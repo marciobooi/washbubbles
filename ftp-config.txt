@@ -1,0 +1,6 @@
+open 104.47.166.109
+washstation
+WashFTPstation!
+prompt noprompt
+mget *.zip
+quit
