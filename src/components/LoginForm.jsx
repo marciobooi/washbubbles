@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 
-export default function LoginForm({ mode = 'admin' }) {
+export default function LoginForm({ mode = 'admin', embedded = false }) {
   const { login } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -22,9 +22,10 @@ export default function LoginForm({ mode = 'admin' }) {
     }
   }
 
+  const formClass = embedded ? 'w-full' : 'bg-white p-4 rounded shadow w-full max-w-md'
   return (
-    <form onSubmit={handleSubmit} className="bg-white p-4 rounded shadow w-full max-w-md">
-      <h3 className="font-semibold mb-2">{mode === 'admin' ? 'Admin Login' : 'Kiosk Login / API Key'}</h3>
+    <form onSubmit={handleSubmit} className={formClass}>
+      {!embedded && <h3 className="font-semibold mb-2">{mode === 'admin' ? 'Admin Login' : 'Kiosk Login / API Key'}</h3>}
       {mode === 'admin' ? (
         <>
           <label className="block mb-2">
