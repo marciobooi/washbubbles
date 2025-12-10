@@ -10,11 +10,11 @@ export default function Pos() {
   ]
 
   return (
-    <div className="relative pb-[12vh]">
+    <div className="relative pb-[12vh] z-10">
       <h2 className="text-2xl font-bold mb-4">Kiosk</h2>
       <div className="min-h-[calc(100vh-6rem)] grid grid-rows-4 sm:grid-rows-2 sm:grid-cols-2 lg:grid-rows-1 lg:grid-cols-4 gap-6">
         {cards.map((c) => (
-          <div key={c.id} className="glass-card p-6 shadow-xl transition-transform duration-150 ease-in-out h-full flex flex-col justify-center select-none cursor-pointer active:scale-95 active:shadow-lg">
+          <div key={c.id} className="z-50 glass-card p-6 shadow-xl transition-transform duration-150 ease-in-out h-full flex flex-col justify-center select-none cursor-pointer active:scale-95 active:shadow-lg">
             <h3 className="text-lg font-semibold text-primary-800">{c.title}</h3>
             <p className="mt-2 text-neutral-600">{c.text}</p>
             <div className="mt-4">
