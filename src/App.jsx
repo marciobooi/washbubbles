@@ -4,10 +4,10 @@ import Admin from './pages/Admin'
 
 export default function App() {
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-sky-50 to-cyan-50">
-      <header className="p-4 border-b bg-white/50 backdrop-blur">
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-primary-50 via-primary-100 to-primary-200">
+      <header className="p-4 border-b border-primary-100 bg-white/70 backdrop-blur">
         <div className="container mx-auto flex items-center justify-between">
-          <h1 className="text-xl font-semibold">Washstore</h1>   
+          <h1 className="text-xl font-semibold text-primary-800">Washstore</h1>   
         </div>
       </header>
 

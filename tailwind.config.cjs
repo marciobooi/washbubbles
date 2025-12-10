@@ -16,12 +16,15 @@ module.exports = {
     },
     extend: {
       colors: {
-        // Map `primary` to Tailwind's teal palette for semantic utilities like bg-primary-500
+        // Map `primary` to Tailwind's teal palette and `success` to green
         primary: colors.teal,
+        success: colors.green,
+        neutral: colors.slate,
       },
       fontFamily: {
         // Add Poppins for headings and Inter for body as the default sans family
-        sans: ['Poppins', 'Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial'],
+        heading: ['Poppins', 'ui-sans-serif', 'system-ui'],
+        sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial'],
       },
     },
   },

@@ -42,8 +42,8 @@ export default function LoginForm({ mode = 'admin' }) {
           <input className="w-full border rounded p-2" value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
         </label>
       )}
-      {error && <p className="text-red-600">{error}</p>}
-      <button className="mt-2 bg-sky-700 text-white px-3 py-1 rounded" type="submit">Login</button>
+      {error && <p className="text-primary-700">{error}</p>}
+      <button className="mt-2 px-3 py-1 rounded btn-primary" type="submit">Login</button>
     </form>
   )
 }
