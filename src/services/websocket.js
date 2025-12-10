@@ -6,7 +6,7 @@
 let socket = null
 const listeners = new Set()
 
-export function connect(url = import.meta.env.VITE_HW_BRIDGE_URL || 'ws://localhost:8080') {
+export function connect(url = import.meta.env.VITE_HW_BRIDGE_URL || 'ws://localhost:3000/ws') {
   if (socket && socket.readyState === WebSocket.OPEN) return socket
 
   socket = new WebSocket(url)

@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { connect, disconnect, subscribe, send } from '../services/websocket'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/machine'
+const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000') + '/api/machine'
 
 async function fetchMachine() {
   try {

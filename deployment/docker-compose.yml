@@ -1,0 +1,45 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: washstore
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks:
+      - washnet
+
+  backend:
+    build: ./backend
+    working_dir: /app
+    command: sh -c "npm run migrate:dev -- --name init || true && npm run seed || true && npm run start"
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/washstore
+      JWT_SECRET: supersecretadminjwt
+      PORT: 3000
+    depends_on:
+      - db
+    volumes:
+      - ./backend:/app
+    networks:
+      - washnet
+
+  nginx:
+    image: nginx:stable
+    ports:
+      - '80:80'
+    volumes:
+      - ./deployment/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./dist:/usr/share/nginx/html:ro
+    depends_on:
+      - backend
+    networks:
+      - washnet
+
+networks:
+  washnet:
+
+volumes:
+  db-data:

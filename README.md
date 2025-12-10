@@ -40,6 +40,7 @@ Environment variables
 ---------------------
 - `VITE_API_URL` - REST API endpoint to fetch machine status (default: `http://localhost:3000/api/machine`).
 - `VITE_HW_BRIDGE_URL` - WebSocket URL for Electron hardware bridge (default: `ws://localhost:8080`).
+ - Backend: `VITE_API_URL` should be `http://localhost:3000` and the backend websocket path is `ws://localhost:3000/ws`.
 
 Routes
 ------
