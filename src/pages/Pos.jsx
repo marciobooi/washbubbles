@@ -5,7 +5,7 @@ import LoginForm from '../components/LoginForm'
 import Loading from '../components/loading'
 
 export default function Pos() {
-  const { data, isFetching, isLoading } = useMachineStatus()
+  const { data } = useMachineStatus()
   const [selectedMachine, setSelectedMachine] = useState('')
   const [amount, setAmount] = useState('')
   const [message, setMessage] = useState(null)
@@ -18,13 +18,6 @@ export default function Pos() {
       <p className="mt-2 text-neutral-600">Point-of-sale interface for kiosks</p>
 
       <div className="mt-4">
-        <h3 className="font-medium">Machine status</h3>
-        {isLoading ? (
-          <div className="mt-4 flex justify-center"><Loading /></div>
-        ) : isFetching ? (
-          <p className="text-sm text-gray-500">Updating...</p>
-        ) : null}
-        <pre className="mt-2 bg-white p-3 rounded shadow text-sm border border-primary-100">{JSON.stringify(data || {}, null, 2)}</pre>
         <div className="mt-4">
           <label className="block">Machine</label>
           <select value={selectedMachine} onChange={(e) => setSelectedMachine(e.target.value)} className="w-full border rounded p-2 focus:outline-none focus:ring-2 focus:ring-primary-300">
