@@ -1,6 +1,7 @@
 import express from 'express'
 import Machine from '../models/machine.js'
 import Sale from '../models/sale.js'
+import { requireKiosk } from '../middleware/auth.js'
 
 const router = express.Router()
 
@@ -15,7 +16,7 @@ router.get('/machine-status', getMachineStatus)
 // Alias used by frontend hook: `/api/machine`
 router.get('/machine', getMachineStatus)
 
-router.post('/sale', async (req, res) => {
+router.post('/sale', requireKiosk, async (req, res) => {
   const { machineId, amount, items } = req.body
   if (!machineId || !amount || !items) return res.status(400).json({ error: 'Missing parameters' })
 

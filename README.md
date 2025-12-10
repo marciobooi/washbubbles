@@ -40,6 +40,7 @@ Environment variables
 ---------------------
 - `VITE_API_URL` - Base API URL for the backend (default: `http://localhost:3000`).
 - `VITE_HW_BRIDGE_URL` - WebSocket URL for the hardware bridge (default: `ws://localhost:3000/ws`).
+ - `VITE_KIOSK_API_KEY` - (optional) API key to use in kiosk builds for POS endpoints.
  - Backend: `VITE_API_URL` should be `http://localhost:3000` and the backend websocket path is `ws://localhost:3000/ws`.
 
 Routes
@@ -127,6 +128,20 @@ To start Electron as well, use one of the following options:
    ```
 
 - Or, start the services manually and then start Electron:
+   Kiosk API key usage (examples)
+   -----------------------------
+   You can use the API key to authenticate kiosk device requests or exchange it for a JWT token:
+
+   Exchange API key for a JWT:
+   ```powershell
+   curl -X POST http://localhost:3000/api/auth/login -H "Content-Type: application/json" -d '{"apiKey":"<your-kiosk-api-key>"}'
+   ```
+
+   Use API key directly when hitting protected kiosk endpoints (e.g., `/api/pos/sale`):
+   ```powershell
+   curl -X POST http://localhost:3000/api/pos/sale -H "Content-Type: application/json" -H "x-api-key: <your-kiosk-api-key>" -d '{"machineId":"<id>","amount":1.5,"items":[]}'
+   ```
+
    ```powershell
    npm run electron:start
    ```

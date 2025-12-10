@@ -1,25 +1,51 @@
 import jwt from 'jsonwebtoken'
+import User from '../models/user.js'
+import mongoose from 'mongoose'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretadminjwt'
 
-export function requireAuth(req, res, next) {
+async function resolveUserFromRequest(req) {
   const auth = req.headers.authorization
-  if (!auth) return res.status(401).json({ error: 'Missing Authorization' })
-  const parts = auth.split(' ')
-  if (parts.length !== 2 || parts[0] !== 'Bearer') return res.status(401).json({ error: 'Invalid Authorization' })
-
-  try {
-    const decoded = jwt.verify(parts[1], JWT_SECRET)
-    req.user = decoded
-    next()
-  } catch (err) {
-    return res.status(401).json({ error: 'Invalid token' })
+  let userModel = null
+  if (auth && auth.startsWith('Bearer ')) {
+    const token = auth.split(' ')[1]
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET)
+      // ensure user exists
+      userModel = await User.findById(decoded.sub)
+      return { userModel, tokenUser: decoded }
+    } catch (err) {
+      return { error: 'Invalid token' }
+    }
   }
+  // ApiKey via Authorization: ApiKey <key>
+  const apiKeyHeader = (req.headers['x-api-key'] || (auth && auth.startsWith('ApiKey ') ? auth.split(' ')[1] : null))
+  if (apiKeyHeader) {
+    userModel = await User.findOne({ apiKey: apiKeyHeader })
+    if (userModel) return { userModel }
+    return { error: 'Invalid apiKey' }
+  }
+  return { error: 'Missing Authorization' }
 }
 
-export function requireAdmin(req, res, next) {
-  requireAuth(req, res, () => {
-    if (!req.user || req.user.role !== 'ADMIN') return res.status(403).json({ error: 'Forbidden' })
+export async function requireAuth(req, res, next) {
+  const resolved = await resolveUserFromRequest(req)
+  if (resolved.error) return res.status(401).json({ error: resolved.error })
+  req.userModel = resolved.userModel
+  req.user = resolved.tokenUser || { sub: resolved.userModel._id.toString(), role: resolved.userModel.role }
+  next()
+}
+
+export async function requireAdmin(req, res, next) {
+  await requireAuth(req, res, async () => {
+    if (!req.userModel || req.userModel.role !== 'ADMIN') return res.status(403).json({ error: 'Forbidden' })
+    next()
+  })
+}
+
+export async function requireKiosk(req, res, next) {
+  await requireAuth(req, res, async () => {
+    if (!req.userModel || req.userModel.role !== 'KIOSK') return res.status(403).json({ error: 'Forbidden' })
     next()
   })
 }
