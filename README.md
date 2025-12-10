@@ -38,8 +38,8 @@ New features
 
 Environment variables
 ---------------------
-- `VITE_API_URL` - REST API endpoint to fetch machine status (default: `http://localhost:3000/api/machine`).
-- `VITE_HW_BRIDGE_URL` - WebSocket URL for Electron hardware bridge (default: `ws://localhost:8080`).
+- `VITE_API_URL` - Base API URL for the backend (default: `http://localhost:3000`).
+- `VITE_HW_BRIDGE_URL` - WebSocket URL for the hardware bridge (default: `ws://localhost:3000/ws`).
  - Backend: `VITE_API_URL` should be `http://localhost:3000` and the backend websocket path is `ws://localhost:3000/ws`.
 
 Routes
@@ -65,3 +65,13 @@ There is a small Electron launcher that can load a URL or a local `dist/index.ht
       ```
 
 Electron will open devtools when loading `http://localhost` so you can debug the app during development.
+
+Docker quick start (optional)
+-----------------------------
+If you want to run the backend + database + nginx stack via Docker (development/test):
+
+```powershell
+docker compose -f deployment/docker-compose.yml up --build
+```
+
+This will build the backend image, create the Postgres DB with `washstore` DB, run migrations (if present) and start NGINX serving the built `dist` (if present). Edit `deployment/docker-compose.yml` to mount code for dev or set environment variables.
