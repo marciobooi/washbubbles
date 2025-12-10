@@ -1,52 +1,26 @@
-import React, { useState } from 'react'
-import useMachineStatus from '../hooks/useMachineStatus'
-import { useAuth } from '../context/AuthContext'
-import LoginForm from '../components/LoginForm'
-import Loading from '../components/loading'
+import React from 'react'
 
 export default function Pos() {
-  const { data } = useMachineStatus()
-  const [selectedMachine, setSelectedMachine] = useState('')
-  const [amount, setAmount] = useState('')
-  const [message, setMessage] = useState(null)
-  const { token } = useAuth()
-  const { role, logout } = useAuth()
+  const cards = [
+    { id: 'wash', title: 'Wash', text: 'Start a wash cycle' },
+    { id: 'dry', title: 'Dry', text: 'Start a dry cycle' },
+    { id: 'rinse', title: 'Rinse', text: 'Rinse cycle' },
+    { id: 'settings', title: 'Settings', text: 'Kiosk settings' },
+  ]
 
   return (
     <div>
-      <h2 className="text-2xl font-bold">Kiosk POS</h2>
-      <p className="mt-2 text-neutral-600">Point-of-sale interface for kiosks</p>
-
-      <div className="mt-4">
-        <div className="mt-4">
-          <label className="block">Machine</label>
-          <select value={selectedMachine} onChange={(e) => setSelectedMachine(e.target.value)} className="w-full border rounded p-2 focus:outline-none focus:ring-2 focus:ring-primary-300">
-            <option value="">Select a machine</option>
-            {(data || []).map((m, idx) => (
-              <option key={m.id ?? m._id ?? idx} value={m.id ?? m._id ?? idx}>{m.name}</option>
-            ))}
-          </select>
-          <label className="block mt-2">Amount</label>
-          <input value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full border p-2 rounded focus:outline-none focus:ring-2 focus:ring-primary-300" />
-          <button className="mt-2 px-3 py-1 rounded btn-primary" onClick={async () => {
-            setMessage(null)
-            if (!selectedMachine || !amount) { setMessage('Select machine and amount'); return }
-            try {
-              const res = await fetch('/api/pos/sale', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': 'Bearer ' + token } : {}) }, body: JSON.stringify({ machineId: selectedMachine, amount, items: [] }) })
-              if (!res.ok) throw new Error('Sale failed')
-              const sale = await res.json()
-              setMessage('Sale recorded: ' + (sale.id ?? sale._id ?? ''))
-            } catch (err) { setMessage(err.message) }
-          }}>Make Sale</button>
-          {message && <p className="mt-2 text-sm">{message}</p>}
-          {!token && (
-            <div className="mt-3">
-              <p className="text-sm text-gray-500">Kiosk login</p>
-              <LoginForm mode="kiosk" />
+      <h2 className="text-2xl font-bold mb-4">Kiosk</h2>
+      <div className="min-h-[calc(100vh-6rem)] grid grid-rows-4 sm:grid-rows-2 sm:grid-cols-2 lg:grid-rows-1 lg:grid-cols-4 gap-6">
+        {cards.map((c) => (
+          <div key={c.id} className="glass-card p-6 shadow-xl hover:shadow-2xl transition-shadow duration-200 h-full flex flex-col justify-center">
+            <h3 className="text-lg font-semibold text-primary-800">{c.title}</h3>
+            <p className="mt-2 text-neutral-600">{c.text}</p>
+            <div className="mt-4">
+              <button className="px-6 py-3 rounded btn-primary w-full text-lg">Start</button>
             </div>
-          )}
-          {token && <button className="mt-2 ml-2 px-3 py-1 rounded btn-primary" onClick={() => logout()}>Logout</button>}
-        </div>
+          </div>
+        ))}
       </div>
     </div>
   )
