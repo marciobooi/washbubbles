@@ -55,7 +55,7 @@ Electron
 --------
 There is a small Electron launcher that can load a URL or a local `dist/index.html` file.
 
-- The Electron entry is at `electron/main.js` and uses `electron/preload.js`.
+- The Electron entry is at `electron/main.cjs` and uses `electron/preload.cjs`.
 - Scripts:
    - `npm run electron:start` — launches Electron and loads the Vite dev server at `http://localhost:5173` (start the dev server separately with `npm run dev`).
    - `npm run electron:load` — launches Electron and loads the built `dist/index.html` (run `npm run build` first).
