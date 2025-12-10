@@ -6,22 +6,19 @@
   "scripts": {
     "dev": "nodemon --watch src --exec node src/index.js",
     "start": "node src/index.js",
-    "migrate:dev": "prisma migrate dev",
-    "prisma:generate": "prisma generate",
-    "seed": "node prisma/seed.js"
+    
+    "seed": "node scripts/seed.cjs"
   },
   "dependencies": {
-    "@prisma/client": "^5.8.0",
+    "mongoose": "^7.5.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "jsonwebtoken": "^9.0.0",
-    "pg": "^8.11.0",
     "ws": "^8.13.0"
   },
   "devDependencies": {
-    "prisma": "^5.8.0",
     "nodemon": "^2.0.22"
   }
 }

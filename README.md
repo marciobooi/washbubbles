@@ -66,27 +66,83 @@ There is a small Electron launcher that can load a URL or a local `dist/index.ht
 
 Electron will open devtools when loading `http://localhost` so you can debug the app during development.
 
-Docker quick start (optional)
------------------------------
-If you want to run the backend + database + nginx stack via Docker (development/test):
+Local DB + optional Docker
+--------------------------
+By default development runs against a locally installed MongoDB (recommended). If you prefer containers, that option is still in this repository — however the default `npm run dev` expects a local MongoDB instance listening on port `27017`.
+
+Local (recommended):
+
+1. Install MongoDB (Windows installer / Homebrew / apt). Ensure MongoDB is running and listening on `localhost:27017`.
+2. Create the database if not present:
+
+```powershell
+# No explicit creation needed for MongoDB — it will create the database on first write
+```
+
+Optional Docker (containers):
 
 ```powershell
 docker compose -f deployment/docker-compose.yml up --build
 ```
 
-Dev start (frontend + Electron)
+Dev start (backend + frontend + Electron)
 -------------------------------
 You can start a combined development environment that runs both the Vite dev server and Electron pointing at the dev server.
 
-From a PowerShell or command prompt in the project root:
+From a PowerShell or command prompt in the project root (recommended):
 ```powershell
 npm install
-npm run dev:electron
-```
+# Start services manually, then start Electron to load the page
 
-Or on Windows, use the provided batch file to open two terminals automatically:
+# Start backend + frontend with a single command
+If you prefer to start both backend and frontend automatically, run the following from the root directory:
+
 ```powershell
-.\\start-electron-dev.bat
+npm install
+npm run dev
 ```
 
-This will build the backend image, create the Postgres DB with `washstore` DB, run migrations (if present) and start NGINX serving the built `dist` (if present). Edit `deployment/docker-compose.yml` to mount code for dev or set environment variables.
+This uses `concurrently` to run the backend (`backend` package) and the Vite dev server at the same time.
+
+Notes on `dev` scripts:
+
+- `npm run dev` — Starts the dev environment and expects a local MongoDB instance listening on `localhost:27017`. It attempts to detect and auto-start the Mongo service (Windows PowerShell) if present (best-effort), waits for the DB TCP port to be available, installs backend dependencies, runs seed and starts the backend & frontend concurrently.
+- `npm run dev:no-db` — Shortcut to start the backend & frontend without waiting for or attempting to start a MongoDB instance (useful for UI-only work or if your DB is already running).
+
+If you want to start MongoDB locally on Windows, you can start the installed MongoDB service using PowerShell (service name varies depending on installer and version):
+
+```powershell
+# Attempt to determine the MongoDB service name and start it
+Get-Service | Where-Object { $_.Name -match 'mongo|mongod' -or $_.DisplayName -match 'Mongo' }
+Start-Service -Name 'MongoDB' # or the service name you find above
+```
+
+If you use MongoDB from a package manager (e.g., Chocolatey) or the official installer, make sure `mongo` is on your `PATH` and MongoDB is running on `localhost:27017`.
+
+To start Electron as well, use one of the following options:
+
+- Start the services and Electron concurrently:
+   ```powershell
+   npm run dev:full
+   ```
+
+- Or, start the services manually and then start Electron:
+   ```powershell
+   npm run electron:start
+   ```
+
+# Option B — run backend + frontend + electron (recommended for full stack)
+npm run dev:full
+```
+
+On Windows, you can use the provided batch file to open Electron and point it to the dev server (starts only Electron):
+```powershell
+.\\start-electron-dev.bat [optional-url]
+```
+
+This will build the backend image, create a MongoDB instance with `washstore` DB, run the seed script (if present) and start NGINX serving the built `dist` (if present). Edit `deployment/docker-compose.yml` to mount code for dev or set environment variables.
+
+Notes about dev warnings & backend availability
+---------------------------------------------
+- The Electron security console warning `Insecure Content-Security-Policy` is expected during development when Vite uses `eval` for HMR. You can safely ignore this during development; it disappears when the app is bundled for distribution.
+- If the front-end shows `ERR_CONNECTION_REFUSED` or the WebSocket connection is failing, confirm the backend is running and listening on port 3000 (or your configured `VITE_API_URL`). The Electron window just loads the front-end URL — you must run backend and front services manually if you want to test integration.

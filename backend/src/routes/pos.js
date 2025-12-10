@@ -1,11 +1,12 @@
 import express from 'express'
+import Machine from '../models/machine.js'
+import Sale from '../models/sale.js'
 
 const router = express.Router()
 
 // POS routes are public (can be configured to use token if required)
 const getMachineStatus = async (req, res) => {
-  const prisma = req.prisma
-  const machines = await prisma.machine.findMany({ orderBy: { createdAt: 'asc' } })
+  const machines = await Machine.find().sort({ createdAt: 1 })
   const data = machines.map((m) => ({ id: m.id, name: m.name, status: m.status, cycle: m.cycle }))
   res.json(data)
 }
@@ -13,22 +14,15 @@ const getMachineStatus = async (req, res) => {
 router.get('/machine-status', getMachineStatus)
 // Alias used by frontend hook: `/api/machine`
 router.get('/machine', getMachineStatus)
-  const prisma = req.prisma
-  const machines = await prisma.machine.findMany({ orderBy: { createdAt: 'asc' } })
-  // Return simplified info for POS
-  const data = machines.map((m) => ({ id: m.id, name: m.name, status: m.status, cycle: m.cycle }))
-  res.json(data)
-})
 
 router.post('/sale', async (req, res) => {
-  const prisma = req.prisma
   const { machineId, amount, items } = req.body
   if (!machineId || !amount || !items) return res.status(400).json({ error: 'Missing parameters' })
 
-  const sale = await prisma.sale.create({ data: { machineId, amount: Number(amount), items: items } })
+  const sale = await Sale.create({ machineId, amount: Number(amount), items })
 
   // Optionally update machine cycle or status
-  await prisma.machine.update({ where: { id: machineId }, data: { cycle: { increment: 1 } } })
+  await Machine.findByIdAndUpdate(machineId, { $inc: { cycle: 1 } })
 
   res.json(sale)
 })
