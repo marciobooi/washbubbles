@@ -7,11 +7,7 @@ export default function App() {
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-sky-50 to-cyan-50">
       <header className="p-4 border-b bg-white/50 backdrop-blur">
         <div className="container mx-auto flex items-center justify-between">
-          <h1 className="text-xl font-semibold">Washstore</h1>
-          <nav className="space-x-4">
-            <Link to="/pos" className="text-sky-700 hover:underline">POS</Link>
-            <Link to="/admin" className="text-sky-700 hover:underline">Admin</Link>
-          </nav>
+          <h1 className="text-xl font-semibold">Washstore</h1>   
         </div>
       </header>
 
