@@ -22,6 +22,9 @@ function getUrlFromArgs() {
 
 function createWindow() {
   const startURL = getUrlFromArgs()
+  // If a kiosk key was passed via CLI or env, ensure it's present in env for preload
+  const argKiosk = process.argv.find((a) => a.startsWith('--kiosk-key='))
+  if (argKiosk) process.env.ELECTRON_KIOSK_API_KEY = argKiosk.split('=')[1]
 
   const mainWindow = new BrowserWindow({
     width: 1280,
