@@ -1,1 +1,0 @@
-START "" "C:\washStationProject\lma-vm-app-0117\washstation-app-kiosk"

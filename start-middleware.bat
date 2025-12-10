@@ -1,1 +1,0 @@
-START /min CMD /k node "C:\washStationProject\lma-middleware-pt-0317\app.js"
