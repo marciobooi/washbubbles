@@ -1,4 +1,10 @@
 const { app, BrowserWindow } = require('electron')
+// In development environment we load dev assets (Vite) that use `eval` for HMR and can trigger
+// a Content-Security-Policy warning in Electron. It's safe for dev, but should never be enabled in production.
+// Keep warnings during development if you prefer, otherwise set the env var ELECTRON_DISABLE_SECURITY_WARNINGS=1
+if (process.env.NODE_ENV === 'development') {
+  process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
+}
 const path = require('path')
 const url = require('url')
 

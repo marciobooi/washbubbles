@@ -21,6 +21,8 @@ app.use(express.json())
 app.use('/api/auth', authRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/pos', posRoutes)
+// Backwards compatibility: also expose pos endpoints under `/api` (eg. `/api/machine`)
+app.use('/api', posRoutes)
 
 app.get('/api/health', (req, res) => res.json({ ok: true }))
 
