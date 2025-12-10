@@ -3,19 +3,23 @@
   position: relative;
   margin: auto;
   display: block;
-  margin-top: 8%;
-  margin-bottom: 8%;
-  width: 600px;
-  height:600px;
+  margin-top: 2rem;
+  margin-bottom: 2rem;
+  width: 300px; /* smaller default */
+  height: 300px;
 }
+
+.box-canvas.box-small { width: 220px; height: 220px; }
+.box-canvas.box-large { width: 600px; height: 600px; }
 
 /* Main machine body */
 .machine {
   position: absolute;
-  left: 150px;
-  top: 100px;
-  width: 300px;
-  height: 400px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 50%;
+  height: 66.666%;
   background: rgb(4, 184, 184);
   border-radius: 2%;
 }
@@ -23,10 +27,10 @@
 /* Powder drawer */
 .drawer {
   position: absolute;
-  top: 10px;
-  left: 10px;
-  width: 100px;
-  height: 50px;
+  top: 2.5%;
+  left: 3.333%;
+  width: 33.333%;
+  height: 12.5%;
   border: 2px solid white;
   border-radius: 0 0 20% 0;
 }
@@ -35,57 +39,67 @@
 .drawer::after {
   content: '';
   position: absolute;
-  width: 70px;
-  height: 15px;
+  width: 70%;
+  height: 30%;
   background: white;
-  bottom: 5px;
-  right: 5px;
+  bottom: 10%;
+  right: 5%;
   border-radius: 0 0 30% 0;
 }
 
 /* Small LED display */
 .panel {
   position: absolute;
-  width: 40px;
-  height: 15px;
+  width: 13.333%;
+  height: 3.75%;
   background: white;
-  left: 150px;
-  top: 30px;
+  left: 50%;
+  top: 7.5%;
+  transform: translateX(-50%);
 }
 
 /* Light indicator in panel */
 .panel::before {
   content: '';
   position: absolute;
-  width: 8px;
-  height: 10px;
+  width: 20%;
+  height: 66.66%;
   background: #5FBD9D;
-  right: 5px;
-  top: 2px;
+  right: 5%;
+  top: 13.333%;
 }
 
 /* Machine dial */
 .panel::after {
   content: '';
   position: absolute;
-  left: 80px;
-  top: -10px;
-  width: 35px;
-  height: 35px;
+  left: 26.666666666%;
+  top: -2.5%;
+  width: 11.666666667%;
+  height: 11.666666667%;
   border: 2px solid white;
   border-radius: 50%;
+}
+
+.divider {
+width: 93%;
+    height: 2px;
+    position: absolute;
+    background: white;
+    left: 10px;
+    top: 74px;
 }
 
 /* Center of washer door, width border forming the frame */
 .door {
   position: absolute;
   background: white;
-  left: 60px;
-  bottom: 90px;
-  width: 170px;
-  height: 170px;
+  left: 20%;
+  bottom: 22.5%;
+  width: 56.666666667%;
+  height: 42.5%;
   border-radius: 50%;
-  border: 5px solid #A3A1A1;
+  border: 4px solid #A3A1A1;
   overflow: hidden;
 }
 
@@ -93,20 +107,20 @@
 .door::after {
   content: '';
   position: absolute;
-  top: 5px;
-  left: 5px;
-  width: 160px;
-  height: 160px;
+  top: 2%;
+  left: 2%;
+  width: 94%;
+  height: 94%;
   background: radial-gradient(transparent 30%, white);
 }
 
 /* Washing machine drum */
 .drum {
   position: absolute;
-  left: 25px;
-  top: 25px;
-  width: 120px;
-  height: 120px;
+  left: 14.58333333%;
+  top: 14.58333333%;
+  width: 40%;
+  height: 40%;
   border-radius: 50%;
   background: #636161;
   overflow: hidden;
@@ -117,8 +131,8 @@
 .drum::before {
   content: '';
   position: absolute;
-  width: 80px;
-  height: 50px;
+  width: 66.666666667%;
+  height: 41.666666667%;
   background: #5FBD9D;
   border-radius: 40%;
   bottom: 0;

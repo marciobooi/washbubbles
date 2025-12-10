@@ -2,9 +2,10 @@ import React, { useState } from 'react'
 import useMachineStatus from '../hooks/useMachineStatus'
 import { useAuth } from '../context/AuthContext'
 import LoginForm from '../components/LoginForm'
+import Loading from '../components/loading'
 
 export default function Pos() {
-  const { data, isFetching } = useMachineStatus()
+  const { data, isFetching, isLoading } = useMachineStatus()
   const [selectedMachine, setSelectedMachine] = useState('')
   const [amount, setAmount] = useState('')
   const [message, setMessage] = useState(null)
@@ -18,7 +19,11 @@ export default function Pos() {
 
       <div className="mt-4">
         <h3 className="font-medium">Machine status</h3>
-        {isFetching && <p className="text-sm text-gray-500">Updating...</p>}
+        {isLoading ? (
+          <div className="mt-4 flex justify-center"><Loading /></div>
+        ) : isFetching ? (
+          <p className="text-sm text-gray-500">Updating...</p>
+        ) : null}
         <pre className="mt-2 bg-white p-3 rounded shadow text-sm border border-primary-100">{JSON.stringify(data || {}, null, 2)}</pre>
         <div className="mt-4">
           <label className="block">Machine</label>
