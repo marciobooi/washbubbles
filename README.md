@@ -155,6 +155,12 @@ On Windows, you can use the provided batch file to open Electron and point it to
 .\\start-electron-dev.bat [optional-url]
 ```
 
+To launch Electron as kiosk and pass the kiosk API key (so the kiosk auto-logs in), use:
+
+```powershell
+.\\start-store-kiosk.bat http://localhost:5173 <kiosk_api_key>
+```
+
 This will build the backend image, create a MongoDB instance with `washstore` DB, run the seed script (if present) and start NGINX serving the built `dist` (if present). Edit `deployment/docker-compose.yml` to mount code for dev or set environment variables.
 
 Notes about dev warnings & backend availability
