@@ -24,8 +24,8 @@ export default function Pos() {
           <label className="block">Machine</label>
           <select value={selectedMachine} onChange={(e) => setSelectedMachine(e.target.value)} className="w-full border rounded p-2">
             <option value="">Select a machine</option>
-            {(data || []).map((m) => (
-              <option key={m.id} value={m.id}>{m.name}</option>
+            {(data || []).map((m, idx) => (
+              <option key={m.id ?? m._id ?? idx} value={m.id ?? m._id ?? idx}>{m.name}</option>
             ))}
           </select>
           <label className="block mt-2">Amount</label>
@@ -37,7 +37,7 @@ export default function Pos() {
               const res = await fetch('/api/pos/sale', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': 'Bearer ' + token } : {}) }, body: JSON.stringify({ machineId: selectedMachine, amount, items: [] }) })
               if (!res.ok) throw new Error('Sale failed')
               const sale = await res.json()
-              setMessage('Sale recorded: ' + sale.id)
+              setMessage('Sale recorded: ' + (sale.id ?? sale._id ?? ''))
             } catch (err) { setMessage(err.message) }
           }}>Make Sale</button>
           {message && <p className="mt-2 text-sm">{message}</p>}
