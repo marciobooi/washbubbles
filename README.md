@@ -49,3 +49,18 @@ Routes
 Realtime support
 ----------------
 The project uses a simple `WebSocket` wrapper located at `src/services/websocket.js` and `useMachineStatus` hook in `src/hooks/useMachineStatus.js` (React Query-based) to update the UI in real time.
+
+Electron
+--------
+There is a small Electron launcher that can load a URL or a local `dist/index.html` file.
+
+- The Electron entry is at `electron/main.js` and uses `electron/preload.js`.
+- Scripts:
+   - `npm run electron:start` — launches Electron and loads the Vite dev server at `http://localhost:5173` (start the dev server separately with `npm run dev`).
+   - `npm run electron:load` — launches Electron and loads the built `dist/index.html` (run `npm run build` first).
+   - You can also pass an explicit URL to Electron, e.g.:
+      ```powershell
+      electron . --url=https://example.com
+      ```
+
+Electron will open devtools when loading `http://localhost` so you can debug the app during development.
