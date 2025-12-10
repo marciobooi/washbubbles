@@ -9,7 +9,9 @@ function getUrlFromArgs() {
   // support `electron . --url dist/index.html`
   if (process.argv[2] && !process.argv[2].startsWith('-')) return process.argv[2]
 
+  // Allow environment override for easier startup scripts
   if (process.env.ELECTRON_START_URL) return process.env.ELECTRON_START_URL
+  if (process.env.VITE_APP_URL) return process.env.VITE_APP_URL
 
   return url.pathToFileURL(path.join(app.getAppPath(), 'dist', 'index.html')).href
 }

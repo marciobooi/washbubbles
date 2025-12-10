@@ -1,7 +1,7 @@
 Electron support
 
-- `electron/main.js` - Electron main process loads a URL or local file and creates a BrowserWindow
-- `electron/preload.js` - Preload to expose a minimal secure API to the renderer
+- `electron/main.cjs` - Electron main process loads a URL or local file and creates a BrowserWindow (CommonJS)
+- `electron/preload.cjs` - Preload to expose a minimal secure API to the renderer (CommonJS)
 
 Examples
 

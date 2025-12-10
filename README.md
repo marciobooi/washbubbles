@@ -74,4 +74,19 @@ If you want to run the backend + database + nginx stack via Docker (development/
 docker compose -f deployment/docker-compose.yml up --build
 ```
 
+Dev start (frontend + Electron)
+-------------------------------
+You can start a combined development environment that runs both the Vite dev server and Electron pointing at the dev server.
+
+From a PowerShell or command prompt in the project root:
+```powershell
+npm install
+npm run dev:electron
+```
+
+Or on Windows, use the provided batch file to open two terminals automatically:
+```powershell
+.\\start-electron-dev.bat
+```
+
 This will build the backend image, create the Postgres DB with `washstore` DB, run migrations (if present) and start NGINX serving the built `dist` (if present). Edit `deployment/docker-compose.yml` to mount code for dev or set environment variables.
