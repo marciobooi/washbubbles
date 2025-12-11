@@ -32,12 +32,25 @@
   /* Modern glass card used for auth panels */
   .glass-card {
     @apply rounded-xl p-6 shadow-xl border;
-    background: linear-gradient(135deg, rgba(255,255,255,0.72) 0%, rgba(255,255,255,0.65) 100%);
+    position: relative;
+    overflow: hidden;
     border-color: rgba(12, 74, 65, 0.08); /* subtle primary border */
-    backdrop-filter: blur(8px);
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
   }
+
+  .glass-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(135deg, rgba(255,255,255,0.72) 0%, rgba(255,255,255,0.65) 100%);
+    backdrop-filter: blur(8px);
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .glass-card > * { position: relative; z-index: 1; }
 
   .auth-left {
     @apply pr-6 hidden md:block;
