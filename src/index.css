@@ -57,3 +57,8 @@
   }
   .auth-right { @apply w-full md:w-96; }
 }
+
+
+.tealFilter {
+  filter: brightness(0) saturate(100%) invert(93%) sepia(7%) saturate(2300%) hue-rotate(130deg) brightness(77%) contrast(82%);
+}

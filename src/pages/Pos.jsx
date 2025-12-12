@@ -1,4 +1,5 @@
 import React from 'react'
+import { useNavigate } from 'react-router-dom'
 import Wave from '../components/wave'
 import Card from '../components/Card'
 
@@ -12,11 +13,18 @@ export default function Pos() {
 
   // Card component moved to src/components/Card.jsx
 
+  const navigate = useNavigate()
   return (
     <div className="relative pb-[12vh] z-10">
       <div className="min-h-[calc(100vh-6rem)] grid grid-rows-4 sm:grid-rows-2 sm:grid-cols-2 lg:grid-rows-1 lg:grid-cols-4 gap-6">
         {cards.map((c) => (
-          <Card key={c.id} c={c} onClick={(id) => console.log('clicked', id)} />
+          <Card key={c.id} c={c} onClick={(id) => {
+            if (c.id === 'wash' || c.id === 'dry') {
+              navigate(`/pos/machines?type=${c.id}`)
+            } else {
+              console.log('clicked', id)
+            }
+          }} />
         ))}
       </div>
       <Wave height="12vh" className="mt-2" />
