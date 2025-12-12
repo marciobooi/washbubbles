@@ -14,9 +14,9 @@ export default function MachineDetail() {
     : ['/drymachine/S1.png', '/drymachine/S2.png', '/drymachine/S3.png', '/drymachine/S4.png']
 
   const machines = [
-    { id: 'm1', name: 'Maquina Lavar 1', weight: 12, price: 3.5, status: 'free' },
-    { id: 'm2', name: 'Maquina Lavar 2', weight: 8, price: 2.5, status: 'working' },
-    { id: 'm3', name: 'Maquina Lavar 3', weight: 18, price: 4.5, status: 'free' },
+    { id: 'm1', name: 'Maquina Lavar 1', weight: 12, price: 3.5, status: 'free', statusText: 'Livre' },
+    { id: 'm2', name: 'Maquina Lavar 2', weight: 8, price: 2.5, status: 'working', statusText: 'Ocupado' },
+    { id: 'm3', name: 'Maquina Lavar 3', weight: 18, price: 4.5, status: 'free', statusText: 'Livre' },
   ]
 
   const machine = machines.find((m) => m.id === id) || machines[0]
@@ -30,7 +30,7 @@ export default function MachineDetail() {
         {frame && <img src={frame} alt={machine.name} className="w-40 h-40 object-contain" />}
         <div className="text-2xl font-semibold">{machine.name}</div>
         <div className="text-neutral-600">{machine.weight} kg • {machine.price.toFixed(2)}€ por ciclo</div>
-        <div className={`py-2 px-4 rounded ${machine.status === 'free' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{machine.status === 'free' ? 'Livre' : 'Em uso'}</div>
+        <div className={`py-2 px-4 rounded ${machine.status === 'free' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{machine.statusText || (machine.status === 'free' ? 'Livre' : 'Ocupado')}</div>
         <div className="mt-4">
           <button className={`btn-primary px-6 py-3 rounded ${machine.status === 'working' ? 'opacity-60 pointer-events-none' : ''}`}>Start Cycle</button>
         </div>

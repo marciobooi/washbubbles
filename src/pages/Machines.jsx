@@ -14,9 +14,9 @@ export default function Machines() {
 
   // Mock machines — replace with API call later
   const machines = [
-    { id: 'm1', name: 'Maquina Lavar 1', weight: 12, price: 3.5, status: 'free' },
-    { id: 'm2', name: 'Maquina Lavar 2', weight: 8, price: 2.5, status: 'working' },
-    { id: 'm3', name: 'Maquina Lavar 3', weight: 18, price: 4.5, status: 'free' },
+    { id: 'm1', name: 'Maquina Lavar 1', weight: 12, price: 3.5, status: 'free', statusText: 'Livre' },
+    { id: 'm2', name: 'Maquina Lavar 2', weight: 8, price: 2.5, status: 'working', statusText: 'Ocupado' },
+    { id: 'm3', name: 'Maquina Lavar 3', weight: 18, price: 4.5, status: 'free', statusText: 'Livre' },
   ]
 
   return (
