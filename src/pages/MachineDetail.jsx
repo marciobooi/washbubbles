@@ -25,15 +25,11 @@ export default function MachineDetail() {
 
   return (
     <div className="relative pb-[12vh] z-10">
-      <button className="btn-primary mb-4" onClick={() => navigate('/pos/machines?type=' + type)}>Back</button>
       <div className="glass-card p-6 flex flex-col items-center gap-4">
         {frame && <img src={frame} alt={machine.name} className="w-40 h-40 object-contain" />}
         <div className="text-2xl font-semibold">{machine.name}</div>
         <div className="text-neutral-600">{machine.weight} kg • {machine.price.toFixed(2)}€ por ciclo</div>
         <div className={`py-2 px-4 rounded ${machine.status === 'free' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{machine.statusText || (machine.status === 'free' ? 'Livre' : 'Ocupado')}</div>
-        <div className="mt-4">
-          <button className={`btn-primary px-6 py-3 rounded ${machine.status === 'working' ? 'opacity-60 pointer-events-none' : ''}`}>Start Cycle</button>
-        </div>
       </div>
       <Wave height="12vh" className="mt-2" />
     </div>
