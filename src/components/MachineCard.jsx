@@ -24,7 +24,7 @@ export default function MachineCard({ m, frames, onSelect = () => {} }) {
       </div>
       <div className="flex-1">
         <div className="text-lg font-semibold">{m.name}</div>
-        <div className="text-sm text-neutral-600">{m.weight} kg • {m.price.toFixed(2)}€</div>
+        <div className="text-sm text-neutral-600">{m.weight} kg • {m.price.toFixed(2)}€{m.price ? ` • ${Math.max(0, m.price - 0.5).toFixed(2)}€ fidelidade` : ''}</div>
       </div>
       <div className="flex items-center gap-2">
         <div className={`w-3 h-3 rounded-full ${isFree ? 'bg-green-500' : 'bg-red-500'}`} />

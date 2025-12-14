@@ -4,11 +4,12 @@ import { useCart } from '../context/CartContext'
 
 export default function CartModal({ open, onClose, onPay = () => {}, onClear = () => {} }) {
   const { cart, removeFromCart, clearCart } = useCart()
+  const [useFidelity, setUseFidelity] = React.useState(false)
   const total = cart.reduce((s, i) => s + (i.price || 0), 0)
+  const discountedTotal = cart.reduce((s, i) => s + Math.max(0, (i.price || 0) - (useFidelity ? 0.5 : 0)), 0)
 
   function handlePay() {
-    onPay(cart)
-    clearCart()
+    onPay(cart, { useFidelity })
     onClose()
   }
 
@@ -22,7 +23,9 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
             <div key={i.id} className="flex items-center justify-between gap-3">
               <div>
                 <div className="font-semibold">{i.name}</div>
-                <div className="text-sm text-neutral-600">{i.price.toFixed(2)}€</div>
+                <div className="text-sm text-neutral-600">
+                  {useFidelity ? `${Math.max(0, i.price - 0.5).toFixed(2)}€ (fidelidade)` : `${i.price.toFixed(2)}€`}
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <button className="px-3 py-1 rounded border" onClick={() => removeFromCart(i.id)}>Remover</button>
@@ -32,8 +35,11 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
         )}
 
         <div className="flex items-center justify-between pt-2 border-t">
-          <div className="text-lg font-semibold">Total</div>
-          <div className="text-lg font-semibold">{total.toFixed(2)}€</div>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={useFidelity} onChange={(e) => setUseFidelity(e.target.checked)} />
+            <span className="text-sm">Pagar com cartão fidelidade (-0,50€ por item)</span>
+          </label>
+          <div className="text-lg font-semibold">{(useFidelity ? discountedTotal : total).toFixed(2)}€</div>
         </div>
 
         <div className="flex gap-3 pt-2">

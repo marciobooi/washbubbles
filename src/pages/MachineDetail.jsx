@@ -28,7 +28,7 @@ export default function MachineDetail() {
       <div className="glass-card p-6 flex flex-col items-center gap-4">
         {frame && <img src={frame} alt={machine.name} className="w-40 h-40 object-contain" />}
         <div className="text-2xl font-semibold">{machine.name}</div>
-        <div className="text-neutral-600">{machine.weight} kg • {machine.price.toFixed(2)}€ por ciclo</div>
+        <div className="text-neutral-600">{machine.weight} kg • {machine.price.toFixed(2)}€ por ciclo • {Math.max(0, machine.price - 0.5).toFixed(2)}€ fidelidade</div>
         <div className={`py-2 px-4 rounded ${machine.status === 'free' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{machine.statusText || (machine.status === 'free' ? 'Livre' : 'Ocupado')}</div>
       </div>
       <Wave height="12vh" className="mt-2" />

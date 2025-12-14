@@ -1,5 +1,6 @@
 import React from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
+import { usePayment } from '../context/PaymentContext'
 import MachineCard from '../components/MachineCard'
 import MachineModal from '../components/MachineModal'
 import Toast from '../components/Toast'
@@ -24,6 +25,7 @@ export default function Machines() {
 
   const [selected, setSelected] = React.useState(null)
   const { addToCart, clearCart } = useCart()
+  const { processPayment } = usePayment()
   const [modalOpen, setModalOpen] = React.useState(false)
   const [toastOpen, setToastOpen] = React.useState(false)
   const [toastMessage, setToastMessage] = React.useState('')
@@ -48,14 +50,20 @@ export default function Machines() {
     console.log('Added to cart', m)
   }
 
-  function pay(m) {
-    console.log('Pay for', m)
-    // For now, emulate payment by clearing cart and closing modal
-    clearCart()
-    closeModal()
-    setToastMessage(`Pagamento efetuado`)
-    setToastType('success')
-    setToastOpen(true)
+  async function pay(m, opts = { useFidelity: false }) {
+    try {
+      const res = await processPayment([m], opts)
+      if (res.success) {
+        closeModal()
+        setToastMessage(`Pagamento efetuado (${res.method})`)
+        setToastType('success')
+        setToastOpen(true)
+      }
+    } catch (e) {
+      setToastMessage('Erro no pagamento')
+      setToastType('error')
+      setToastOpen(true)
+    }
   }
 
   return (

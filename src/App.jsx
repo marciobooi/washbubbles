@@ -5,14 +5,17 @@ import Machines from './pages/Machines'
 import MachineDetail from './pages/MachineDetail'
 import Admin from './pages/Admin'
 import { CartProvider, useCart } from './context/CartContext'
+import { PaymentProvider, usePayment } from './context/PaymentContext'
 import CartModal from './components/CartModal'
 import Toast from './components/Toast'
 
 export default function App() {
   return (
-    <CartProvider>
-      <AppInner />
-    </CartProvider>
+    <PaymentProvider>
+      <CartProvider>
+        <AppInner />
+      </CartProvider>
+    </PaymentProvider>
   )
 }
 
@@ -23,12 +26,24 @@ function AppInner() {
   const [toastOpen, setToastOpen] = React.useState(false)
   const [toastMessage, setToastMessage] = React.useState('')
 
-  function handlePay(items) {
-    // Simple feedback
-    setToastMessage('Pagamento efetuado')
-    setToastOpen(true)
-    setCartOpen(false)
-    console.log('Paid for', items)
+  const { processPayment } = usePayment()
+  const { clearCart } = useCart()
+
+  async function handlePay(items, opts = { useFidelity: false }) {
+    try {
+      const res = await processPayment(items, opts)
+      if (res.success) {
+        setToastMessage(`Pagamento efetuado (${res.method})`)
+        setToastOpen(true)
+        clearCart()
+        setCartOpen(false)
+        console.log('Paid for', items, res)
+      }
+    } catch (e) {
+      setToastMessage('Erro no pagamento')
+      setToastOpen(true)
+      console.error(e)
+    }
   }
 
   return (
