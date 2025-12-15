@@ -10,19 +10,22 @@ export default function Card({ c, onClick = () => {} }) {
       aria-pressed="false"
       onClick={() => onClick(c.id)}
       onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onClick(c.id)}
-      className="z-50 glass-card p-6 shadow-xl transition-transform duration-150 ease-in-out h-full flex flex-col justify-center select-none cursor-pointer active:scale-95 active:shadow-lg"
+      className="glass-card h-full flex flex-col justify-between p-8 select-none cursor-pointer group"
     >
-      <div className="mt-2 flex-grow flex items-center justify-center w-full overflow-hidden">
+      <div className="flex-grow flex items-center justify-center w-full overflow-hidden py-2">
         {frame ? (
           <img
             src={frame}
             alt={`${c.title} animation`}
-            className="mx-auto w-full h-full object-contain max-h-64"
+            className="mx-auto w-auto h-32 object-contain drop-shadow-sm transition-all duration-300 group-hover:scale-110 group-hover:drop-shadow-md"
             style={{ filter: 'brightness(0) saturate(100%) invert(93%) sepia(7%) saturate(2300%) hue-rotate(130deg) brightness(77%) contrast(82%)' }}
           />
         ) : null}
       </div>
-      <p className="mt-4 text-center text-neutral-600 font-bold text-2xl">{c.text}</p>
+      <div className="mt-6 text-center">
+        <p className="text-neutral-700 font-medium text-lg tracking-wide uppercase">{c.text}</p>
+        <div className="h-1 w-8 bg-primary-400/30 mx-auto mt-3 rounded-full transition-all duration-300 group-hover:w-16 group-hover:bg-primary-500/50"></div>
+      </div>
     </div>
   )
 }

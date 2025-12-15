@@ -42,6 +42,13 @@ export default function Pos() {
 
   return (
     <div className="relative min-h-[calc(100vh-4rem)] flex flex-col z-10">
+      {/* Background Blobs for Glass Effect */}
+      <div className="absolute inset-0 overflow-hidden -z-10 pointer-events-none">
+        <div className="absolute top-[-10%] left-[20%] w-[500px] h-[500px] bg-teal-300/30 rounded-full blur-[100px] animate-blob mix-blend-multiply"></div>
+        <div className="absolute top-[10%] right-[20%] w-[400px] h-[400px] bg-purple-300/30 rounded-full blur-[100px] animate-blob animation-delay-2000 mix-blend-multiply"></div>
+        <div className="absolute bottom-[-10%] left-[30%] w-[600px] h-[600px] bg-blue-300/30 rounded-full blur-[100px] animate-blob animation-delay-4000 mix-blend-multiply"></div>
+      </div>
+
       {/* Header Section */}
       <div className="pt-12 pb-8 text-center animate-fade-in-down">
         <h1 className="text-5xl font-heading font-bold text-primary-900 drop-shadow-sm tracking-tight">
