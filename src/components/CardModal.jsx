@@ -30,7 +30,7 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 bg-neutral-50 flex flex-col animate-fade-in-up overflow-hidden">
+    <div className="fixed inset-0 z-50 bg-neutral-100 flex flex-col animate-fade-in-up overflow-hidden">
       {/* Header */}
       <div className="bg-white shadow-sm px-6 py-4 flex items-center justify-between shrink-0 z-10">
         <div className="flex items-center gap-3">
@@ -55,24 +55,37 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
         <div className="h-full flex flex-col lg:grid lg:grid-cols-12 gap-4 lg:gap-8 max-w-7xl mx-auto">
           
           {/* Left Column: Balance & Actions */}
-          <div className="shrink-0 lg:col-span-5 flex flex-col overflow-y-auto lg:overflow-visible custom-scrollbar max-h-[40vh] lg:max-h-none">
-            <div className="bg-gradient-to-br from-primary-600 to-primary-800 rounded-3xl p-6 lg:p-8 text-white shadow-xl relative overflow-hidden group shrink-0 flex flex-col gap-6 h-full">
-              <div className="absolute top-0 right-0 -mt-10 -mr-10 w-40 h-40 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
-              
+          <div className="">
+          
               {/* Balance Section */}
-              <div>
-                <p className="text-primary-100 text-base lg:text-lg font-medium uppercase tracking-wider mb-1 lg:mb-2">Saldo Disponível</p>
-                <p className="text-4xl lg:text-6xl font-bold tracking-tight">{balance.toFixed(2)}€</p>
+              <div className="relative z-10 grid grid-cols-2 gap-4">
+             
+             <div className='flex justify-around'>
+                <div className="">
+                  <span className="text-primary-800 text-sm lg:text-base font-medium">ID do Cartão</span>
+                  <span className="font-mono font-bold text-primary-900 text-sm lg:text-base">**** 8821</span>
+                </div>
+                <div className="">
+                  <span className="px-3 py-1 bg-white text-primary-700 border border-primary-200 rounded-full text-xs lg:text-sm font-bold shadow-sm">Ativo</span>
+                </div>
+                </div>
+
+                <div className='text-end'>
+                <p className="text-neutral-500 text-base lg:text-lg font-medium uppercase tracking-wider mb-1 lg:mb-2">Saldo Disponível</p>
+                <p className="text-4xl lg:text-6xl font-bold tracking-tight text-primary-600">{balance.toFixed(2)}€</p>
+                </div>
+
+
               </div>
-              
-              {/* Recharge Button */}
+
+       {/* Recharge Button */}
               <button 
                 onClick={() => {
                   const v = window.prompt('Valor para recarregar (€)', '10')
                   const amount = Number(v)
                   if (!isNaN(amount) && amount > 0) onRecharge(amount)
                 }} 
-                className="w-full bg-white text-primary-700 hover:bg-primary-50 active:scale-[0.98] py-3 lg:py-4 rounded-xl font-bold text-base lg:text-lg shadow-lg transition-all flex items-center justify-center gap-3"
+                className="relative z-10 w-full bg-primary-600 hover:bg-primary-700 text-white active:scale-[0.98] py-3 lg:py-4 rounded-xl font-bold text-base lg:text-lg shadow-lg shadow-primary-600/20 transition-all flex items-center justify-center gap-3"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
@@ -80,21 +93,9 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
                 Recarregar Saldo
               </button>
 
-              <div className="h-px bg-primary-500/30 w-full"></div>
 
-              {/* Info Section */}
-              <div className="space-y-3 lg:space-y-4">
-                <h3 className="text-lg font-bold text-white/90">Informações</h3>
-                <div className="flex items-center justify-between p-3 lg:p-4 bg-white/10 backdrop-blur-sm rounded-xl border border-white/10">
-                  <span className="text-primary-100 text-sm lg:text-base">ID do Cartão</span>
-                  <span className="font-mono font-semibold text-white text-sm lg:text-base">**** 8821</span>
-                </div>
-                <div className="flex items-center justify-between p-3 lg:p-4 bg-white/10 backdrop-blur-sm rounded-xl border border-white/10">
-                  <span className="text-primary-100 text-sm lg:text-base">Estado</span>
-                  <span className="px-3 py-1 bg-green-500/20 text-green-100 border border-green-500/30 rounded-full text-xs lg:text-sm font-medium">Ativo</span>
-                </div>
-              </div>
-            </div>
+
+        
           </div>
 
           {/* Right Column: Transactions */}
