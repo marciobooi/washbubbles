@@ -4,6 +4,7 @@ import Wave from '../components/wave'
 import Card from '../components/Card'
 import CardModal from '../components/CardModal'
 import Toast from '../components/Toast'
+import Banner from '../components/Banner'
 
 export default function Pos() {
   const cards = [
@@ -41,33 +42,40 @@ export default function Pos() {
   }
 
   return (
-    <div className="relative min-h-[calc(100vh-4rem)] flex flex-col z-10">
+    <>
+      {/* Banner Carousel */}
+      <div className="mb-8">
+        <Banner />
+      </div>
+<div className='flex-1 container mx-auto p-4'>
+      <div className="relative min-h-[calc(100vh-4rem)] flex flex-col z-10">
+        {/* Cards Grid */}
+        <div className="flex-grow flex items-center justify-center px-6 pb-32">
+          <div className="w-full max-w-7xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+            {cards.map((c) => (
+              <div key={c.id} className="aspect-[3/4] sm:aspect-square lg:aspect-[3/4] xl:aspect-square transition-all duration-300 hover:-translate-y-2">
+                <Card c={c} onClick={(id) => {
+                  if (c.id === 'wash' || c.id === 'dry') {
+                    navigate(`/pos/machines?type=${c.id}`)
+                  } else if (c.id === 'card') {
+                    openCard()
+                  } else {
+                    console.log('clicked', id)
+                  }
+                }} />
+              </div>
+            ))}
+          </div>
+        </div>
 
-      {/* Cards Grid */}
-      <div className="flex-grow flex items-center justify-center px-6 pb-32">
-        <div className="w-full max-w-7xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-          {cards.map((c) => (
-            <div key={c.id} className="aspect-[3/4] sm:aspect-square lg:aspect-[3/4] xl:aspect-square transition-all duration-300 hover:-translate-y-2">
-              <Card c={c} onClick={(id) => {
-                if (c.id === 'wash' || c.id === 'dry') {
-                  navigate(`/pos/machines?type=${c.id}`)
-                } else if (c.id === 'card') {
-                  openCard()
-                } else {
-                  console.log('clicked', id)
-                }
-              }} />
-            </div>
-          ))}
+        <CardModal open={cardOpen} onClose={closeCard} transactions={transactions} balance={transactions.reduce((s,t)=>s+t.amount,0)} onRecharge={(amt)=>handleRecharge(amt)} />
+        <Toast open={toastOpen} message={toastMsg} onClose={()=>setToastOpen(false)} type="success" />
+        
+        <div className="fixed bottom-0 left-0 right-0 pointer-events-none z-0">
+          <Wave height="18vh" className="opacity-90 text-primary-500" />
         </div>
       </div>
-
-      <CardModal open={cardOpen} onClose={closeCard} transactions={transactions} balance={transactions.reduce((s,t)=>s+t.amount,0)} onRecharge={(amt)=>handleRecharge(amt)} />
-      <Toast open={toastOpen} message={toastMsg} onClose={()=>setToastOpen(false)} type="success" />
-      
-      <div className="fixed bottom-0 left-0 right-0 pointer-events-none z-0">
-         <Wave height="18vh" className="opacity-90 text-primary-500" />
       </div>
-    </div>
+    </>
   )
 }

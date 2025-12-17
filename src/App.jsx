@@ -83,7 +83,7 @@ function AppInner() {
         </div>
       </header>
 
-      <main className="flex-1 container mx-auto p-4">
+      <main className="">
         <Routes>
           <Route path="/pos" element={<Pos />} />
           <Route path="/pos/machines" element={<Machines />} />
