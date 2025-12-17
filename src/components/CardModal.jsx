@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
+import { useCart } from '../context/CartContext'
 
 function formatDate(iso) {
   const d = new Date(iso)
@@ -18,6 +19,10 @@ function getTxIcon(type) {
 }
 
 export default function CardModal({ open, onClose, transactions = [], balance = 0, onRecharge = () => {} }) {
+  const { addToCart } = useCart()
+  const [selectedAmount, setSelectedAmount] = useState(null)
+  const [addedToCart, setAddedToCart] = useState(false)
+
   useEffect(() => {
     if (!open) return
     const onKey = (e) => {
@@ -26,6 +31,24 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [open, onClose])
+
+  const handleAddToCart = () => {
+    if (!selectedAmount) return
+    
+    addToCart({
+      id: `recharge-${Date.now()}`,
+      type: 'Recarga de Cartão',
+      amount: selectedAmount,
+      price: selectedAmount
+    })
+    
+    // Visual feedback
+    setAddedToCart(true)
+    setTimeout(() => {
+      setAddedToCart(false)
+      setSelectedAmount(null)
+    }, 1500)
+  }
 
   if (!open) return null
 
@@ -82,18 +105,50 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
 
               </div>
 
-              {/* Recharge Button */}
-              <button 
-                onClick={() => {
-                  const v = window.prompt('Valor para recarregar (€)', '10')
-                  const amount = Number(v)
-                  if (!isNaN(amount) && amount > 0) onRecharge(amount)
-                }} 
-                className="relative z-10 w-full bg-teal-600 hover:bg-primary-700 text-white active:scale-[0.98] py-4 rounded-2xl font-bold text-lg shadow-lg shadow-primary-600/20 transition-all flex items-center justify-center gap-3 group/btn"
-              >
-         
-                Recarregar Saldo
-              </button>
+              {/* Amount Selection */}
+              <div className="relative z-10 flex items-center gap-3">
+                {[5, 10, 20].map((amount) => (
+                  <button
+                    key={amount}
+                    onClick={() => setSelectedAmount(amount)}
+                    className={`flex-1 py-3 rounded-xl font-bold text-lg transition-all ${
+                      selectedAmount === amount
+                        ? 'bg-teal-600 text-white shadow-lg shadow-teal-600/30 scale-105'
+                        : 'border-2 border-teal-600 text-teal-600 hover:bg-teal-50'
+                    }`}
+                  >
+                    {amount}€
+                  </button>
+                ))}
+                
+                <button 
+                  onClick={handleAddToCart}
+                  disabled={!selectedAmount || addedToCart}
+                  className={`flex-[2] py-3 rounded-xl font-bold text-base transition-all flex items-center justify-center gap-2 ${
+                    addedToCart
+                      ? 'bg-green-600 text-white shadow-lg shadow-green-600/30'
+                      : selectedAmount
+                      ? 'bg-teal-600 hover:bg-teal-700 text-white shadow-lg shadow-teal-600/20 active:scale-[0.98]'
+                      : 'bg-neutral-200 text-neutral-400 cursor-not-allowed'
+                  }`}
+                >
+                  {addedToCart ? (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Adicionado!
+                    </>
+                  ) : (
+                    <>
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                      </svg>
+                      Adicionar ao Carrinho
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
 
