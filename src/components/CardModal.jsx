@@ -55,13 +55,17 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
         <div className="h-full flex flex-col lg:grid lg:grid-cols-12 gap-4 lg:gap-8 max-w-7xl mx-auto">
           
           {/* Left Column: Balance & Actions */}
-          <div className="shrink-0 lg:col-span-5 flex flex-col gap-4 lg:gap-6 overflow-y-auto lg:overflow-visible custom-scrollbar max-h-[40vh] lg:max-h-none">
-            <div className="bg-gradient-to-br from-primary-600 to-primary-800 rounded-3xl p-6 lg:p-8 text-white shadow-xl relative overflow-hidden group shrink-0">
+          <div className="shrink-0 lg:col-span-5 flex flex-col overflow-y-auto lg:overflow-visible custom-scrollbar max-h-[40vh] lg:max-h-none">
+            <div className="bg-gradient-to-br from-primary-600 to-primary-800 rounded-3xl p-6 lg:p-8 text-white shadow-xl relative overflow-hidden group shrink-0 flex flex-col gap-6 h-full">
               <div className="absolute top-0 right-0 -mt-10 -mr-10 w-40 h-40 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
               
-              <p className="text-primary-100 text-base lg:text-lg font-medium uppercase tracking-wider mb-1 lg:mb-2">Saldo Disponível</p>
-              <p className="text-4xl lg:text-6xl font-bold tracking-tight mb-6 lg:mb-8">{balance.toFixed(2)}€</p>
+              {/* Balance Section */}
+              <div>
+                <p className="text-primary-100 text-base lg:text-lg font-medium uppercase tracking-wider mb-1 lg:mb-2">Saldo Disponível</p>
+                <p className="text-4xl lg:text-6xl font-bold tracking-tight">{balance.toFixed(2)}€</p>
+              </div>
               
+              {/* Recharge Button */}
               <button 
                 onClick={() => {
                   const v = window.prompt('Valor para recarregar (€)', '10')
@@ -75,18 +79,19 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
                 </svg>
                 Recarregar Saldo
               </button>
-            </div>
 
-            <div className="bg-white rounded-3xl p-4 lg:p-6 shadow-sm border border-neutral-100 shrink-0">
-              <h3 className="text-lg font-bold text-neutral-800 mb-3 lg:mb-4">Informações</h3>
+              <div className="h-px bg-primary-500/30 w-full"></div>
+
+              {/* Info Section */}
               <div className="space-y-3 lg:space-y-4">
-                <div className="flex items-center justify-between p-3 lg:p-4 bg-neutral-50 rounded-xl">
-                  <span className="text-neutral-500 text-sm lg:text-base">ID do Cartão</span>
-                  <span className="font-mono font-semibold text-neutral-700 text-sm lg:text-base">**** 8821</span>
+                <h3 className="text-lg font-bold text-white/90">Informações</h3>
+                <div className="flex items-center justify-between p-3 lg:p-4 bg-white/10 backdrop-blur-sm rounded-xl border border-white/10">
+                  <span className="text-primary-100 text-sm lg:text-base">ID do Cartão</span>
+                  <span className="font-mono font-semibold text-white text-sm lg:text-base">**** 8821</span>
                 </div>
-                <div className="flex items-center justify-between p-3 lg:p-4 bg-neutral-50 rounded-xl">
-                  <span className="text-neutral-500 text-sm lg:text-base">Estado</span>
-                  <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs lg:text-sm font-medium">Ativo</span>
+                <div className="flex items-center justify-between p-3 lg:p-4 bg-white/10 backdrop-blur-sm rounded-xl border border-white/10">
+                  <span className="text-primary-100 text-sm lg:text-base">Estado</span>
+                  <span className="px-3 py-1 bg-green-500/20 text-green-100 border border-green-500/30 rounded-full text-xs lg:text-sm font-medium">Ativo</span>
                 </div>
               </div>
             </div>
