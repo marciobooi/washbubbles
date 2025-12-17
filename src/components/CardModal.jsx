@@ -54,7 +54,7 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 bg-neutral-100 flex flex-col animate-fade-in-up overflow-hidden">
+    <div className="fixed inset-0 z-50 flex flex-col animate-fade-in-up overflow-hidden">
       {/* Header */}
       <div className="bg-white shadow-sm px-6 py-4 flex items-center justify-between shrink-0 z-10">
         <div className="flex items-center gap-3">
@@ -75,7 +75,7 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
       </div>
 
       {/* Content */}
-      <div className="flex-grow overflow-hidden p-4 lg:p-6">
+      <div className="flex-grow overflow-hidden p-4 lg:p-6 ">
         <div className="h-full flex flex-col lg:grid lg:grid-cols-12 gap-4 lg:gap-8 max-w-7xl mx-auto">
           
           {/* Left Column: Balance & Actions */}
