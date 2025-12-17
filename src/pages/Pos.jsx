@@ -42,28 +42,12 @@ export default function Pos() {
 
   return (
     <div className="relative min-h-[calc(100vh-4rem)] flex flex-col z-10">
-      {/* Background Blobs for Glass Effect */}
-      <div className="absolute inset-0 overflow-hidden -z-10 pointer-events-none">
-        <div className="absolute top-[-10%] left-[20%] w-[500px] h-[500px] bg-teal-300/30 rounded-full blur-[100px] animate-blob mix-blend-multiply"></div>
-        <div className="absolute top-[10%] right-[20%] w-[400px] h-[400px] bg-purple-300/30 rounded-full blur-[100px] animate-blob animation-delay-2000 mix-blend-multiply"></div>
-        <div className="absolute bottom-[-10%] left-[30%] w-[600px] h-[600px] bg-blue-300/30 rounded-full blur-[100px] animate-blob animation-delay-4000 mix-blend-multiply"></div>
-      </div>
-
-      {/* Header Section */}
-      <div className="pt-12 pb-8 text-center animate-fade-in-down">
-        <h1 className="text-5xl font-heading font-bold text-primary-900 drop-shadow-sm tracking-tight">
-          WashBubbles
-        </h1>
-        <p className="mt-3 text-xl text-primary-800 font-light">
-          Selecione uma opção para começar
-        </p>
-      </div>
 
       {/* Cards Grid */}
       <div className="flex-grow flex items-center justify-center px-6 pb-32">
         <div className="w-full max-w-7xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
           {cards.map((c) => (
-            <div key={c.id} className="aspect-[4/5] sm:aspect-square lg:aspect-[3/4] xl:aspect-square transition-all duration-300 hover:-translate-y-2">
+            <div key={c.id} className="aspect-[3/4] sm:aspect-square lg:aspect-[3/4] xl:aspect-square transition-all duration-300 hover:-translate-y-2">
               <Card c={c} onClick={(id) => {
                 if (c.id === 'wash' || c.id === 'dry') {
                   navigate(`/pos/machines?type=${c.id}`)

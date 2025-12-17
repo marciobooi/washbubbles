@@ -17,7 +17,7 @@ export default function Card({ c, onClick = () => {} }) {
           <img
             src={frame}
             alt={`${c.title} animation`}
-            className="mx-auto w-auto h-32 object-contain drop-shadow-sm transition-all duration-300 group-hover:scale-110 group-hover:drop-shadow-md"
+            className="mx-auto w-auto max-w-32 h-32 object-contain drop-shadow-sm transition-all duration-300 group-hover:scale-110 group-hover:drop-shadow-md"
             style={{ filter: 'brightness(0) saturate(100%) invert(93%) sepia(7%) saturate(2300%) hue-rotate(130deg) brightness(77%) contrast(82%)' }}
           />
         ) : null}
