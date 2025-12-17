@@ -24,6 +24,7 @@ export default function MachineDetail() {
   const frame = useFrameAnimation(frames, 300, { seed })
 
   return (
+    <div className='flex-1 container mx-auto p-4'>
     <div className="relative pb-[12vh] z-10">
       <div className="glass-card p-6 flex flex-col items-center gap-4">
         {frame && <img src={frame} alt={machine.name} className="w-40 h-40 object-contain" />}
@@ -32,6 +33,7 @@ export default function MachineDetail() {
         <div className={`py-2 px-4 rounded ${machine.status === 'free' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{machine.statusText || (machine.status === 'free' ? 'Livre' : 'Ocupado')}</div>
       </div>
       <Wave height="12vh" className="mt-2" />
+    </div>
     </div>
   )
 }

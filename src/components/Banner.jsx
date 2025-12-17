@@ -20,57 +20,45 @@ export default function Banner() {
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % banners.length)
-    }, 5000) // Auto-advance every 5 seconds
-    
+    }, 5000)
     return () => clearInterval(interval)
   }, [])
 
-  const goToSlide = (index) => {
-    setCurrentIndex(index)
-  }
-
-  const goToPrevious = () => {
-    setCurrentIndex((prev) => (prev - 1 + banners.length) % banners.length)
-  }
-
-  const goToNext = () => {
-    setCurrentIndex((prev) => (prev + 1) % banners.length)
-  }
+  const goToSlide = (index) => setCurrentIndex(index)
+  const goToPrevious = () => setCurrentIndex((prev) => (prev - 1 + banners.length) % banners.length)
+  const goToNext = () => setCurrentIndex((prev) => (prev + 1) % banners.length)
 
   return (
-    <div className="relative w-full overflow-hidden bg-gradient-to-r from-teal-500 to-teal-600 shadow-xl">
-      {/* Carousel Container */}
-      <div className="relative h-64 lg:h-80">
-        {banners.map((banner, index) => (
-          <div
-            key={banner.id}
-            className={`absolute inset-0 transition-all duration-700 ease-in-out flex items-center justify-center ${
-              index === currentIndex
-                ? 'opacity-100 translate-x-0'
-                : index < currentIndex
-                ? 'opacity-0 -translate-x-full'
-                : 'opacity-0 translate-x-full'
-            }`}
-            style={{
-              backgroundImage: `url(${banner.image})`,
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
-              backgroundRepeat: 'no-repeat',
-              filter: 'brightness(0.7)',
-            }}
-          >
-            <div className="absolute inset-0 bg-gradient-to-r from-teal-700/70 to-teal-500/60 z-0" />
-            <div className="relative z-10 flex flex-col items-start justify-center h-full px-8 lg:px-16 w-full max-w-5xl mx-auto">
-              <h2 className="text-4xl lg:text-5xl font-bold mb-4 text-white drop-shadow-lg">
-                {banner.title}
-              </h2>
-              <p className="text-xl lg:text-2xl text-white opacity-90 drop-shadow-md">
-                {banner.text}
-              </p>
-            </div>
+    <div className="relative w-full h-[20rem] overflow-hidden bg-gradient-to-r from-teal-500 to-teal-600 shadow-xl">
+      {banners.map((banner, index) => (
+        <div
+          key={banner.id}
+          className={`absolute inset-0 transition-all duration-700 ease-in-out flex items-center justify-center ${
+            index === currentIndex
+              ? 'opacity-100 translate-x-0'
+              : index < currentIndex
+              ? 'opacity-0 -translate-x-full'
+              : 'opacity-0 translate-x-full'
+          }`}
+          style={{
+            backgroundImage: `url(${banner.image})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+          }}
+        >
+          {/* Overlay for darkening the image only */}
+          <div className="absolute inset-0 z-0" style={{background: 'linear-gradient(to right, rgba(13,148,136,0.7), rgba(20,184,166,0.6))', filter: 'brightness(0.7)'}} />
+          <div className="relative z-10 flex flex-col items-start justify-end h-full px-8 lg:px-16 w-full max-w-5xl mx-auto pb-10">
+            <h2 className="text-4xl lg:text-5xl font-bold mb-2 text-white drop-shadow-lg">
+              {banner.title}
+            </h2>
+            <p className="text-xl lg:text-2xl text-white opacity-90 drop-shadow-md">
+              {banner.text}
+            </p>
           </div>
-        ))}
-      </div>
+        </div>
+      ))}
 
       {/* Navigation Arrows */}
       <button

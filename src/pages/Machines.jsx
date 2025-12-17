@@ -67,6 +67,7 @@ export default function Machines() {
   }
 
   return (
+    <div className='flex-1 container mx-auto p-4'>
     <div className="relative pb-[12vh] z-10">
       <h2 className="p-4 text-center text-xl font-semibold mb-4">Selecionar máquina ({type})</h2>
       <div className="grid gap-4">
@@ -77,6 +78,7 @@ export default function Machines() {
       <MachineModal open={modalOpen} machine={selected} frames={frames} onClose={closeModal} onAddToCart={handleAddToCart} onPay={pay} />
       <Toast open={toastOpen} message={toastMessage} type={toastType} onClose={() => setToastOpen(false)} />
       <Wave height="12vh" className="mt-2" />
+    </div>
     </div>
   )
 }

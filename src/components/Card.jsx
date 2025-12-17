@@ -10,7 +10,7 @@ export default function Card({ c, onClick = () => {} }) {
       aria-pressed="false"
       onClick={() => onClick(c.id)}
       onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onClick(c.id)}
-      className="glass-card h-full flex flex-col justify-between p-8 select-none cursor-pointer group"
+      className="glass-card h-full flex flex-col justify-between p-8 select-none cursor-pointer group shadow-lg"
     >
       <div className="flex-grow flex items-center justify-center w-full overflow-hidden py-2">
         {frame ? (
