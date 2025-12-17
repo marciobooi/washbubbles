@@ -55,47 +55,46 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
         <div className="h-full flex flex-col lg:grid lg:grid-cols-12 gap-4 lg:gap-8 max-w-7xl mx-auto">
           
           {/* Left Column: Balance & Actions */}
-          <div className="">
-          
-              {/* Balance Section */}
-              <div className="relative z-10 grid grid-cols-2 gap-4">
-             
-             <div className='flex justify-around'>
-                <div className="">
-                  <span className="text-primary-800 text-sm lg:text-base font-medium">ID do Cartão</span>
-                  <span className="font-mono font-bold text-primary-900 text-sm lg:text-base">**** 8821</span>
-                </div>
-                <div className="">
-                  <span className="px-3 py-1 bg-white text-primary-700 border border-primary-200 rounded-full text-xs lg:text-sm font-bold shadow-sm">Ativo</span>
-                </div>
+          <div className="shrink-0 ">
+            <div className="bg-white rounded-3xl p-6 lg:p-8 shadow-xl border border-neutral-100 relative overflow-hidden group shrink-0 flex flex-col justify-between gap-6 h-full">
+              <div className="absolute top-0 right-0 -mt-10 -mr-10 w-40 h-40 bg-primary-50 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-700"></div>
+              
+              {/* Balance & Info Section */}
+              <div className="relative z-10 grid grid-cols-2 gap-4 items-center flex-grow">
+                
+                <div className="flex flex-col justify-center gap-4 border-r border-neutral-100 pr-4">
+                  <div className="flex flex-col">
+                    <span className="text-neutral-400 text-xs uppercase tracking-wider font-bold mb-1">ID do Cartão</span>
+                    <span className="font-mono font-bold text-neutral-700 text-lg">**** 8821</span>
+                  </div>
+                  <div>
+                    <span className="inline-flex items-center px-3 py-1 bg-green-50 text-green-700 border border-green-200 rounded-full text-xs font-bold shadow-sm gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                      Ativo
+                    </span>
+                  </div>
                 </div>
 
-                <div className='text-end'>
-                <p className="text-neutral-500 text-base lg:text-lg font-medium uppercase tracking-wider mb-1 lg:mb-2">Saldo Disponível</p>
-                <p className="text-4xl lg:text-6xl font-bold tracking-tight text-primary-600">{balance.toFixed(2)}€</p>
+                <div className="text-right flex flex-col justify-center h-full">
+                  <p className="text-neutral-400 text-xs font-bold uppercase tracking-wider mb-1">Saldo Disponível</p>
+                  <p className="text-4xl lg:text-5xl font-bold tracking-tight text-primary-600">{balance.toFixed(2)}€</p>
                 </div>
-
 
               </div>
 
-       {/* Recharge Button */}
+              {/* Recharge Button */}
               <button 
                 onClick={() => {
                   const v = window.prompt('Valor para recarregar (€)', '10')
                   const amount = Number(v)
                   if (!isNaN(amount) && amount > 0) onRecharge(amount)
                 }} 
-                className="relative z-10 w-full bg-primary-600 hover:bg-primary-700 text-white active:scale-[0.98] py-3 lg:py-4 rounded-xl font-bold text-base lg:text-lg shadow-lg shadow-primary-600/20 transition-all flex items-center justify-center gap-3"
+                className="relative z-10 w-full bg-teal-600 hover:bg-primary-700 text-white active:scale-[0.98] py-4 rounded-2xl font-bold text-lg shadow-lg shadow-primary-600/20 transition-all flex items-center justify-center gap-3 group/btn"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
+         
                 Recarregar Saldo
               </button>
-
-
-
-        
+            </div>
           </div>
 
           {/* Right Column: Transactions */}
@@ -117,14 +116,13 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
                   {transactions.map((t) => {
                     const isPositive = t.amount >= 0
                     return (
-                      <div key={t.id} className="group bg-white p-4 rounded-2xl border border-neutral-100 hover:border-primary-200 hover:shadow-md transition-all duration-200 flex items-center gap-5">
+                      <div key={t.id} className="group bg-white p-4 rounded-2xl border border-neutral-100 border-primary-200 shadow-md transition-all duration-200 flex items-center gap-5">
                         {/* Icon Box */}
                         <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${isPositive ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'}`}>
                           <img 
                             src={getTxIcon(t.type)} 
                             alt="" 
-                            className="w-9 h-9 object-contain"
-                            style={{ filter: isPositive ? 'none' : 'grayscale(20%)' }}
+                            className="w-9 h-9 object-contain tealFilter"
                           />
                         </div>
 
@@ -137,13 +135,13 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
                             </span>
                           </div>
                           <div className="flex items-center gap-4 text-sm text-neutral-500">
-                            <span className="flex items-center gap-1.5">
+                            <span className="flex items-center gap-1.5 tealFilter">
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                               </svg>
                               {formatDate(t.ts)}
                             </span>
-                            <span className="flex items-center gap-1.5">
+                            <span className="flex items-center gap-1.5 tealFilter">
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                               </svg>
