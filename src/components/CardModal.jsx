@@ -37,6 +37,7 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
     
     addToCart({
       id: `recharge-${Date.now()}`,
+      name: `Recarga de Cartão - ${selectedAmount}€`,
       type: 'Recarga de Cartão',
       amount: selectedAmount,
       price: selectedAmount

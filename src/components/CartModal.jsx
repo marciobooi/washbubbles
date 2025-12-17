@@ -7,9 +7,12 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
   const [useFidelity, setUseFidelity] = React.useState(false)
   const total = cart.reduce((s, i) => s + (i.price || 0), 0)
   const discountedTotal = cart.reduce((s, i) => s + Math.max(0, (i.price || 0) - (useFidelity ? 0.5 : 0)), 0)
+  
+  // Check if cart contains recharge items
+  const hasRecharge = cart.some(item => item.type === 'Recarga de Cartão')
 
   function handlePay() {
-    onPay(cart, { useFidelity })
+    onPay(cart, { useFidelity: hasRecharge ? false : useFidelity })
     onClose()
   }
 
@@ -34,13 +37,25 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
           ))
         )}
 
-        <div className="flex items-center justify-between pt-2 border-t">
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={useFidelity} onChange={(e) => setUseFidelity(e.target.checked)} />
-            <span className="text-sm">Pagar com cartão fidelidade (-0,50€ por item)</span>
-          </label>
-          <div className="text-lg font-semibold">{(useFidelity ? discountedTotal : total).toFixed(2)}€</div>
-        </div>
+        {!hasRecharge && (
+          <div className="flex items-center justify-between pt-2 border-t">
+            <label className="flex items-center gap-2">
+              <input 
+                type="checkbox" 
+                checked={useFidelity} 
+                onChange={(e) => setUseFidelity(e.target.checked)} 
+              />
+              <span className="text-sm">Pagar com cartão fidelidade (-0,50€ por item)</span>
+            </label>
+            <div className="text-lg font-semibold">{(useFidelity ? discountedTotal : total).toFixed(2)}€</div>
+          </div>
+        )}
+
+        {hasRecharge && (
+          <div className="pt-2 border-t">
+            <div className="text-lg font-semibold text-right">{total.toFixed(2)}€</div>
+          </div>
+        )}
 
         <div className="flex gap-3 pt-2">
           <button onClick={handlePay} className="btn-primary px-4 py-2 rounded">Pagar</button>
