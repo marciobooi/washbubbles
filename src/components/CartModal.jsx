@@ -18,49 +18,88 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
 
   return (
     <Modal open={open} onClose={onClose} title="Carrinho">
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-6">
         {cart.length === 0 ? (
-          <div className="text-neutral-600">Carrinho vazio</div>
+          <div className="text-center py-8">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mx-auto mb-3 opacity-20 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
+            <p className="text-neutral-400 mb-6">Carrinho vazio</p>
+            <button 
+              onClick={onClose}
+              className="px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-semibold transition-all"
+            >
+              Fechar
+            </button>
+          </div>
         ) : (
-          cart.map((i) => (
-            <div key={i.id} className="flex items-center justify-between gap-3">
-              <div>
-                <div className="font-semibold">{i.name}</div>
-                <div className="text-sm text-neutral-600">
-                  {useFidelity ? `${Math.max(0, i.price - 0.5).toFixed(2)}€ (fidelidade)` : `${i.price.toFixed(2)}€`}
+          <>
+            {/* Items List */}
+            <div className="space-y-3">
+              {cart.map((i) => (
+                <div key={i.id} className="bg-neutral-50 p-4 rounded-lg relative group">
+                  <button 
+                    onClick={() => removeFromCart(i.id)}
+                    className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-lg transition-all active:scale-90"
+                    aria-label="Remover item"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                  <div className="flex items-center justify-between">
+                    <div className="font-semibold text-neutral-800 pr-6">{i.name || i.type}</div>
+                    <div className="text-lg font-bold text-neutral-800">
+                      {!hasRecharge && useFidelity ? Math.max(0, i.price - 0.5).toFixed(2) : i.price.toFixed(2)}€
+                    </div>
+                  </div>
+                  {!hasRecharge && useFidelity && (
+                    <div className="text-xs text-green-600 mt-1">-0.50€ desconto fidelidade</div>
+                  )}
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button className="px-3 py-1 rounded border" onClick={() => removeFromCart(i.id)}>Remover</button>
-              </div>
+              ))}
             </div>
-          ))
-        )}
 
-        {!hasRecharge && (
-          <div className="flex items-center justify-between pt-2 border-t">
-            <label className="flex items-center gap-2">
-              <input 
-                type="checkbox" 
-                checked={useFidelity} 
-                onChange={(e) => setUseFidelity(e.target.checked)} 
-              />
-              <span className="text-sm">Pagar com cartão fidelidade (-0,50€ por item)</span>
-            </label>
-            <div className="text-lg font-semibold">{(useFidelity ? discountedTotal : total).toFixed(2)}€</div>
-          </div>
-        )}
+            {/* Fidelity Option */}
+            {!hasRecharge && (
+              <label className="flex items-center gap-3 p-4 bg-teal-50 rounded-lg cursor-pointer hover:bg-teal-100 transition-colors">
+                <input 
+                  type="checkbox" 
+                  checked={useFidelity} 
+                  onChange={(e) => setUseFidelity(e.target.checked)}
+                  className="w-5 h-5"
+                />
+                <span className="text-sm font-medium text-neutral-700">
+                  Pagar com cartão fidelidade <span className="text-teal-600 font-bold">(-0,50€ por item)</span>
+                </span>
+              </label>
+            )}
 
-        {hasRecharge && (
-          <div className="pt-2 border-t">
-            <div className="text-lg font-semibold text-right">{total.toFixed(2)}€</div>
-          </div>
-        )}
+            {/* Total */}
+            <div className="flex items-center justify-between pt-4 border-t-2 border-neutral-200">
+              <span className="text-xl font-bold text-neutral-700">Total</span>
+              <span className="text-3xl font-bold text-teal-600">
+                {(!hasRecharge && useFidelity ? discountedTotal : total).toFixed(2)}€
+              </span>
+            </div>
 
-        <div className="flex gap-3 pt-2">
-          <button onClick={handlePay} className="btn-primary px-4 py-2 rounded">Pagar</button>
-          <button onClick={() => { clearCart(); onClear() }} className="px-4 py-2 rounded border">Limpar</button>
-        </div>
+            {/* Action Buttons */}
+            <div className="flex gap-3">
+              <button 
+                onClick={handlePay} 
+                className="flex-1 bg-teal-600 hover:bg-teal-700 text-white py-4 rounded-xl font-bold text-lg shadow-lg transition-all active:scale-[0.98]"
+              >
+                Pagar
+              </button>
+              <button 
+                onClick={() => { clearCart(); onClear() }} 
+                className="px-6 py-4 rounded-xl border-2 border-neutral-300 text-neutral-600 hover:bg-neutral-50 font-semibold transition-all"
+              >
+                Limpar
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </Modal>
   )
