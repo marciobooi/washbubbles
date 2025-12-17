@@ -48,7 +48,7 @@ export default function Pos() {
         <Banner />
       </div>
 <div className='flex-1 container mx-auto p-4'>
-      <div className="relative min-h-[calc(100vh-4rem)] flex flex-col z-10">
+      <div className="relative min-h-[calc(100vh-35rem)] flex flex-col z-10">
         {/* Cards Grid */}
         <div className="flex-grow flex items-center justify-center px-6 pb-32">
           <div className="w-full max-w-7xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
