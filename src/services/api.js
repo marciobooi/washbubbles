@@ -19,7 +19,12 @@ export class ApiError extends Error {
 
 
 function toUrl(base, path, query) {
-  const url = new URL(path, base.startsWith('http') ? base : window.location.origin + base);
+  // Ensure base + path are joined correctly even when `path` starts with '/'.
+  // Example: base="/api" and path="/auth/login" should result in 
+  // window.location.origin + "/api/auth/login" (not replace `/api` with `/auth/login`).
+  const host = base.startsWith('http') ? base : window.location.origin + base;
+  const full = host.replace(/\/$/, '') + '/' + String(path).replace(/^\//, '');
+  const url = new URL(full);
   if (query) {
     Object.entries(query).forEach(([k, v]) => {
       if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
