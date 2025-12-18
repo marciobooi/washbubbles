@@ -35,12 +35,29 @@ router.get('/users', async (req, res) => {
   res.json(masked)
 })
 
-// Create user (admin) - simple create without password (recommended to use /auth/register for full flow)
+// Create user (admin) - accepts an optional `password` field so admins can set credentials directly
 router.post('/users', async (req, res) => {
-  const { username, role } = req.body
+  const { username, role, password } = req.body
   if (!username) return res.status(400).json({ error: 'Missing username' })
-  const user = await User.create({ username, role: role || 'user' })
-  res.json({ _id: user._id, username: user.username, role: user.role })
+
+  // If password is provided, hash it; otherwise generate a random password (and return it)
+  let hash
+  if (password) {
+    hash = await bcrypt.hash(password, 10)
+  } else {
+    // generate a secure random temporary password and hash it
+    const temp = crypto.randomBytes(8).toString('hex')
+    hash = await bcrypt.hash(temp, 10)
+  }
+
+  const apiKey = role === 'KIOSK' ? crypto.randomBytes(24).toString('hex') : undefined
+  const user = await User.create({ username, role: role || 'user', password: hash, apiKey })
+
+  const resp = { _id: user._id, username: user.username, role: user.role }
+  // If admin provided a password, do not echo it back. If we generated one because admin didn't provide it, return the temp password so admin can share it.
+  if (!password && user) resp.tempPassword = temp
+
+  res.json(resp)
 })
 
 // Rotate API key for user
@@ -94,8 +111,13 @@ router.get('/users/:id', async (req, res) => {
 })
 
 router.put('/users/:id', async (req, res) => {
-  const { username, role } = req.body
-  const u = await User.findByIdAndUpdate(req.params.id, { username, role }, { new: true }).select('username role apiKey createdAt')
+  const { username, role, password } = req.body
+  const update = { username, role }
+  if (password) {
+    const hash = await bcrypt.hash(password, 10)
+    update.password = hash
+  }
+  const u = await User.findByIdAndUpdate(req.params.id, update, { new: true }).select('username role apiKey createdAt')
   if (!u) return res.status(404).json({ error: 'User not found' })
   u.apiKey = u.apiKey ? u.apiKey.slice(0, 8) + '…' : null
   res.json(u)

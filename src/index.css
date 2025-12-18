@@ -66,9 +66,7 @@
   .glass-card > * { position: relative; z-index: 1; }
 
   /* Admin machines form inputs */
-  .machine-form input,
-  .machine-form select,
-  .machine-form textarea {
+  input, select, textarea {
     background-color: var(--color-green-50);
     border-radius: 8px;
     border: 1px solid var(--color-green-500);

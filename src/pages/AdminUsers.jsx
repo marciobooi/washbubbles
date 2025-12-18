@@ -14,6 +14,8 @@ export default function AdminUsers(){
   const [editing, setEditing] = useState(null)
   const [username, setUsername] = useState('')
   const [role, setRole] = useState('user')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [isSaving, setIsSaving] = useState(false)
 
   async function load() {
@@ -40,6 +42,8 @@ export default function AdminUsers(){
     setEditing(null)
     setUsername('')
     setRole('user')
+    setPassword('')
+    setConfirmPassword('')
     setModalOpen(true)
   }
 
@@ -47,6 +51,8 @@ export default function AdminUsers(){
     setEditing(u)
     setUsername(u.username)
     setRole(u.role)
+    setPassword('')
+    setConfirmPassword('')
     setModalOpen(true)
   }
 
@@ -54,6 +60,8 @@ export default function AdminUsers(){
     setEditing(null)
     setUsername('')
     setRole('user')
+    setPassword('')
+    setConfirmPassword('')
     setModalOpen(false)
   }
 
@@ -61,23 +69,36 @@ export default function AdminUsers(){
     e?.preventDefault()
     setIsSaving(true)
     try {
+      // validate passwords when creating or when provided on update
+      if (!editing) {
+        if (!password || password.length < 6) throw new Error('Password must be at least 6 characters')
+        if (password !== confirmPassword) throw new Error('Passwords do not match')
+      } else if (password) {
+        if (password.length < 6) throw new Error('Password must be at least 6 characters')
+        if (password !== confirmPassword) throw new Error('Passwords do not match')
+      }
+
+      const payload = { username, role }
+      if (password) payload.password = password
+
       if (editing) {
-        await api.updateUser(editing._id, { username, role })
+        await api.updateUser(editing._id, payload)
         toast({ title: 'Utilizador atualizado', variant: 'success' })
       } else {
-        await api.createUser({ username, role })
+        await api.createUser(payload)
         toast({ title: 'Utilizador criado', variant: 'success' })
       }
       setModalOpen(false)
       load()
     } catch (e) {
       console.error(e)
+      const msg = e?.body?.error || e?.message || 'Erro'
       if (e && e.status === 401) {
         toast({ title: 'Sessão expirada, faça login novamente', variant: 'destructive' })
         navigate('/admin/login')
         return
       }
-      toast({ title: 'Erro', variant: 'destructive' })
+      toast({ title: msg, variant: 'destructive' })
     } finally {
       setIsSaving(false)
     }
@@ -154,8 +175,8 @@ export default function AdminUsers(){
       </div>
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? 'Editar Utilizador' : 'Novo Utilizador'}>
-        <form onSubmit={save} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch">
-          <div className="md:col-span-2 space-y-3">
+        <form onSubmit={save} className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">
+
             <div>
               <label htmlFor="user-username" className="text-sm font-medium">Username</label>
               <input id="user-username" className="border p-2 rounded mt-1 w-full" placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} />
@@ -168,24 +189,20 @@ export default function AdminUsers(){
                 <option value="admin">admin</option>
               </select>
             </div>
-          </div>
 
-          <div className="md:col-span-1">
-            <div className="border rounded p-3 bg-muted-foreground/5 h-full">
-              <div className="flex flex-col gap-3 h-full justify-between">
-                <div>
-                  <div className="font-semibold">{username || (editing ? editing.username : 'Username')}</div>
-                  <div className="text-xs text-muted-foreground">{role}</div>
-                </div>
-
-                <div className="flex justify-center">
-                  <div className="h-12 w-12 rounded bg-neutral-50 flex items-center justify-center text-sm text-neutral-500">Key</div>
-                </div>
-              </div>
+            <div>
+              <label className="text-sm font-medium">Password</label>
+              <input type="password" className="w-full mt-2 p-2 border rounded" placeholder="Definir password (opcional ao editar)" value={password} onChange={(e)=>setPassword(e.target.value)} />
             </div>
-          </div>
 
-          <div className="md:col-span-3 flex justify-end gap-2 mt-4">
+            <div>
+              <label className="text-sm font-medium">Confirmar password</label>
+              <input type="password" className="w-full mt-2 p-2 border rounded" placeholder="Confirmar password" value={confirmPassword} onChange={(e)=>setConfirmPassword(e.target.value)} />
+            </div>
+
+            <div className="md:col-span-2 text-xs text-muted-foreground">Password mínima: 6 caracteres. Deixe em branco para não alterar.</div>
+
+          <div className="md:col-span-2 flex justify-end gap-2 mt-4">
             <Button variant="outline" type="button" onClick={() => setModalOpen(false)}><X className="h-4 w-4 mr-2" />Cancelar</Button>
             <Button type="submit" disabled={isSaving} aria-disabled={isSaving}>{isSaving ? 'Salvando...' : (<><Check className="h-4 w-4 mr-2" />Salvar</>)}</Button>
           </div>
