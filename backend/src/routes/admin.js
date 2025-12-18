@@ -5,6 +5,7 @@ import User from '../models/user.js'
 import Sale from '../models/sale.js'
 import Setting from '../models/setting.js'
 import crypto from 'crypto'
+import bcrypt from 'bcryptjs'
 
 const router = express.Router()
 
@@ -42,11 +43,12 @@ router.post('/users', async (req, res) => {
 
   // If password is provided, hash it; otherwise generate a random password (and return it)
   let hash
+  let temp
   if (password) {
     hash = await bcrypt.hash(password, 10)
   } else {
     // generate a secure random temporary password and hash it
-    const temp = crypto.randomBytes(8).toString('hex')
+    temp = crypto.randomBytes(8).toString('hex')
     hash = await bcrypt.hash(temp, 10)
   }
 
