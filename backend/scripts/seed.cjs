@@ -21,9 +21,9 @@ async function main() {
   const kioskHash = await bcrypt.hash(kioskPassword, 10)
 
   // ensure admin user exists (upsert style)
-  await User.updateOne({ email: 'admin@washstore.local' }, { $set: { email: 'admin@washstore.local', password: adminHash, role: 'ADMIN' } }, { upsert: true })
+  await User.updateOne({ $or: [{ username: 'admin' }, { email: 'admin@washstore.local' }] }, { $set: { username: 'admin', email: 'admin@washstore.local', password: adminHash, role: 'ADMIN' } }, { upsert: true })
   // ensure kiosk user exists (upsert style)
-  await User.updateOne({ email: 'kiosk@washstore.local' }, { $set: { email: 'kiosk@washstore.local', password: kioskHash, role: 'KIOSK', apiKey: kioskApiKey } }, { upsert: true })
+  await User.updateOne({ $or: [{ username: 'kiosk' }, { email: 'kiosk@washstore.local' }] }, { $set: { username: 'kiosk', email: 'kiosk@washstore.local', password: kioskHash, role: 'KIOSK', apiKey: kioskApiKey } }, { upsert: true })
 
   // Insert sample machines if none exist
   const count = await Machine.countDocuments()
@@ -31,8 +31,8 @@ async function main() {
     await Machine.create([{ name: 'Machine A' }, { name: 'Machine B' }])
   }
 
-  console.log('Seed complete - admin user: admin@washstore.local (password: ' + adminPassword + ')')
-  console.log('Seed complete - kiosk user: kiosk@washstore.local (password: ' + kioskPassword + ')')
+  console.log('Seed complete - admin user: admin (password: ' + adminPassword + ')')
+  console.log('Seed complete - kiosk user: kiosk (password: ' + kioskPassword + ')')
   console.log('Kiosk API key: ' + kioskApiKey)
   process.exit(0)
 }

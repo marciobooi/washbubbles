@@ -25,9 +25,9 @@ router.post('/machines', async (req, res) => {
 
 // List users (admin only)
 router.get('/users', async (req, res) => {
-  const users = await User.find().select('email role apiKey createdAt').lean()
+  const users = await User.find().select('username role apiKey createdAt').lean()
   // mask apiKey
-  const masked = users.map((u) => ({ _id: u._id, email: u.email, role: u.role, apiKey: u.apiKey ? u.apiKey.slice(0, 8) + '…' : null, createdAt: u.createdAt }))
+  const masked = users.map((u) => ({ _id: u._id, username: u.username, role: u.role, apiKey: u.apiKey ? u.apiKey.slice(0, 8) + '…' : null, createdAt: u.createdAt }))
   res.json(masked)
 })
 

@@ -30,11 +30,11 @@ Quick start
 
  - `npm run seed` now waits up to ~15s for a local MongoDB server (configured by `MONGODB_URL`) to be reachable and will print a clear message if it cannot connect. If you prefer to skip this waiting behavior, set `SEED_WAIT=false` and run the command; note the seed will then fail if the DB is not reachable.
  - `npm run seed` will create the admin and kiosk users if missing. The defaults are:
-    - Admin: email `admin@washstore.local`, password `admin1234` (configurable via `ADMIN_PASSWORD`).
-    - Kiosk: email `kiosk@washstore.local`, password `kiosk1234` (configurable via `KIOSK_PASSWORD`).
+    - Admin: username `admin`, password `admin1234` (configurable via `ADMIN_PASSWORD`).
+    - Kiosk: username `kiosk`, password `kiosk1234` (configurable via `KIOSK_PASSWORD`).
 
 4. REST endpoints (local server):
-   - `POST /auth/login` : { email, password }
+   - `POST /auth/login` : { username, password }
    - `GET /pos/machine-status`
    - `POST /pos/sale` : { machineId, amount, items }
    Authentication
@@ -46,7 +46,7 @@ Quick start
       - This is accepted by the backend and allows calls to kiosk-protected endpoints such as `POST /pos/sale`.
    - Use JWT: exchange credentials via `POST /api/auth/login` (send `{ apiKey: '<key>' }`) to receive a token and then use `Authorization: Bearer <token>` in subsequent requests.
 
-   Admin users continue to use email/password login and will receive a JWT that grants access to admin endpoints.
+   Admin users continue to use username/password login and will receive a JWT that grants access to admin endpoints.
    - `GET /admin/machines` (requires JWT token)
    - `POST /admin/machines` (requires JWT token)
 

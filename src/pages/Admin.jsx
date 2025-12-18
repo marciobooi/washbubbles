@@ -28,7 +28,7 @@ export default function Admin() {
       {/* Right column with cover image (hidden on small screens) */}
       <div className="bg-muted relative hidden lg:block">
         <img
-          src="/public/geral/login.jpg"
+          src="/geral/login.jpg"
           alt="Cover"
           className="absolute inset-0 h-full w-full object-cover dark:brightness-[0.2] dark:grayscale"
         />
