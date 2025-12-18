@@ -286,6 +286,11 @@ export function createApi(config) {
     updateMachine,
     deleteMachine,
 
+    // Users
+    getUsers,
+    getUser,
+    createUser,
+    updateUser,
     deleteUser,
     rotateUserKey,
 
