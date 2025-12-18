@@ -62,40 +62,38 @@ export default function AdminOperations() {
   const dry = machines.filter(m => m.type === 'dry')
 
   const MachineTile = ({ m }) => (
-    <div className={`p-3 rounded-lg border hover:shadow-md transition ${m.status === 'working' ? 'bg-yellow-50' : m.status === 'offline' ? 'bg-gray-50' : 'bg-white'}`}>
-      <div className="flex items-center gap-3">
-        {m.icon && <img src={m.icon} alt="icon" className="h-10 w-10 object-contain tealFilter" />}
-        <div className="flex-1">
-          <div className="font-semibold">{m.name}</div>
-          <div className="text-xs text-muted-foreground">{m.weight ? `${m.weight} kg` : ''}</div>
-        </div>
-        <div className="flex flex-col items-end gap-2">
-          <span className={`text-xs px-2 py-1 rounded ${m.status === 'working' ? 'bg-yellow-100 text-yellow-800' : m.status === 'offline' ? 'bg-gray-100 text-gray-800' : 'bg-green-100 text-green-800'}`}>{m.statusText || (m.status === 'working' ? 'Ocupado' : m.status === 'offline' ? 'Offline' : 'Livre')}</span>
-          <div className="flex gap-2 mt-2">
-            {m.status !== 'working' && (
-              <Button size="sm" variant="ghost" className="p-1" onClick={() => startMachine(m)} aria-label="Iniciar">
-                <Play className="w-4 h-4" />
-              </Button>
-            )}
-            {m.status === 'working' && (
-              <Button size="sm" variant="destructive" className="p-1" onClick={() => stopMachine(m)} aria-label="Parar">
-                <Square className="w-4 h-4" />
-              </Button>
-            )}
-            <Button size="sm" variant="ghost" className="p-1" onClick={() => setMachineStatus(m, 'free', 'Livre')} aria-label="Cancelar">
-              <X className="w-4 h-4" />
+    <div className={`aspect-square flex flex-col p-4 rounded-lg border hover:shadow-md transition ${m.status === 'working' ? 'bg-yellow-50' : m.status === 'offline' ? 'bg-gray-50' : 'bg-white'}`}>
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center">
+        {m.icon && <img src={m.icon} alt="icon" className="h-12 w-12 object-contain tealFilter" />}
+        <div className="font-semibold">{m.name}</div>
+        <div className="text-xs text-muted-foreground">{m.weight ? `${m.weight} kg` : ''}</div>
+      </div>
+      <div className="mt-3 flex flex-col items-end gap-2">
+        <span className={`text-xs px-2 py-1 rounded ${m.status === 'working' ? 'bg-yellow-100 text-yellow-800' : m.status === 'offline' ? 'bg-gray-100 text-gray-800' : 'bg-green-100 text-green-800'}`}>{m.statusText || (m.status === 'working' ? 'Ocupado' : m.status === 'offline' ? 'Offline' : 'Livre')}</span>
+        <div className="flex gap-2 mt-2">
+          {m.status !== 'working' && (
+            <Button size="sm" variant="ghost" className="p-1" onClick={() => startMachine(m)} aria-label="Iniciar">
+              <Play className="w-4 h-4" />
             </Button>
-            {m.status !== 'offline' && (
-              <Button size="sm" variant="outline" className="p-1" onClick={() => setOffline(m)} aria-label="Offline">
-                <Power className="w-4 h-4" />
-              </Button>
-            )}
-            {m.status === 'offline' && (
-              <Button size="sm" variant="outline" className="p-1" onClick={() => setOnline(m)} aria-label="Online">
-                <Power className="w-4 h-4" />
-              </Button>
-            )}
-          </div>
+          )}
+          {m.status === 'working' && (
+            <Button size="sm" variant="destructive" className="p-1" onClick={() => stopMachine(m)} aria-label="Parar">
+              <Square className="w-4 h-4" />
+            </Button>
+          )}
+          <Button size="sm" variant="ghost" className="p-1" onClick={() => setMachineStatus(m, 'free', 'Livre')} aria-label="Cancelar">
+            <X className="w-4 h-4" />
+          </Button>
+          {m.status !== 'offline' && (
+            <Button size="sm" variant="outline" className="p-1" onClick={() => setOffline(m)} aria-label="Offline">
+              <Power className="w-4 h-4" />
+            </Button>
+          )}
+          {m.status === 'offline' && (
+            <Button size="sm" variant="outline" className="p-1" onClick={() => setOnline(m)} aria-label="Online">
+              <Power className="w-4 h-4" />
+            </Button>
+          )}
         </div>
       </div>
     </div>
