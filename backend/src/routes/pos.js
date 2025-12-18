@@ -2,6 +2,7 @@ import express from 'express'
 import Machine from '../models/machine.js'
 import Sale from '../models/sale.js'
 import { requireKiosk } from '../middleware/auth.js'
+import { broadcastMachines } from '../wsServer.js'
 
 const router = express.Router()
 
@@ -53,6 +54,8 @@ router.post('/sale', requireKiosk, async (req, res) => {
   await Machine.findByIdAndUpdate(machineId, { $inc: { cycle: 1 }, $set: { status: 'working', statusText: 'Ocupado' } })
 
   const updated = await Machine.findById(machineId)
+  // broadcast updated machine list so kiosks and dashboards refresh in real-time
+  try { await broadcastMachines() } catch (e) { console.error('[pos] broadcastMachines error', e) }
 
   res.json({ sale, machine: updated })
 })

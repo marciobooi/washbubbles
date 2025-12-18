@@ -12,13 +12,21 @@ export function connect(url = import.meta.env.VITE_HW_BRIDGE_URL || 'ws://localh
   // Attach auth token or kiosk api key as query params when available
   try {
     const token = localStorage.getItem('ws_token')
-    const kioskKey = window?.electronAPI?.kioskKey?.() || import.meta.env.VITE_KIOSK_API_KEY
+    const kioskKey = window?.electronAPI?.kioskKey?.() || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
     const parsed = new URL(url)
-    if (token) parsed.searchParams.set('token', token)
-    else if (kioskKey) parsed.searchParams.set('apiKey', kioskKey)
+    if (token) {
+      parsed.searchParams.set('token', token)
+      console.info('[ws] connecting with token')
+    } else if (kioskKey) {
+      parsed.searchParams.set('apiKey', kioskKey)
+      console.info('[ws] connecting with kioskApiKey')
+    } else {
+      console.info('[ws] connecting without auth')
+    }
     url = parsed.toString()
   } catch (e) {
     // ignore URL parsing errors
+    console.error('[ws] connect build url failed', e)
   }
 
   socket = new WebSocket(url)

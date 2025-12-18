@@ -6,6 +6,7 @@ import MachineModal from '../components/MachineModal'
 import { toast } from '@/components/ui/Toast'
 import Wave from '../components/ui/wave'
 import api from '@/services/api'
+import { connect, subscribe } from '@/services/websocket'
 import { useCart } from '../context/CartContext'
 
 export default function Machines() {
@@ -55,7 +56,18 @@ export default function Machines() {
       }
     }
     load()
-    return () => { mounted = false }
+
+    // subscribe to websocket updates so POS refreshes automatically
+    connect()
+    const unsub = subscribe((message) => {
+      console.debug('[ws] Machines received message', message)
+      if (typeof message === 'object' && message.type === 'machine-status') {
+        const data = Array.isArray(message.payload) ? message.payload.filter((m) => (m.type || 'wash') === type) : []
+        if (data.length) setMachines(data)
+      }
+    })
+
+    return () => { mounted = false; unsub() }
   }, [type])
 
   const [selected, setSelected] = React.useState(null)

@@ -3,7 +3,8 @@ import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
 import { Button } from '@/components/ui/button'
 import { Play, Square, X, Power } from 'lucide-react'
-import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip' 
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
+import { connect, subscribe } from '@/services/websocket' 
 
 export default function AdminOperations() {
   const [machines, setMachines] = React.useState([])
@@ -22,7 +23,17 @@ export default function AdminOperations() {
     }
   }
 
-  React.useEffect(() => { load() }, [])
+  React.useEffect(() => {
+    load()
+    connect()
+    const unsub = subscribe((message) => {
+      console.debug('[ws] AdminOperations received message', message)
+      if (typeof message === 'object' && message.type === 'machine-status' && Array.isArray(message.payload)) {
+        setMachines(message.payload)
+      }
+    })
+    return () => unsub()
+  }, [])
 
   async function setMachineStatus(m, status, statusText) {
     const prevStatus = m.status
