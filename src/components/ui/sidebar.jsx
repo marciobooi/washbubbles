@@ -12,6 +12,8 @@ export function SidebarProvider({ children }) {
     }
   })
 
+  const [searchQuery, setSearchQuery] = useState('')
+
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0')
@@ -21,7 +23,7 @@ export function SidebarProvider({ children }) {
   const toggle = () => setCollapsed((s) => !s)
 
   return (
-    <SidebarContext.Provider value={{ collapsed, toggle }}>{children}</SidebarContext.Provider>
+    <SidebarContext.Provider value={{ collapsed, toggle, searchQuery, setSearchQuery }}>{children}</SidebarContext.Provider>
   )
 }
 

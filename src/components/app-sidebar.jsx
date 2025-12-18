@@ -1,6 +1,7 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
 import { VersionSwitcher } from './version-switcher'
+import { useSidebar } from './ui/sidebar'
 import { Home, FileText, Layers, BookOpen, Server } from 'lucide-react'
 import {
   Sidebar,
@@ -59,24 +60,38 @@ export function AppSidebar(props) {
         <VersionSwitcher versions={data.versions} defaultVersion={data.versions[0]} />
       </SidebarHeader>
       <SidebarContent>
-        {data.navMain.map((item) => (
-          <SidebarGroup key={item.title}>
-            <SidebarGroupLabel>
-              {item.icon && <item.icon className="inline-block mr-2 h-4 w-4 align-middle" />} {item.title}
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {item.items.map((it) => (
-                  <SidebarMenuItem key={it.title}>
-                    <SidebarMenuButton asChild isActive={it.isActive} Icon={it.icon} title={it.title}>
-                      <Link to={it.url}>{it.title}</Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        ))}
+        {(() => {
+          const { searchQuery } = useSidebar() || { searchQuery: '' }
+          const sq = (searchQuery || '').trim().toLowerCase()
+
+          const groups = sq
+            ? data.navMain
+                .map((g) => ({
+                  ...g,
+                  items: g.items.filter((it) => (it.title || '').toLowerCase().includes(sq)),
+                }))
+                .filter((g) => g.items.length > 0)
+            : data.navMain
+
+          return groups.map((item) => (
+            <SidebarGroup key={item.title}>
+              <SidebarGroupLabel>
+                {item.icon && <item.icon className="inline-block mr-2 h-4 w-4 align-middle" />} {item.title}
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {item.items.map((it) => (
+                    <SidebarMenuItem key={it.title}>
+                      <SidebarMenuButton asChild isActive={it.isActive} Icon={it.icon} title={it.title}>
+                        <Link to={it.url}>{it.title}</Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ))
+        })()}
       </SidebarContent>
       <SidebarRail />
     </Sidebar>

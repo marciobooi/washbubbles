@@ -40,4 +40,14 @@ router.post('/users/:id/rotate', async (req, res) => {
   res.json({ _id: user._id, apiKey: newKey })
 })
 
+// Admin search endpoint: search users and machines by query (admin only)
+router.get('/search', async (req, res) => {
+  const q = (req.query.q || '').trim()
+  if (!q || q.length < 1) return res.json({ users: [], machines: [] })
+  const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
+  const users = await User.find({ username: regex }).limit(10).select('username role createdAt').lean()
+  const machines = await Machine.find({ name: regex }).limit(10).lean()
+  res.json({ users, machines })
+})
+
 export default router
