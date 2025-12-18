@@ -3,6 +3,7 @@ import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
 import { Button } from '@/components/ui/button'
 import { Play, Square, X, Power } from 'lucide-react'
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip' 
 
 export default function AdminOperations() {
   const [machines, setMachines] = React.useState([])
@@ -64,7 +65,7 @@ export default function AdminOperations() {
   const MachineTile = ({ m }) => (
     <div className={`aspect-square flex flex-col p-4 rounded-lg border hover:shadow-md transition ${m.status === 'working' ? 'bg-yellow-50' : m.status === 'offline' ? 'bg-gray-50' : 'bg-white'}`}>
       <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center">
-        {m.icon && <img src={m.icon} alt="icon" className="h-12 w-12 object-contain tealFilter" />}
+        {m.icon && <img src={m.icon} alt="icon" className="h-16 w-16 object-contain tealFilter" />}
         <div className="font-semibold">{m.name}</div>
         <div className="text-xs text-muted-foreground">{m.weight ? `${m.weight} kg` : ''}</div>
       </div>
@@ -72,27 +73,52 @@ export default function AdminOperations() {
         <span className={`text-xs px-2 py-1 rounded ${m.status === 'working' ? 'bg-yellow-100 text-yellow-800' : m.status === 'offline' ? 'bg-gray-100 text-gray-800' : 'bg-green-100 text-green-800'}`}>{m.statusText || (m.status === 'working' ? 'Ocupado' : m.status === 'offline' ? 'Offline' : 'Livre')}</span>
         <div className="flex gap-2 mt-2">
           {m.status !== 'working' && (
-            <Button size="sm" variant="ghost" className="p-1" onClick={() => startMachine(m)} aria-label="Iniciar">
-              <Play className="w-4 h-4" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button size="sm" variant="ghost" className="p-2" onClick={() => startMachine(m)} aria-label="Iniciar">
+                  <Play className="w-5 h-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent sideOffset={6}>Iniciar</TooltipContent>
+            </Tooltip>
           )}
           {m.status === 'working' && (
-            <Button size="sm" variant="destructive" className="p-1" onClick={() => stopMachine(m)} aria-label="Parar">
-              <Square className="w-4 h-4" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button size="sm" variant="destructive" className="p-2" onClick={() => stopMachine(m)} aria-label="Parar">
+                  <Square className="w-5 h-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent sideOffset={6}>Parar</TooltipContent>
+            </Tooltip>
           )}
-          <Button size="sm" variant="ghost" className="p-1" onClick={() => setMachineStatus(m, 'free', 'Livre')} aria-label="Cancelar">
-            <X className="w-4 h-4" />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button size="sm" variant="ghost" className="p-2" onClick={() => setMachineStatus(m, 'free', 'Livre')} aria-label="Cancelar">
+                <X className="w-5 h-5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent sideOffset={6}>Cancelar</TooltipContent>
+          </Tooltip>
           {m.status !== 'offline' && (
-            <Button size="sm" variant="outline" className="p-1" onClick={() => setOffline(m)} aria-label="Offline">
-              <Power className="w-4 h-4" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button size="sm" variant="outline" className="p-2" onClick={() => setOffline(m)} aria-label="Offline">
+                  <Power className="w-5 h-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent sideOffset={6}>Offline</TooltipContent>
+            </Tooltip>
           )}
           {m.status === 'offline' && (
-            <Button size="sm" variant="outline" className="p-1" onClick={() => setOnline(m)} aria-label="Online">
-              <Power className="w-4 h-4" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button size="sm" variant="outline" className="p-2" onClick={() => setOnline(m)} aria-label="Online">
+                  <Power className="w-5 h-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent sideOffset={6}>Online</TooltipContent>
+            </Tooltip>
           )}
         </div>
       </div>
@@ -100,7 +126,8 @@ export default function AdminOperations() {
   )
 
   return (
-    <div className="p-4">
+    <TooltipProvider>
+      <div className="p-4">
       <h2 className="text-lg font-semibold mb-4">Operações</h2>
 
       <div className="mb-6">
@@ -126,5 +153,6 @@ export default function AdminOperations() {
         )}
       </div>
     </div>
+    </TooltipProvider>
   )
 }
