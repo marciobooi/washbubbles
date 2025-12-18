@@ -13,6 +13,7 @@ import AdminDashboard from './pages/AdminDashboard'
 import AdminUsers from './pages/AdminUsers'
 import AdminMachines from './pages/AdminMachines'
 import AdminTransactions from './pages/AdminTransactions'
+import AdminOperations from './pages/AdminOperations'
 import AdminSettings from './pages/AdminSettings'
 import AdminProfile from './pages/AdminProfile'
 import RequireAdmin from './components/RequireAdmin'
@@ -113,6 +114,7 @@ function AppInner() {
             <Route path="users" element={<AdminUsers />} />
             <Route path="machines" element={<AdminMachines />} />
             <Route path="transactions" element={<AdminTransactions />} />
+            <Route path="operations" element={<AdminOperations />} />
             <Route path="settings" element={<AdminSettings />} />
             <Route path="profile" element={<AdminProfile />} />
           </Route>

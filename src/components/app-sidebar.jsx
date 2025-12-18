@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { useSidebar } from './ui/sidebar'
 import Fuse from 'fuse.js'
 import Highlight from './Highlight'
-import { Cpu, Users, CreditCard, Settings } from 'lucide-react'
+import { Cpu, Users, CreditCard, Settings, Activity } from 'lucide-react'
 import {
   Sidebar,
   SidebarContent,
@@ -18,6 +18,7 @@ import {
 } from './ui/sidebar'
 
 const navItems = [
+  { title: 'Operações', url: '/admin/operations', Icon: Activity },
   { title: 'Máquinas', url: '/admin/machines', Icon: Cpu },
   { title: 'Utilizadores', url: '/admin/users', Icon: Users },
   { title: 'Transacções', url: '/admin/transactions', Icon: CreditCard },
