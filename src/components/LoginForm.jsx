@@ -51,39 +51,46 @@ export default function LoginForm({ mode = 'admin', embedded = false }) {
     )
   }
 
+  // Non-embedded: full demo-style form without Card wrapper (matches shadcn example)
   return (
-    <Card className="w-full max-w-md mx-auto">
-      <form onSubmit={handleSubmit}>
-        <CardHeader>
-          <CardTitle>{mode === 'admin' ? 'Admin Login' : 'Kiosk Login'}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {mode === 'admin' ? (
-              <>
-                <div>
-                  <label className="text-sm mb-1 block text-neutral-700">Email</label>
-                  <Input placeholder="you@company.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-                </div>
-                <div>
-                  <label className="text-sm mb-1 block text-neutral-700">Password</label>
-                  <Input type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} />
-                </div>
-              </>
-            ) : (
-              <div>
-                <label className="text-sm mb-1 block text-neutral-700">API Key</label>
-                <Input placeholder="Paste your API key" value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
-              </div>
-            )}
+    <form onSubmit={handleSubmit} className="flex flex-col gap-6 w-full">
+      <div className="flex flex-col items-center gap-1 text-center">
+        <h1 className="text-2xl font-bold">Login to your account</h1>
+        <p className="text-muted-foreground text-sm">Enter your email below to login to your account</p>
+      </div>
 
-            {error && <div className="text-destructive text-sm">{error}</div>}
+      {mode === 'admin' ? (
+        <>
+          <div>
+            <label className="text-sm mb-1 block text-neutral-700">Email</label>
+            <Input id="email" placeholder="m@example.com" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
           </div>
-        </CardContent>
-        <CardFooter>
-          <Button type="submit" className="ml-auto" disabled={loading}>{loading ? 'Entrando...' : 'Entrar'}</Button>
-        </CardFooter>
-      </form>
-    </Card>
+
+          <div>
+            <div className="flex items-center">
+              <label className="text-sm mb-1 block text-neutral-700">Password</label>
+              </div>
+            <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+          </div>
+
+          <div>
+            <Button type="submit" className="w-full" disabled={loading}>{loading ? 'Entrando...' : 'Entrar'}</Button>
+          </div>
+
+      
+
+       
+        </>
+      ) : (
+        <div>
+          <label className="text-sm mb-1 block text-neutral-700">API Key</label>
+          <Input placeholder="Paste your API key" value={apiKey} onChange={(e) => setApiKey(e.target.value)} />
+          {error && <div className="text-destructive text-sm mt-2">{error}</div>}
+          <div className="mt-4">
+            <Button type="submit" className="w-full" disabled={loading}>{loading ? 'Entrando...' : 'Entrar'}</Button>
+          </div>
+        </div>
+      )}
+    </form>
   )
 }
