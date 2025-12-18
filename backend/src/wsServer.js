@@ -12,7 +12,16 @@ export async function broadcastMachines() {
     const machines = await Machine.find().sort({ createdAt: 1 })
     const clients = _wss.clients ? _wss.clients.size : 0
     const msg = JSON.stringify({ type: 'machine-status', payload: machines })
-    console.log(`[ws] broadcasting machine-status to ${clients} clients`)
+    if (process.env.DEBUG_WS === 'true') {
+      try {
+        const infos = Array.from(_wss.clients).filter(c => c.readyState === c.OPEN).map((c) => ({ username: c.userModel ? c.userModel.username : 'anonymous', remote: c._socket ? `${c._socket.remoteAddress}:${c._socket.remotePort}` : 'unknown' }))
+        console.log(`[ws] broadcasting machine-status to ${clients} clients — details:`, infos)
+      } catch (e) {
+        console.log(`[ws] broadcasting machine-status to ${clients} clients`)
+      }
+    } else {
+      console.log(`[ws] broadcasting machine-status to ${clients} clients`)
+    }
     _wss.clients.forEach((client) => {
       if (client.readyState === client.OPEN) client.send(msg)
     })
@@ -26,7 +35,16 @@ export async function broadcastMachine(machine) {
     if (!_wss || !machine) return
     const clients = _wss.clients ? _wss.clients.size : 0
     const msg = JSON.stringify({ type: 'machine-update', payload: machine })
-    console.log(`[ws] broadcasting machine-update (${machine._id}) to ${clients} clients`)
+    if (process.env.DEBUG_WS === 'true') {
+      try {
+        const infos = Array.from(_wss.clients).filter(c => c.readyState === c.OPEN).map((c) => ({ username: c.userModel ? c.userModel.username : 'anonymous', remote: c._socket ? `${c._socket.remoteAddress}:${c._socket.remotePort}` : 'unknown' }))
+        console.log(`[ws] broadcasting machine-update (${machine._id}) to ${clients} clients — details:`, infos)
+      } catch (e) {
+        console.log(`[ws] broadcasting machine-update (${machine._id}) to ${clients} clients`)
+      }
+    } else {
+      console.log(`[ws] broadcasting machine-update (${machine._id}) to ${clients} clients`)
+    }
     _wss.clients.forEach((client) => {
       if (client.readyState === client.OPEN) client.send(msg)
     })
