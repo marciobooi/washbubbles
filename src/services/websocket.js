@@ -9,6 +9,18 @@ const listeners = new Set()
 export function connect(url = import.meta.env.VITE_HW_BRIDGE_URL || 'ws://localhost:3000/ws') {
   if (socket && socket.readyState === WebSocket.OPEN) return socket
 
+  // Attach auth token or kiosk api key as query params when available
+  try {
+    const token = localStorage.getItem('ws_token')
+    const kioskKey = window?.electronAPI?.kioskKey?.() || import.meta.env.VITE_KIOSK_API_KEY
+    const parsed = new URL(url)
+    if (token) parsed.searchParams.set('token', token)
+    else if (kioskKey) parsed.searchParams.set('apiKey', kioskKey)
+    url = parsed.toString()
+  } catch (e) {
+    // ignore URL parsing errors
+  }
+
   socket = new WebSocket(url)
 
   socket.addEventListener('open', () => {

@@ -2,13 +2,23 @@ import express from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
+import rateLimit from 'express-rate-limit'
 import User from '../models/user.js'
 import { requireAuth } from '../middleware/auth.js'
 
 const router = express.Router()
-const JWT_SECRET = process.env.JWT_SECRET || 'supersecretadminjwt'
+const JWT_SECRET = process.env.JWT_SECRET // enforced at startup
 
-router.post('/login', async (req, res) => {
+// Rate limiter for login endpoint to mitigate brute-force attacks
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 6, // limit each IP to 6 requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts, please try again later.' },
+})
+
+router.post('/login', loginLimiter, async (req, res) => {
   // Using Mongoose User model. Accepts username/password OR apiKey.
   const { username, password, apiKey } = req.body
   if (!apiKey && (!username || !password)) return res.status(400).json({ error: 'Missing credentials' })
@@ -24,7 +34,11 @@ router.post('/login', async (req, res) => {
     if (!ok) return res.status(401).json({ error: 'Invalid credentials' })
   }
 
-  const token = jwt.sign({ sub: user._id.toString(), role: user.role, username: user.username }, JWT_SECRET, {
+  // Ensure a secret is available at runtime (in case dotenv wasn't loaded early)
+  const secret = process.env.JWT_SECRET
+  if (!secret) return res.status(500).json({ error: 'Server misconfiguration (missing JWT secret)' })
+
+  const token = jwt.sign({ sub: user._id.toString(), role: user.role, username: user.username }, secret, {
     expiresIn: '8h',
   })
 

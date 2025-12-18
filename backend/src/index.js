@@ -1,14 +1,18 @@
+import 'dotenv/config'
 import express from 'express'
 import http from 'http'
 import cors from 'cors'
-import dotenv from 'dotenv'
 import { connectMongo } from './db.js'
 import authRoutes from './routes/auth.js'
 import adminRoutes from './routes/admin.js'
 import posRoutes from './routes/pos.js'
 import { initWebSocket } from './wsServer.js'
 
-dotenv.config()
+// Enforce presence of JWT secret in production-like environments
+if (!process.env.JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET is not set. Set JWT_SECRET in environment and restart the server.')
+  process.exit(1)
+}
 
 const app = express()
 const server = http.createServer(app)
