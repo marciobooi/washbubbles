@@ -5,6 +5,7 @@ import MachineCard from '../components/MachineCard'
 import MachineModal from '../components/MachineModal'
 import { toast } from '@/components/ui/Toast'
 import Wave from '../components/ui/wave'
+import api from '@/services/api'
 import { useCart } from '../context/CartContext'
 
 export default function Machines() {
@@ -16,12 +17,45 @@ export default function Machines() {
     ? ['/washingmashine/L1.png', '/washingmashine/L2.png', '/washingmashine/L3.png', '/washingmashine/L4.png']
     : ['/drymachine/S1.png', '/drymachine/S2.png', '/drymachine/S3.png', '/drymachine/S4.png']
 
-  // Mock machines — replace with API call later
-  const machines = [
-    { id: 'm1', name: 'Maquina Lavar 1', weight: 12, price: 3.5, status: 'free', statusText: 'Livre' },
-    { id: 'm2', name: 'Maquina Lavar 2', weight: 8, price: 2.5, status: 'working', statusText: 'Ocupado' },
-    { id: 'm3', name: 'Maquina Lavar 3', weight: 18, price: 4.5, status: 'free', statusText: 'Livre' },
-  ]
+  const [machines, setMachines] = React.useState([])
+  const [loading, setLoading] = React.useState(true)
+
+  React.useEffect(() => {
+    let mounted = true
+    async function load() {
+      try {
+        setLoading(true)
+        // Prefer kiosk/public machines endpoint (requires kiosk API key)
+        const kioskKey = localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
+        const data = await api.getPublicMachines({ type }, { apiKey: kioskKey })
+        if (mounted && Array.isArray(data)) {
+          setMachines(data)
+        } else if (mounted && !kioskKey) {
+          // No kiosk key available locally — inform admin to configure one
+          toast({ title: 'Kiosk API key missing. Configure `kiosk_api_key` in localStorage or set VITE_KIOSK_API_KEY', variant: 'warning' })
+        }
+      } catch (e) {
+        console.error('Failed to fetch machines', e)
+        // Provide specific guidance if the kiosk key is invalid or missing
+        if (e instanceof Error && (e.message?.includes('Invalid apiKey') || e.message?.includes('Invalid token') || e.status === 401)) {
+          toast({ title: 'Kiosk key inválida ou expirada. Verifique a chave em localStorage / VITE_KIOSK_API_KEY', variant: 'destructive' })
+        } else {
+          toast({ title: 'Erro ao carregar máquinas — usando dados locais', variant: 'destructive' })
+        }
+
+        // Fallback to local mock
+        setMachines([
+          { id: 'm1', name: 'Maquina Lavar 1', weight: 12, price: 3.5, status: 'free', statusText: 'Livre', type: 'wash', icon: '/washingmashine/L1.png' },
+          { id: 'm2', name: 'Maquina Lavar 2', weight: 8, price: 2.5, statusText: 'Ocupado', status: 'working', type: 'wash', icon: '/washingmashine/L1.png' },
+          { id: 'm3', name: 'Maquina Lavar 3', weight: 18, price: 4.5, status: 'free', statusText: 'Livre', type: 'wash', icon: '/washingmashine/L1.png' },
+        ].filter(m => m.type === type))
+      } finally {
+        if (mounted) setLoading(false)
+      }
+    }
+    load()
+    return () => { mounted = false }
+  }, [type])
 
   const [selected, setSelected] = React.useState(null)
   const { addToCart, clearCart } = useCart()
@@ -62,11 +96,15 @@ export default function Machines() {
     <div className='flex-1 container mx-auto p-4'>
     <div className="relative pb-[12vh] z-10">
       <h2 className="p-4 text-center text-xl font-semibold mb-4">Selecionar máquina ({type})</h2>
-      <div className="grid gap-4">
-        {machines.map((m) => (
-          <MachineCard key={m.id} m={m} frames={frames} onSelect={(id) => { const mFound = machines.find((x) => x.id === id); if (mFound) openModalFor(mFound) }} />
-        ))}
-      </div>
+      {loading ? (
+        <div className="text-center text-neutral-500">Carregando máquinas...</div>
+      ) : (
+        <div className="grid gap-4">
+          {machines.map((m) => (
+            <MachineCard key={m._id || m.id} m={m} frames={frames} onSelect={(id) => { const mFound = machines.find((x) => (x._id || x.id) === id); if (mFound) openModalFor(mFound) }} />
+          ))}
+        </div>
+      )}
       <MachineModal open={modalOpen} machine={selected} frames={frames} onClose={closeModal} onAddToCart={handleAddToCart} onPay={pay} />
 
       <Wave height="12vh" className="mt-2" />

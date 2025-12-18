@@ -28,15 +28,31 @@ export default function MachineDetail() {
         // ignore - fallback to local
       }
 
-      // fallback to local data
-      const machines = [
-        { id: 'm1', name: 'Maquina Lavar 1', weight: 12, price: 3.5, status: 'free', statusText: 'Livre', type: 'wash', icon: '/washingmashine/L1.png' },
-        { id: 'm2', name: 'Maquina Lavar 2', weight: 8, price: 2.5, status: 'working', statusText: 'Ocupado', type: 'wash', icon: '/washingmashine/L1.png' },
-        { id: 'm3', name: 'Maquina Lavar 3', weight: 18, price: 4.5, status: 'free', statusText: 'Livre', type: 'wash', icon: '/washingmashine/L1.png' },
-      ]
-      const found = machines.find((m) => m.id === id) || machines[0]
-      setMachine(found)
-      setFrames(found.type === 'wash' ? ['/washingmashine/L1.png','/washingmashine/L2.png','/washingmashine/L3.png','/washingmashine/L4.png'] : ['/drymachine/S1.png','/drymachine/S2.png','/drymachine/S3.png','/drymachine/S4.png'])
+      // If getMachine didn't return a machine, try fetching the full list and find by id
+      try {
+        const kioskKey = localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
+        const list = await api.getPublicMachines(undefined, { apiKey: kioskKey })
+        if (Array.isArray(list)) {
+          const found = list.find((m) => (m._id || m.id) === id)
+          if (found) {
+            setMachine(found)
+            setFrames(found.type === 'wash'
+              ? ['/washingmashine/L1.png','/washingmashine/L2.png','/washingmashine/L3.png','/washingmashine/L4.png']
+              : ['/drymachine/S1.png','/drymachine/S2.png','/drymachine/S3.png','/drymachine/S4.png'])
+            return
+          }
+        }
+      } catch (e) {
+        // ignore - we'll use a small local fallback
+        console.error('Failed to fetch machines list', e)
+      }
+
+      // final small fallback
+      const fallback = { id: id || 'm1', name: 'Maquina', weight: 12, price: 3.5, status: 'free', statusText: 'Livre', type, icon: type === 'wash' ? '/washingmashine/L1.png' : '/drymachine/S1.png' }
+      setMachine(fallback)
+      setFrames(type === 'wash'
+        ? ['/washingmashine/L1.png','/washingmashine/L2.png','/washingmashine/L3.png','/washingmashine/L4.png']
+        : ['/drymachine/S1.png','/drymachine/S2.png','/drymachine/S3.png','/drymachine/S4.png'])
     }
     load()
     return () => { mounted = false }

@@ -81,6 +81,7 @@ export function createApi(config) {
       timeoutMs = 15000,
       retry,
       expect,
+      skipAuth = false,
       ...rest
     } = opts;
 
@@ -88,7 +89,8 @@ export function createApi(config) {
 
     const headers = new Headers(hdrs || {});
     const token = getToken?.();
-    if (token) headers.set('Authorization', `Bearer ${token}`);
+    // Only set Bearer Authorization if caller did not provide their own Authorization header and skipAuth is not set
+    if (!skipAuth && token && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`);
 
     let body = rawBody;
 
@@ -191,6 +193,14 @@ export function createApi(config) {
     return request(`/admin/machines/${id}`, { method: 'GET', expect: 'json' });
   }
 
+  // Public/kiosk machines list. Pass e.g. { type: 'wash' } to filter.
+  // Optionally pass `opts = { apiKey }` to set `x-api-key` header for kiosks.
+  function getPublicMachines(query, opts) {
+    const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined;
+    // Kiosk calls should not attach the user's Bearer token
+    return request('/pos/machines', { method: 'GET', expect: 'json', query, headers, skipAuth: true });
+  }
+
   function createMachine(payload) {
     return request('/admin/machines', { method: 'POST', json: payload, expect: 'json' });
   }
@@ -271,15 +281,11 @@ export function createApi(config) {
     // Machines
     getMachines,
     getMachine,
+    getPublicMachines,
     createMachine,
     updateMachine,
     deleteMachine,
 
-    // Users
-    getUsers,
-    getUser,
-    createUser,
-    updateUser,
     deleteUser,
     rotateUserKey,
 

@@ -18,13 +18,20 @@ async function resolveUserFromRequest(req) {
       return { error: 'Invalid token' }
     }
   }
-  // ApiKey via Authorization: ApiKey <key>
-  const apiKeyHeader = (req.headers['x-api-key'] || (auth && auth.startsWith('ApiKey ') ? auth.split(' ')[1] : null))
-  if (apiKeyHeader) {
-    userModel = await User.findOne({ apiKey: apiKeyHeader })
+  // ApiKey via Authorization: ApiKey <key> (preferred for security)
+  if (auth && auth.startsWith('ApiKey ')) {
+    const apiKey = auth.split(' ')[1]
+    userModel = await User.findOne({ apiKey })
     if (userModel) return { userModel }
     return { error: 'Invalid apiKey' }
   }
+
+  // Deprecated header: x-api-key - do not accept for stricter security. If present, return an error instructing to use Authorization header.
+  const xApiKey = req.headers['x-api-key']
+  if (xApiKey) {
+    return { error: 'Invalid apiKey header format. Use Authorization: ApiKey <key>' }
+  }
+
   return { error: 'Missing Authorization' }
 }
 
