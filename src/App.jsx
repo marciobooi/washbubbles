@@ -7,14 +7,16 @@ import Admin from './pages/Admin'
 import { CartProvider, useCart } from './context/CartContext'
 import { PaymentProvider, usePayment } from './context/PaymentContext'
 import CartModal from './components/CartModal'
-import Toast from './components/ui/Toast'
+import { ToastProvider } from './components/ui/use-toast'
 import HelpTutorial from './components/HelpTutorial'
 
 export default function App() {
   return (
     <PaymentProvider>
       <CartProvider>
-        <AppInner />
+        <ToastProvider>
+          <AppInner />
+        </ToastProvider>
       </CartProvider>
     </PaymentProvider>
   )

@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card'
 import api from '@/services/api'
+import { toast } from '@/components/ui/use-toast'
 
 export default function LoginForm({ mode = 'admin', embedded = false }) {
   const { login } = useAuth()
@@ -23,7 +24,12 @@ export default function LoginForm({ mode = 'admin', embedded = false }) {
       const data = await api.login(payload)
       login({ token: data.token, role: data.role })
     } catch (err) {
-      setError(err.message || 'Login failed')
+      // show error via global toast (shadcn-style)
+      try {
+        toast({ title: 'Login failed', description: err.message || 'Login failed', variant: 'destructive' })
+      } catch (e) {
+        setError(err.message || 'Login failed')
+      }
     } finally {
       setLoading(false)
     }
