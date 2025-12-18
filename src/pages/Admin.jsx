@@ -1,6 +1,8 @@
 import React from 'react'
 import LoginForm from '../components/LoginForm'
 import { useAuth } from '../context/AuthContext'
+import { Button } from '@/components/ui/button'
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card'
 
 export default function Admin() {
   const { token, role, logout } = useAuth()
@@ -17,11 +19,19 @@ export default function Admin() {
           )}
           {token && role === 'ADMIN' && (
             <>
-              <h2 className="text-lg font-semibold mb-2">Admin</h2>
-              <p className="text-sm text-neutral-700">You are logged in as an admin.</p>
-              <div className="mt-4 flex gap-2">
-                <button className="px-3 py-1 rounded btn-success" onClick={() => logout()}>Logout</button>
-              </div>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Admin</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-neutral-700">You are logged in as an admin.</p>
+                </CardContent>
+                <CardFooter>
+                  <div className="mt-2 flex gap-2 ml-auto">
+                    <Button variant="outline" onClick={() => logout()}>Logout</Button>
+                  </div>
+                </CardFooter>
+              </Card>
             </>
           )}
         </div>
