@@ -59,11 +59,7 @@ router.post('/register', async (req, res) => {
   return res.json({ _id: user._id, username: user.username, role: user.role, apiKey: user.apiKey ? user.apiKey.slice(0,8)+'…' : null })
 })
 
-// Return information about the current user when provided a valid auth token or apiKey
-router.get('/me', requireAuth, async (req, res) => {
-  const u = req.userModel
-  if (!u) return res.status(404).json({ error: 'User not found' })
-  return res.json({ _id: u._id, username: u.username, role: u.role, apiKey: u.apiKey ? u.apiKey.slice(0,8)+'…' : null })
-})
+// NOTE: `/auth/me` endpoint removed — prefer using token payloads returned by `/auth/login` for client-side role checks.
+// If you still need server-side user info, reintroduce an authenticated route that returns specific safe fields.
 
 export default router

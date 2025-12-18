@@ -1,7 +1,18 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import LoginForm from '../components/LoginForm'
+import { useAuth } from '../context/AuthContext'
+import { useNavigate } from 'react-router-dom'
 
 export default function Admin() {
+  const { role } = useAuth()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    if (role === 'ADMIN') {
+      navigate('/admin/dashboard')
+    }
+  }, [role, navigate])
+
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       {/* Left column with logo and form */}

@@ -199,9 +199,7 @@ export function createApi(config) {
     return request(`/admin/users/${id}/rotate`, { method: 'POST', expect: 'json' });
   }
 
-  function me() {
-    return request('/auth/me', { method: 'GET', expect: 'json' });
-  }
+  // Note: `me()` removed — use tokens returned from /auth/login and backend-provided JWT payloads when needed.
 
   return {
     request,
@@ -211,7 +209,6 @@ export function createApi(config) {
     createMachine,
     getUsers,
     rotateUserKey,
-    me,
   };
 }
 
@@ -235,7 +232,6 @@ export const {
   createMachine,
   getUsers,
   rotateUserKey,
-  me,
 } = api;
 
 export default api;

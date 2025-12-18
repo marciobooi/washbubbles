@@ -9,6 +9,8 @@ import { PaymentProvider, usePayment } from './context/PaymentContext'
 import CartModal from './components/CartModal'
 import { ToastProvider, toast } from './components/ui/Toast'
 import HelpTutorial from './components/HelpTutorial'
+import AdminDashboard from './pages/AdminDashboard'
+import RequireAdmin from './components/RequireAdmin'
 
 export default function App() {
   return (
@@ -91,6 +93,7 @@ function AppInner() {
           <Route path="/pos/machines" element={<Machines />} />
           <Route path="/pos/machines/:id" element={<MachineDetail />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/admin/dashboard" element={<RequireAdmin><AdminDashboard /></RequireAdmin>} />
           <Route path="/" element={<Navigate to="/pos" replace />} />
         </Routes>
       </main>

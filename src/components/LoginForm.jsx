@@ -8,6 +8,7 @@ import { toast } from '@/components/ui/Toast'
 
 export default function LoginForm({ mode = 'admin', embedded = false }) {
   const { login } = useAuth()
+  const navigate = useNavigate()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [apiKey, setApiKey] = useState('')
@@ -23,6 +24,9 @@ export default function LoginForm({ mode = 'admin', embedded = false }) {
     try {
       const data = await api.login(payload)
       login({ token: data.token, role: data.role })
+      // Navigation is handled by the parent (e.g., Admin page) after successful login
+      // This keeps routing decisions out of the form component and centralizes role-based redirects
+      // (no client-side navigation here)
     } catch (err) {
       // show error via global toast (shadcn-style)
       try {
