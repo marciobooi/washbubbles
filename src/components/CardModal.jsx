@@ -54,7 +54,7 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col animate-fade-in-up overflow-hidden">
+    <div className="fixed bg-white  inset-0 z-50 flex flex-col animate-fade-in-up overflow-hidden">
       {/* Header */}
       <div className="bg-white shadow-sm px-6 py-4 flex items-center justify-between shrink-0 z-10">
         <div className="flex items-center gap-3">
