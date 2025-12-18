@@ -8,7 +8,6 @@ import { toast } from '@/components/ui/Toast'
 
 export default function LoginForm({ mode = 'admin', embedded = false }) {
   const { login } = useAuth()
-  const navigate = useNavigate()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [apiKey, setApiKey] = useState('')
