@@ -15,9 +15,9 @@ export default function AdminMachines(){
   const [name, setName] = useState('')
   const [status, setStatus] = useState('free')
   const [weight, setWeight] = useState(0)
-  const [price, setPrice] = useState(0)
+  const [moneyPrice, setMoneyPrice] = useState(0)
+  const [loyaltyPrice, setLoyaltyPrice] = useState(0)
   const [type, setType] = useState('wash')
-  const [icon, setIcon] = useState('')
 
   async function load() {
     setLoading(true)
@@ -44,9 +44,9 @@ export default function AdminMachines(){
     setName('')
     setStatus('free')
     setWeight(0)
-    setPrice(0)
+    setMoneyPrice(0)
+    setLoyaltyPrice(0)
     setType('wash')
-    setIcon('')
     setModalOpen(true)
   }
 
@@ -55,16 +55,16 @@ export default function AdminMachines(){
     setName(m.name)
     setStatus(m.status || 'free')
     setWeight(m.weight || 0)
-    setPrice(m.price || 0)
+    setMoneyPrice(m.price || 0)
+    setLoyaltyPrice(m.loyaltyPrice || 0)
     setType(m.type || 'wash')
-    setIcon(m.icon || '')
     setModalOpen(true)
   }
 
   async function save(e) {
     e?.preventDefault()
     try {
-      const payload = { name, status, statusText: status === 'free' ? 'Livre' : status === 'working' ? 'Ocupado' : status, weight, price, type }
+      const payload = { name, status, statusText: 'Livre', weight, price: moneyPrice, loyaltyPrice, type }
       if (icon) payload.icon = icon
       if (editing) {
         await api.updateMachine(editing._id, payload)
@@ -118,6 +118,8 @@ export default function AdminMachines(){
             <tr>
               <th className="px-4 py-2 text-left">Nome</th>
               <th className="px-4 py-2 text-left">Tipo</th>
+              <th className="px-4 py-2 text-left">Preço</th>
+              <th className="px-4 py-2 text-left">Fidelidade</th>
               <th className="px-4 py-2 text-left">Estado</th>
               <th className="px-4 py-2 text-left">Criado</th>
               <th className="px-4 py-2 text-left">Ações</th>
@@ -140,6 +142,8 @@ export default function AdminMachines(){
                     <div>{m.name}</div>
                   </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{m.type}</td>
+                  <td className="px-4 py-3">{typeof m.price === 'number' ? m.price.toFixed(2) + '€' : m.price}</td>
+                  <td className="px-4 py-3">{typeof m.loyaltyPrice === 'number' ? m.loyaltyPrice.toFixed(2) + '€' : m.loyaltyPrice}</td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{m.status}</td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(m.createdAt).toLocaleString()}</td>
                   <td className="px-4 py-3">
@@ -161,34 +165,42 @@ export default function AdminMachines(){
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? 'Editar Máquina' : 'Nova Máquina'}>
         <form onSubmit={save} className="flex flex-col gap-2">
-          <input className="border p-2 rounded" placeholder="Nome" value={name} onChange={(e) => setName(e.target.value)} />
+          <div>
+            <label htmlFor="machine-name" className="text-sm font-medium">Nome</label>
+            <input id="machine-name" className="border p-2 rounded mt-1 w-full" placeholder="Nome" value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
 
           <div className="grid grid-cols-3 gap-2">
-            <select className="border p-2 rounded" value={status} onChange={(e) => setStatus(e.target.value)}>
-              <option value="free">free</option>
-              <option value="working">working</option>
-              <option value="offline">offline</option>
-            </select>
-
-            <input className="border p-2 rounded" placeholder="Peso (kg)" type="number" value={weight} onChange={(e) => setWeight(Number(e.target.value))} />
-            <input className="border p-2 rounded" placeholder="Preço (€)" type="number" step="0.01" value={price} onChange={(e) => setPrice(Number(e.target.value))} />
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <select className="border p-2 rounded" value={type} onChange={(e) => setType(e.target.value)}>
-              <option value="wash">wash</option>
-              <option value="dry">dry</option>
-            </select>
-
-            <input className="border p-2 rounded" placeholder="Icon (optional)" value={icon} onChange={(e) => setIcon(e.target.value)} />
-          </div>
-
-          { (icon || type) && (
-            <div className="flex items-center gap-2">
-              <div className="text-sm text-muted-foreground">Preview:</div>
-              <img src={icon || (type === 'dry' ? '/drymachine/S1.png' : '/washingmashine/L1.png')} alt="preview" className="h-10 w-10 object-contain" />
+            <div>
+              <label htmlFor="machine-weight" className="text-sm font-medium">Peso (kg)</label>
+              <input id="machine-weight" className="border p-2 rounded mt-1 w-full" placeholder="Peso (kg)" type="number" value={weight} onChange={(e) => setWeight(Number(e.target.value))} />
             </div>
-          )}
+
+            <div>
+              <label htmlFor="machine-price" className="text-sm font-medium">Preço (€)</label>
+              <input id="machine-price" className="border p-2 rounded mt-1 w-full" placeholder="Preço (€)" type="number" step="0.01" value={moneyPrice} onChange={(e) => setMoneyPrice(Number(e.target.value))} />
+            </div>
+
+            <div>
+              <label htmlFor="machine-loyalty" className="text-sm font-medium">Fidelidade (€)</label>
+              <input id="machine-loyalty" className="border p-2 rounded mt-1 w-full" placeholder="Fidelidade (€)" type="number" step="0.01" value={loyaltyPrice} onChange={(e) => setLoyaltyPrice(Number(e.target.value))} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-2">
+            <div>
+              <label htmlFor="machine-type" className="text-sm font-medium">Tipo</label>
+              <select id="machine-type" className="border p-2 rounded mt-1 w-full" value={type} onChange={(e) => setType(e.target.value)}>
+                <option value="wash">Lavagem (wash)</option>
+                <option value="dry">Secagem (dry)</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="text-sm font-medium">Pré-visualização</div>
+              <img src={(editing && editing.icon) || (type === 'dry' ? '/drymachine/S1.png' : '/washingmashine/L1.png')} alt="preview" className="h-10 w-10 object-contain tealFilter" aria-hidden />
+            </div>
+          </div>
 
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" type="button" onClick={() => setModalOpen(false)}><X className="h-4 w-4 mr-2" />Cancelar</Button>
