@@ -36,7 +36,7 @@ export function Sidebar({ children, className = '', ...props }) {
   // When collapsed, use smaller width and hide overflow
   return (
     <aside
-      className={`relative transition-all duration-150 flex-shrink-0 ${collapsed ? 'w-16' : 'w-64'} min-h-screen border-r bg-sidebar p-2 overflow-y-auto overflow-x-hidden ${className}`}
+      className={`relative transition-all duration-150 flex-shrink-0 ${collapsed ? 'w-20' : 'w-64'} min-h-screen border-r bg-sidebar p-2 overflow-y-auto overflow-x-hidden ${className}`}
       data-collapsed={collapsed}
       {...props}
     >
@@ -154,11 +154,12 @@ export function SidebarTrigger({ className = '' }) {
   return (
     <button
       className={`p-2 rounded-md hover:bg-muted/50 ${className}`}
-      aria-expanded={ctx.collapsed}
+      // aria-expanded should be true when the sidebar is expanded
+      aria-expanded={!ctx.collapsed}
       onClick={ctx.toggle}
       title={ctx.collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
     >
-      <span className={`inline-block transform transition-transform ${ctx.collapsed ? 'rotate-180' : ''}`}>
+      <span className={`inline-block transform transition-transform`}>
         {ctx.collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
       </span>
     </button>
