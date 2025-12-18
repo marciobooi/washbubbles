@@ -96,6 +96,11 @@ function AppInner() {
           <Route path="/pos" element={<Pos />} />
           <Route path="/pos/machines" element={<Machines />} />
           <Route path="/pos/machines/:id" element={<MachineDetail />} />
+
+          {/* Admin login (public) */}
+          <Route path="/admin/login" element={<Admin />} />
+
+          {/* Protected admin area */}
           <Route path="/admin" element={<RequireAdmin><AdminDashboard /></RequireAdmin>}>
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<div className="p-4">Welcome to the admin dashboard</div>} />
@@ -104,7 +109,6 @@ function AppInner() {
             <Route path="transactions" element={<AdminTransactions />} />
             <Route path="settings" element={<AdminSettings />} />
           </Route>
-          <Route path="/admin/settings" element={<RequireAdmin><AdminSettings /></RequireAdmin>} />
           <Route path="/" element={<Navigate to="/pos" replace />} />
         </Routes>
       </main>

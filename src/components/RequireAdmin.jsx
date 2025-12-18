@@ -16,7 +16,7 @@ export default function RequireAdmin({ children }) {
   }
 
   // If no token or not admin, redirect to login
-  if (role !== 'ADMIN') return <Navigate to="/admin" replace />
+  if (role !== 'ADMIN') return <Navigate to="/admin/login" replace />
 
   return children
 }
