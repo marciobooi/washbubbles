@@ -1,7 +1,7 @@
 import React from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import useFrameAnimation from '../hooks/useFrameAnimation'
-import Wave from '../components/wave'
+import Wave from '../components/ui/wave'
 
 export default function MachineDetail() {
   const { id } = useParams()

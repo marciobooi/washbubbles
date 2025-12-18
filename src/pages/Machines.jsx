@@ -3,8 +3,8 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { usePayment } from '../context/PaymentContext'
 import MachineCard from '../components/MachineCard'
 import MachineModal from '../components/MachineModal'
-import Toast from '../components/Toast'
-import Wave from '../components/wave'
+import Toast from '../components/ui/Toast'
+import Wave from '../components/ui/wave'
 import { useCart } from '../context/CartContext'
 
 export default function Machines() {

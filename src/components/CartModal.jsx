@@ -1,5 +1,5 @@
 import React from 'react'
-import Modal from './Modal'
+import Modal from './ui/Modal'
 import { useCart } from '../context/CartContext'
 
 export default function CartModal({ open, onClose, onPay = () => {}, onClear = () => {} }) {

@@ -1,9 +1,9 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
-import Wave from '../components/wave'
+import Wave from '../components/ui/wave'
 import Card from '../components/Card'
 import CardModal from '../components/CardModal'
-import Toast from '../components/Toast'
+import Toast from '../components/ui/Toast'
 import Banner from '../components/Banner'
 
 export default function Pos() {

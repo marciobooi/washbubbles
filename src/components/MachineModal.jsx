@@ -1,5 +1,5 @@
 import React from 'react'
-import Modal from './Modal'
+import Modal from './ui/Modal'
 import useFrameAnimation from '../hooks/useFrameAnimation'
 
 export default function MachineModal({ open, machine, frames, onClose, onAddToCart = () => {}, onPay = () => {} }) {
