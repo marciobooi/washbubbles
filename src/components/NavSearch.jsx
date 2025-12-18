@@ -2,11 +2,14 @@ import React, { useEffect, useState, useRef } from 'react'
 import { Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { useSidebar } from '@/components/ui/sidebar'
-import api from '@/services/api'
+import Fuse from 'fuse.js'
+import Highlight from './Highlight'
 
 export default function NavSearch({ className = '' }) {
   const { searchQuery, setSearchQuery } = useSidebar()
   const [remoteResults, setRemoteResults] = useState({ users: [], machines: [] })
+  const [userMatches, setUserMatches] = useState([])
+  const [machineMatches, setMachineMatches] = useState([])
   const [open, setOpen] = useState(false)
   const ref = useRef()
 
@@ -30,6 +33,32 @@ export default function NavSearch({ className = '' }) {
     setRemoteResults({ users: [], machines: [] })
     setOpen(false)
   }, [searchQuery])
+
+  // Compute local Fuse matches for highlight
+  useEffect(() => {
+    const q = (searchQuery || '').trim()
+    if (!q) {
+      setUserMatches([])
+      setMachineMatches([])
+      return
+    }
+
+    if (remoteResults.users && remoteResults.users.length) {
+      const fuse = new Fuse(remoteResults.users, { keys: ['username'], includeMatches: true, threshold: 0.4 })
+      const r = fuse.search(q)
+      setUserMatches(r.map((it) => ({ item: it.item, indices: (it.matches && it.matches.find((m) => m.key === 'username')?.indices) || [] })))
+    } else {
+      setUserMatches([])
+    }
+
+    if (remoteResults.machines && remoteResults.machines.length) {
+      const fuse = new Fuse(remoteResults.machines, { keys: ['name'], includeMatches: true, threshold: 0.4 })
+      const r = fuse.search(q)
+      setMachineMatches(r.map((it) => ({ item: it.item, indices: (it.matches && it.matches.find((m) => m.key === 'name')?.indices) || [] })))
+    } else {
+      setMachineMatches([])
+    }
+  }, [remoteResults, searchQuery])
 
   // Close on outside click
   useEffect(() => {
@@ -55,28 +84,32 @@ export default function NavSearch({ className = '' }) {
         onFocus={() => { if ((searchQuery||'').trim().length >= 3) setOpen(true) }}
       />
 
-      {open && (remoteResults.users.length || remoteResults.machines.length) ? (
+      {open && (userMatches.length || machineMatches.length) ? (
         <div className="absolute left-0 mt-10 w-[28rem] bg-white shadow rounded z-50 p-2">
-          {remoteResults.users.length > 0 && (
+          {userMatches.length > 0 && (
             <div className="mb-2">
               <div className="text-xs uppercase text-muted-foreground mb-1">Users</div>
               <ul className="divide-y">
-                {remoteResults.users.map((u) => (
-                  <li key={u._id} className="py-1">
-                    <a className="block px-2 py-1 rounded hover:bg-muted/50" href={`/admin/users?u=${u._id}`}>{u.username} <span className="text-xs text-muted-foreground">{u.role}</span></a>
+                {userMatches.map(({ item, indices }) => (
+                  <li key={item._id} className="py-1">
+                    <a className="block px-2 py-1 rounded hover:bg-muted/50" href={`/admin/users?u=${item._id}`}>
+                      <Highlight text={item.username} matches={indices} /> <span className="text-xs text-muted-foreground">{item.role}</span>
+                    </a>
                   </li>
                 ))}
               </ul>
             </div>
           )}
 
-          {remoteResults.machines.length > 0 && (
+          {machineMatches.length > 0 && (
             <div>
               <div className="text-xs uppercase text-muted-foreground mb-1">Machines</div>
               <ul className="divide-y">
-                {remoteResults.machines.map((m) => (
-                  <li key={m._id} className="py-1">
-                    <a className="block px-2 py-1 rounded hover:bg-muted/50" href={`/admin/machines?m=${m._id}`}>{m.name}</a>
+                {machineMatches.map(({ item, indices }) => (
+                  <li key={item._id} className="py-1">
+                    <a className="block px-2 py-1 rounded hover:bg-muted/50" href={`/admin/machines?m=${item._id}`}>
+                      <Highlight text={item.name} matches={indices} />
+                    </a>
                   </li>
                 ))}
               </ul>

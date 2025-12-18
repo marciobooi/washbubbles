@@ -187,16 +187,78 @@ export function createApi(config) {
     return request('/admin/machines', { method: 'GET', expect: 'json' });
   }
 
+  function getMachine(id) {
+    return request(`/admin/machines/${id}`, { method: 'GET', expect: 'json' });
+  }
+
   function createMachine(payload) {
     return request('/admin/machines', { method: 'POST', json: payload, expect: 'json' });
+  }
+
+  function updateMachine(id, payload) {
+    return request(`/admin/machines/${id}`, { method: 'PUT', json: payload, expect: 'json' });
+  }
+
+  function deleteMachine(id) {
+    return request(`/admin/machines/${id}`, { method: 'DELETE', expect: 'json' });
   }
 
   function getUsers() {
     return request('/admin/users', { method: 'GET', expect: 'json' });
   }
 
+  function getUser(id) {
+    return request(`/admin/users/${id}`, { method: 'GET', expect: 'json' });
+  }
+
+  function createUser(payload) {
+    return request('/admin/users', { method: 'POST', json: payload, expect: 'json' });
+  }
+
+  function updateUser(id, payload) {
+    return request(`/admin/users/${id}`, { method: 'PUT', json: payload, expect: 'json' });
+  }
+
+  function deleteUser(id) {
+    return request(`/admin/users/${id}`, { method: 'DELETE', expect: 'json' });
+  }
+
   function rotateUserKey(id) {
     return request(`/admin/users/${id}/rotate`, { method: 'POST', expect: 'json' });
+  }
+
+  // Transactions
+  function getTransactions() {
+    return request('/admin/transactions', { method: 'GET', expect: 'json' });
+  }
+
+  function getTransaction(id) {
+    return request(`/admin/transactions/${id}`, { method: 'GET', expect: 'json' });
+  }
+
+  function createTransaction(payload) {
+    return request('/admin/transactions', { method: 'POST', json: payload, expect: 'json' });
+  }
+
+  function deleteTransaction(id) {
+    return request(`/admin/transactions/${id}`, { method: 'DELETE', expect: 'json' });
+  }
+
+  // Settings
+  function getSettings() {
+    return request('/admin/settings', { method: 'GET', expect: 'json' });
+  }
+
+  function getSetting(key) {
+    return request(`/admin/settings/${encodeURIComponent(key)}`, { method: 'GET', expect: 'json' });
+  }
+
+  function setSetting(payload) {
+    return request('/admin/settings', { method: 'POST', json: payload, expect: 'json' });
+  }
+
+  function deleteSetting(key) {
+    return request(`/admin/settings/${encodeURIComponent(key)}`, { method: 'DELETE', expect: 'json' });
   }
 
   // Note: `me()` removed — use tokens returned from /auth/login and backend-provided JWT payloads when needed.
@@ -229,9 +291,24 @@ export const {
   login,
   register,
   getMachines,
+  getMachine,
   createMachine,
+  updateMachine,
+  deleteMachine,
   getUsers,
+  getUser,
+  createUser,
+  updateUser,
+  deleteUser,
   rotateUserKey,
+  getTransactions,
+  getTransaction,
+  createTransaction,
+  deleteTransaction,
+  getSettings,
+  getSetting,
+  setSetting,
+  deleteSetting,
 } = api;
 
 export default api;

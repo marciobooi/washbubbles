@@ -12,6 +12,7 @@ import HelpTutorial from './components/HelpTutorial'
 import AdminDashboard from './pages/AdminDashboard'
 import AdminUsers from './pages/AdminUsers'
 import AdminMachines from './pages/AdminMachines'
+import AdminTransactions from './pages/AdminTransactions'
 import AdminSettings from './pages/AdminSettings'
 import RequireAdmin from './components/RequireAdmin'
 
@@ -95,10 +96,14 @@ function AppInner() {
           <Route path="/pos" element={<Pos />} />
           <Route path="/pos/machines" element={<Machines />} />
           <Route path="/pos/machines/:id" element={<MachineDetail />} />
-          <Route path="/admin" element={<Admin />} />
-          <Route path="/admin/dashboard" element={<RequireAdmin><AdminDashboard /></RequireAdmin>} />
-          <Route path="/admin/users" element={<RequireAdmin><AdminUsers /></RequireAdmin>} />
-          <Route path="/admin/machines" element={<RequireAdmin><AdminMachines /></RequireAdmin>} />
+          <Route path="/admin" element={<RequireAdmin><AdminDashboard /></RequireAdmin>}>
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<div className="p-4">Welcome to the admin dashboard</div>} />
+            <Route path="users" element={<AdminUsers />} />
+            <Route path="machines" element={<AdminMachines />} />
+            <Route path="transactions" element={<AdminTransactions />} />
+            <Route path="settings" element={<AdminSettings />} />
+          </Route>
           <Route path="/admin/settings" element={<RequireAdmin><AdminSettings /></RequireAdmin>} />
           <Route path="/" element={<Navigate to="/pos" replace />} />
         </Routes>

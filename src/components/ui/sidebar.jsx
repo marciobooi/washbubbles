@@ -144,7 +144,7 @@ export function SidebarRail() {
 }
 
 export function SidebarInset({ children }) {
-  return <div className="flex flex-1 min-h-screen">{children}</div>
+  return <div className="flex flex-1 flex-col min-h-screen">{children}</div>
 }
 
 import { ChevronLeft, ChevronRight } from 'lucide-react'
