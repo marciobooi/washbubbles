@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card'
 import api from '@/services/api'
-import { toast } from '@/components/ui/use-toast'
+import { toast } from '@/components/ui/Toast'
 
 export default function LoginForm({ mode = 'admin', embedded = false }) {
   const { login } = useAuth()

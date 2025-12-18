@@ -7,7 +7,7 @@ import Admin from './pages/Admin'
 import { CartProvider, useCart } from './context/CartContext'
 import { PaymentProvider, usePayment } from './context/PaymentContext'
 import CartModal from './components/CartModal'
-import { ToastProvider } from './components/ui/use-toast'
+import { ToastProvider, toast } from './components/ui/Toast'
 import HelpTutorial from './components/HelpTutorial'
 
 export default function App() {
@@ -26,8 +26,7 @@ function AppInner() {
   const { cart } = useCart()
   const cartCount = cart.length
   const [cartOpen, setCartOpen] = React.useState(false)
-  const [toastOpen, setToastOpen] = React.useState(false)
-  const [toastMessage, setToastMessage] = React.useState('')
+
   const [helpOpen, setHelpOpen] = React.useState(false)
   const location = useLocation()
 
@@ -38,15 +37,13 @@ function AppInner() {
     try {
       const res = await processPayment(items, opts)
       if (res.success) {
-        setToastMessage(`Pagamento efetuado (${res.method})`)
-        setToastOpen(true)
+        toast({ title: `Pagamento efetuado (${res.method})`, variant: 'success' })
         clearCart()
         setCartOpen(false)
         console.log('Paid for', items, res)
       }
     } catch (e) {
-      setToastMessage('Erro no pagamento')
-      setToastOpen(true)
+      toast({ title: 'Erro no pagamento', variant: 'destructive' })
       console.error(e)
     }
   }
@@ -99,7 +96,6 @@ function AppInner() {
       </main>
 
       <CartModal open={cartOpen} onClose={() => setCartOpen(false)} onPay={handlePay} />
-      <Toast open={toastOpen} message={toastMessage} type="success" onClose={() => setToastOpen(false)} />
       <HelpTutorial run={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
   )

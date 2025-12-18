@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import Wave from '../components/ui/wave'
 import Card from '../components/Card'
 import CardModal from '../components/CardModal'
-import Toast from '../components/ui/Toast'
+import { toast } from '@/components/ui/Toast'
 import Banner from '../components/Banner'
 
 export default function Pos() {
@@ -23,8 +23,7 @@ export default function Pos() {
     { id: 't2', ts: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), type: 'Gasto - Lavagem', amount: -3 },
     { id: 't3', ts: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), type: 'Gasto - Secagem', amount: -4 },
   ])
-  const [toastOpen, setToastOpen] = React.useState(false)
-  const [toastMsg, setToastMsg] = React.useState('')
+
 
   function openCard() {
     setCardOpen(true)
@@ -37,8 +36,7 @@ export default function Pos() {
   function handleRecharge(amount = 10) {
     const m = { id: `t${Date.now()}`, ts: new Date().toISOString(), type: `Recarregado`, amount: Number(amount) }
     setTransactions((s) => [m, ...s])
-    setToastMsg(`Cartão recarregado ${Number(amount).toFixed(2)}€`)
-    setToastOpen(true)
+    toast({ title: `Cartão recarregado ${Number(amount).toFixed(2)}€`, variant: 'success' })
   }
 
   return (
@@ -69,7 +67,7 @@ export default function Pos() {
         </div>
 
         <CardModal open={cardOpen} onClose={closeCard} transactions={transactions} balance={transactions.reduce((s,t)=>s+t.amount,0)} onRecharge={(amt)=>handleRecharge(amt)} />
-        <Toast open={toastOpen} message={toastMsg} onClose={()=>setToastOpen(false)} type="success" />
+
         
         <div className="fixed bottom-0 left-0 right-0 pointer-events-none z-0">
           <Wave height="18vh" className="opacity-90 text-primary-500" />

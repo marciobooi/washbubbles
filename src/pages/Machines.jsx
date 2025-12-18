@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import { usePayment } from '../context/PaymentContext'
 import MachineCard from '../components/MachineCard'
 import MachineModal from '../components/MachineModal'
-import Toast from '../components/ui/Toast'
+import { toast } from '@/components/ui/Toast'
 import Wave from '../components/ui/wave'
 import { useCart } from '../context/CartContext'
 
@@ -27,9 +27,7 @@ export default function Machines() {
   const { addToCart, clearCart } = useCart()
   const { processPayment } = usePayment()
   const [modalOpen, setModalOpen] = React.useState(false)
-  const [toastOpen, setToastOpen] = React.useState(false)
-  const [toastMessage, setToastMessage] = React.useState('')
-  const [toastType, setToastType] = React.useState('success')
+
 
   function openModalFor(m) {
     setSelected(m)
@@ -44,9 +42,7 @@ export default function Machines() {
   function handleAddToCart(m) {
     addToCart(m)
     // Simple feedback for now
-    setToastMessage(`${m.name} adicionado ao carrinho`)
-    setToastType('success')
-    setToastOpen(true)
+    toast({ title: `${m.name} adicionado ao carrinho`, variant: 'success' })
     console.log('Added to cart', m)
   }
 
@@ -55,14 +51,10 @@ export default function Machines() {
       const res = await processPayment([m], opts)
       if (res.success) {
         closeModal()
-        setToastMessage(`Pagamento efetuado (${res.method})`)
-        setToastType('success')
-        setToastOpen(true)
+        toast({ title: `Pagamento efetuado (${res.method})`, variant: 'success' })
       }
     } catch (e) {
-      setToastMessage('Erro no pagamento')
-      setToastType('error')
-      setToastOpen(true)
+      toast({ title: 'Erro no pagamento', variant: 'destructive' })
     }
   }
 
@@ -76,7 +68,7 @@ export default function Machines() {
         ))}
       </div>
       <MachineModal open={modalOpen} machine={selected} frames={frames} onClose={closeModal} onAddToCart={handleAddToCart} onPay={pay} />
-      <Toast open={toastOpen} message={toastMessage} type={toastType} onClose={() => setToastOpen(false)} />
+
       <Wave height="12vh" className="mt-2" />
     </div>
     </div>
