@@ -26,13 +26,14 @@ export default function Machines() {
       try {
         setLoading(true)
         // Prefer kiosk/public machines endpoint (requires kiosk API key)
-        const kioskKey = localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
+        const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
+        const kioskKey = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
         const data = await api.getPublicMachines({ type }, { apiKey: kioskKey })
         if (mounted && Array.isArray(data)) {
           setMachines(data)
         } else if (mounted && !kioskKey) {
           // No kiosk key available locally — inform admin to configure one
-          toast({ title: 'Kiosk API key missing. Configure `kiosk_api_key` in localStorage or set VITE_KIOSK_API_KEY', variant: 'warning' })
+          toast({ title: 'Kiosk API key missing. Configure `kiosk_api_key` in localStorage or set VITE_KIOSK_API_KEY / pass via Electron', variant: 'warning' })
         }
       } catch (e) {
         console.error('Failed to fetch machines', e)

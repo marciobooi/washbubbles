@@ -30,7 +30,8 @@ export default function MachineDetail() {
 
       // If getMachine didn't return a machine, try fetching the full list and find by id
       try {
-        const kioskKey = localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
+        const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
+        const kioskKey = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
         const list = await api.getPublicMachines(undefined, { apiKey: kioskKey })
         if (Array.isArray(list)) {
           const found = list.find((m) => (m._id || m.id) === id)
