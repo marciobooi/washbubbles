@@ -33,6 +33,11 @@ function AppInner() {
   const cartCount = cart.length
   const [cartOpen, setCartOpen] = React.useState(false)
 
+  // Close the cart modal automatically when the cart becomes empty
+  React.useEffect(() => {
+    if (cartCount === 0) setCartOpen(false)
+  }, [cartCount])
+
   const [helpOpen, setHelpOpen] = React.useState(false)
   const location = useLocation()
 
@@ -77,15 +82,15 @@ function AppInner() {
                 <span className="sr-only">Ajuda</span>
               </button>
 
-              <button aria-label="Open cart" className="relative inline-flex items-center p-2 rounded-md hover:bg-white/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400" onClick={() => setCartOpen(true)}>
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-primary-800" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4m1.6 8L5 21h14" />
-                </svg>
-                <span className="sr-only">Cart</span>
-                {cartCount > 0 && (
+              {cartCount > 0 && (
+                <button aria-label="Open cart" className="relative inline-flex items-center p-2 rounded-md hover:bg-white/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400" onClick={() => setCartOpen(true)}>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-primary-800" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4m1.6 8L5 21h14" />
+                  </svg>
+                  <span className="sr-only">Cart</span>
                   <span className="absolute -top-1 -right-1 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-semibold leading-none text-white bg-red-600 rounded-full">{cartCount}</span>
-                )}
-              </button>
+                </button>
+              )}
             </div>
           </div>
         </header>
