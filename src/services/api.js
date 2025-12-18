@@ -267,10 +267,33 @@ export function createApi(config) {
     request,
     login,
     register,
+
+    // Machines
     getMachines,
+    getMachine,
     createMachine,
+    updateMachine,
+    deleteMachine,
+
+    // Users
     getUsers,
+    getUser,
+    createUser,
+    updateUser,
+    deleteUser,
     rotateUserKey,
+
+    // Transactions
+    getTransactions,
+    getTransaction,
+    createTransaction,
+    deleteTransaction,
+
+    // Settings
+    getSettings,
+    getSetting,
+    setSetting,
+    deleteSetting,
   };
 }
 

@@ -1,20 +1,27 @@
 import React, { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
 
 export default function AdminTransactions() {
   const [tx, setTx] = useState([])
   const [loading, setLoading] = useState(false)
+  const navigate = useNavigate()
 
   async function load() {
     setLoading(true)
     try {
-      const res = await fetch('/api/admin/transactions')
-      if (res.ok) {
-        const data = await res.json()
-        setTx(data)
-      }
+      const data = await api.getTransactions()
+      setTx(data)
     } catch (e) {
       console.error(e)
+      // Handle unauthorized explicitly
+      if (e && e.status === 401) {
+        toast({ title: 'Unauthorized - please login', variant: 'destructive' })
+        navigate('/admin')
+        return
+      }
+      toast({ title: 'Erro ao carregar transacções', variant: 'destructive' })
     } finally {
       setLoading(false)
     }
