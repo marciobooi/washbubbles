@@ -1,10 +1,16 @@
 import React, { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
+import Modal from '@/components/ui/Modal'
+import { Pencil, Trash2, Plus, Check, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
 export default function AdminMachines(){
+  const navigate = useNavigate()
   const [machines, setMachines] = useState([])
   const [loading, setLoading] = useState(false)
+  const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null)
   const [name, setName] = useState('')
   const [status, setStatus] = useState('active')
@@ -16,6 +22,11 @@ export default function AdminMachines(){
       setMachines(data)
     } catch (e) {
       console.error(e)
+      if (e && e.status === 401) {
+        toast({ title: 'Sessão expirada, faça login novamente', variant: 'destructive' })
+        navigate('/admin/login')
+        return
+      }
       toast({ title: 'Erro ao carregar máquinas', variant: 'destructive' })
     } finally {
       setLoading(false)
@@ -24,20 +35,22 @@ export default function AdminMachines(){
 
   useEffect(() => { load() }, [])
 
-  function startEdit(m) {
-    setEditing(m)
-    setName(m.name)
-    setStatus(m.status || 'active')
-  }
-
-  function resetForm() {
+  function openNew() {
     setEditing(null)
     setName('')
     setStatus('active')
+    setModalOpen(true)
   }
 
-  async function submit(e) {
-    e.preventDefault()
+  function openEdit(m) {
+    setEditing(m)
+    setName(m.name)
+    setStatus(m.status || 'active')
+    setModalOpen(true)
+  }
+
+  async function save(e) {
+    e?.preventDefault()
     try {
       if (editing) {
         await api.updateMachine(editing._id, { name, status })
@@ -46,10 +59,15 @@ export default function AdminMachines(){
         await api.createMachine({ name, status })
         toast({ title: 'Máquina criada', variant: 'success' })
       }
-      resetForm()
+      setModalOpen(false)
       load()
     } catch (e) {
       console.error(e)
+      if (e && e.status === 401) {
+        toast({ title: 'Sessão expirada, faça login novamente', variant: 'destructive' })
+        navigate('/admin/login')
+        return
+      }
       toast({ title: 'Erro', variant: 'destructive' })
     }
   }
@@ -62,44 +80,79 @@ export default function AdminMachines(){
       load()
     } catch (e) {
       console.error(e)
+      if (e && e.status === 401) {
+        toast({ title: 'Sessão expirada, faça login novamente', variant: 'destructive' })
+        navigate('/admin/login')
+        return
+      }
       toast({ title: 'Erro ao remover', variant: 'destructive' })
     }
   }
 
   return (
     <div className="p-4">
-      <h2 className="text-lg font-semibold mb-4">Máquinas</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold">Máquinas</h2>
+        <div>
+          <Button onClick={openNew}><Plus className="h-4 w-4 mr-2" /> Nova Máquina</Button>
+        </div>
+      </div>
 
-      <div className="bg-white rounded shadow p-4 mb-4">
-        <form onSubmit={submit} className="flex gap-2">
-          <input className="border p-2 rounded flex-1" placeholder="Nome" value={name} onChange={(e) => setName(e.target.value)} />
+      <div className="bg-white rounded shadow overflow-auto">
+        <table className="min-w-full divide-y text-sm">
+          <thead className="bg-muted-foreground/5">
+            <tr>
+              <th className="px-4 py-2 text-left">Nome</th>
+              <th className="px-4 py-2 text-left">Estado</th>
+              <th className="px-4 py-2 text-left">Criado</th>
+              <th className="px-4 py-2 text-left">Ações</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {loading ? (
+              <tr>
+                <td colSpan={4} className="p-4">Loading...</td>
+              </tr>
+            ) : machines.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="p-4">Nenhuma máquina</td>
+              </tr>
+            ) : (
+              machines.map((m) => (
+                <tr key={m._id} className="hover:bg-muted/30">
+                  <td className="px-4 py-3">{m.name}</td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">{m.status}</td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(m.createdAt).toLocaleString()}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-2">
+                      <button className="btn p-2" title="Editar" aria-label="Editar" onClick={() => openEdit(m)}>
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button className="btn btn-destructive p-2" title="Remover" aria-label="Remover" onClick={() => remove(m._id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? 'Editar Máquina' : 'Nova Máquina'}>
+        <form onSubmit={save} className="flex flex-col gap-2">
+          <input className="border p-2 rounded" placeholder="Nome" value={name} onChange={(e) => setName(e.target.value)} />
           <select className="border p-2 rounded" value={status} onChange={(e) => setStatus(e.target.value)}>
             <option value="active">active</option>
             <option value="offline">offline</option>
           </select>
-          <button className="btn btn-primary" type="submit">{editing ? 'Atualizar' : 'Criar'}</button>
-          {editing && <button type="button" className="btn" onClick={resetForm}>Cancelar</button>}
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" type="button" onClick={() => setModalOpen(false)}><X className="h-4 w-4 mr-2" />Cancelar</Button>
+            <Button type="submit"><Check className="h-4 w-4 mr-2" />Salvar</Button>
+          </div>
         </form>
-      </div>
-
-      <div className="bg-white rounded shadow p-4">
-        {loading ? <div>Loading...</div> : (
-          <ul>
-            {machines.map((m) => (
-              <li key={m._id} className="py-2 flex justify-between items-center border-b">
-                <div>
-                  <div className="font-semibold">{m.name}</div>
-                  <div className="text-xs text-muted-foreground">{m.status}</div>
-                </div>
-                <div className="flex gap-2">
-                  <button className="btn" onClick={() => startEdit(m)}>Edit</button>
-                  <button className="btn btn-destructive" onClick={() => remove(m._id)}>Delete</button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      </Modal>
     </div>
   )
 }
