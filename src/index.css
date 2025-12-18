@@ -65,6 +65,15 @@
 
   .glass-card > * { position: relative; z-index: 1; }
 
+  /* Admin machines form inputs */
+  .machine-form input,
+  .machine-form select,
+  .machine-form textarea {
+    background-color: var(--color-green-50);
+    border-radius: 8px;
+    border: 1px solid var(--color-green-500);
+  }
+
   .auth-left {
     @apply pr-6 hidden md:block;
   }
@@ -166,6 +175,10 @@
 
   --primary: var(--primary-600);
   --primary-foreground: #ffffff;
+
+  /* Greens used for machine input highlights */
+  --color-green-50: #ecfdf5;
+  --color-green-500: #10b981;
 
   /* Surfaces */
   --background: #f0fdfa;

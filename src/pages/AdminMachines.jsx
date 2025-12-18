@@ -204,7 +204,7 @@ export default function AdminMachines(){
       </div>
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? 'Editar Máquina' : 'Nova Máquina'}>
-        <form onSubmit={save} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+        <form onSubmit={save} className="machine-form grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch">
           {/* Left column: main fields */}
           <div className="md:col-span-2 space-y-3">
             <div>
@@ -247,19 +247,23 @@ export default function AdminMachines(){
 
           {/* Right column: preview */}
           <div className="md:col-span-1">
-            <div className="border rounded p-3 bg-muted-foreground/5">
-              <div className="flex items-center gap-3">
-                <img src={(editing && editing.icon) || (type === 'dry' ? '/drymachine/S1.png' : '/washingmashine/L1.png')} alt="preview" className={`h-12 w-12 object-contain rounded transition-transform duration-300 tealFilter ${animating ? 'scale-95 opacity-60' : 'scale-100 opacity-100'}`} aria-hidden />
-                <div className="flex-1">
-                    <div className="font-semibold">{name || (editing ? editing.name : 'Nome da máquina')}</div>
-                    <div className="text-xs text-muted-foreground">{type === 'wash' ? 'Lavagem' : 'Secagem'} • {weight !== '' ? weight + ' kg' : '—'}</div>
-                    <div className="text-sm mt-1">{moneyPrice !== '' ? Number(moneyPrice).toFixed(2) : (editing && editing.price ? editing.price.toFixed(2) : '—')}€ • Fidelidade: {loyaltyPrice !== '' ? Number(loyaltyPrice).toFixed(2) : (editing && typeof editing.loyaltyPrice === 'number' ? editing.loyaltyPrice.toFixed(2) : '—')}€</div>
+            <div className="border rounded p-3 bg-muted-foreground/5 h-full">
+              <div className="flex flex-col gap-3 h-full justify-between">
+                <div>
+                  <div className="font-semibold">{name || (editing ? editing.name : 'Nome da máquina')}</div>
+                  <div className="text-xs text-muted-foreground">{type === 'wash' ? 'Lavagem' : 'Secagem'} • {weight !== '' ? weight + ' kg' : '—'}</div>
+                  <div className="text-sm mt-1">{moneyPrice !== '' ? Number(moneyPrice).toFixed(2) : (editing && editing.price ? editing.price.toFixed(2) : '—')}€ • Fidelidade: {loyaltyPrice !== '' ? Number(loyaltyPrice).toFixed(2) : (editing && typeof editing.loyaltyPrice === 'number' ? editing.loyaltyPrice.toFixed(2) : '—')}€</div>
                 </div>
 
-                {/* Dynamic status badge */}
-                <div className={`text-xs px-2 py-1 rounded ${editing?.status === 'working' ? 'bg-yellow-100 text-yellow-800' : editing?.status === 'offline' ? 'bg-gray-100 text-gray-800' : 'bg-green-100 text-green-800'}`}>{editing?.statusText || (editing?.status === 'working' ? 'Ocupado' : editing?.status === 'offline' ? 'Offline' : 'Livre')}</div>
+                <div>
+                  <div className={`flex justify-center  text-xs px-2 py-1 rounded ${editing?.status === 'working' ? 'bg-yellow-100 text-yellow-800' : editing?.status === 'offline' ? 'bg-gray-100 text-gray-800' : 'bg-green-100 text-green-800'}`}>{editing?.statusText || (editing?.status === 'working' ? 'Ocupado' : editing?.status === 'offline' ? 'Offline' : 'Livre')}</div>
+                </div>
+
+                <div className="flex justify-center">
+                  <img src={(editing && editing.icon) || (type === 'dry' ? '/drymachine/S1.png' : '/washingmashine/L1.png')} alt="preview" className={`h-12 w-12 object-contain rounded transition-transform duration-300 ${animating ? 'scale-95 opacity-60' : 'scale-100 opacity-100'} tealFilter`} aria-hidden />
+                </div>
+              </div>
             </div>
-          </div>
           </div>
 
           {/* Full-width action row */}
