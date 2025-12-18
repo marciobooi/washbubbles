@@ -14,6 +14,7 @@ import AdminUsers from './pages/AdminUsers'
 import AdminMachines from './pages/AdminMachines'
 import AdminTransactions from './pages/AdminTransactions'
 import AdminSettings from './pages/AdminSettings'
+import AdminProfile from './pages/AdminProfile'
 import RequireAdmin from './components/RequireAdmin'
 
 export default function App() {
@@ -113,6 +114,7 @@ function AppInner() {
             <Route path="machines" element={<AdminMachines />} />
             <Route path="transactions" element={<AdminTransactions />} />
             <Route path="settings" element={<AdminSettings />} />
+            <Route path="profile" element={<AdminProfile />} />
           </Route>
           <Route path="/" element={<Navigate to="/pos" replace />} />
         </Routes>

@@ -59,6 +59,26 @@ router.post('/register', async (req, res) => {
   return res.json({ _id: user._id, username: user.username, role: user.role, apiKey: user.apiKey ? user.apiKey.slice(0,8)+'…' : null })
 })
 
+// Change password for the authenticated user
+router.post('/change-password', requireAuth, async (req, res) => {
+  const { currentPassword, newPassword } = req.body
+  if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Missing fields' })
+  if (typeof newPassword !== 'string' || newPassword.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters' })
+
+  const user = req.userModel
+  if (!user) return res.status(401).json({ error: 'Unauthorized' })
+
+  // Verify current password
+  const ok = await bcrypt.compare(currentPassword, user.password)
+  if (!ok) return res.status(401).json({ error: 'Invalid current password' })
+
+  const hash = await bcrypt.hash(newPassword, 10)
+  user.password = hash
+  await user.save()
+
+  res.json({ success: true })
+})
+
 // NOTE: `/auth/me` endpoint removed — prefer using token payloads returned by `/auth/login` for client-side role checks.
 // If you still need server-side user info, reintroduce an authenticated route that returns specific safe fields.
 
