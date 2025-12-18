@@ -54,8 +54,8 @@ router.post('/sale', requireKiosk, async (req, res) => {
   await Machine.findByIdAndUpdate(machineId, { $inc: { cycle: 1 }, $set: { status: 'working', statusText: 'Ocupado' } })
 
   const updated = await Machine.findById(machineId)
-  // broadcast updated machine list so kiosks and dashboards refresh in real-time
-  try { await broadcastMachines() } catch (e) { console.error('[pos] broadcastMachines error', e) }
+  // broadcast single updated machine so clients refresh quickly
+  try { await broadcastMachine(updated) } catch (e) { console.error('[pos] broadcastMachine error', e) }
 
   res.json({ sale, machine: updated })
 })

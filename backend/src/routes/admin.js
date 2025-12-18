@@ -6,7 +6,7 @@ import Sale from '../models/sale.js'
 import Setting from '../models/setting.js'
 import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
-import { broadcastMachines } from '../wsServer.js'
+import { broadcastMachines, broadcastMachine } from '../wsServer.js'
 
 const router = express.Router()
 
@@ -26,7 +26,7 @@ router.post('/machines', async (req, res) => {
   if (type && !['wash', 'dry'].includes(type)) return res.status(400).json({ error: 'Invalid type' })
   const finalIcon = icon || (type === 'dry' ? '/drymachine/S1.png' : '/washingmashine/L1.png')
   const machine = await Machine.create({ name, status, statusText, weight, price, loyaltyPrice: loyaltyPrice || 0, type: type || 'wash', icon: finalIcon })
-  // broadcast updated machine list to connected clients
+  // new machine created — broadcast full list so clients get the new item
   try { await broadcastMachines() } catch (e) { console.error('[admin] broadcastMachines error', e) }
   res.json(machine)
 })
@@ -98,8 +98,8 @@ router.put('/machines/:id', async (req, res) => {
   const finalIcon = icon || (type === 'dry' ? '/drymachine/S1.png' : '/washingmashine/L1.png')
   const m = await Machine.findByIdAndUpdate(req.params.id, { name, status, statusText, weight, price, loyaltyPrice: loyaltyPrice || 0, type, icon: finalIcon }, { new: true })
   if (!m) return res.status(404).json({ error: 'Machine not found' })
-  // broadcast updated machine list
-  try { await broadcastMachines() } catch (e) { console.error('[admin] broadcastMachines error', e) }
+  // broadcast single updated machine to clients (more efficient)
+  try { await broadcastMachine(m) } catch (e) { console.error('[admin] broadcastMachine error', e) }
   res.json(m)
 })
 

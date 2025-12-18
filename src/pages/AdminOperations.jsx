@@ -30,6 +30,14 @@ export default function AdminOperations() {
       console.debug('[ws] AdminOperations received message', message)
       if (typeof message === 'object' && message.type === 'machine-status' && Array.isArray(message.payload)) {
         setMachines(message.payload)
+      } else if (typeof message === 'object' && message.type === 'machine-update') {
+        const m = message.payload
+        if (!m) return
+        setMachines((prev) => {
+          const found = prev.find((x) => x._id === m._id)
+          if (found) return prev.map((x) => (x._id === m._id ? m : x))
+          return [...prev, m]
+        })
       }
     })
     return () => unsub()

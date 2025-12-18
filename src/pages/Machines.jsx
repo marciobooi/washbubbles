@@ -64,6 +64,19 @@ export default function Machines() {
       if (typeof message === 'object' && message.type === 'machine-status') {
         const data = Array.isArray(message.payload) ? message.payload.filter((m) => (m.type || 'wash') === type) : []
         if (data.length) setMachines(data)
+      } else if (typeof message === 'object' && message.type === 'machine-update') {
+        const m = message.payload
+        if (!m) return
+        // If update matches current type, upsert it; otherwise remove it from the view
+        if ((m.type || 'wash') === type) {
+          setMachines((prev) => {
+            const found = prev.find((x) => (x._id || x.id) === (m._id || m.id))
+            if (found) return prev.map((x) => ((x._id || x.id) === (m._id || m.id) ? m : x))
+            return [...prev, m]
+          })
+        } else {
+          setMachines((prev) => prev.filter((x) => (x._id || x.id) !== (m._id || m.id)))
+        }
       }
     })
 

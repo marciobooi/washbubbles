@@ -21,6 +21,20 @@ export async function broadcastMachines() {
   }
 }
 
+export async function broadcastMachine(machine) {
+  try {
+    if (!_wss || !machine) return
+    const clients = _wss.clients ? _wss.clients.size : 0
+    const msg = JSON.stringify({ type: 'machine-update', payload: machine })
+    console.log(`[ws] broadcasting machine-update (${machine._id}) to ${clients} clients`)
+    _wss.clients.forEach((client) => {
+      if (client.readyState === client.OPEN) client.send(msg)
+    })
+  } catch (err) {
+    console.error('[ws] broadcastMachine error', err.message || err)
+  }
+}
+
 export function initWebSocket(server) {
   const wss = new WebSocketServer({ server, path: '/ws' })
   _wss = wss
