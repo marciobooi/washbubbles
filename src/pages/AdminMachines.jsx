@@ -13,7 +13,11 @@ export default function AdminMachines(){
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null)
   const [name, setName] = useState('')
-  const [status, setStatus] = useState('active')
+  const [status, setStatus] = useState('free')
+  const [weight, setWeight] = useState(0)
+  const [price, setPrice] = useState(0)
+  const [type, setType] = useState('wash')
+  const [icon, setIcon] = useState('')
 
   async function load() {
     setLoading(true)
@@ -38,25 +42,35 @@ export default function AdminMachines(){
   function openNew() {
     setEditing(null)
     setName('')
-    setStatus('active')
+    setStatus('free')
+    setWeight(0)
+    setPrice(0)
+    setType('wash')
+    setIcon('')
     setModalOpen(true)
   }
 
   function openEdit(m) {
     setEditing(m)
     setName(m.name)
-    setStatus(m.status || 'active')
+    setStatus(m.status || 'free')
+    setWeight(m.weight || 0)
+    setPrice(m.price || 0)
+    setType(m.type || 'wash')
+    setIcon(m.icon || '')
     setModalOpen(true)
   }
 
   async function save(e) {
     e?.preventDefault()
     try {
+      const payload = { name, status, statusText: status === 'free' ? 'Livre' : status === 'working' ? 'Ocupado' : status, weight, price, type }
+      if (icon) payload.icon = icon
       if (editing) {
-        await api.updateMachine(editing._id, { name, status })
+        await api.updateMachine(editing._id, payload)
         toast({ title: 'Máquina atualizada', variant: 'success' })
       } else {
-        await api.createMachine({ name, status })
+        await api.createMachine(payload)
         toast({ title: 'Máquina criada', variant: 'success' })
       }
       setModalOpen(false)
@@ -103,6 +117,7 @@ export default function AdminMachines(){
           <thead className="bg-muted-foreground/5">
             <tr>
               <th className="px-4 py-2 text-left">Nome</th>
+              <th className="px-4 py-2 text-left">Tipo</th>
               <th className="px-4 py-2 text-left">Estado</th>
               <th className="px-4 py-2 text-left">Criado</th>
               <th className="px-4 py-2 text-left">Ações</th>
@@ -120,7 +135,11 @@ export default function AdminMachines(){
             ) : (
               machines.map((m) => (
                 <tr key={m._id} className="hover:bg-muted/30">
-                  <td className="px-4 py-3">{m.name}</td>
+                  <td className="px-4 py-3 flex items-center gap-2">
+                    {m.icon && <img src={m.icon} alt="icon" className="h-8 w-8 object-contain" />}
+                    <div>{m.name}</div>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">{m.type}</td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{m.status}</td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(m.createdAt).toLocaleString()}</td>
                   <td className="px-4 py-3">
@@ -143,10 +162,34 @@ export default function AdminMachines(){
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? 'Editar Máquina' : 'Nova Máquina'}>
         <form onSubmit={save} className="flex flex-col gap-2">
           <input className="border p-2 rounded" placeholder="Nome" value={name} onChange={(e) => setName(e.target.value)} />
-          <select className="border p-2 rounded" value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="active">active</option>
-            <option value="offline">offline</option>
-          </select>
+
+          <div className="grid grid-cols-3 gap-2">
+            <select className="border p-2 rounded" value={status} onChange={(e) => setStatus(e.target.value)}>
+              <option value="free">free</option>
+              <option value="working">working</option>
+              <option value="offline">offline</option>
+            </select>
+
+            <input className="border p-2 rounded" placeholder="Peso (kg)" type="number" value={weight} onChange={(e) => setWeight(Number(e.target.value))} />
+            <input className="border p-2 rounded" placeholder="Preço (€)" type="number" step="0.01" value={price} onChange={(e) => setPrice(Number(e.target.value))} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <select className="border p-2 rounded" value={type} onChange={(e) => setType(e.target.value)}>
+              <option value="wash">wash</option>
+              <option value="dry">dry</option>
+            </select>
+
+            <input className="border p-2 rounded" placeholder="Icon (optional)" value={icon} onChange={(e) => setIcon(e.target.value)} />
+          </div>
+
+          { (icon || type) && (
+            <div className="flex items-center gap-2">
+              <div className="text-sm text-muted-foreground">Preview:</div>
+              <img src={icon || (type === 'dry' ? '/drymachine/S1.png' : '/washingmashine/L1.png')} alt="preview" className="h-10 w-10 object-contain" />
+            </div>
+          )}
+
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" type="button" onClick={() => setModalOpen(false)}><X className="h-4 w-4 mr-2" />Cancelar</Button>
             <Button type="submit"><Check className="h-4 w-4 mr-2" />Salvar</Button>

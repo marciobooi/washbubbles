@@ -19,9 +19,11 @@ router.get('/machines', async (req, res) => {
 
 // create machine
 router.post('/machines', async (req, res) => {
-  const { name, status } = req.body
+  const { name, status, statusText, weight, price, type, icon } = req.body
   if (!name) return res.status(400).json({ error: 'Missing name' })
-  const machine = await Machine.create({ name, status })
+  if (type && !['wash', 'dry'].includes(type)) return res.status(400).json({ error: 'Invalid type' })
+  const finalIcon = icon || (type === 'dry' ? '/drymachine/S1.png' : '/washingmashine/L1.png')
+  const machine = await Machine.create({ name, status, statusText, weight, price, type: type || 'wash', icon: finalIcon })
   res.json(machine)
 })
 
@@ -69,8 +71,10 @@ router.get('/machines/:id', async (req, res) => {
 
 // Update machine
 router.put('/machines/:id', async (req, res) => {
-  const { name, status } = req.body
-  const m = await Machine.findByIdAndUpdate(req.params.id, { name, status }, { new: true })
+  const { name, status, statusText, weight, price, type, icon } = req.body
+  if (type && !['wash', 'dry'].includes(type)) return res.status(400).json({ error: 'Invalid type' })
+  const finalIcon = icon || (type === 'dry' ? '/drymachine/S1.png' : '/washingmashine/L1.png')
+  const m = await Machine.findByIdAndUpdate(req.params.id, { name, status, statusText, weight, price, type, icon: finalIcon }, { new: true })
   if (!m) return res.status(404).json({ error: 'Machine not found' })
   res.json(m)
 })
