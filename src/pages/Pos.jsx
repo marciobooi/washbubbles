@@ -31,10 +31,12 @@ export default function Pos() {
 
   function openCard() {
     setCardOpen(true)
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('modal-open'))
   }
 
   function closeCard() {
     setCardOpen(false)
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('modal-close'))
   }
 
   async function handleRecharge(amount = 10) {

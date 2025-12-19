@@ -39,7 +39,24 @@ function AppInner() {
   const cartCount = cart.length
   const [cartOpen, setCartOpen] = React.useState(false)
   const [helpOpen, setHelpOpen] = React.useState(false)
+  // Count of externally-dispatched modal opens (e.g., CardModal in `Pos`)
+  const [externalModalCount, setExternalModalCount] = React.useState(0)
+
+  React.useEffect(() => {
+    const onExternalOpen = () => setExternalModalCount((c) => c + 1)
+    const onExternalClose = () => setExternalModalCount((c) => Math.max(0, c - 1))
+    window.addEventListener('modal-open', onExternalOpen)
+    window.addEventListener('modal-close', onExternalClose)
+    return () => {
+      window.removeEventListener('modal-open', onExternalOpen)
+      window.removeEventListener('modal-close', onExternalClose)
+    }
+  }, [])
+
+  const anyModalOpen = externalModalCount > 0 || cartOpen || helpOpen
   const location = useLocation()
+  // Show compact Home button when any modal is open or when viewing machines (e.g. /pos/machines)
+  const showHome = anyModalOpen || location.pathname.startsWith('/pos/machines')
 
   // Close the cart modal automatically when the cart becomes empty
   React.useEffect(() => {
@@ -165,12 +182,14 @@ function AppInner() {
               {location.pathname.startsWith('/pos') && <LanguageSwitcher />}
 
 
-              <Link to="/pos" className="inline-flex items-center p-2 rounded-md hover:bg-white/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400" title="Home">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-primary-800" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 9.75L12 3l9 6.75V20a1 1 0 0 1-1 1h-5.5a1 1 0 0 1-1-1V14a1 1 0 0 0-1-1H10a1 1 0 0 0-1 1v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9.75z" />
-                </svg>
-                <span className="sr-only">Home</span>
-              </Link>
+              {showHome && (
+                <Link to="/pos" className="inline-flex items-center p-2 rounded-md hover:bg-white/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400" title="Home">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-primary-800" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 9.75L12 3l9 6.75V20a1 1 0 0 1-1 1h-5.5a1 1 0 0 1-1-1V14a1 1 0 0 0-1-1H10a1 1 0 0 0-1 1v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9.75z" />
+                  </svg>
+                  <span className="sr-only">Home</span>
+                </Link>
+              )}
 
 
               <button aria-label="Ajuda" className="inline-flex items-center p-2 rounded-md hover:bg-white/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400" onClick={() => setHelpOpen(true)} title="Ajuda">
