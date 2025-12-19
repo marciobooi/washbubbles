@@ -20,7 +20,7 @@ export default function Banner() {
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % banners.length)
-    }, 5000)
+    }, 10000)
     return () => clearInterval(interval)
   }, [])
 
