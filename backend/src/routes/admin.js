@@ -6,6 +6,10 @@ import Sale from '../models/sale.js'
 import Setting from '../models/setting.js'
 import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
+import fs from 'fs'
+import path from 'path'
+import multer from 'multer'
+import sharp from 'sharp'
 import { broadcastMachines, broadcastMachine, listClients, disconnectClient } from '../wsServer.js'
 
 const router = express.Router()
@@ -228,6 +232,79 @@ router.post('/settings', async (req, res) => {
   if (!key) return res.status(400).json({ error: 'Missing key' })
   const s = await Setting.findOneAndUpdate({ key }, { value }, { upsert: true, new: true })
   res.json(s)
+})
+
+// Upload a logo file and persist the public URL as `branding.logo`
+const uploadDirs = [
+  path.resolve(process.cwd(), '../public/uploads'),
+  path.resolve(process.cwd(), 'public/uploads'),
+  path.resolve(process.cwd(), '../../public/uploads'),
+]
+let uploadDir = null
+for (const d of uploadDirs) {
+  try {
+    fs.mkdirSync(d, { recursive: true })
+    uploadDir = d
+    break
+  } catch (e) {
+    // continue
+  }
+}
+if (!uploadDir) uploadDir = uploadDirs[0]
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadDir),
+  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9.-]/g,'_')}`),
+})
+
+const ALLOWED_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+const MAX_FILE_SIZE = 5 * 1024 * 1024 // 5MB
+
+const upload = multer({
+  storage,
+  limits: { fileSize: MAX_FILE_SIZE },
+  fileFilter: (req, file, cb) => {
+    if (!ALLOWED_MIMES.includes(file.mimetype)) {
+      return cb(new Error('Invalid file type'))
+    }
+    cb(null, true)
+  }
+})
+
+router.post('/settings/logo', (req, res) => {
+  upload.single('logo')(req, res, async function (err) {
+    if (err) {
+      console.error('Multer error', err)
+      return res.status(400).json({ error: err.message })
+    }
+
+    try {
+      if (!req.file) return res.status(400).json({ error: 'No file uploaded' })
+
+      const origPath = req.file.path
+      const ext = path.extname(req.file.filename).toLowerCase() || '.jpg'
+      const base = path.basename(req.file.filename, ext)
+      const outName = `${base}-resized${ext}`
+      const outPath = path.join(uploadDir, outName)
+
+      // Resize, keep orientation and constrain to 800x800
+      await sharp(origPath).rotate().resize({ width: 800, height: 800, fit: 'inside' }).toFile(outPath)
+
+      // If resized file differs, remove original
+      if (outPath !== origPath) {
+        try { fs.unlinkSync(origPath) } catch (e) { /* ignore */ }
+      }
+
+      const url = `/uploads/${outName}`
+      const s = await Setting.findOneAndUpdate({ key: 'branding.logo' }, { value: url }, { upsert: true, new: true })
+      res.json({ url, setting: s })
+    } catch (e) {
+      // cleanup any uploaded file
+      try { if (req.file && req.file.path) fs.unlinkSync(req.file.path) } catch (err) { /* ignore */ }
+      console.error('Logo upload error', e)
+      res.status(400).json({ error: e && e.message ? e.message : 'Failed to process upload' })
+    }
+  })
 })
 
 router.delete('/settings/:key', async (req, res) => {

@@ -22,15 +22,19 @@ import AdminSettings from './pages/AdminSettings'
 import AdminProfile from './pages/AdminProfile'
 import RequireAdmin from './components/RequireAdmin'
 
+import { BrandingProvider } from './context/BrandingContext'
+
 export default function App() {
   return (
-    <PaymentProvider>
-      <CartProvider>
-        <ToastProvider>
-          <AppInner />
-        </ToastProvider>
-      </CartProvider>
-    </PaymentProvider>
+    <BrandingProvider>
+      <PaymentProvider>
+        <CartProvider>
+          <ToastProvider>
+            <AppInner />
+          </ToastProvider>
+        </CartProvider>
+      </PaymentProvider>
+    </BrandingProvider>
   )
 }
 

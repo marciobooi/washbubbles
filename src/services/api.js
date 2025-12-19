@@ -285,7 +285,11 @@ export function createApi(config) {
   }
 
   function getSetting(key) {
-    return request(`/admin/settings/${encodeURIComponent(key)}`, { method: 'GET', expect: 'json' });
+    return request(`/admin/settings/${encodeURIComponent(key)}`, { method: 'GET', expect: 'json' }).catch((e) => {
+      // Return null for missing settings (404) instead of throwing an ApiError
+      if (e && e.status === 404) return null
+      throw e
+    })
   }
 
   function setSetting(payload) {
