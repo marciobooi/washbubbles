@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import Joyride, { STATUS } from 'react-joyride'
+import { X } from 'lucide-react'
 
 export default function HelpTutorial({ run, onClose }) {
   const [stepIndex, setStepIndex] = useState(0)
@@ -144,85 +145,99 @@ export default function HelpTutorial({ run, onClose }) {
   }
 
   return (
-    <Joyride
-      steps={steps}
-      run={run}
-      continuous
-      showProgress
-      showSkipButton
-      stepIndex={stepIndex}
-      callback={handleJoyrideCallback}
-      styles={{
-        options: {
-          primaryColor: '#0d9488',
-          textColor: '#1f2937',
-          backgroundColor: '#fff',
-          arrowColor: '#fff',
-          overlayColor: 'rgba(0, 0, 0, 0.6)',
-          zIndex: 10000,
-        },
-        tooltip: {
-          borderRadius: 20,
-          padding: 40,
-          boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-          width: 600,
-          height: 450,
-        },
-        tooltipContainer: {
-          textAlign: 'left',
-          display: 'flex',
-          flexDirection: 'column',
-          height: '80%',
-        },
-        tooltipContent: {
-          padding: '10px 0',
-          fontSize: 18,
-          lineHeight: 1.7,
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-        },
-        buttonNext: {
-          backgroundColor: '#0d9488',
-          borderRadius: 14,
-          padding: '16px 32px',
-          fontSize: 18,
-          fontWeight: 700,
-          boxShadow: '0 4px 6px -1px rgba(13, 148, 136, 0.3)',
-          transition: 'all 0.2s',
-        },
-        buttonBack: {
-          color: '#0d9488',
-          marginRight: 12,
-          borderRadius: 14,
-          padding: '16px 32px',
-          fontSize: 18,
-          fontWeight: 600,
-          border: '2px solid #0d9488',
-          backgroundColor: 'transparent',
-        },
-        buttonSkip: {
-          color: '#6b7280',
-          fontSize: 16,
-          fontWeight: 500,
-        },
-        buttonClose: {
-          color: '#6b7280',
-          width: 36,
-          height: 36,
-        },
-        spotlight: {
-          borderRadius: 12,
-        },
-      }}
-      locale={{
-        back: 'Anterior',
-        close: 'Fechar',
-        last: 'Concluir',
-        next: 'Próximo',
-        skip: 'Saltar Tutorial',
-      }}
-    />
+    <>
+      <Joyride
+        steps={steps}
+        run={run}
+        continuous
+        showProgress
+        showSkipButton
+        stepIndex={stepIndex}
+        callback={handleJoyrideCallback}
+        styles={{
+          options: {
+            primaryColor: '#0d9488',
+            textColor: '#1f2937',
+            backgroundColor: '#fff',
+            arrowColor: '#fff',
+            overlayColor: 'rgba(0, 0, 0, 0.6)',
+            zIndex: 10000,
+          },
+          tooltip: {
+            borderRadius: 20,
+            padding: 40,
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            width: 600,
+            height: 450,
+          },
+          tooltipContainer: {
+            textAlign: 'left',
+            display: 'flex',
+            flexDirection: 'column',
+            height: '80%',
+          },
+          tooltipContent: {
+            padding: '10px 0',
+            fontSize: 18,
+            lineHeight: 1.7,
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+          },
+          buttonNext: {
+            backgroundColor: '#0d9488',
+            borderRadius: 14,
+            padding: '16px 32px',
+            fontSize: 18,
+            fontWeight: 700,
+            boxShadow: '0 4px 6px -1px rgba(13, 148, 136, 0.3)',
+            transition: 'all 0.2s',
+          },
+          buttonBack: {
+            color: '#0d9488',
+            marginRight: 12,
+            borderRadius: 14,
+            padding: '16px 32px',
+            fontSize: 18,
+            fontWeight: 600,
+            border: '2px solid #0d9488',
+            backgroundColor: 'transparent',
+          },
+          buttonSkip: {
+            color: '#6b7280',
+            fontSize: 16,
+            fontWeight: 500,
+          },
+          buttonClose: {
+            color: '#6b7280',
+            width: 36,
+            height: 36,
+          },
+          spotlight: {
+            borderRadius: 12,
+          },
+        }}
+        locale={{
+          back: 'Anterior',
+          close: 'Fechar',
+          last: 'Concluir',
+          next: 'Próximo',
+          skip: 'Saltar Tutorial',
+        }}
+      />
+
+      {/* Always-available close button (in case Joyride's close is not actionable) */}
+      {run && (
+        <button
+          aria-label="Fechar Tutorial"
+          title="Fechar Tutorial"
+          onClick={() => { onClose(); setStepIndex(0) }}
+          className="fixed top-4 right-4 z-[10001] inline-flex items-center justify-center w-10 h-10 bg-white rounded-full shadow-md hover:bg-neutral-100 focus:outline-none"
+        >
+          <X className="w-4 h-4 text-neutral-700" />
+        </button>
+      )}
+    </>
   )
 }
