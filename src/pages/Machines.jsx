@@ -121,7 +121,8 @@ export default function Machines() {
         }
 
         closeModal()
-        toast({ title: `Pagamento efetuado (${res.method})`, variant: 'success' })
+        const translateMethod = (m) => m === 'card' ? 'Cartão' : (m === 'cash' ? 'Dinheiro' : m)
+        toast({ title: `Pagamento efetuado (${translateMethod(res.method)})`, variant: 'success' })
       }
     } catch (e) {
       toast({ title: 'Erro no pagamento', variant: 'destructive' })

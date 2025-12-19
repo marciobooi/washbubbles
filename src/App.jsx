@@ -73,7 +73,8 @@ function AppInner() {
       if (res.success) {
         // Normalize fidelity -> card so only 'card' or 'cash' exist
         res.method = res.method === 'fidelity' ? 'card' : res.method
-        toast({ title: `Pagamento efetuado (${res.method})`, variant: 'success' })
+        const translateMethod = (m) => m === 'card' ? 'Cartão' : (m === 'cash' ? 'Dinheiro' : m)
+        toast({ title: `Pagamento efetuado (${translateMethod(res.method)})`, variant: 'success' })
 
         // Persist transactions to backend (POS endpoints) — support recharges and machine sales
         try {
