@@ -23,9 +23,9 @@ export default function Pos() {
   const navigate = useNavigate()
   const [cardOpen, setCardOpen] = React.useState(false)
   const [transactions, setTransactions] = React.useState([
-    { id: 't1', ts: new Date().toISOString(), type: 'Recarregado', amount: 10 },
-    { id: 't2', ts: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), type: 'Gasto - Lavagem', amount: -3 },
-    { id: 't3', ts: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), type: 'Gasto - Secagem', amount: -4 },
+    { id: 't1', ts: new Date().toISOString(), type: 'recharged', amount: 10 },
+    { id: 't2', ts: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), type: 'spent_wash', amount: -3 },
+    { id: 't3', ts: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), type: 'spent_dry', amount: -4 },
   ])
 
 

@@ -18,5 +18,26 @@
   "status": {
     "free": "Free",
     "occupied": "Occupied"
+  },
+  "machines": {
+    "select": "Select {{type}} machine",
+    "type": {
+      "wash": "washing",
+      "dry": "drying"
+    }
+  },
+  "card": {
+    "title": "My Card",
+    "idLabel": "Card ID",
+    "active": "Active",
+    "balanceLabel": "Available Balance",
+    "addToCart": "Add to Cart",
+    "added": "Added!",
+    "transactionsTitle": "Transaction History"
+  },
+  "transactions": {
+    "recharged": "Recharged",
+    "spent_wash": "Spent - Wash",
+    "spent_dry": "Spent - Dry"
   }
 }

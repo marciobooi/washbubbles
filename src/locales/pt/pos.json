@@ -18,5 +18,26 @@
   "status": {
     "free": "Livre",
     "occupied": "Ocupado"
+  },
+  "machines": {
+    "select": "Selecionar máquina de {{type}}",
+    "type": {
+      "wash": "lavar",
+      "dry": "secar"
+    }
+  },
+  "card": {
+    "title": "Meu Cartão",
+    "idLabel": "ID do Cartão",
+    "active": "Ativo",
+    "balanceLabel": "Saldo Disponível",
+    "addToCart": "Adicionar ao Carrinho",
+    "added": "Adicionado!",
+    "transactionsTitle": "Histórico de Transações"
+  },
+  "transactions": {
+    "recharged": "Recarregado",
+    "spent_wash": "Gasto - Lavagem",
+    "spent_dry": "Gasto - Secagem"
   }
 }

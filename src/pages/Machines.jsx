@@ -7,7 +7,7 @@ import Wave from '../components/ui/wave'
 import api from '@/services/api'
 import { connect, subscribe } from '@/services/websocket'
 import { useCart } from '../context/CartContext'
-
+import { useTranslation } from 'react-i18next'
 export default function Machines() {
   const [searchParams] = useSearchParams()
   const type = searchParams.get('type') || 'wash'
@@ -134,10 +134,14 @@ export default function Machines() {
     }
   }
 
+  const { t } = useTranslation('pos')
+
+  const typeLabel = t(`machines.type.${type}`)
+
   return (
     <div className='flex-1 container mx-auto p-4'>
     <div className="relative pb-[12vh] z-10">
-      <h2 className="p-4 text-center text-xl font-semibold mb-4">Selecionar máquina ({type})</h2>
+      <h2 className="p-4 text-center text-xl font-semibold mb-4">{t('machines.select', { type: typeLabel })}</h2>
       {loading ? (
         <div className="text-center text-neutral-500">Carregando máquinas...</div>
       ) : (

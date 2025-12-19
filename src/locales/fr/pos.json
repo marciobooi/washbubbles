@@ -18,5 +18,26 @@
   "status": {
     "free": "Libre",
     "occupied": "Occupé"
+  },
+  "machines": {
+    "select": "Sélectionner la machine de {{type}}",
+    "type": {
+      "wash": "lavage",
+      "dry": "séchage"
+    }
+  },
+  "card": {
+    "title": "Ma Carte",
+    "idLabel": "ID de la carte",
+    "active": "Actif",
+    "balanceLabel": "Solde disponible",
+    "addToCart": "Ajouter au panier",
+    "added": "Ajouté !",
+    "transactionsTitle": "Historique des transactions"
+  },
+  "transactions": {
+    "recharged": "Rechargé",
+    "spent_wash": "Dépense - Lavage",
+    "spent_dry": "Dépense - Séchage"
   }
 }

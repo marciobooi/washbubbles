@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useCart } from '../context/CartContext'
+import { useTranslation } from 'react-i18next'
 
 function formatDate(iso) {
   const d = new Date(iso)
@@ -20,6 +21,7 @@ function getTxIcon(type) {
 
 export default function CardModal({ open, onClose, transactions = [], balance = 0, onRecharge = () => {} }) {
   const { addToCart } = useCart()
+  const { t } = useTranslation('pos')
   const [selectedAmount, setSelectedAmount] = useState(null)
   const [addedToCart, setAddedToCart] = useState(false)
 
@@ -31,6 +33,16 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [open, onClose])
+
+  // Prevent page scroll when CardModal is open, and restore on close
+  React.useEffect(() => {
+    if (!open) return
+    const prev = document.body.style.overflow
+    try { document.body.style.overflow = 'hidden' } catch (e) {}
+    return () => {
+      try { document.body.style.overflow = prev } catch (e) {}
+    }
+  }, [open])
 
   const handleAddToCart = () => {
     if (!selectedAmount) return
@@ -61,7 +73,7 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
           <div className="p-2 bg-primary-50 rounded-xl">
             <img src="/card/card.png" alt="Card" className="w-8 h-8 object-contain" />
           </div>
-          <h2 className="text-2xl font-bold text-neutral-800 tracking-tight">Meu Cartão</h2>
+          <h2 className="text-2xl font-bold text-neutral-800 tracking-tight">{t('card.title')}</h2>
         </div>
         <button 
           onClick={onClose}
@@ -88,19 +100,19 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
                 
                 <div className="flex flex-col justify-center gap-4 border-r border-neutral-100 pr-4">
                   <div className="flex flex-col">
-                    <span className="text-neutral-400 text-xs uppercase tracking-wider font-bold mb-1">ID do Cartão</span>
+                    <span className="text-neutral-400 text-xs uppercase tracking-wider font-bold mb-1">{t('card.idLabel')}</span>
                     <span className="font-mono font-bold text-neutral-700 text-lg">**** 8821</span>
                   </div>
                   <div>
                     <span className="inline-flex items-center px-3 py-1 bg-green-50 text-green-700 border border-green-200 rounded-full text-xs font-bold shadow-sm gap-1.5">
                       <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-                      Ativo
+                      {t('card.active')}
                     </span>
                   </div>
                 </div>
 
                 <div className="text-right flex flex-col justify-center h-full">
-                  <p className="text-neutral-400 text-xs font-bold uppercase tracking-wider mb-1">Saldo Disponível</p>
+                  <p className="text-neutral-400 text-xs font-bold uppercase tracking-wider mb-1">{t('card.balanceLabel')}</p>
                   <p className="text-4xl lg:text-5xl font-bold tracking-tight text-primary-600">{balance.toFixed(2)}€</p>
                 </div>
 
@@ -135,17 +147,17 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
                 >
                   {addedToCart ? (
                     <>
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                       </svg>
-                      Adicionado!
+                      {t('card.added')}
                     </>
                   ) : (
                     <>
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
                       </svg>
-                      Adicionar ao Carrinho
+                      {t('card.addToCart')}
                     </>
                   )}
                 </button>
@@ -156,7 +168,7 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
           {/* Right Column: Transactions */}
           <div className="flex-grow lg:col-span-7 bg-white rounded-3xl shadow-sm border border-neutral-100 flex flex-col overflow-hidden min-h-0">
             <div className="p-4 lg:p-6 border-b border-neutral-100 bg-neutral-50/50 shrink-0">
-              <h3 className="text-lg lg:text-xl font-bold text-neutral-800">Histórico de Transações</h3>
+              <h3 className="text-lg lg:text-xl font-bold text-neutral-800">{t('card.transactionsTitle')}</h3>
             </div>
             
             <div className="flex-grow overflow-y-auto p-3 lg:p-4 custom-scrollbar">
@@ -169,14 +181,14 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {transactions.map((t) => {
+                  {transactions.map((tx) => {
                     const isPositive = t.amount >= 0
                     return (
                       <div key={t.id} className="group bg-white p-4 rounded-2xl border border-neutral-100 border-primary-200 shadow-md transition-all duration-200 flex items-center gap-5">
                         {/* Icon Box */}
                         <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${isPositive ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'}`}>
                           <img 
-                            src={getTxIcon(t.type)} 
+                            src={getTxIcon(tx.type)} 
                             alt="" 
                             className="w-9 h-9 object-contain tealFilter"
                           />
@@ -185,9 +197,9 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
                         {/* Details */}
                         <div className="flex-grow min-w-0">
                           <div className="flex items-center justify-between mb-1">
-                            <h4 className="font-bold text-neutral-800 text-lg truncate">{t.type}</h4>
+                            <h4 className="font-bold text-neutral-800 text-lg truncate">{t(`transactions.${tx.type}`)}</h4>
                             <span className={`font-bold text-xl ${isPositive ? 'text-green-600' : 'text-neutral-800'}`}>
-                              {isPositive ? '+' : ''}{t.amount.toFixed(2)}€
+                              {isPositive ? '+' : ''}{tx.amount.toFixed(2)}€
                             </span>
                           </div>
                           <div className="flex items-center gap-4 text-sm text-neutral-500">
@@ -195,13 +207,13 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                               </svg>
-                              {formatDate(t.ts)}
+                              {formatDate(tx.ts)}
                             </span>
                             <span className="flex items-center gap-1.5 tealFilter">
                               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                               </svg>
-                              {formatTime(t.ts)}
+                              {formatTime(tx.ts)}
                             </span>
                           </div>
                         </div>

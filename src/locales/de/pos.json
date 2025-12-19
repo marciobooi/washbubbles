@@ -18,5 +18,26 @@
   "status": {
     "free": "Frei",
     "occupied": "Beschäftigt"
+  },
+  "machines": {
+    "select": "{{type}} auswählen",
+    "type": {
+      "wash": "Waschmaschine",
+      "dry": "Trockner"
+    }
+  },
+  "card": {
+    "title": "Meine Karte",
+    "idLabel": "Karten-ID",
+    "active": "Aktiv",
+    "balanceLabel": "Verfügbares Guthaben",
+    "addToCart": "In den Warenkorb",
+    "added": "Hinzugefügt!",
+    "transactionsTitle": "Transaktionsverlauf"
+  },
+  "transactions": {
+    "recharged": "Aufgeladen",
+    "spent_wash": "Ausgabe - Waschen",
+    "spent_dry": "Ausgabe - Trocknen"
   }
 }
