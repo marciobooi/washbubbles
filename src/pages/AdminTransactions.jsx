@@ -6,6 +6,7 @@ import api from '@/services/api'
 export default function AdminTransactions() {
   const [tx, setTx] = useState([])
   const [loading, setLoading] = useState(false)
+  const [expanded, setExpanded] = useState({})
   const navigate = useNavigate()
 
   async function load() {
@@ -50,31 +51,58 @@ export default function AdminTransactions() {
               </tr>
             </thead>
             <tbody>
-              {tx.map((t) => (
-                <tr key={t._id} className="border-t">
-                  <td className="p-2">{new Date(t.createdAt).toLocaleString()}</td>
-                  <td className="p-2">{t.type || 'payment'}</td>
-                  <td className="p-2">{t.machineId ? t.machineId.name : '-'}</td>
-                  <td className="p-2">{t.method || '-'}</td>
-                  <td className="p-2">{t.amount}</td>
-                  <td className="p-2">{t.inserted ?? '-'}</td>
-                  <td className="p-2">{t.change ?? '-'}</td>
-                  <td className="p-2">
-                    {Array.isArray(t.items) ? (
-                      <div className="flex flex-col gap-1">
-                        {t.items.map((it, idx) => (
-                          <div key={it.productId || it._id || it.id || idx} className="text-sm">
-                            <span className="font-semibold mr-2">{it.name || it.type || (it.productId || it._id || it.id)}</span>
-                            {(it.productId || it._id || it.id) && <span className="text-xs text-neutral-500">{it.productId || it._id || it.id}</span>}
+              {(() => {
+                // group transactions by batchId (fallback to createdAt second) for older entries
+                const groups = Object.values(tx.reduce((acc, t) => {
+                  const key = t.batchId || new Date(t.createdAt).toISOString().slice(0,19)
+                  if (!acc[key]) acc[key] = { key, createdAt: t.createdAt, method: t.method, type: t.type || 'payment', items: [], amount: 0, inserted: 0, change: 0 }
+                  acc[key].items.push(t)
+                  acc[key].amount += Number(t.amount || 0)
+                  acc[key].inserted += Number(t.inserted || 0)
+                  acc[key].change += Number(t.change || 0)
+                  return acc
+                }, {}))
+
+                // render grouped rows with expandable details
+                return groups.map((g) => (
+                  <React.Fragment key={g.key}>
+                    <tr className="border-t">
+                      <td className="p-2">{new Date(g.createdAt).toLocaleString()}</td>
+                      <td className="p-2">{g.type}</td>
+                      <td className="p-2">{g.items.map(i => (i.machineId ? i.machineId.name : (Array.isArray(i.items) && i.items[0] && (i.items[0].name || i.items[0].type)) || '-')).join(', ')}</td>
+                      <td className="p-2">{g.items[0] ? g.items[0].method : '-'}</td>
+                      <td className="p-2">{typeof g.amount === 'number' ? g.amount.toFixed(2) : g.amount}</td>
+                      <td className="p-2">{g.inserted ? g.inserted.toFixed(2) : '-'}</td>
+                      <td className="p-2">{g.change ? g.change.toFixed(2) : '-'}</td>
+                      <td className="p-2">
+                        <button onClick={() => setExpanded((s)=>({...s,[g.key]:!s[g.key]}))} className="text-sm underline">{expanded[g.key] ? 'Ocultar' : 'Detalhes'}</button>
+                      </td>
+                    </tr>
+
+                    {expanded[g.key] && (
+                      <tr>
+                        <td colSpan={8} className="p-2 bg-neutral-50">
+                          <div className="space-y-2">
+                            {g.items.map((t) => (
+                              <div key={t._id} className="p-2 bg-white border rounded flex items-center justify-between">
+                                <div>
+                                  <div className="font-semibold">{t.machineId ? t.machineId.name : '-'}</div>
+                                  <div className="text-xs text-neutral-500">{t.items ? (Array.isArray(t.items) ? t.items.map(it=>it.name||it.type).join(', ') : JSON.stringify(t.items)) : ''}</div>
+                                </div>
+                                <div className="text-right">
+                                  <div>{t.method}</div>
+                                  <div className="font-semibold">{Number(t.amount).toFixed(2)}€</div>
+                                  <div className="text-xs">Inserido: {t.inserted ?? '-'} Troco: {t.change ?? '-'}</div>
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <pre className="whitespace-pre-wrap">{JSON.stringify(t.items)}</pre>
+                        </td>
+                      </tr>
                     )}
-                  </td>
-                </tr>
-              ))}
+                  </React.Fragment>
+                ))
+              })()}
             </tbody>
           </table>
         )}

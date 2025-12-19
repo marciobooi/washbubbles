@@ -86,13 +86,15 @@ function AppInner() {
           const insertedTotal = res.inserted != null ? Number(res.inserted) : null
           const changeTotal = res.change != null ? Number(res.change) : null
 
+          // generate a batch id to group these related sales
+          const batchId = `batch-${Date.now()}-${Math.random().toString(36).slice(2,8)}`
           for (const it of items) {
             // Detect recharge items (added by CardModal)
             const isRecharge = (it.id && String(it.id).startsWith('recharge')) || (it.type && String(it.type).toLowerCase().includes('recarga'))
 
             if (isRecharge) {
               // POST /pos/recharge (requires kiosk key)
-              const json = { amount: Number(it.amount), items: it, method: res.method || 'card', inserted: Number(it.amount), change: 0 }
+              const json = { amount: Number(it.amount), items: it, method: res.method || 'card', inserted: Number(it.amount), change: 0, batchId }
               await api.request('/pos/recharge', {
                 method: 'POST',
                 json,
@@ -117,7 +119,7 @@ function AppInner() {
                 change = 0
               }
 
-              const payload = { machineId, amount: Number(it.price || it.amount || 0), items: [it], method: res.method || 'card', inserted, change }
+              const payload = { machineId, amount: Number(it.price || it.amount || 0), items: [it], method: res.method || 'card', inserted, change, batchId }
               await api.request('/pos/sale', { method: 'POST', json: payload, headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined, skipAuth: true, expect: 'json' })
             } else {
               // Fallback: create an admin transaction if possible (won't usually run)
