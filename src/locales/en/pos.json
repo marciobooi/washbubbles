@@ -1,0 +1,22 @@
+{
+  "cards": {
+    "wash": { "title": "Wash", "text": "Wash laundry" },
+    "dry": { "title": "Dry", "text": "Dry laundry" },
+    "card": { "title": "My Card", "text": "My Card" },
+    "buyCard": { "title": "Buy Card", "text": "Buy a card" }
+  },
+  "recharge": {
+    "success": "Card recharged {{amount}}€",
+    "error": "Failed to recharge the card"
+  },
+  "unit": {
+    "kg": "kg"
+  },
+  "labels": {
+    "fidelity": "fidelity"
+  },
+  "status": {
+    "free": "Free",
+    "occupied": "Occupied"
+  }
+}

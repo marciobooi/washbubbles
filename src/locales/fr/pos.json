@@ -1,0 +1,22 @@
+{
+  "cards": {
+    "wash": { "title": "Laver", "text": "Laver le linge" },
+    "dry": { "title": "Sécher", "text": "Sécher le linge" },
+    "card": { "title": "Ma carte", "text": "Ma carte" },
+    "buyCard": { "title": "Acheter la carte", "text": "Acheter la carte" }
+  },
+  "recharge": {
+    "success": "Carte rechargée {{amount}}€",
+    "error": "Échec du rechargement de la carte"
+  },
+  "unit": {
+    "kg": "kg"
+  },
+  "labels": {
+    "fidelity": "fidélité"
+  },
+  "status": {
+    "free": "Libre",
+    "occupied": "Occupé"
+  }
+}

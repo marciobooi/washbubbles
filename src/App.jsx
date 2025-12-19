@@ -2,6 +2,7 @@ import { Link, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import React from 'react'
 import Pos from './pages/Pos'
 import api from './services/api'
+import { Home } from 'lucide-react'
 import Machines from './pages/Machines'
 import MachineDetail from './pages/MachineDetail'
 import Admin from './pages/Admin'
@@ -10,6 +11,7 @@ import { PaymentProvider, usePayment } from './context/PaymentContext'
 import CartModal from './components/CartModal'
 import { ToastProvider, toast } from './components/ui/Toast'
 import HelpTutorial from './components/HelpTutorial'
+import LanguageSwitcher from './components/LanguageSwitcher'
 import AdminDashboard from './pages/AdminDashboard'
 import AdminUsers from './pages/AdminUsers'
 import AdminMachines from './pages/AdminMachines'
@@ -154,15 +156,13 @@ function AppInner() {
         <header className="p-4 border-b border-primary-100 bg-white/70 backdrop-blur">
           <div className="container mx-auto flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <h1 className="text-xl font-semibold text-primary-800">Washstore</h1>
+              <Link to="/" className="inline-flex items-center gap-2 p-2 rounded-md hover:bg-white/60 focus:outline-none" title="Home">
+                <Home className="h-5 w-5 text-primary-800" />
+                <span className="text-xl font-semibold text-primary-800">Washstore</span>
+              </Link>
             </div>
             <div className="flex items-center gap-3">
-              <Link to="/pos" className="inline-flex items-center p-2 rounded-md hover:bg-white/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400" title="Início">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-primary-800" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 9.75L12 3l9 6.75V20a1 1 0 0 1-1 1h-5.5a1 1 0 0 1-1-1V14a1 1 0 0 0-1-1H10a1 1 0 0 0-1 1v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9.75z" />
-                </svg>
-                <span className="sr-only">Início</span>
-              </Link>
+              {location.pathname.startsWith('/pos') && <LanguageSwitcher />}
 
               <button aria-label="Ajuda" className="inline-flex items-center p-2 rounded-md hover:bg-white/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400" onClick={() => setHelpOpen(true)} title="Ajuda">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-primary-800" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>

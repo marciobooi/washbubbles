@@ -6,13 +6,16 @@ import CardModal from '../components/CardModal'
 import { toast } from '@/components/ui/Toast'
 import Banner from '../components/Banner'
 import api from '@/services/api'
+import { useTranslation } from 'react-i18next'
 
 export default function Pos() {
+  const { t } = useTranslation('pos')
+
   const cards = [
-    { id: 'wash', title: 'Lavar roupa', text: 'Lavar roupa', frames: ['/washingmashine/L1.png', '/washingmashine/L2.png', '/washingmashine/L3.png', '/washingmashine/L4.png'] },
-    { id: 'dry', title: 'Secar roupa', text: 'Secar roupa', frames: ['/drymachine/S1.png', '/drymachine/S2.png', '/drymachine/S3.png', '/drymachine/S4.png'] },
-    { id: 'card', title: 'Rinse', text: 'O meu cartão', frames: ['/card/card.png' ] },
-    { id: 'buyCard', title: 'Settings', text: 'Comprar cartão' , frames: ['/card/card-group.png' ] }
+    { id: 'wash', title: t('cards.wash.title'), text: t('cards.wash.text'), frames: ['/washingmashine/L1.png', '/washingmashine/L2.png', '/washingmashine/L3.png', '/washingmashine/L4.png'] },
+    { id: 'dry', title: t('cards.dry.title'), text: t('cards.dry.text'), frames: ['/drymachine/S1.png', '/drymachine/S2.png', '/drymachine/S3.png', '/drymachine/S4.png'] },
+    { id: 'card', title: t('cards.card.title'), text: t('cards.card.text'), frames: ['/card/card.png' ] },
+    { id: 'buyCard', title: t('cards.buyCard.title'), text: t('cards.buyCard.text') , frames: ['/card/card-group.png' ] }
   ]
 
   // Card component moved to src/components/Card.jsx
@@ -44,10 +47,10 @@ export default function Pos() {
       const sale = resp && resp.sale ? resp.sale : null
       const m = sale ? { id: sale._id || `t${Date.now()}`, ts: sale.createdAt || new Date().toISOString(), type: `Recarregado`, amount: Number(amount) } : { id: `t${Date.now()}`, ts: new Date().toISOString(), type: `Recarregado`, amount: Number(amount) }
       setTransactions((s) => [m, ...s])
-      toast({ title: `Cartão recarregado ${Number(amount).toFixed(2)}€`, variant: 'success' })
+      toast({ title: t('recharge.success', { amount: Number(amount).toFixed(2) }), variant: 'success' })
     } catch (e) {
       console.error('Failed to recharge', e)
-      toast({ title: 'Erro ao recarregar o cartão', variant: 'destructive' })
+      toast({ title: t('recharge.error'), variant: 'destructive' })
     }
   }
 

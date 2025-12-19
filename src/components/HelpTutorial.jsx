@@ -90,9 +90,9 @@ export default function HelpTutorial({ run, onClose }) {
             <p>No carrinho, tem duas opções de pagamento:</p>
             <ul className="list-disc list-inside space-y-1 ml-4">
               <li><strong>Cartão Fidelidade</strong> - Desconto de 0,50€ por item</li>
-              <li><strong>Multibanco/Dinheiro</strong> - Pagamento tradicional</li>
+              <li><strong>Dinheiro</strong> - Pagamento tradicional</li>
             </ul>
-            <p className="mt-3">⚠️ <em>Para recargas de cartão, apenas Multibanco/Dinheiro está disponível.</em></p>
+            <p className="mt-3">⚠️ <em>Para recargas de cartão, apenas Dinheiro está disponível.</em></p>
           </div>
         </div>
       ),

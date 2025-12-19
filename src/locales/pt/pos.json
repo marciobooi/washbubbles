@@ -1,0 +1,22 @@
+{
+  "cards": {
+    "wash": { "title": "Lavar roupa", "text": "Lavar roupa" },
+    "dry": { "title": "Secar roupa", "text": "Secar roupa" },
+    "card": { "title": "O meu cartão", "text": "O meu cartão" },
+    "buyCard": { "title": "Comprar cartão", "text": "Comprar cartão" }
+  },
+  "recharge": {
+    "success": "Cartão recarregado {{amount}}€",
+    "error": "Erro ao recarregar o cartão"
+  },
+  "unit": {
+    "kg": "kg"
+  },
+  "labels": {
+    "fidelity": "fidelidade"
+  },
+  "status": {
+    "free": "Livre",
+    "occupied": "Ocupado"
+  }
+}
