@@ -43,11 +43,34 @@ function AppInner() {
   // Count of externally-dispatched modal opens (e.g., CardModal in `Pos`)
   const [externalModalCount, setExternalModalCount] = React.useState(0)
 
+  // Branding (companyName / logo) pulled from settings
+  const [branding, setBranding] = React.useState({ companyName: null, logo: null })
+
   React.useEffect(() => {
     const onExternalOpen = () => setExternalModalCount((c) => c + 1)
     const onExternalClose = () => setExternalModalCount((c) => Math.max(0, c - 1))
     window.addEventListener('modal-open', onExternalOpen)
     window.addEventListener('modal-close', onExternalClose)
+
+    // Load branding settings on mount
+    async function loadBranding() {
+      try {
+        const nameResp = await api.getSetting('branding.companyName').catch(() => null)
+        const logoResp = await api.getSetting('branding.logo').catch(() => null)
+        const companyName = nameResp && nameResp.value ? String(nameResp.value) : null
+        setBranding({ companyName, logo: logoResp && logoResp.value ? String(logoResp.value) : null })
+        if (companyName) {
+          try { document.title = companyName } catch (e) {}
+        }
+        // Notify other components about branding
+        try { window.dispatchEvent(new CustomEvent('branding:update', { detail: { company: companyName, logo: logoResp && logoResp.value ? String(logoResp.value) : null }})) } catch (e) {}
+      } catch (e) {
+        console.debug('Failed to load branding', e)
+      }
+    }
+
+    loadBranding()
+
     return () => {
       window.removeEventListener('modal-open', onExternalOpen)
       window.removeEventListener('modal-close', onExternalClose)
@@ -225,8 +248,12 @@ function AppInner() {
           <div className="container mx-auto flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Link to="/" className="inline-flex items-center gap-2 p-2 rounded-md hover:bg-white/60 focus:outline-none" title="Home">
-                <Home className="h-5 w-5 text-primary-800" />
-                <span className="text-xl font-semibold text-primary-800">Washstore</span>
+                {branding.logo ? (
+                  <img src={branding.logo} alt={branding.companyName || 'Company'} className="h-6 w-6 object-contain rounded-sm" />
+                ) : (
+                  <Home className="h-5 w-5 text-primary-800" />
+                )}
+                <span className="text-xl font-semibold text-primary-800">{branding.companyName || 'Washstore'}</span>
               </Link>
             </div>
             <div className="flex items-center gap-3">

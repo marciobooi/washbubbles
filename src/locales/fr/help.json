@@ -1,6 +1,6 @@
 {
   "welcome": {
-    "title": "Bienvenue chez Washstore ! 👋",
+    "title": "Bienvenue chez {{company}} ! 👋",
     "text": "Nous vous guiderons sur la façon d'utiliser les machines."
   },
   "step1": {
@@ -40,7 +40,7 @@
   },
   "done": {
     "title": "C'est prêt ! 🎉",
-    "text": "Vous savez maintenant comment utiliser Washstore.",
+    "text": "Vous savez maintenant comment utiliser {{company}}.",
     "note": "Si vous avez besoin d'aide, touchez l'icône <strong>?</strong> dans le menu."
   },
   "buttons": {

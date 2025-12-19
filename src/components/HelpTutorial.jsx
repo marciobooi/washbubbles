@@ -6,13 +6,22 @@ import { useTranslation, Trans } from 'react-i18next'
 export default function HelpTutorial({ run, onClose }) {
   const { t } = useTranslation('help')
   const [stepIndex, setStepIndex] = useState(0)
+  const [company, setCompany] = useState(null)
 
+  React.useEffect(() => {
+    // listen for branding updates from App
+    const onBrand = (e) => setCompany(e && e.detail && e.detail.company ? e.detail.company : null)
+    window.addEventListener('branding:update', onBrand)
+    // try to initialize from document.title if present
+    try { if (!company && typeof document !== 'undefined' && document.title) setCompany(document.title) } catch (e) {}
+    return () => window.removeEventListener('branding:update', onBrand)
+  }, [company])
   const steps = [
     {
       target: 'body',
       content: (
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-teal-600 mb-3"><Trans ns="help" i18nKey="welcome.title" /></h2>
+          <h2 className="text-2xl font-bold text-teal-600 mb-3"><Trans ns="help" i18nKey="welcome.title" values={{ company: company || 'Washstore' }} /></h2>
           <p className="text-neutral-700"><Trans ns="help" i18nKey="welcome.text" /></p>
         </div>
       ),
@@ -112,7 +121,7 @@ export default function HelpTutorial({ run, onClose }) {
       content: (
         <div className="text-center">
           <h2 className="text-2xl font-bold text-teal-600 mb-3"><Trans ns="help" i18nKey="done.title" /></h2>
-          <p className="text-neutral-700 mb-4"><Trans ns="help" i18nKey="done.text" /></p>
+          <p className="text-neutral-700 mb-4"><Trans ns="help" i18nKey="done.text" values={{ company: company || 'Washstore' }} /></p>
           <p className="text-sm text-neutral-500"><Trans ns="help" i18nKey="done.note" components={{ strong: <strong /> }} /></p>
         </div>
       ),
