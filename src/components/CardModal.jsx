@@ -147,7 +147,7 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
                 >
                   {addedToCart ? (
                     <>
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 24 24" stroke="currentColor">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                       </svg>
                       {t('card.added')}
@@ -182,9 +182,9 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
               ) : (
                 <div className="space-y-3">
                   {transactions.map((tx) => {
-                    const isPositive = t.amount >= 0
+                    const isPositive = tx.amount >= 0
                     return (
-                      <div key={t.id} className="group bg-white p-4 rounded-2xl border border-neutral-100 border-primary-200 shadow-md transition-all duration-200 flex items-center gap-5">
+                      <div key={tx.id} className="group bg-white p-4 rounded-2xl border border-neutral-100 border-primary-200 shadow-md transition-all duration-200 flex items-center gap-5">
                         {/* Icon Box */}
                         <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${isPositive ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'}`}>
                           <img 
