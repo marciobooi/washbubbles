@@ -292,6 +292,14 @@ export function createApi(config) {
     })
   }
 
+  // Public settings lookup for branding values (no auth required)
+  function getPublicSetting(key) {
+    return request(`/settings/${encodeURIComponent(key)}`, { method: 'GET', expect: 'json', skipAuth: true }).catch((e) => {
+      if (e && e.status === 404) return null
+      throw e
+    })
+  }
+
   function setSetting(payload) {
     return request('/admin/settings', { method: 'POST', json: payload, expect: 'json' });
   }
@@ -333,6 +341,7 @@ export function createApi(config) {
     // Settings
     getSettings,
     getSetting,
+    getPublicSetting,
     setSetting,
     deleteSetting,
 
@@ -377,6 +386,7 @@ export const {
   deleteTransaction,
   getSettings,
   getSetting,
+  getPublicSetting,
   setSetting,
   deleteSetting,
   gatewayGetCard,

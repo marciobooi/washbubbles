@@ -1,6 +1,7 @@
 import express from 'express'
 import Machine from '../models/machine.js'
 import Sale from '../models/sale.js'
+import Setting from '../models/setting.js'
 import { requireKiosk } from '../middleware/auth.js'
 import { broadcastMachines, broadcastMachine } from '../wsServer.js'
 
@@ -118,6 +119,15 @@ router.get('/cards/:code', requireKiosk, async (req, res) => {
   const c = await Card.findOne({ code }).lean()
   if (!c) return res.status(404).json({ error: 'Card not found' })
   res.json(c)
+})
+
+// Public: lightweight settings lookup for branding keys (no auth)
+router.get('/settings/:key', async (req, res) => {
+  const key = String(req.params.key || '')
+  if (!key.startsWith('branding.')) return res.status(404).json({ error: 'Not found' })
+  const s = await Setting.findOne({ key }).lean()
+  if (!s) return res.status(404).json({ error: 'Setting not found' })
+  res.json(s)
 })
 
 // Spending using card: deduct amount from card balance and create Sale

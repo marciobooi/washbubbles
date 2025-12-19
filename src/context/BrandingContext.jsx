@@ -10,10 +10,11 @@ export function BrandingProvider({ children }) {
   useEffect(() => {
     async function load() {
       try {
-        const name = await api.getSetting('branding.companyName').catch(() => null)
-        const logo = await api.getSetting('branding.logo').catch(() => null)
-        const primary = await api.getSetting('branding.primaryColor').catch(() => null)
-        const accent = await api.getSetting('branding.accentColor').catch(() => null)
+        // Use public settings endpoint for branding (safe to expose)
+        const name = await api.getPublicSetting('branding.companyName').catch(() => null)
+        const logo = await api.getPublicSetting('branding.logo').catch(() => null)
+        const primary = await api.getPublicSetting('branding.primaryColor').catch(() => null)
+        const accent = await api.getPublicSetting('branding.accentColor').catch(() => null)
         const companyName = name && name.value ? String(name.value) : null
         const logoUrl = logo && logo.value ? String(logo.value) : null
         const primaryColor = primary && primary.value ? String(primary.value) : null
@@ -22,6 +23,8 @@ export function BrandingProvider({ children }) {
         if (primaryColor) try { document.documentElement.style.setProperty('--branding-primary', primaryColor) } catch (e) {}
         if (accentColor) try { document.documentElement.style.setProperty('--branding-accent', accentColor) } catch (e) {}
         if (companyName) try { document.title = companyName } catch (e) {}
+        // Notify others about loaded branding
+        try { window.dispatchEvent(new CustomEvent('branding:update', { detail: { company: companyName, logo: logoUrl, primaryColor, accentColor } })) } catch (e) {}
       } catch (e) {
         console.debug('branding load failed', e)
       }

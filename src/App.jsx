@@ -59,8 +59,9 @@ function AppInner() {
     // Load branding settings on mount
     async function loadBranding() {
       try {
-        const nameResp = await api.getSetting('branding.companyName').catch(() => null)
-        const logoResp = await api.getSetting('branding.logo').catch(() => null)
+            // Use public settings endpoint for branding
+        const nameResp = await api.getPublicSetting('branding.companyName').catch(() => null)
+        const logoResp = await api.getPublicSetting('branding.logo').catch(() => null)
         const companyName = nameResp && nameResp.value ? String(nameResp.value) : null
         setBranding({ companyName, logo: logoResp && logoResp.value ? String(logoResp.value) : null })
         if (companyName) {
@@ -75,9 +76,17 @@ function AppInner() {
 
     loadBranding()
 
+    const onBrandEvent = (e) => {
+      const d = e && e.detail ? e.detail : {}
+      setBranding({ companyName: d.company || null, logo: d.logo || null })
+      if (d.company) try { document.title = d.company } catch (e) {}
+    }
+    window.addEventListener('branding:update', onBrandEvent)
+
     return () => {
       window.removeEventListener('modal-open', onExternalOpen)
       window.removeEventListener('modal-close', onExternalClose)
+      window.removeEventListener('branding:update', onBrandEvent)
     }
   }, [])
 
