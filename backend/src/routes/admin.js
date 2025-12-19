@@ -139,14 +139,46 @@ router.delete('/users/:id', async (req, res) => {
 
 // Transactions (Sales)
 router.get('/transactions', async (req, res) => {
-  const tx = await Sale.find().populate('machineId').sort({ createdAt: -1 }).limit(200).lean()
+  const tx = await Sale.find().populate('machineId').populate('cardId').sort({ createdAt: -1 }).limit(200).lean()
   res.json(tx)
 })
 
 router.get('/transactions/:id', async (req, res) => {
-  const t = await Sale.findById(req.params.id).populate('machineId').lean()
+  const t = await Sale.findById(req.params.id).populate('machineId').populate('cardId').lean()
   if (!t) return res.status(404).json({ error: 'Transaction not found' })
   res.json(t)
+})
+
+// Loyalty Cards (admin)
+router.get('/cards', async (req, res) => {
+  const Card = (await import('../models/card.js')).default
+  const list = await Card.find().sort({ createdAt: -1 }).lean()
+  res.json(list)
+})
+
+router.get('/cards/:id', async (req, res) => {
+  const Card = (await import('../models/card.js')).default
+  const c = await Card.findById(req.params.id).lean()
+  if (!c) return res.status(404).json({ error: 'Card not found' })
+  res.json(c)
+})
+
+router.post('/cards', async (req, res) => {
+  const { code, balance = 0, metadata } = req.body
+  if (!code) return res.status(400).json({ error: 'Missing code' })
+  const Card = (await import('../models/card.js')).default
+  const existing = await Card.findOne({ code })
+  if (existing) return res.status(400).json({ error: 'Card already exists' })
+  const c = await Card.create({ code, balance: Number(balance || 0), metadata })
+  res.json(c)
+})
+
+router.put('/cards/:id', async (req, res) => {
+  const { balance, metadata } = req.body
+  const Card = (await import('../models/card.js')).default
+  const c = await Card.findByIdAndUpdate(req.params.id, { balance: balance == null ? undefined : Number(balance), metadata }, { new: true })
+  if (!c) return res.status(404).json({ error: 'Card not found' })
+  res.json(c)
 })
 
 router.post('/transactions', async (req, res) => {

@@ -40,17 +40,29 @@ router.get('/machines', requireKiosk, async (req, res) => {
 })
 
 router.post('/sale', requireKiosk, async (req, res) => {
-  const { machineId, amount, items, method, inserted, change, type } = req.body
+  const { machineId, amount, items, method, inserted, change, type, cardCode, cardId } = req.body
   if (!machineId || amount == null || !items) return res.status(400).json({ error: 'Missing parameters' })
 
   // Ensure machine exists
   const machine = await Machine.findById(machineId)
   if (!machine) return res.status(404).json({ error: 'Machine not found' })
 
+  // If card specified and method is card, deduct from card balance
+  let card = null
+  if ((cardId || cardCode) && method === 'card') {
+    const Card = (await import('../models/card.js')).default
+    card = cardId ? await Card.findById(cardId) : await Card.findOne({ code: cardCode })
+    if (!card) return res.status(404).json({ error: 'Card not found' })
+    const price = Number(amount)
+    if ((card.balance || 0) < price) return res.status(400).json({ error: 'Insufficient balance' })
+    card.balance = Number((card.balance || 0) - price)
+    await card.save()
+  }
+
   // Compute inserted/change defaults and create sale
   const insertedNum = Number(inserted || 0)
   const changeNum = (change != null) ? Number(change) : Math.max(0, insertedNum - Number(amount || 0))
-  const sale = await Sale.create({ machineId, amount: Number(amount), items, method, inserted: insertedNum, change: changeNum, type: type || 'payment' })
+  const sale = await Sale.create({ machineId, amount: Number(amount), items, method, inserted: insertedNum, change: changeNum, type: type || 'payment', cardId: card ? card._id : undefined, cardCode: card ? card.code : (cardCode || undefined) })
 
   // Update machine: increment cycle and mark as occupied after successful payment
   await Machine.findByIdAndUpdate(machineId, { $inc: { cycle: 1 }, $set: { status: 'working', statusText: 'Ocupado' } })
@@ -59,15 +71,70 @@ router.post('/sale', requireKiosk, async (req, res) => {
   // broadcast single updated machine so clients refresh quickly
   try { await broadcastMachine(updated) } catch (e) { console.error('[pos] broadcastMachine error', e) }
 
-  res.json({ sale, machine: updated })
+  res.json({ sale, machine: updated, card })
 })
 
 // Card recharge / top-up (kiosk) — stored as a transaction without a machine reference
+// Card recharge / top-up (kiosk) — stored as a transaction and optionally attached to a loyalty card
 router.post('/recharge', requireKiosk, async (req, res) => {
-  const { amount, items, method, inserted, change } = req.body
+  const { amount, items, method, inserted, change, cardCode, cardId } = req.body
   if (amount == null) return res.status(400).json({ error: 'Missing amount' })
-  const sale = await Sale.create({ amount: Number(amount), items, method: method || 'card', inserted: Number(inserted || amount), change: Number(change || 0), type: 'recharge' })
-  res.json({ sale })
+
+  // If card specified, update its balance
+  let card = null
+  if (cardId || cardCode) {
+    const Card = (await import('../models/card.js')).default
+    if (cardId) card = await Card.findById(cardId)
+    else card = await Card.findOne({ code: cardCode })
+    if (!card && cardCode) {
+      // create card implicitly when code provided
+      card = await Card.create({ code: cardCode, balance: 0 })
+    }
+    if (card) {
+      card.balance = Number((card.balance || 0) + Number(amount))
+      await card.save()
+    }
+  }
+
+  const sale = await Sale.create({ amount: Number(amount), items, method: method || 'card', inserted: Number(inserted || amount), change: Number(change || 0), type: 'recharge', cardId: card ? card._id : undefined, cardCode: card ? card.code : (cardCode || undefined) })
+  res.json({ sale, card })
+})
+
+// Public: lookup card by code (kiosk will use this to show balance)
+router.get('/cards/:code', requireKiosk, async (req, res) => {
+  const code = req.params.code
+  const Card = (await import('../models/card.js')).default
+  const c = await Card.findOne({ code }).lean()
+  if (!c) return res.status(404).json({ error: 'Card not found' })
+  res.json(c)
+})
+
+// Spending using card: deduct amount from card balance and create Sale
+router.post('/cards/:code/spend', requireKiosk, async (req, res) => {
+  const code = req.params.code
+  const { machineId, amount, items, method } = req.body
+  if (!code || amount == null) return res.status(400).json({ error: 'Missing parameters' })
+  const Card = (await import('../models/card.js')).default
+  const card = await Card.findOne({ code })
+  if (!card) return res.status(404).json({ error: 'Card not found' })
+
+  const price = Number(amount)
+  if ((card.balance || 0) < price) return res.status(400).json({ error: 'Insufficient balance' })
+
+  card.balance = Number((card.balance || 0) - price)
+  await card.save()
+
+  const sale = await Sale.create({ machineId, amount: price, items, method: method || 'card', type: 'payment', cardId: card._id, cardCode: card.code })
+
+  // Update machine state if relevant
+  if (machineId) {
+    await Machine.findByIdAndUpdate(machineId, { $inc: { cycle: 1 }, $set: { status: 'working', statusText: 'Ocupado' } })
+    const updated = await Machine.findById(machineId)
+    try { await broadcastMachine(updated) } catch (e) { console.error('[pos] broadcastMachine error', e) }
+    return res.json({ sale, machine: updated, card })
+  }
+
+  res.json({ sale, card })
 })
 
 export default router

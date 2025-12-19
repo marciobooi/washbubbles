@@ -5,28 +5,39 @@ import CashModal from './CashModal'
 
 export default function CartModal({ open, onClose, onPay = () => {}, onClear = () => {} }) {
   const { cart, removeFromCart, clearCart } = useCart()
-  const [useFidelity, setUseFidelity] = React.useState(false)
   const [showCash, setShowCash] = React.useState(false)
-  const total = cart.reduce((s, i) => s + (i.price || 0), 0)
-  const discountedTotal = cart.reduce((s, i) => s + Math.max(0, (i.price || 0) - (useFidelity ? 0.5 : 0)), 0)
-  
-  // Check if cart contains recharge items
-  const hasRecharge = cart.some(item => item.type === 'Recarga de Cartão')
+  const [cardError, setCardError] = React.useState(null)
 
-  function handleCardPay() {
-    // Pay immediately with card (or fidelity) — close cart
-    onPay(cart, { useFidelity: hasRecharge ? false : useFidelity, method: 'card' })
+  // Separate purchase items (machines/services) from recharge items
+  const purchaseTotal = cart.reduce((s, i) => (i.type === 'Recarga de Cartão' ? s : s + (i.price || i.amount || 0)), 0)
+  const rechargeTotal = cart.reduce((s, i) => (i.type === 'Recarga de Cartão' ? s + (i.price || i.amount || 0) : s), 0)
+  const total = purchaseTotal + rechargeTotal
+
+  // Check if cart contains recharge items
+  const hasRecharge = rechargeTotal > 0
+
+  async function handleCardPay() {
+    setCardError(null)
+    // Card payment: ensure recharge funds in cart cover purchases (or allow if there are no purchases)
+    const short = Math.max(0, Math.round((purchaseTotal - rechargeTotal) * 100) / 100)
+    if (short > 0) {
+      setCardError(`Fundos insuficientes: falta ${short.toFixed(2)}€`)
+      return
+    }
+
+    // proceed with card payment
+    onPay(cart, { method: 'card' })
     onClose()
   }
 
   function openCashModal() {
+    setCardError(null)
     setShowCash(true)
   }
 
   async function handleCashConfirm(inserted) {
-    const finalTotal = Number(!hasRecharge && useFidelity ? discountedTotal : total)
     // Call onPay with cash method and inserted amount
-    onPay(cart, { useFidelity: hasRecharge ? false : useFidelity, method: 'cash', inserted })
+    onPay(cart, { method: 'cash', inserted })
     setShowCash(false)
     onClose()
   }
@@ -55,7 +66,13 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
               {cart.map((i) => (
                 <div key={i.id} className="bg-neutral-50 p-4 rounded-lg relative group">
                   <button 
-                    onClick={() => removeFromCart(i.id)}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      // Remove item and close modal only if it was the last item
+                      const remaining = cart.filter((x) => x.id !== i.id).length
+                      removeFromCart(i.id)
+                      if (remaining === 0) onClose()
+                    }}
                     className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-lg transition-all active:scale-90"
                     aria-label="Remover item"
                   >
@@ -66,59 +83,52 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
                   <div className="flex items-center justify-between">
                     <div className="font-semibold text-neutral-800 pr-6">{i.name || i.type}</div>
                     <div className="text-lg font-bold text-neutral-800">
-                      {!hasRecharge && useFidelity ? Math.max(0, i.price - 0.5).toFixed(2) : i.price.toFixed(2)}€
+                      {(i.price || i.amount || 0).toFixed(2)}€
                     </div>
                   </div>
-                  {!hasRecharge && useFidelity && (
-                    <div className="text-xs text-green-600 mt-1">-0.50€ desconto fidelidade</div>
-                  )}
                 </div>
               ))}
             </div>
 
-            {/* Fidelity Option */}
-            {!hasRecharge && (
-              <label className="flex items-center gap-3 p-4 bg-teal-50 rounded-lg cursor-pointer hover:bg-teal-100 transition-colors">
-                <input 
-                  type="checkbox" 
-                  checked={useFidelity} 
-                  onChange={(e) => setUseFidelity(e.target.checked)}
-                  className="w-5 h-5"
-                />
-                <span className="text-sm font-medium text-neutral-700">
-                  Pagar com cartão fidelidade <span className="text-teal-600 font-bold">(-0,50€ por item)</span>
-                </span>
-              </label>
-            )}
+
 
             {/* Total */}
             <div className="flex items-center justify-between pt-4 border-t-2 border-neutral-200">
-              <span className="text-xl font-bold text-neutral-700">Total</span>
-              <span className="text-3xl font-bold text-teal-600">
-                {(!hasRecharge && useFidelity ? discountedTotal : total).toFixed(2)}€
-              </span>
+              <div>
+                <div className="text-sm text-neutral-500">Total a pagar</div>
+                <div className="text-2xl font-bold text-neutral-800">{purchaseTotal.toFixed(2)}€</div>
+                {hasRecharge && <div className="text-sm text-neutral-600">Saldo no carrinho: <span className="font-semibold">{rechargeTotal.toFixed(2)}€</span></div>}
+                {cardError && <div className="text-sm text-red-600 font-semibold mt-2">{cardError}</div>}
+              </div>
+
+              <div className="text-3xl font-bold text-teal-600">{total.toFixed(2)}€</div>
             </div>
 
             {/* Action Buttons */}
             <div className="flex gap-3">
               <button 
                 onClick={handleCardPay} 
-                className="flex-1 bg-teal-600 hover:bg-teal-700 text-white py-4 rounded-xl font-bold text-lg shadow-lg transition-all active:scale-[0.98]"
+                disabled={purchaseTotal > rechargeTotal}
+                className={`flex-1 py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-3 ${purchaseTotal > rechargeTotal ? 'bg-neutral-100 text-neutral-400 cursor-not-allowed' : 'bg-teal-600 hover:bg-teal-700 text-white shadow-lg'}`}
               >
-                Pagar com Cartão
+                {/* Card icon */}
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 6h18M5 14h.01M9 14h6" />
+                </svg>
+                <span>Cartão</span>
               </button>
+
               <button 
                 onClick={openCashModal} 
-                className="flex-1 bg-white border border-neutral-300 text-neutral-700 py-4 rounded-xl font-bold text-lg shadow-sm transition-all hover:bg-neutral-50"
+                className="flex-1 bg-white border border-neutral-300 text-neutral-700 py-4 rounded-xl font-bold text-lg shadow-sm transition-all hover:bg-neutral-50 flex items-center justify-center gap-3"
               >
-                Pagar (Dinheiro)
+                {/* Cash icon */}
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6M7 10h10M7 6h10" />
+                </svg>
+                <span>Dinheiro</span>
               </button>
-              <button 
-                onClick={() => { clearCart(); onClear() }} 
-                className="px-6 py-4 rounded-xl border-2 border-neutral-300 text-neutral-600 hover:bg-neutral-50 font-semibold transition-all"
-              >
-                Limpar
-              </button>
+
               <button 
                 onClick={onClose}
                 className="px-6 py-4 rounded-xl bg-neutral-100 text-neutral-700 hover:bg-neutral-200 font-semibold transition-all"
@@ -131,7 +141,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
       </div>
     </Modal>
     {/* cash insert modal */}
-    <CashModal open={showCash} total={(!hasRecharge && useFidelity ? discountedTotal : total)} onClose={() => setShowCash(false)} onConfirm={handleCashConfirm} />
+    <CashModal open={showCash} total={total} onClose={() => setShowCash(false)} onConfirm={handleCashConfirm} />
     </>
   )
 }

@@ -11,6 +11,9 @@ const saleSchema = new Schema({
   type: { type: String, enum: ['payment', 'recharge', 'admin_start', 'other'], default: 'payment' },
   // Payment method (card, cash, kiosk)
   method: { type: String },
+  // Loyalty card reference (if any)
+  cardId: { type: Schema.Types.ObjectId, ref: 'Card' },
+  cardCode: { type: String },
   // Amount the user inserted (for cash payments) and change given back
   inserted: { type: Number, default: 0 },
   change: { type: Number, default: 0 },
