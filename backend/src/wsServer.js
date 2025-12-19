@@ -5,6 +5,8 @@ import User from './models/user.js'
 
 // basic in-process WebSocket server that broadcasts machine updates to clients
 let _wss = null
+let _clientCounter = 0
+let _heartbeatInterval = null
 
 export async function broadcastMachines() {
   try {
@@ -14,7 +16,7 @@ export async function broadcastMachines() {
     const msg = JSON.stringify({ type: 'machine-status', payload: machines })
     if (process.env.DEBUG_WS === 'true') {
       try {
-        const infos = Array.from(_wss.clients).filter(c => c.readyState === c.OPEN).map((c) => ({ username: c.userModel ? c.userModel.username : 'anonymous', remote: c._socket ? `${c._socket.remoteAddress}:${c._socket.remotePort}` : 'unknown' }))
+        const infos = Array.from(_wss.clients).filter(c => c.readyState === c.OPEN).map((c) => ({ id: c._id, username: c.userModel ? c.userModel.username : 'anonymous', remote: c._socket ? `${c._socket.remoteAddress}:${c._socket.remotePort}` : 'unknown', isAlive: !!c.isAlive }))
         console.log(`[ws] broadcasting machine-status to ${clients} clients — details:`, infos)
       } catch (e) {
         console.log(`[ws] broadcasting machine-status to ${clients} clients`)
@@ -37,7 +39,7 @@ export async function broadcastMachine(machine) {
     const msg = JSON.stringify({ type: 'machine-update', payload: machine })
     if (process.env.DEBUG_WS === 'true') {
       try {
-        const infos = Array.from(_wss.clients).filter(c => c.readyState === c.OPEN).map((c) => ({ username: c.userModel ? c.userModel.username : 'anonymous', remote: c._socket ? `${c._socket.remoteAddress}:${c._socket.remotePort}` : 'unknown' }))
+        const infos = Array.from(_wss.clients).filter(c => c.readyState === c.OPEN).map((c) => ({ id: c._id, username: c.userModel ? c.userModel.username : 'anonymous', remote: c._socket ? `${c._socket.remoteAddress}:${c._socket.remotePort}` : 'unknown', isAlive: !!c.isAlive }))
         console.log(`[ws] broadcasting machine-update (${machine._id}) to ${clients} clients — details:`, infos)
       } catch (e) {
         console.log(`[ws] broadcasting machine-update (${machine._id}) to ${clients} clients`)
@@ -53,11 +55,37 @@ export async function broadcastMachine(machine) {
   }
 }
 
+export function listClients() {
+  if (!_wss) return []
+  return Array.from(_wss.clients)
+    .filter(c => c.readyState === c.OPEN)
+    .map((c) => ({ id: c._id, username: c.userModel ? c.userModel.username : 'anonymous', remote: c._socket ? `${c._socket.remoteAddress}:${c._socket.remotePort}` : 'unknown', connectedAt: c._connectedAt, isAlive: !!c.isAlive }))
+}
+
+export function disconnectClient(id) {
+  if (!_wss) return false
+  const client = Array.from(_wss.clients).find((c) => c._id === id || (c._socket && `${c._socket.remoteAddress}:${c._socket.remotePort}` === id))
+  if (!client) return false
+  try {
+    client.terminate()
+    return true
+  } catch (e) {
+    console.error('[ws] disconnectClient error', e)
+    return false
+  }
+}
+
 export function initWebSocket(server) {
   const wss = new WebSocketServer({ server, path: '/ws' })
   _wss = wss
 
   wss.on('connection', async (socket, request) => {
+    // assign per-socket metadata
+    socket._id = ++_clientCounter
+    socket._connectedAt = new Date().toISOString()
+    socket.isAlive = true
+    socket.on('pong', () => { socket.isAlive = true })
+
     // Authenticate the connection using either a JWT (query ?token=) or x-api-key header
     try {
       const JWT_SECRET = process.env.JWT_SECRET
@@ -103,7 +131,7 @@ export function initWebSocket(server) {
       }
 
       socket.userModel = userModel
-      console.log('[ws] client connected', userModel ? userModel.username : 'anonymous')
+      console.log('[ws] client connected', userModel ? userModel.username : 'anonymous', 'id=', socket._id)
     } catch (err) {
       console.error('[ws] auth failure', err)
       try { socket.close(1011, 'Server error') } catch (e) {}
@@ -138,8 +166,27 @@ export function initWebSocket(server) {
       }
     })
 
-    socket.on('close', () => console.log('[ws] client disconnected'))
+    socket.on('close', () => console.log('[ws] client disconnected id=', socket._id))
   })
+
+  // start heartbeat monitor (if not already started)
+  if (!_heartbeatInterval) {
+    _heartbeatInterval = setInterval(() => {
+      try {
+        Array.from(wss.clients).forEach((client) => {
+          if (client.isAlive === false) {
+            console.log('[ws] terminating dead client', client._id)
+            try { client.terminate() } catch (e) { }
+            return
+          }
+          client.isAlive = false
+          try { client.ping() } catch (e) { }
+        })
+      } catch (e) {
+        console.error('[ws] heartbeat error', e)
+      }
+    }, 30000)
+  }
 
   // Example: notify every connected client when a machine changes every 10s (dev only)
   setInterval(async () => {

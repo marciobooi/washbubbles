@@ -6,7 +6,7 @@ import Sale from '../models/sale.js'
 import Setting from '../models/setting.js'
 import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
-import { broadcastMachines, broadcastMachine } from '../wsServer.js'
+import { broadcastMachines, broadcastMachine, listClients, disconnectClient } from '../wsServer.js'
 
 const router = express.Router()
 
@@ -165,6 +165,20 @@ router.delete('/transactions/:id', async (req, res) => {
 router.get('/settings', async (req, res) => {
   const list = await Setting.find().lean()
   res.json(list)
+})
+
+// WebSocket client diagnostics (admin only)
+router.get('/ws/clients', async (req, res) => {
+  const clients = listClients()
+  res.json(clients)
+})
+
+router.post('/ws/clients/disconnect', async (req, res) => {
+  const { id } = req.body
+  if (!id) return res.status(400).json({ error: 'Missing id' })
+  const ok = disconnectClient(id)
+  if (!ok) return res.status(404).json({ error: 'Client not found' })
+  res.json({ success: true })
 })
 
 router.get('/settings/:key', async (req, res) => {
