@@ -109,8 +109,9 @@ function AppInner() {
 
           {/* Protected admin area */}
           <Route path="/admin" element={<RequireAdmin><AdminDashboard /></RequireAdmin>}>
-            <Route index element={<Navigate to="dashboard" replace />} />
-            <Route path="dashboard" element={<div className="p-4">Welcome to the admin dashboard</div>} />
+            <Route index element={<Navigate to="operations" replace />} />
+            {/* Backwards-compat: support legacy /admin/dashboard URLs */}
+            <Route path="dashboard" element={<Navigate to="operations" replace />} />
             <Route path="users" element={<AdminUsers />} />
             <Route path="machines" element={<AdminMachines />} />
             <Route path="transactions" element={<AdminTransactions />} />

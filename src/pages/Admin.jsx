@@ -9,7 +9,7 @@ export default function Admin() {
 
   useEffect(() => {
     if (role === 'ADMIN') {
-      navigate('/admin/dashboard')
+      navigate('/admin/operations')
     }
   }, [role, navigate])
 
