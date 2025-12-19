@@ -43,10 +43,10 @@ export default function AdminTransactions() {
                 <th className="text-left p-2">Time</th>
                 <th className="text-left p-2">Type</th>
                 <th className="text-left p-2">Machine</th>
-                <th className="text-left p-2">Method</th>
-                <th className="text-left p-2">Amount</th>
-                <th className="text-left p-2">Inserted</th>
-                <th className="text-left p-2">Change</th>
+                <th className="text-left p-2">Método</th>
+                <th className="text-left p-2">Valor</th>
+                <th className="text-left p-2">Inserido</th>
+                <th className="text-left p-2">Troco</th>
                 <th className="text-left p-2">Items</th>
               </tr>
             </thead>
@@ -70,7 +70,7 @@ export default function AdminTransactions() {
                       <td className="p-2">{new Date(g.createdAt).toLocaleString()}</td>
                       <td className="p-2">{g.type}</td>
                       <td className="p-2">{g.items.map(i => (i.machineId ? i.machineId.name : (Array.isArray(i.items) && i.items[0] && (i.items[0].name || i.items[0].type)) || '-')).join(', ')}</td>
-                      <td className="p-2">{g.items[0] ? g.items[0].method : '-'}</td>
+                      <td className="p-2">{(g.items[0] && (g.items[0].method === 'card' ? 'Cartão' : (g.items[0].method === 'cash' ? 'Dinheiro' : g.items[0].method))) || '-'}</td>
                       <td className="p-2">{typeof g.amount === 'number' ? g.amount.toFixed(2) : g.amount}</td>
                       <td className="p-2">{g.inserted ? g.inserted.toFixed(2) : '-'}</td>
                       <td className="p-2">{g.change ? g.change.toFixed(2) : '-'}</td>
@@ -90,7 +90,7 @@ export default function AdminTransactions() {
                                   <div className="text-xs text-neutral-500">{t.items ? (Array.isArray(t.items) ? t.items.map(it=>it.name||it.type).join(', ') : JSON.stringify(t.items)) : ''}</div>
                                 </div>
                                 <div className="text-right">
-                                  <div>{t.method}</div>
+                                  <div>{t.method === 'card' ? 'Cartão' : (t.method === 'cash' ? 'Dinheiro' : t.method)}</div>
                                   <div className="font-semibold">{Number(t.amount).toFixed(2)}€</div>
                                   <div className="text-xs">Inserido: {t.inserted ?? '-'} Troco: {t.change ?? '-'}</div>
                                 </div>
