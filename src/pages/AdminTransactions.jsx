@@ -35,24 +35,24 @@ export default function AdminTransactions() {
       <h2 className="text-lg font-semibold mb-4">Transacções</h2>
       <div className="bg-white rounded shadow p-4">
         {loading ? (
-          <div>Loading...</div>
+          <div>A carregar...</div>
         ) : (
           <table className="w-full text-sm table-auto">
             <thead>
               <tr>
-                <th className="text-left p-2">Time</th>
-                <th className="text-left p-2">Type</th>
-                <th className="text-left p-2">Machine</th>
+                <th className="text-left p-2">Hora</th>
+                <th className="text-left p-2">Tipo</th>
+                <th className="text-left p-2">Máquina</th>
                 <th className="text-left p-2">Método</th>
                 <th className="text-left p-2">Valor</th>
                 <th className="text-left p-2">Inserido</th>
                 <th className="text-left p-2">Troco</th>
-                <th className="text-left p-2">Items</th>
+                <th className="text-left p-2">Itens</th>
               </tr>
             </thead>
             <tbody>
               {(() => {
-                // group transactions by batchId (fallback to createdAt second) for older entries
+                // Agrupar transacções por batchId (fallback para second-level timestamp para entradas antigas)
                 const groups = Object.values(tx.reduce((acc, t) => {
                   const key = t.batchId || new Date(t.createdAt).toISOString().slice(0,19)
                   if (!acc[key]) acc[key] = { key, createdAt: t.createdAt, method: t.method, type: t.type || 'payment', items: [], amount: 0, inserted: 0, change: 0 }
@@ -68,7 +68,7 @@ export default function AdminTransactions() {
                   <React.Fragment key={g.key}>
                     <tr className="border-t">
                       <td className="p-2">{new Date(g.createdAt).toLocaleString()}</td>
-                      <td className="p-2">{g.type}</td>
+                      <td className="p-2">{g.type === 'payment' ? 'Pagamento' : (g.type === 'recharge' ? 'Recarga' : g.type)}</td>
                       <td className="p-2">{g.items.map(i => (i.machineId ? i.machineId.name : (Array.isArray(i.items) && i.items[0] && (i.items[0].name || i.items[0].type)) || '-')).join(', ')}</td>
                       <td className="p-2">{(g.items[0] && (g.items[0].method === 'card' ? 'Cartão' : (g.items[0].method === 'cash' ? 'Dinheiro' : g.items[0].method))) || '-'}</td>
                       <td className="p-2">{typeof g.amount === 'number' ? g.amount.toFixed(2) : g.amount}</td>

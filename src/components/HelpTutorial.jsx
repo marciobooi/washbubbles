@@ -67,7 +67,7 @@ export default function HelpTutorial({ run, onClose }) {
       disableBeacon: true,
     },
     {
-      target: '[aria-label="Open cart"]',
+      target: '[aria-label="Abrir carrinho"]',
       content: (
         <div>
           <h3 className="text-xl font-bold text-teal-600 mb-3">Passo 4: Carrinho de Compras 🛒</h3>

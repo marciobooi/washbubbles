@@ -16,7 +16,7 @@ export default function Modal({ open, onClose, children, title, hideClose = fals
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
       <div role="dialog" aria-modal="true" aria-label={title} className="relative bg-white rounded-xl shadow-2xl max-w-3xl w-full z-10 p-6">
         {!hideClose && (
-          <button aria-label="Close" onClick={onClose} className="absolute right-3 top-3 text-neutral-600 hover:text-neutral-900">✕</button>
+          <button aria-label="Fechar" onClick={onClose} className="absolute right-3 top-3 text-neutral-600 hover:text-neutral-900">✕</button>
         )}
         {children}
       </div>
