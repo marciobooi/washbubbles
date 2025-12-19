@@ -12,6 +12,7 @@ import CartModal from './components/CartModal'
 import { ToastProvider, toast } from './components/ui/Toast'
 import HelpTutorial from './components/HelpTutorial'
 import LanguageSwitcher from './components/LanguageSwitcher'
+import Modal from './components/ui/Modal'
 import AdminDashboard from './pages/AdminDashboard'
 import AdminUsers from './pages/AdminUsers'
 import AdminMachines from './pages/AdminMachines'
@@ -58,6 +59,39 @@ function AppInner() {
   // Show compact Home button when any modal is open or when viewing machines (e.g. /pos/machines)
   const showHome = anyModalOpen || location.pathname.startsWith('/pos/machines')
 
+  // Machine start notification state
+  const [machineNotice, setMachineNotice] = React.useState({ open: false, names: [] })
+  const noticeTimer = React.useRef(null)
+
+  function closeMachineNotice() {
+    if (noticeTimer.current) {
+      clearTimeout(noticeTimer.current)
+      noticeTimer.current = null
+    }
+    setMachineNotice({ open: false, names: [] })
+  }
+
+  function showMachineNotice(names = []) {
+    if (!Array.isArray(names) || names.length === 0) return
+    // normalize names
+    const uniq = Array.from(new Set(names.filter(Boolean)))
+    setMachineNotice({ open: true, names: uniq })
+    if (noticeTimer.current) clearTimeout(noticeTimer.current)
+    noticeTimer.current = setTimeout(() => {
+      setMachineNotice({ open: false, names: [] })
+      noticeTimer.current = null
+    }, 20000)
+  }
+
+  React.useEffect(() => {
+    const onEvent = (e) => {
+      const names = (e && e.detail && e.detail.names) || []
+      showMachineNotice(names)
+    }
+    window.addEventListener('machine-notice', onEvent)
+    return () => window.removeEventListener('machine-notice', onEvent)
+  }, [])
+
   // Close the cart modal automatically when the cart becomes empty
   React.useEffect(() => {
     if (cartCount === 0) setCartOpen(false)
@@ -91,6 +125,11 @@ function AppInner() {
 
         // Success: server already created sales and updated machines
         toast({ title: `Pagamento efetuado (Dinheiro)`, variant: 'success' })
+        // Show machine notification for machines purchased (if any)
+        try {
+          const machineNames = items.filter(i => !(i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge')))).map(i => i.name).filter(Boolean)
+          if (machineNames.length) showMachineNotice(machineNames)
+        } catch (e) {}
         clearCart()
         setCartOpen(false)
         return
@@ -135,6 +174,12 @@ function AppInner() {
             return
           }
 
+          // Show machine notification for machines purchased (if any)
+          try {
+            const machineNames = machineItems.map(i => i.name).filter(Boolean)
+            if (machineNames.length) showMachineNotice(machineNames)
+          } catch (e) {}
+
           toast({ title: `Pagamento efetuado (Cartão)`, variant: 'success' })
           clearCart()
           setCartOpen(false)
@@ -147,6 +192,12 @@ function AppInner() {
           const payload = { machineId, amount: Number(it.price || it.amount || 0), items: [it], method: 'card', inserted: Number(it.price || it.amount || 0), change: 0, batchId }
           await api.request('/pos/sale', { method: 'POST', json: payload, headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined, skipAuth: true, expect: 'json' })
         }
+
+        // Show machine notification for machines purchased (if any)
+        try {
+          const machineNames = machineItems.map(i => i.name).filter(Boolean)
+          if (machineNames.length) showMachineNotice(machineNames)
+        } catch (e) {}
 
         toast({ title: `Pagamento efetuado (Cartão)`, variant: 'success' })
         clearCart()
@@ -242,6 +293,25 @@ function AppInner() {
 
       <CartModal open={cartOpen} onClose={() => setCartOpen(false)} onPay={handlePay} />
       <HelpTutorial run={helpOpen} onClose={() => setHelpOpen(false)} />
+
+      <Modal open={machineNotice.open} onClose={closeMachineNotice} title={machineNotice.names.length === 1 ? `Máquina ${machineNotice.names[0]}` : 'Máquina Iniciada'}>
+        <div className="p-4">
+          {machineNotice.names.length === 1 ? (
+            <div className="space-y-3">
+              <p className="text-lg font-semibold">Dirija-se à máquina <span className="font-bold">{machineNotice.names[0]}</span></p>
+              <p>Escolha o programa desejado e carregue <strong>Start</strong>. A máquina iniciará automaticamente.</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-lg font-semibold">Dirija-se às máquinas <span className="font-bold">{machineNotice.names.join(', ')}</span></p>
+              <p>Escolham o programa desejado e carreguem <strong>Start</strong>. As máquinas iniciarão automaticamente.</p>
+            </div>
+          )}
+          <div className="mt-4 text-right">
+            <button onClick={closeMachineNotice} className="px-4 py-2 bg-neutral-100 rounded-md hover:bg-neutral-200">Fechar</button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

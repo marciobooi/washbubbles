@@ -127,6 +127,7 @@ export default function Machines() {
         closeModal()
         const translateMethod = (m) => m === 'card' ? 'Cartão' : (m === 'cash' ? 'Dinheiro' : m)
         toast({ title: `Pagamento efetuado (${translateMethod(res.method)})`, variant: 'success' })
+        try { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('machine-notice', { detail: { names: [m.name] } })) } catch (e) {}
       }
     } catch (e) {
       toast({ title: 'Erro no pagamento', variant: 'destructive' })

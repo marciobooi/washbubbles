@@ -144,6 +144,28 @@ export default function HelpTutorial({ run, onClose }) {
     }
   }
 
+  // Capture clicks on Joyride's internal close button (data-test-id="button-close") in case
+  // the button's own handler is blocked by overlay or propagation issues.
+  React.useEffect(() => {
+    if (!run) return
+    const onDocClick = (e) => {
+      try {
+        const el = e.target && e.target.closest ? e.target.closest('[data-test-id="button-close"]') : null
+        if (el) {
+          e.preventDefault()
+          e.stopPropagation()
+          try { onClose && onClose() } catch (err) { console.error(err) }
+          setStepIndex(0)
+          try { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('modal-close')) } catch (err) {}
+        }
+      } catch (err) {
+        console.error('Error handling Joyride close click', err)
+      }
+    }
+    document.addEventListener('click', onDocClick, true)
+    return () => document.removeEventListener('click', onDocClick, true)
+  }, [run, onClose])
+
   return (
     <>
       <Joyride
@@ -232,8 +254,14 @@ export default function HelpTutorial({ run, onClose }) {
         <button
           aria-label="Fechar Tutorial"
           title="Fechar Tutorial"
-          onClick={() => { onClose(); setStepIndex(0) }}
-          className="fixed top-4 right-4 z-[10001] inline-flex items-center justify-center w-10 h-10 bg-white rounded-full shadow-md hover:bg-neutral-100 focus:outline-none"
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            try { onClose && onClose() } catch (err) { console.error(err) }
+            setStepIndex(0)
+            try { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('modal-close')) } catch (err) {}
+          }}
+          className="fixed top-4 right-4 z-[11000] pointer-events-auto inline-flex items-center justify-center w-10 h-10 bg-white rounded-full shadow-md hover:bg-neutral-100 focus:outline-none"
         >
           <X className="w-4 h-4 text-neutral-700" />
         </button>
