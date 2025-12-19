@@ -28,6 +28,10 @@ app.use('/api/pos', posRoutes)
 // Backwards compatibility: also expose pos endpoints under `/api` (eg. `/api/machine`)
 app.use('/api', posRoutes)
 
+// Gateways (kiosk)
+import gatewaysRoutes from './routes/gateways.js'
+app.use('/api/gateways', gatewaysRoutes)
+
 app.get('/api/health', (req, res) => res.json({ ok: true }))
 
 // Initialize WebSocket server (models will be imported in wsServer.js)

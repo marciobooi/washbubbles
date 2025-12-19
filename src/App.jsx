@@ -53,87 +53,94 @@ function AppInner() {
 
   async function handlePay(items, opts = { useFidelity: false }) {
     try {
-      // Handle cash payments locally: compute totals and assign inserted/change from opts
-      const total = items.reduce((s, i) => s + (i.price || i.amount || 0), 0)
-      let res
+      const method = opts && opts.method === 'cash' ? 'cash' : 'card'
+      const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
+      const kioskKey = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
 
-      if (opts && opts.method === 'cash') {
-        const inserted = Number(opts.inserted || 0)
-        const change = Math.max(0, Math.round((inserted - total) * 100) / 100)
-        if (inserted + 0.0001 < total) {
-          toast({ title: 'Dinheiro insuficiente', description: 'Valor inserido é inferior ao total', variant: 'destructive' })
+      // generate a batch id to group these related sales
+      const batchId = `batch-${Date.now()}-${Math.random().toString(36).slice(2,8)}`
+
+      if (method === 'cash') {
+        // Validate cash via CashGateway (server-side gateway will persist sales atomically)
+        const res = await processPayment(items, { method: 'cash', inserted: opts.inserted })
+        if (!res.success) {
+          // Forward meaningful errors to the user
+          const msg = res.error?.message || (res.error && res.error.body && res.error.body.error) || 'Erro no pagamento com dinheiro'
+          toast({ title: 'Pagamento falhou', description: msg, variant: 'destructive' })
           return
         }
-        res = { success: true, method: 'cash', total, inserted, change }
-      } else {
-        // Delegate card / fidelity payments to payment provider
-        res = await processPayment(items, opts)
-      }
 
-      if (res.success) {
-        // Normalize fidelity -> card so only 'card' or 'cash' exist
-        res.method = res.method === 'fidelity' ? 'card' : res.method
-        const translateMethod = (m) => m === 'card' ? 'Cartão' : (m === 'cash' ? 'Dinheiro' : m)
-        toast({ title: `Pagamento efetuado (${translateMethod(res.method)})`, variant: 'success' })
-
-        // Persist transactions to backend (POS endpoints) — support recharges and machine sales
-        try {
-          // kiosk key used for POS endpoints
-          const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
-          const kioskKey = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
-
-          // For cash payments with multiple items, attach inserted/change to the FIRST persisted sale so admin can see totals
-          let postedInsertedAssigned = false
-          const insertedTotal = res.inserted != null ? Number(res.inserted) : null
-          const changeTotal = res.change != null ? Number(res.change) : null
-
-          // generate a batch id to group these related sales
-          const batchId = `batch-${Date.now()}-${Math.random().toString(36).slice(2,8)}`
-          for (const it of items) {
-            // Detect recharge items (added by CardModal)
-            const isRecharge = (it.id && String(it.id).startsWith('recharge')) || (it.type && String(it.type).toLowerCase().includes('recarga'))
-
-            if (isRecharge) {
-              // POST /pos/recharge (requires kiosk key)
-              const json = { amount: Number(it.amount), items: it, method: res.method || 'card', inserted: Number(it.amount), change: 0, batchId }
-              await api.request('/pos/recharge', {
-                method: 'POST',
-                json,
-                headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined,
-                skipAuth: true,
-                expect: 'json',
-              })
-            } else if (it._id || it.id) {
-              // Assume machine sale. Use /pos/sale
-              const machineId = it._id || it.id
-              // Determine per-sale inserted/change values
-              let inserted = 0
-              let change = 0
-
-              if (res.method === 'cash' && !postedInsertedAssigned) {
-                inserted = insertedTotal || 0
-                change = changeTotal || 0
-                postedInsertedAssigned = true
-              } else if (res.method !== 'cash') {
-                // For card/fidelity, record inserted as price and no change
-                inserted = Number(it.price || it.amount || 0)
-                change = 0
-              }
-
-              const payload = { machineId, amount: Number(it.price || it.amount || 0), items: [it], method: res.method || 'card', inserted, change, batchId }
-              await api.request('/pos/sale', { method: 'POST', json: payload, headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined, skipAuth: true, expect: 'json' })
-            } else {
-              // Fallback: create an admin transaction if possible (won't usually run)
-              try { await api.createTransaction({ amount: Number(it.amount || it.price || 0), items: it }) } catch (e) { }
-            }
-          }
-        } catch (e) {
-          console.warn('Failed to persist transactions to backend', e)
-        }
-
+        // Success: server already created sales and updated machines
+        toast({ title: `Pagamento efetuado (Dinheiro)`, variant: 'success' })
         clearCart()
         setCartOpen(false)
-        console.log('Paid for', items, res)
+        return
+      }
+
+      // Generic failure handling for gateways (only valid if `res` exists)
+      if (typeof res !== 'undefined' && !res.success) {
+        const status = res.error?.status || res.error?.response?.status
+        const bodyError = res.error?.body?.error || res.error?.message || res.error
+        if (status === 409) {
+          toast({ title: 'Máquina já em uso', description: String(bodyError), variant: 'destructive' })
+        } else {
+          toast({ title: 'Falha no pagamento', description: String(bodyError), variant: 'destructive' })
+        }
+        return
+      }
+
+      // Card flow
+      // If a cardCode is provided, use CardGateway to charge machines and post recharges server-side first
+      const cardCode = opts.cardCode || null
+
+      // first persist recharges (if any) — recharges are always card-based
+      try {
+        for (const it of items.filter(i => (i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge'))))) {
+          const json = { amount: Number(it.amount), items: it, method: 'card', inserted: Number(it.amount), change: 0, batchId, cardCode }
+          await api.request('/pos/recharge', { method: 'POST', json, headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined, skipAuth: true, expect: 'json' })
+        }
+
+        const machineItems = items.filter(i => !(i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge'))))
+
+        if (cardCode && machineItems.length) {
+          // Charge via CardGateway (calls /pos/cards/:code/spend per item)
+          const res = await processPayment(machineItems, { method: 'card', cardCode, batchId, kioskKey })
+          if (!res.success) {
+            const status = res.error?.status || res.error?.response?.status
+            const msg = res.error?.message || (res.error && res.error.body && res.error.body.error) || res.error || 'Erro desconhecido'
+            if (status === 409) {
+              toast({ title: 'Máquina já em uso', description: String(msg), variant: 'destructive' })
+            } else {
+              toast({ title: 'Erro no pagamento com cartão', description: String(msg), variant: 'destructive' })
+            }
+            return
+          }
+
+          toast({ title: `Pagamento efetuado (Cartão)`, variant: 'success' })
+          clearCart()
+          setCartOpen(false)
+          return
+        }
+
+        // Fallback: no cardCode provided — persist machine sales as card payments using cart recharges
+        for (const it of machineItems) {
+          const machineId = it._id || it.id
+          const payload = { machineId, amount: Number(it.price || it.amount || 0), items: [it], method: 'card', inserted: Number(it.price || it.amount || 0), change: 0, batchId }
+          await api.request('/pos/sale', { method: 'POST', json: payload, headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined, skipAuth: true, expect: 'json' })
+        }
+
+        toast({ title: `Pagamento efetuado (Cartão)`, variant: 'success' })
+        clearCart()
+        setCartOpen(false)
+      } catch (e) {
+        console.warn('Failed to persist card transactions', e)
+        const status = e?.status || e?.response?.status || (e?.body && e.body.status)
+        const bodyError = (e && e.body && e.body.error) || e?.message || e
+        if (status === 409 || String(bodyError).toLowerCase().includes('already in use')) {
+          toast({ title: 'Máquina já em uso', description: String(bodyError), variant: 'destructive' })
+        } else {
+          toast({ title: 'Erro ao persistir transacções', variant: 'destructive' })
+        }
       }
     } catch (e) {
       toast({ title: 'Erro no pagamento', variant: 'destructive' })

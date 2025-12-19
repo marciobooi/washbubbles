@@ -46,58 +46,23 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
   }
 
   async function checkCardAndPay() {
+    // Use central checkout to persist recharges and charge via card gateway
     setCheckingCard(true)
     setCardError(null)
     try {
-      // kiosk key used for POS endpoints
-      const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
-      const kioskKey = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
-
       if (!cardCode) {
         setCardError('Insira o código do cartão')
         setCheckingCard(false)
         return
       }
 
-      // Fetch card info
-      const card = await api.request(`/pos/cards/${encodeURIComponent(cardCode)}`, { method: 'GET', headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined, skipAuth: true, expect: 'json' })
-      const remaining = Math.max(0, Math.round((purchaseTotal - rechargeTotal) * 100) / 100)
-
-      setCardBalance(Number(card.balance || 0))
-
-      if ((Number(card.balance || 0) + rechargeTotal) < purchaseTotal) {
-        // Not enough balance — suggest top-up
-        setCardNeedsTopup(true)
-        setCardError(`Saldo insuficiente: ${card.balance.toFixed(2)}€ (falta ${(remaining - card.balance).toFixed(2)}€)`)
-        setCheckingCard(false)
-        return
-      }
-
-      // Enough balance — proceed to persist transactions
-      // First persist any recharge items in cart
-      const itemsCopy = [...cart]
-      // Persist recharges first (if any)
-      for (const it of itemsCopy.filter(i => i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge')))) {
-        const json = { amount: Number(it.amount), items: it, method: 'card', inserted: Number(it.amount), change: 0, cardCode }
-        await api.request('/pos/recharge', { method: 'POST', json, headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined, skipAuth: true, expect: 'json' })
-      }
-
-      // Then persist machine sales, charging the loyalty card via cardCode
-      for (const it of itemsCopy.filter(i => !(i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge'))))) {
-        const machineId = it._id || it.id
-        const payload = { machineId, amount: Number(it.price || it.amount || 0), items: [it], method: 'card', inserted: 0, change: 0, cardCode }
-        await api.request('/pos/sale', { method: 'POST', json: payload, headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined, skipAuth: true, expect: 'json' })
-      }
-
-      toast({ title: 'Pagamento efetuado (cartão)', variant: 'success' })
-      clearCart()
+      // Delegate payment to the main handler — it will persist recharges and charge machines using cardCode
+      await onPay(cart, { method: 'card', cardCode })
       setShowCardPrompt(false)
       onClose()
     } catch (e) {
       console.error('Card payment failed', e)
-      if (e && e.status === 404) setCardError('Cartão não encontrado')
-      else if (e && e.status === 400 && e.error) setCardError(e.error)
-      else setCardError('Erro ao processar pagamento com cartão')
+      setCardError(e?.message || 'Erro ao processar pagamento com cartão')
     } finally {
       setCheckingCard(false)
     }
@@ -117,8 +82,8 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
       const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
       const kioskKey = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
 
-      const json = { amount, items: [{ type: 'recharge', amount }], method: 'card', inserted: amount, change: 0, cardCode }
-      await api.request('/pos/recharge', { method: 'POST', json, headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined, skipAuth: true, expect: 'json' })
+      // Use gateways topup for card code
+      await api.gatewayTopupCard(cardCode, { amount }, { apiKey: kioskKey })
 
       toast({ title: `Cartão recarregado: +${amount.toFixed(2)}€`, variant: 'success' })
       // Now attempt payment again

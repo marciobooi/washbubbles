@@ -109,13 +109,17 @@ export default function Machines() {
     try {
       const res = await processPayment([m], opts)
       if (res.success) {
-        // Persist transaction to backend via kiosk endpoint
+        // Persist transaction to backend via kiosk endpoint only when needed
         try {
           const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
           const kioskKey = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
           const inserted = opts.inserted != null ? Number(opts.inserted) : Number(m.price || 0)
           const change = Math.max(0, (inserted || 0) - (m.price || 0))
-          await api.request('/pos/sale', { method: 'POST', json: { machineId: m._id || m.id, amount: Number(m.price || 0), items: [m], method: opts.method || 'card', inserted, change }, headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined, skipAuth: true, expect: 'json' })
+
+          // If cardCode provided, CardGateway has already performed the spend calls; skip creating /pos/sale here
+          if (!opts.cardCode) {
+            await api.request('/pos/sale', { method: 'POST', json: { machineId: m._id || m.id, amount: Number(m.price || 0), items: [m], method: opts.method || 'card', inserted, change }, headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined, skipAuth: true, expect: 'json' })
+          }
         } catch (e) {
           console.warn('Failed to persist sale to backend', e)
         }

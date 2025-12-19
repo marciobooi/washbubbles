@@ -254,6 +254,27 @@ export function createApi(config) {
     return request('/admin/transactions', { method: 'POST', json: payload, expect: 'json' });
   }
 
+  // Gateways (kiosk)
+  function gatewayGetCard(code, opts) {
+    const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
+    return request(`/gateways/cards/${encodeURIComponent(code)}`, { method: 'GET', expect: 'json', headers, skipAuth: true })
+  }
+
+  function gatewayTopupCard(code, payload, opts) {
+    const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
+    return request(`/gateways/cards/${encodeURIComponent(code)}/topup`, { method: 'POST', json: payload, expect: 'json', headers, skipAuth: true })
+  }
+
+  function gatewayCardPay(payload, opts) {
+    const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
+    return request('/gateways/card/pay', { method: 'POST', json: payload, expect: 'json', headers, skipAuth: true })
+  }
+
+  function gatewayCashPay(payload, opts) {
+    const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
+    return request('/gateways/cash/pay', { method: 'POST', json: payload, expect: 'json', headers, skipAuth: true })
+  }
+
   function deleteTransaction(id) {
     return request(`/admin/transactions/${id}`, { method: 'DELETE', expect: 'json' });
   }
@@ -310,6 +331,12 @@ export function createApi(config) {
     getSetting,
     setSetting,
     deleteSetting,
+
+    // Gateways
+    gatewayGetCard,
+    gatewayTopupCard,
+    gatewayCardPay,
+    gatewayCashPay,
   };
 }
 
@@ -348,6 +375,10 @@ export const {
   getSetting,
   setSetting,
   deleteSetting,
+  gatewayGetCard,
+  gatewayTopupCard,
+  gatewayCardPay,
+  gatewayCashPay,
 } = api;
 
 export default api;
