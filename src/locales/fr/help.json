@@ -1,0 +1,53 @@
+{
+  "welcome": {
+    "title": "Bienvenue chez Washstore ! 👋",
+    "text": "Nous vous guiderons sur la façon d'utiliser les machines."
+  },
+  "step1": {
+    "title": "Étape 1 : Choisir le type de service",
+    "wash": "🧺 <0>Lavage</0> - Pour laver votre linge",
+    "dry": "🌀 <0>Séchage</0> - Pour sécher votre linge",
+    "instruction": "Touchez la carte du service souhaité pour continuer."
+  },
+  "step2": {
+    "title": "Étape 2 : Sélectionnez une machine",
+    "available": "✅ <0>Vert</0> - Machine disponible",
+    "occupied": "🔴 <0>Rouge</0> - Machine occupée",
+    "maintenance": "🟡 <0>Jaune</0> - Maintenance",
+    "instruction": "Choisissez une machine disponible et touchez-la."
+  },
+  "step3": {
+    "title": "Étape 3 : Choisissez un programme",
+    "durations": "Durées",
+    "temperatures": "Températures",
+    "prices": "Prix",
+    "instruction": "Sélectionnez le programme qui convient le mieux à vos besoins."
+  },
+  "step4": {
+    "title": "Étape 4 : Panier 🛒",
+    "text": "Tous les services sélectionnés apparaissent ici.",
+    "instruction": "Touchez l'icône du panier pour voir vos articles."
+  },
+  "step5": {
+    "title": "Étape 5 : Paiement 💳",
+    "option1": "<0>Carte fidélité</0> - Réduction de 0,50€ par article",
+    "option2": "<0>Espèces</0> - Paiement traditionnel",
+    "note": "⚠️ <em>Les recharges de carte sont disponibles uniquement en espèces.</em>"
+  },
+  "card": {
+    "title": "Carte fidélité 💎",
+    "text": "Touchez l'<strong>icône carte</strong> dans le menu pour voir le solde, l'historique et recharger la carte."
+  },
+  "done": {
+    "title": "C'est prêt ! 🎉",
+    "text": "Vous savez maintenant comment utiliser Washstore.",
+    "note": "Si vous avez besoin d'aide, touchez l'icône <strong>?</strong> dans le menu."
+  },
+  "buttons": {
+    "back": "Précédent",
+    "close": "Fermer",
+    "last": "Terminer",
+    "next": "Suivant",
+    "skip": "Passer le tutoriel"
+  }
+}

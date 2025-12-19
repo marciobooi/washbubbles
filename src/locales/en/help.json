@@ -1,0 +1,53 @@
+{
+  "welcome": {
+    "title": "Welcome to Washstore! 👋",
+    "text": "We'll guide you through how to use the machines."
+  },
+  "step1": {
+    "title": "Step 1: Choose a Service",
+    "wash": "🧺 <0>Wash</0> — For washing your clothes",
+    "dry": "🌀 <0>Dry</0> — For drying your clothes",
+    "instruction": "Tap the service card to continue."
+  },
+  "step2": {
+    "title": "Step 2: Select a Machine",
+    "available": "✅ <0>Green</0> - Machine available",
+    "occupied": "🔴 <0>Red</0> - Machine occupied",
+    "maintenance": "🟡 <0>Yellow</0> - Maintenance",
+    "instruction": "Choose an available machine and tap it."
+  },
+  "step3": {
+    "title": "Step 3: Pick a Program",
+    "durations": "Durations",
+    "temperatures": "Temperatures",
+    "prices": "Prices",
+    "instruction": "Select the program that best suits your needs."
+  },
+  "step4": {
+    "title": "Step 4: Shopping Cart 🛒",
+    "text": "All selected services appear here.",
+    "instruction": "Tap the cart icon to view your items."
+  },
+  "step5": {
+    "title": "Step 5: Payment 💳",
+    "option1": "<0>Loyalty Card</0> - €0.50 discount per item",
+    "option2": "<0>Cash</0> - Traditional payment",
+    "note": "⚠️ <em>Card top-ups are only available via Cash.</em>"
+  },
+  "card": {
+    "title": "Loyalty Card 💎",
+    "text": "Tap the <strong>card icon</strong> in the top menu to view balance, history and top-up the card."
+  },
+  "done": {
+    "title": "You're Ready! 🎉",
+    "text": "You now know how to use Washstore.",
+    "note": "If you need help again, tap the <strong>?</strong> icon in the menu."
+  },
+  "buttons": {
+    "back": "Back",
+    "close": "Close",
+    "last": "Finish",
+    "next": "Next",
+    "skip": "Skip Tutorial"
+  }
+}

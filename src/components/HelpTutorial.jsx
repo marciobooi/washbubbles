@@ -1,8 +1,10 @@
 import React, { useState } from 'react'
 import Joyride, { STATUS } from 'react-joyride'
 import { X } from 'lucide-react'
+import { useTranslation, Trans } from 'react-i18next'
 
 export default function HelpTutorial({ run, onClose }) {
+  const { t } = useTranslation('help')
   const [stepIndex, setStepIndex] = useState(0)
 
   const steps = [
@@ -10,8 +12,8 @@ export default function HelpTutorial({ run, onClose }) {
       target: 'body',
       content: (
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-teal-600 mb-3">Bem-vindo ao Washstore! 👋</h2>
-          <p className="text-neutral-700">Vamos guiá-lo através do processo de utilização das nossas máquinas.</p>
+          <h2 className="text-2xl font-bold text-teal-600 mb-3"><Trans ns="help" i18nKey="welcome.title" /></h2>
+          <p className="text-neutral-700"><Trans ns="help" i18nKey="welcome.text" /></p>
         </div>
       ),
       placement: 'center',
@@ -21,11 +23,11 @@ export default function HelpTutorial({ run, onClose }) {
       target: 'body',
       content: (
         <div>
-          <h3 className="text-xl font-bold text-teal-600 mb-3">Passo 1: Escolha o Tipo de Serviço</h3>
+          <h3 className="text-xl font-bold text-teal-600 mb-3"><Trans ns="help" i18nKey="step1.title" /></h3>
           <div className="space-y-2 text-neutral-700">
-            <p>🧺 <strong>Lavagem</strong> - Para lavar a sua roupa</p>
-            <p>🌀 <strong>Secagem</strong> - Para secar a sua roupa</p>
-            <p>Toque no cartão do serviço pretendido para continuar.</p>
+            <p><Trans ns="help" i18nKey="step1.wash" components={[<strong />]} /></p>
+            <p><Trans ns="help" i18nKey="step1.dry" components={[<strong />]} /></p>
+            <p className="mt-1"><Trans ns="help" i18nKey="step1.instruction" /></p>
           </div>
         </div>
       ),
@@ -36,12 +38,12 @@ export default function HelpTutorial({ run, onClose }) {
       target: 'body',
       content: (
         <div>
-          <h3 className="text-xl font-bold text-teal-600 mb-3">Passo 2: Selecione uma Máquina</h3>
+          <h3 className="text-xl font-bold text-teal-600 mb-3"><Trans ns="help" i18nKey="step2.title" /></h3>
           <div className="space-y-2 text-neutral-700">
-            <p>✅ <strong className="text-green-600">Verde</strong> - Máquina disponível</p>
-            <p>🔴 <strong className="text-red-600">Vermelho</strong> - Máquina ocupada</p>
-            <p>🟡 <strong className="text-yellow-600">Amarelo</strong> - Manutenção</p>
-            <p className="mt-3">Escolha uma máquina <strong>disponível</strong> e toque nela.</p>
+            <p><Trans ns="help" i18nKey="step2.available" components={[<strong className="text-green-600" />]} /></p>
+            <p><Trans ns="help" i18nKey="step2.occupied" components={[<strong className="text-red-600" />]} /></p>
+            <p><Trans ns="help" i18nKey="step2.maintenance" components={[<strong className="text-yellow-600" />]} /></p>
+            <p className="mt-3"><Trans ns="help" i18nKey="step2.instruction" components={[<strong />]} /></p>
           </div>
         </div>
       ),
@@ -52,15 +54,10 @@ export default function HelpTutorial({ run, onClose }) {
       target: 'body',
       content: (
         <div>
-          <h3 className="text-xl font-bold text-teal-600 mb-3">Passo 3: Escolha um Programa</h3>
+          <h3 className="text-xl font-bold text-teal-600 mb-3"><Trans i18nKey="step3.title" /></h3>
           <div className="space-y-2 text-neutral-700">
-            <p>Visualize os programas disponíveis com diferentes:</p>
-            <ul className="list-disc list-inside space-y-1 ml-4">
-              <li>Durações</li>
-              <li>Temperaturas</li>
-              <li>Preços</li>
-            </ul>
-            <p className="mt-3">Selecione o programa que melhor se adequa às suas necessidades.</p>
+            <p>{t('step3.durations')} • {t('step3.temperatures')} • {t('step3.prices')}</p>
+            <p className="mt-3"><Trans ns="help" i18nKey="step3.instruction" /></p>
           </div>
         </div>
       ),
@@ -71,11 +68,10 @@ export default function HelpTutorial({ run, onClose }) {
       target: '[aria-label="Abrir carrinho"]',
       content: (
         <div>
-          <h3 className="text-xl font-bold text-teal-600 mb-3">Passo 4: Carrinho de Compras 🛒</h3>
+          <h3 className="text-xl font-bold text-teal-600 mb-3"><Trans ns="help" i18nKey="step4.title" /></h3>
           <div className="space-y-2 text-neutral-700">
-            <p>Todos os serviços selecionados aparecem aqui.</p>
-            <p>Pode adicionar vários serviços antes de pagar.</p>
-            <p className="mt-3">Toque no ícone do carrinho para ver os seus itens.</p>
+            <p><Trans ns="help" i18nKey="step4.text" /></p>
+            <p className="mt-3"><Trans ns="help" i18nKey="step4.instruction" /></p>
           </div>
         </div>
       ),
@@ -86,14 +82,11 @@ export default function HelpTutorial({ run, onClose }) {
       target: 'body',
       content: (
         <div>
-          <h3 className="text-xl font-bold text-teal-600 mb-3">Passo 5: Pagamento 💳</h3>
+          <h3 className="text-xl font-bold text-teal-600 mb-3"><Trans ns="help" i18nKey="step5.title" /></h3>
           <div className="space-y-2 text-neutral-700">
-            <p>No carrinho, tem duas opções de pagamento:</p>
-            <ul className="list-disc list-inside space-y-1 ml-4">
-              <li><strong>Cartão Fidelidade</strong> - Desconto de 0,50€ por item</li>
-              <li><strong>Dinheiro</strong> - Pagamento tradicional</li>
-            </ul>
-            <p className="mt-3">⚠️ <em>Para recargas de cartão, apenas Dinheiro está disponível.</em></p>
+            <p><Trans ns="help" i18nKey="step5.option1" components={[<strong />]} /></p>
+            <p><Trans ns="help" i18nKey="step5.option2" components={[<strong />]} /></p>
+            <p className="mt-3"><Trans ns="help" i18nKey="step5.note" /></p>
           </div>
         </div>
       ),
@@ -104,28 +97,23 @@ export default function HelpTutorial({ run, onClose }) {
       target: 'body',
       content: (
         <div>
-          <h3 className="text-xl font-bold text-teal-600 mb-3">Cartão Fidelidade 💎</h3>
+          <h3 className="text-xl font-bold text-teal-600 mb-3"><Trans ns="help" i18nKey="card.title" /></h3>
           <div className="space-y-2 text-neutral-700">
-            <p>Toque no <strong>ícone do cartão</strong> no menu superior para:</p>
-            <ul className="list-disc list-inside space-y-1 ml-4">
-              <li>Ver o seu saldo</li>
-              <li>Consultar o histórico de transações</li>
-              <li>Recarregar o cartão (5€, 10€, ou 20€)</li>
-            </ul>
-            <p className="mt-3">💡 Poupe 0,50€ em cada serviço!</p>
+            <p><Trans ns="help" i18nKey="card.text" components={[<strong />]} /></p>
+            <p className="mt-3">💡 <Trans ns="help" i18nKey="done.note" /></p>
           </div>
         </div>
       ),
       placement: 'center',
       disableBeacon: true,
-    },
+    },  
     {
       target: 'body',
       content: (
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-teal-600 mb-3">Está Pronto! 🎉</h2>
-          <p className="text-neutral-700 mb-4">Agora já sabe como usar o Washstore.</p>
-          <p className="text-sm text-neutral-500">Se precisar de ajuda novamente, toque no ícone <strong>?</strong> no menu.</p>
+          <h2 className="text-2xl font-bold text-teal-600 mb-3"><Trans ns="help" i18nKey="done.title" /></h2>
+          <p className="text-neutral-700 mb-4"><Trans ns="help" i18nKey="done.text" /></p>
+          <p className="text-sm text-neutral-500"><Trans ns="help" i18nKey="done.note" components={{ strong: <strong /> }} /></p>
         </div>
       ),
       placement: 'center',
@@ -241,11 +229,11 @@ export default function HelpTutorial({ run, onClose }) {
           },
         }}
         locale={{
-          back: 'Anterior',
-          close: 'Fechar',
-          last: 'Concluir',
-          next: 'Próximo',
-          skip: 'Saltar Tutorial',
+          back: t('buttons.back'),
+          close: t('buttons.close'),
+          last: t('buttons.last'),
+          next: t('buttons.next'),
+          skip: t('buttons.skip'),
         }}
       />
 

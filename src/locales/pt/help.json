@@ -1,0 +1,53 @@
+{
+  "welcome": {
+    "title": "Bem-vindo ao Washstore! 👋",
+    "text": "Vamos guiá-lo através do processo de utilização das nossas máquinas."
+  },
+  "step1": {
+    "title": "Passo 1: Escolha o Tipo de Serviço",
+    "wash": "🧺 <0>Lavagem</0> - Para lavar a sua roupa",
+    "dry": "🌀 <0>Secagem</0> - Para secar a sua roupa",
+    "instruction": "Toque no cartão do serviço pretendido para continuar."
+  },
+  "step2": {
+    "title": "Passo 2: Selecione uma Máquina",
+    "available": "✅ <0>Verde</0> - Máquina disponível",
+    "occupied": "🔴 <0>Vermelho</0> - Máquina ocupada",
+    "maintenance": "🟡 <0>Amarelo</0> - Manutenção",
+    "instruction": "Escolha uma máquina <strong>disponível</strong> e toque nela."
+  },
+  "step3": {
+    "title": "Passo 3: Escolha um Programa",
+    "durations": "Durações",
+    "temperatures": "Temperaturas",
+    "prices": "Preços",
+    "instruction": "Selecione o programa que melhor se adequa às suas necessidades."
+  },
+  "step4": {
+    "title": "Passo 4: Carrinho de Compras 🛒",
+    "text": "Todos os serviços selecionados aparecem aqui.",
+    "instruction": "Toque no ícone do carrinho para ver os seus itens."
+  },
+  "step5": {
+    "title": "Passo 5: Pagamento 💳",
+    "option1": "<0>Cartão Fidelidade</0> - Desconto de 0,50€ por item",
+    "option2": "<0>Dinheiro</0> - Pagamento tradicional",
+    "note": "⚠️ <em>Para recargas de cartão, apenas Dinheiro está disponível.</em>"
+  },
+  "card": {
+    "title": "Cartão Fidelidade 💎",
+    "text": "Toque no <strong>ícone do cartão</strong> no menu superior para ver saldo, histórico e recarregar o cartão."
+  },
+  "done": {
+    "title": "Está Pronto! 🎉",
+    "text": "Agora já sabe como usar o Washstore.",
+    "note": "Se precisar de ajuda novamente, toque no ícone <strong>?</strong> no menu."
+  },
+  "buttons": {
+    "back": "Anterior",
+    "close": "Fechar",
+    "last": "Concluir",
+    "next": "Próximo",
+    "skip": "Saltar Tutorial"
+  }
+}

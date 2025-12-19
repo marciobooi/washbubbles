@@ -1,0 +1,53 @@
+{
+  "welcome": {
+    "title": "Willkommen bei Washstore! 👋",
+    "text": "Wir führen Sie durch die Nutzung der Maschinen."
+  },
+  "step1": {
+    "title": "Schritt 1: Wählen Sie den Diensttyp",
+    "wash": "🧺 <0>Waschen</0> - Zum Waschen Ihrer Kleidung",
+    "dry": "🌀 <0>Trocknen</0> - Zum Trocknen Ihrer Kleidung",
+    "instruction": "Tippen Sie auf die Karte des gewünschten Dienstes, um fortzufahren."
+  },
+  "step2": {
+    "title": "Schritt 2: Wählen Sie eine Maschine",
+    "available": "✅ <0>Grün</0> - Maschine verfügbar",
+    "occupied": "🔴 <0>Rot</0> - Maschine besetzt",
+    "maintenance": "🟡 <0>Gelb</0> - Wartung",
+    "instruction": "Wählen Sie eine verfügbare Maschine und tippen Sie darauf."
+  },
+  "step3": {
+    "title": "Schritt 3: Wählen Sie ein Programm",
+    "durations": "Dauern",
+    "temperatures": "Temperaturen",
+    "prices": "Preise",
+    "instruction": "Wählen Sie das Programm, das am besten zu Ihren Bedürfnissen passt."
+  },
+  "step4": {
+    "title": "Schritt 4: Warenkorb 🛒",
+    "text": "Alle ausgewählten Dienste erscheinen hier.",
+    "instruction": "Tippen Sie auf das Warenkorbsymbol, um Ihre Artikel anzuzeigen."
+  },
+  "step5": {
+    "title": "Schritt 5: Zahlung 💳",
+    "option1": "<0>Treuekarte</0> - 0,50€ Rabatt pro Artikel",
+    "option2": "<0>Bargeld</0> - Traditionelle Zahlung",
+    "note": "⚠️ <em>Kartennachladungen sind nur mit Bargeld möglich.</em>"
+  },
+  "card": {
+    "title": "Treuekarte 💎",
+    "text": "Tippen Sie auf das <strong>Karten-Symbol</strong> im oberen Menü, um Guthaben, Verlauf und Aufladung anzuzeigen."
+  },
+  "done": {
+    "title": "Fertig! 🎉",
+    "text": "Sie wissen jetzt, wie man Washstore benutzt.",
+    "note": "Wenn Sie erneut Hilfe benötigen, tippen Sie auf das <strong>?</strong>-Symbol im Menü."
+  },
+  "buttons": {
+    "back": "Zurück",
+    "close": "Schließen",
+    "last": "Fertigstellen",
+    "next": "Weiter",
+    "skip": "Tutorial überspringen"
+  }
+}
