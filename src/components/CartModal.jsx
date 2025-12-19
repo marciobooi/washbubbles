@@ -1,10 +1,12 @@
 import React from 'react'
 import Modal from './ui/Modal'
 import { useCart } from '../context/CartContext'
+import CashModal from './CashModal'
 
 export default function CartModal({ open, onClose, onPay = () => {}, onClear = () => {} }) {
   const { cart, removeFromCart, clearCart } = useCart()
   const [useFidelity, setUseFidelity] = React.useState(false)
+  const [showCash, setShowCash] = React.useState(false)
   const total = cart.reduce((s, i) => s + (i.price || 0), 0)
   const discountedTotal = cart.reduce((s, i) => s + Math.max(0, (i.price || 0) - (useFidelity ? 0.5 : 0)), 0)
   
@@ -12,11 +14,20 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
   const hasRecharge = cart.some(item => item.type === 'Recarga de Cartão')
 
   function handlePay() {
-    onPay(cart, { useFidelity: hasRecharge ? false : useFidelity })
+    // Open cash insert modal to simulate inserted money
+    setShowCash(true)
+  }
+
+  async function handleCashConfirm(inserted) {
+    const finalTotal = Number(!hasRecharge && useFidelity ? discountedTotal : total)
+    // Call onPay with cash method and inserted amount
+    onPay(cart, { useFidelity: hasRecharge ? false : useFidelity, method: 'cash', inserted })
+    setShowCash(false)
     onClose()
   }
 
   return (
+    <>
     <Modal open={open} onClose={onClose} title="Carrinho">
       <div className="flex flex-col gap-6">
         {cart.length === 0 ? (
@@ -102,5 +113,8 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
         )}
       </div>
     </Modal>
+    {/* cash insert modal */}
+    <CashModal open={showCash} total={(!hasRecharge && useFidelity ? discountedTotal : total)} onClose={() => setShowCash(false)} onConfirm={handleCashConfirm} />
+    </>
   )
 }

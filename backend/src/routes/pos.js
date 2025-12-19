@@ -2,7 +2,7 @@ import express from 'express'
 import Machine from '../models/machine.js'
 import Sale from '../models/sale.js'
 import { requireKiosk } from '../middleware/auth.js'
-import { broadcastMachines } from '../wsServer.js'
+import { broadcastMachines, broadcastMachine } from '../wsServer.js'
 
 const router = express.Router()
 
@@ -40,15 +40,17 @@ router.get('/machines', requireKiosk, async (req, res) => {
 })
 
 router.post('/sale', requireKiosk, async (req, res) => {
-  const { machineId, amount, items } = req.body
+  const { machineId, amount, items, method, inserted, change, type } = req.body
   if (!machineId || amount == null || !items) return res.status(400).json({ error: 'Missing parameters' })
 
   // Ensure machine exists
   const machine = await Machine.findById(machineId)
   if (!machine) return res.status(404).json({ error: 'Machine not found' })
 
-  // Create sale
-  const sale = await Sale.create({ machineId, amount: Number(amount), items })
+  // Compute inserted/change defaults and create sale
+  const insertedNum = Number(inserted || 0)
+  const changeNum = (change != null) ? Number(change) : Math.max(0, insertedNum - Number(amount || 0))
+  const sale = await Sale.create({ machineId, amount: Number(amount), items, method, inserted: insertedNum, change: changeNum, type: type || 'payment' })
 
   // Update machine: increment cycle and mark as occupied after successful payment
   await Machine.findByIdAndUpdate(machineId, { $inc: { cycle: 1 }, $set: { status: 'working', statusText: 'Ocupado' } })
@@ -58,6 +60,14 @@ router.post('/sale', requireKiosk, async (req, res) => {
   try { await broadcastMachine(updated) } catch (e) { console.error('[pos] broadcastMachine error', e) }
 
   res.json({ sale, machine: updated })
+})
+
+// Card recharge / top-up (kiosk) — stored as a transaction without a machine reference
+router.post('/recharge', requireKiosk, async (req, res) => {
+  const { amount, items, method, inserted, change } = req.body
+  if (amount == null) return res.status(400).json({ error: 'Missing amount' })
+  const sale = await Sale.create({ amount: Number(amount), items, method: method || 'card', inserted: Number(inserted || amount), change: Number(change || 0), type: 'recharge' })
+  res.json({ sale })
 })
 
 export default router

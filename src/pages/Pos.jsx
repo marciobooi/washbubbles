@@ -5,6 +5,7 @@ import Card from '../components/Card'
 import CardModal from '../components/CardModal'
 import { toast } from '@/components/ui/Toast'
 import Banner from '../components/Banner'
+import api from '@/services/api'
 
 export default function Pos() {
   const cards = [
@@ -33,10 +34,21 @@ export default function Pos() {
     setCardOpen(false)
   }
 
-  function handleRecharge(amount = 10) {
-    const m = { id: `t${Date.now()}`, ts: new Date().toISOString(), type: `Recarregado`, amount: Number(amount) }
-    setTransactions((s) => [m, ...s])
-    toast({ title: `Cartão recarregado ${Number(amount).toFixed(2)}€`, variant: 'success' })
+  async function handleRecharge(amount = 10) {
+    try {
+      // Persist recharge via kiosk endpoint
+      const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
+      const kioskKey = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
+      // Use api.request directly (skip auth)
+      const resp = await api.request('/pos/recharge', { method: 'POST', json: { amount: Number(amount), items: [{ type: 'recharge', amount: Number(amount) }], method: 'card', inserted: Number(amount), change: 0 }, headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined, skipAuth: true, expect: 'json' })
+      const sale = resp && resp.sale ? resp.sale : null
+      const m = sale ? { id: sale._id || `t${Date.now()}`, ts: sale.createdAt || new Date().toISOString(), type: `Recarregado`, amount: Number(amount) } : { id: `t${Date.now()}`, ts: new Date().toISOString(), type: `Recarregado`, amount: Number(amount) }
+      setTransactions((s) => [m, ...s])
+      toast({ title: `Cartão recarregado ${Number(amount).toFixed(2)}€`, variant: 'success' })
+    } catch (e) {
+      console.error('Failed to recharge', e)
+      toast({ title: 'Erro ao recarregar o cartão', variant: 'destructive' })
+    }
   }
 
   return (

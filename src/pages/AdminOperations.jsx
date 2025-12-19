@@ -73,7 +73,15 @@ export default function AdminOperations() {
   }
 
   // shorthand helpers
-  const startMachine = (m) => setMachineStatus(m, 'working', 'Ocupado')
+  const startMachine = async (m) => {
+    await setMachineStatus(m, 'working', 'Ocupado')
+    try {
+      // record admin-initiated start as a transaction (no price)
+      await api.createTransaction({ machineId: m._id, amount: 0, type: 'admin_start' })
+    } catch (e) {
+      console.warn('Failed to record admin start transaction', e)
+    }
+  }
   const stopMachine = (m) => setMachineStatus(m, 'free', 'Livre')
   const setOffline = (m) => setMachineStatus(m, 'offline', 'Offline')
   const setOnline = (m) => setMachineStatus(m, 'free', 'Livre')

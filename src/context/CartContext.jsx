@@ -10,7 +10,9 @@ export function CartProvider({ children }) {
   const [cart, setCart] = useState([])
 
   function addToCart(item) {
-    setCart((c) => [...c, item])
+    // Ensure every cart item has a stable `id` for React keying and removal
+    const normalized = { ...item, id: item.id || item._id || `cart-${Date.now()}-${Math.random().toString(36).slice(2,8)}` }
+    setCart((c) => [...c, normalized])
   }
 
   function removeFromCart(id) {

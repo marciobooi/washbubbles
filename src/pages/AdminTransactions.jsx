@@ -40,8 +40,12 @@ export default function AdminTransactions() {
             <thead>
               <tr>
                 <th className="text-left p-2">Time</th>
+                <th className="text-left p-2">Type</th>
                 <th className="text-left p-2">Machine</th>
+                <th className="text-left p-2">Method</th>
                 <th className="text-left p-2">Amount</th>
+                <th className="text-left p-2">Inserted</th>
+                <th className="text-left p-2">Change</th>
                 <th className="text-left p-2">Items</th>
               </tr>
             </thead>
@@ -49,8 +53,12 @@ export default function AdminTransactions() {
               {tx.map((t) => (
                 <tr key={t._id} className="border-t">
                   <td className="p-2">{new Date(t.createdAt).toLocaleString()}</td>
-                  <td className="p-2">{t.machineId ? t.machineId.name : t.machineId}</td>
+                  <td className="p-2">{t.type || 'payment'}</td>
+                  <td className="p-2">{t.machineId ? t.machineId.name : '-'}</td>
+                  <td className="p-2">{t.method || '-'}</td>
                   <td className="p-2">{t.amount}</td>
+                  <td className="p-2">{t.inserted ?? '-'}</td>
+                  <td className="p-2">{t.change ?? '-'}</td>
                   <td className="p-2"><pre className="whitespace-pre-wrap">{JSON.stringify(t.items)}</pre></td>
                 </tr>
               ))}

@@ -3,9 +3,17 @@ import mongoose from 'mongoose'
 const { Schema } = mongoose
 
 const saleSchema = new Schema({
-  machineId: { type: Schema.Types.ObjectId, ref: 'Machine', required: true },
+  // machineId is optional because some transactions (card recharges, admin events) do not relate to a machine
+  machineId: { type: Schema.Types.ObjectId, ref: 'Machine' },
   amount: { type: Number, required: true },
   items: { type: Schema.Types.Mixed },
+  // Transaction type: payment, recharge, admin_start, etc.
+  type: { type: String, enum: ['payment', 'recharge', 'admin_start', 'other'], default: 'payment' },
+  // Payment method (card, cash, kiosk)
+  method: { type: String },
+  // Amount the user inserted (for cash payments) and change given back
+  inserted: { type: Number, default: 0 },
+  change: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now }
 })
 

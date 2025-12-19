@@ -1,6 +1,7 @@
 import { Link, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import React from 'react'
 import Pos from './pages/Pos'
+import api from './services/api'
 import Machines from './pages/Machines'
 import MachineDetail from './pages/MachineDetail'
 import Admin from './pages/Admin'
@@ -51,6 +52,40 @@ function AppInner() {
       const res = await processPayment(items, opts)
       if (res.success) {
         toast({ title: `Pagamento efetuado (${res.method})`, variant: 'success' })
+
+        // Persist transactions to backend (POS endpoints) — support recharges and machine sales
+        try {
+          // kiosk key used for POS endpoints
+          const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
+          const kioskKey = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
+
+          for (const it of items) {
+            // Detect recharge items (added by CardModal)
+            const isRecharge = (it.id && String(it.id).startsWith('recharge')) || (it.type && String(it.type).toLowerCase().includes('recarga'))
+
+            if (isRecharge) {
+              // POST /pos/recharge (requires kiosk key)
+              await api.request('/pos/recharge', {
+                method: 'POST',
+                json: { amount: Number(it.amount), items: it, method: 'card', inserted: Number(it.amount), change: 0 },
+                headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined,
+                skipAuth: true,
+                expect: 'json',
+              })
+            } else if (it._id || it.id) {
+              // Assume machine sale. Use /pos/sale
+              const machineId = it._id || it.id
+              const payload = { machineId, amount: Number(it.price || it.amount || 0), items: [it], method: 'card', inserted: Number(it.price || it.amount || 0), change: 0 }
+              await api.request('/pos/sale', { method: 'POST', json: payload, headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined, skipAuth: true, expect: 'json' })
+            } else {
+              // Fallback: create an admin transaction if possible (won't usually run)
+              try { await api.createTransaction({ amount: Number(it.amount || it.price || 0), items: it }) } catch (e) { }
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to persist transactions to backend', e)
+        }
+
         clearCart()
         setCartOpen(false)
         console.log('Paid for', items, res)

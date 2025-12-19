@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "nodemon --watch src --exec node src/index.js",
     "start": "node src/index.js",
-    "seed": "node scripts/seed.cjs"
+    "seed": "node scripts/seed.cjs",
+    "test": "mocha --exit --recursive --reporter spec --timeout 10000"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -20,6 +21,10 @@
     "ws": "^8.13.0"
   },
   "devDependencies": {
-    "nodemon": "^2.0.22"
+    "nodemon": "^2.0.22",
+    "mocha": "^10.2.0",
+    "supertest": "^6.4.3",
+    "chai": "^4.3.8",
+    "mongodb-memory-server": "^8.11.0"
   }
 }

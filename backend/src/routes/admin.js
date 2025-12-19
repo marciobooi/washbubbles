@@ -150,9 +150,13 @@ router.get('/transactions/:id', async (req, res) => {
 })
 
 router.post('/transactions', async (req, res) => {
-  const { machineId, amount, items } = req.body
-  if (!machineId || !amount) return res.status(400).json({ error: 'Missing fields' })
-  const s = await Sale.create({ machineId, amount, items })
+  const { machineId, amount, items, type, method, inserted, change } = req.body
+  // Allow admin_start transactions with no amount (defaults to 0)
+  if (!machineId && type !== 'recharge') return res.status(400).json({ error: 'Missing machineId or invalid type' })
+  // For admin_start, allow amount to be omitted and default to 0
+  const finalAmount = (amount == null && type === 'admin_start') ? 0 : Number(amount)
+  if (finalAmount == null || Number.isNaN(finalAmount)) return res.status(400).json({ error: 'Invalid amount' })
+  const s = await Sale.create({ machineId, amount: finalAmount, items, type: type || 'payment', method, inserted: Number(inserted || 0), change: Number(change || 0) })
   res.json(s)
 })
 

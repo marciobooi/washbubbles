@@ -2,7 +2,8 @@ import React from 'react'
 import useFrameAnimation from '../hooks/useFrameAnimation'
 
 export default function MachineCard({ m, frames, onSelect = () => {} }) {
-  const seed = Array.from(String(m.id)).reduce((s, c) => s * 31 + c.charCodeAt(0), 0)
+  const uniqueId = m._id || m.id || ''
+  const seed = Array.from(String(uniqueId)).reduce((s, c) => s * 31 + c.charCodeAt(0), 0)
   const frame = useFrameAnimation(frames, 300, { seed })
   const isFree = m.status === 'free'
   const borderClass = isFree ? 'border-1 border-green-500' : 'border-1 border-red-500'
@@ -13,7 +14,7 @@ export default function MachineCard({ m, frames, onSelect = () => {} }) {
   return (
     <div
       className={`rounded-xl shadow-xl bg-white flex items-center gap-4 p-4 ${borderClass} ${interactiveClass}`}
-      onClick={() => isFree && onSelect(m.id)}
+      onClick={() => isFree && onSelect(uniqueId)}
       role="button"
       aria-disabled={!isFree}
     >
