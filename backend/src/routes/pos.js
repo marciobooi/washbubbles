@@ -43,9 +43,17 @@ router.post('/sale', requireKiosk, async (req, res) => {
   const { machineId, amount, items, method, inserted, change, type, cardCode, cardId } = req.body
   if (!machineId || amount == null || !items) return res.status(400).json({ error: 'Missing parameters' })
 
+  // Only accept 'card' or 'cash' as payment methods from clients
+  if (method && !['card', 'cash'].includes(String(method))) return res.status(400).json({ error: 'Unsupported payment method' })
+
   // Ensure machine exists
   const machine = await Machine.findById(machineId)
   if (!machine) return res.status(404).json({ error: 'Machine not found' })
+
+  // Prevent occupying a machine that is already working
+  if (machine.status === 'working') {
+    return res.status(409).json({ error: 'Machine already in use' })
+  }
 
   // If card specified and method is card, deduct from card balance
   let card = null
@@ -79,6 +87,9 @@ router.post('/sale', requireKiosk, async (req, res) => {
 router.post('/recharge', requireKiosk, async (req, res) => {
   const { amount, items, method, inserted, change, cardCode, cardId } = req.body
   if (amount == null) return res.status(400).json({ error: 'Missing amount' })
+
+  // Recharges are always card-based in this system
+  if (method && String(method) !== 'card') return res.status(400).json({ error: 'Recharges must be performed with method "card"' })
 
   // If card specified, update its balance
   let card = null
@@ -118,11 +129,19 @@ router.post('/cards/:code/spend', requireKiosk, async (req, res) => {
   const card = await Card.findOne({ code })
   if (!card) return res.status(404).json({ error: 'Card not found' })
 
+  if (method && String(method) !== 'card') return res.status(400).json({ error: 'Card spending must use method "card"' })
+
   const price = Number(amount)
   if ((card.balance || 0) < price) return res.status(400).json({ error: 'Insufficient balance' })
 
   card.balance = Number((card.balance || 0) - price)
   await card.save()
+
+  // Prevent occupying a machine that is already working
+  if (machineId) {
+    const m = await Machine.findById(machineId)
+    if (m && m.status === 'working') return res.status(409).json({ error: 'Machine already in use' })
+  }
 
   const sale = await Sale.create({ machineId, amount: price, items, method: method || 'card', type: 'payment', cardId: card._id, cardCode: card.code })
 

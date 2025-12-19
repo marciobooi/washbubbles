@@ -16,7 +16,8 @@ export function PaymentProvider({ children }) {
 
     return new Promise((resolve) => {
       setTimeout(() => {
-        resolve({ success: true, total, discounted, method: opts.useFidelity ? 'fidelity' : 'card' })
+        // Loyalty 'fidelity' is a *card* payment in our system — normalize method to 'card'
+        resolve({ success: true, total, discounted, method: 'card', discountedTotal: discounted, fidelityUsed: !!opts.useFidelity })
       }, 600)
     })
   }

@@ -53,8 +53,26 @@ function AppInner() {
 
   async function handlePay(items, opts = { useFidelity: false }) {
     try {
-      const res = await processPayment(items, opts)
+      // Handle cash payments locally: compute totals and assign inserted/change from opts
+      const total = items.reduce((s, i) => s + (i.price || i.amount || 0), 0)
+      let res
+
+      if (opts && opts.method === 'cash') {
+        const inserted = Number(opts.inserted || 0)
+        const change = Math.max(0, Math.round((inserted - total) * 100) / 100)
+        if (inserted + 0.0001 < total) {
+          toast({ title: 'Dinheiro insuficiente', description: 'Valor inserido é inferior ao total', variant: 'destructive' })
+          return
+        }
+        res = { success: true, method: 'cash', total, inserted, change }
+      } else {
+        // Delegate card / fidelity payments to payment provider
+        res = await processPayment(items, opts)
+      }
+
       if (res.success) {
+        // Normalize fidelity -> card so only 'card' or 'cash' exist
+        res.method = res.method === 'fidelity' ? 'card' : res.method
         toast({ title: `Pagamento efetuado (${res.method})`, variant: 'success' })
 
         // Persist transactions to backend (POS endpoints) — support recharges and machine sales
@@ -63,15 +81,21 @@ function AppInner() {
           const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
           const kioskKey = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
 
+          // For cash payments with multiple items, attach inserted/change to the FIRST persisted sale so admin can see totals
+          let postedInsertedAssigned = false
+          const insertedTotal = res.inserted != null ? Number(res.inserted) : null
+          const changeTotal = res.change != null ? Number(res.change) : null
+
           for (const it of items) {
             // Detect recharge items (added by CardModal)
             const isRecharge = (it.id && String(it.id).startsWith('recharge')) || (it.type && String(it.type).toLowerCase().includes('recarga'))
 
             if (isRecharge) {
               // POST /pos/recharge (requires kiosk key)
+              const json = { amount: Number(it.amount), items: it, method: res.method || 'card', inserted: Number(it.amount), change: 0 }
               await api.request('/pos/recharge', {
                 method: 'POST',
-                json: { amount: Number(it.amount), items: it, method: 'card', inserted: Number(it.amount), change: 0 },
+                json,
                 headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined,
                 skipAuth: true,
                 expect: 'json',
@@ -79,7 +103,21 @@ function AppInner() {
             } else if (it._id || it.id) {
               // Assume machine sale. Use /pos/sale
               const machineId = it._id || it.id
-              const payload = { machineId, amount: Number(it.price || it.amount || 0), items: [it], method: 'card', inserted: Number(it.price || it.amount || 0), change: 0 }
+              // Determine per-sale inserted/change values
+              let inserted = 0
+              let change = 0
+
+              if (res.method === 'cash' && !postedInsertedAssigned) {
+                inserted = insertedTotal || 0
+                change = changeTotal || 0
+                postedInsertedAssigned = true
+              } else if (res.method !== 'cash') {
+                // For card/fidelity, record inserted as price and no change
+                inserted = Number(it.price || it.amount || 0)
+                change = 0
+              }
+
+              const payload = { machineId, amount: Number(it.price || it.amount || 0), items: [it], method: res.method || 'card', inserted, change }
               await api.request('/pos/sale', { method: 'POST', json: payload, headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined, skipAuth: true, expect: 'json' })
             } else {
               // Fallback: create an admin transaction if possible (won't usually run)

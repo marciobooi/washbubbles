@@ -59,7 +59,20 @@ export default function AdminTransactions() {
                   <td className="p-2">{t.amount}</td>
                   <td className="p-2">{t.inserted ?? '-'}</td>
                   <td className="p-2">{t.change ?? '-'}</td>
-                  <td className="p-2"><pre className="whitespace-pre-wrap">{JSON.stringify(t.items)}</pre></td>
+                  <td className="p-2">
+                    {Array.isArray(t.items) ? (
+                      <div className="flex flex-col gap-1">
+                        {t.items.map((it, idx) => (
+                          <div key={it.productId || it._id || it.id || idx} className="text-sm">
+                            <span className="font-semibold mr-2">{it.name || it.type || (it.productId || it._id || it.id)}</span>
+                            {(it.productId || it._id || it.id) && <span className="text-xs text-neutral-500">{it.productId || it._id || it.id}</span>}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <pre className="whitespace-pre-wrap">{JSON.stringify(t.items)}</pre>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
