@@ -32,7 +32,8 @@ export default function App() {
 }
 
 function AppInner() {
-  const { cart } = useCart()
+  const { cart, clearCart } = useCart()
+  const { processPayment } = usePayment()
   const cartCount = cart.length
   const [cartOpen, setCartOpen] = React.useState(false)
   const [helpOpen, setHelpOpen] = React.useState(false)
