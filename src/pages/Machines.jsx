@@ -2,7 +2,6 @@ import React from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { usePayment } from '../context/PaymentContext'
 import MachineCard from '../components/MachineCard'
-import MachineModal from '../components/MachineModal'
 import { toast } from '@/components/ui/Toast'
 import Wave from '../components/ui/wave'
 import api from '@/services/api'
@@ -83,20 +82,20 @@ export default function Machines() {
     return () => { mounted = false; unsub() }
   }, [type])
 
-  const [selected, setSelected] = React.useState(null)
-  const { addToCart, clearCart } = useCart()
+  const { addToCart, clearCart, openCart } = useCart()
   const { processPayment } = usePayment()
-  const [modalOpen, setModalOpen] = React.useState(false)
 
-
-  function openModalFor(m) {
-    setSelected(m)
-    setModalOpen(true)
-  }
-
-  function closeModal() {
-    setModalOpen(false)
-    setSelected(null)
+  async function openForAdd(m) {
+    addToCart(m)
+    // Don't auto-open cart; show toast with action to view cart
+    try {
+      const sonner = await import('sonner')
+      const sonnerToast = sonner.toast
+      sonnerToast(`${m.name} adicionado ao carrinho`, { action: { label: 'Ver carrinho', onClick: () => openCart() }, type: 'success' })
+    } catch (e) {
+      // fallback to simple toast
+      toast({ title: `${m.name} adicionado ao carrinho`, variant: 'success' })
+    }
   }
 
   function handleAddToCart(m) {
@@ -138,11 +137,11 @@ export default function Machines() {
       ) : (
         <div className="grid gap-4">
           {machines.map((m) => (
-            <MachineCard key={m._id || m.id} m={m} frames={frames} onSelect={(id) => { const mFound = machines.find((x) => (x._id || x.id) === id); if (mFound) openModalFor(mFound) }} />
+            <MachineCard key={m._id || m.id} m={m} frames={frames} onSelect={(id) => { const mFound = machines.find((x) => String(x._id || x.id) === String(id)); if (mFound) openForAdd(mFound) }} />
           ))}
         </div>
       )}
-      <MachineModal open={modalOpen} machine={selected} frames={frames} onClose={closeModal} onAddToCart={handleAddToCart} onPay={pay} />
+      {/* MachineModal removed — clicking a machine adds directly to cart */}
 
       <Wave height="12vh" className="mt-2" />
     </div>

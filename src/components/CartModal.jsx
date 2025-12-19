@@ -13,8 +13,13 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
   // Check if cart contains recharge items
   const hasRecharge = cart.some(item => item.type === 'Recarga de Cartão')
 
-  function handlePay() {
-    // Open cash insert modal to simulate inserted money
+  function handleCardPay() {
+    // Pay immediately with card (or fidelity) — close cart
+    onPay(cart, { useFidelity: hasRecharge ? false : useFidelity, method: 'card' })
+    onClose()
+  }
+
+  function openCashModal() {
     setShowCash(true)
   }
 
@@ -28,7 +33,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
 
   return (
     <>
-    <Modal open={open} onClose={onClose} title="Carrinho">
+    <Modal open={open} onClose={onClose} title="Carrinho" hideClose={true}>
       <div className="flex flex-col gap-6">
         {cart.length === 0 ? (
           <div className="text-center py-8">
@@ -97,16 +102,28 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
             {/* Action Buttons */}
             <div className="flex gap-3">
               <button 
-                onClick={handlePay} 
+                onClick={handleCardPay} 
                 className="flex-1 bg-teal-600 hover:bg-teal-700 text-white py-4 rounded-xl font-bold text-lg shadow-lg transition-all active:scale-[0.98]"
               >
-                Pagar
+                Pagar com Cartão
+              </button>
+              <button 
+                onClick={openCashModal} 
+                className="flex-1 bg-white border border-neutral-300 text-neutral-700 py-4 rounded-xl font-bold text-lg shadow-sm transition-all hover:bg-neutral-50"
+              >
+                Pagar (Dinheiro)
               </button>
               <button 
                 onClick={() => { clearCart(); onClear() }} 
                 className="px-6 py-4 rounded-xl border-2 border-neutral-300 text-neutral-600 hover:bg-neutral-50 font-semibold transition-all"
               >
                 Limpar
+              </button>
+              <button 
+                onClick={onClose}
+                className="px-6 py-4 rounded-xl bg-neutral-100 text-neutral-700 hover:bg-neutral-200 font-semibold transition-all"
+              >
+                Fechar
               </button>
             </div>
           </>

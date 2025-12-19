@@ -35,17 +35,20 @@ function AppInner() {
   const { cart } = useCart()
   const cartCount = cart.length
   const [cartOpen, setCartOpen] = React.useState(false)
+  const [helpOpen, setHelpOpen] = React.useState(false)
+  const location = useLocation()
 
   // Close the cart modal automatically when the cart becomes empty
   React.useEffect(() => {
     if (cartCount === 0) setCartOpen(false)
   }, [cartCount])
 
-  const [helpOpen, setHelpOpen] = React.useState(false)
-  const location = useLocation()
-
-  const { processPayment } = usePayment()
-  const { clearCart } = useCart()
+  // Listen for open-cart events emitted by CartContext.openCart
+  React.useEffect(() => {
+    const onOpen = () => setCartOpen(true)
+    window.addEventListener('open-cart', onOpen)
+    return () => window.removeEventListener('open-cart', onOpen)
+  }, [])
 
   async function handlePay(items, opts = { useFidelity: false }) {
     try {

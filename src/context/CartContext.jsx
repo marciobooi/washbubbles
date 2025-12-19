@@ -23,6 +23,11 @@ export function CartProvider({ children }) {
     setCart([])
   }
 
-  const value = { cart, addToCart, removeFromCart, clearCart }
+  function openCart() {
+    // Emit browser event consumed by App to open the cart modal
+    try { window.dispatchEvent(new CustomEvent('open-cart')) } catch (e) { console.warn('openCart event failed', e) }
+  }
+
+  const value = { cart, addToCart, removeFromCart, clearCart, openCart }
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>
 }
