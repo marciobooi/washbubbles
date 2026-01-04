@@ -2,6 +2,7 @@ import express from 'express'
 import Machine from '../models/machine.js'
 import Sale from '../models/sale.js'
 import Setting from '../models/setting.js'
+import Price from '../models/price.js'
 import { requireKiosk } from '../middleware/auth.js'
 import { broadcastMachines, broadcastMachine } from '../wsServer.js'
 
@@ -17,6 +18,15 @@ const getMachineStatus = async (req, res) => {
 router.get('/machine-status', getMachineStatus)
 // Alias used by frontend hook: `/api/machine`
 router.get('/machine', getMachineStatus)
+
+// Public price lookup endpoint for POS kiosk display (no auth required)
+router.get('/prices/lookup', async (req, res) => {
+  const { type, weight } = req.query
+  if (!type || !weight) return res.status(400).json({ error: 'Missing type or weight' })
+  const price = await Price.findOne({ type, weight: Number(weight) })
+  if (!price) return res.status(404).json({ error: 'Price not found for this type/weight' })
+  res.json(price)
+})
 
 // Kiosk-only machines list: returns richer machine objects and accepts optional `type` query
 // This endpoint requires a kiosk API key (`x-api-key` header or `Authorization: ApiKey <key>`).

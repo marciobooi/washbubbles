@@ -346,6 +346,11 @@ export function createApi(config) {
     return request(`/admin/prices/lookup?type=${type}&weight=${weight}`, { method: 'GET', expect: 'json' });
   }
 
+  // Public POS price lookup (no authentication required)
+  function getPriceByTypeWeightPublic(type, weight) {
+    return request(`/pos/prices/lookup?type=${type}&weight=${weight}`, { method: 'GET', expect: 'json', skipAuth: true });
+  }
+
   function createPrice(payload) {
     return request('/admin/prices', { method: 'POST', json: payload, expect: 'json' });
   }
@@ -451,6 +456,7 @@ export function createApi(config) {
     getPrices,
     getPrice,
     getPriceByTypeWeight,
+    getPriceByTypeWeightPublic,
     createPrice,
     updatePrice,
     deletePrice,
@@ -519,6 +525,7 @@ export const {
   getPrices,
   getPrice,
   getPriceByTypeWeight,
+  getPriceByTypeWeightPublic,
   createPrice,
   updatePrice,
   deletePrice,

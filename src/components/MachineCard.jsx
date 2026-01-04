@@ -15,7 +15,7 @@ export default function MachineCard({ m, frames, onSelect = () => {} }) {
     async function loadPrice() {
       if (m.type && m.weight) {
         try {
-          const price = await api.getPriceByTypeWeight(m.type, m.weight)
+          const price = await api.getPriceByTypeWeightPublic(m.type, m.weight)
           if (mounted && price) {
             setPriceData(price)
           }
