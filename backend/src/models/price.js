@@ -6,7 +6,6 @@ const priceSchema = new mongoose.Schema({
   duration: { type: Number, default: null }, // minutes (for wash machines)
   cashPrice: { type: Number, required: true, default: 0 }, // price for cash payment
   cardPrice: { type: Number, required: true, default: 0 }, // price for card payment
-  mobilePrice: { type: Number, required: true, default: 0 }, // price for mobile payment
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 })

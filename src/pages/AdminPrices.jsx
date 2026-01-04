@@ -3,7 +3,7 @@ import api from '@/services/api'
 import { toast } from '@/components/ui/Toast'
 import Modal from '@/components/ui/Modal'
 import { Button } from '@/components/ui/button'
-import { Plus, Pencil, Trash2, Clock, Banknote, CreditCard, Smartphone } from 'lucide-react'
+import { Plus, Pencil, Trash2, Clock, Banknote, CreditCard } from 'lucide-react'
 
 const EMPTY_FORM = {
   type: 'wash',
@@ -11,7 +11,6 @@ const EMPTY_FORM = {
   duration: '',
   cashPrice: '',
   cardPrice: '',
-  mobilePrice: '',
 }
 
 export default function AdminPrices() {
@@ -68,7 +67,6 @@ export default function AdminPrices() {
       duration: price.duration != null ? String(price.duration) : '',
       cashPrice: String(price.cashPrice ?? ''),
       cardPrice: String(price.cardPrice ?? ''),
-      mobilePrice: String(price.mobilePrice ?? ''),
     })
     setModalOpen(true)
   }
@@ -87,7 +85,6 @@ export default function AdminPrices() {
         duration: form.duration !== '' ? Number(form.duration) : null,
         cashPrice: Number(form.cashPrice),
         cardPrice: Number(form.cardPrice),
-        mobilePrice: form.mobilePrice !== '' ? Number(form.mobilePrice) : 0,
       }
       if (editing) {
         await api.updatePrice(editing._id, payload)
@@ -150,7 +147,6 @@ export default function AdminPrices() {
                       <th className="px-4 py-2 text-left">Duração</th>
                       <th className="px-4 py-2 text-left">Dinheiro</th>
                       <th className="px-4 py-2 text-left">Cartão</th>
-                      <th className="px-4 py-2 text-left">Mobile</th>
                       <th className="px-4 py-2 text-left">Ações</th>
                     </tr>
                   </thead>
@@ -213,7 +209,6 @@ export default function AdminPrices() {
                       <th className="px-4 py-2 text-left">Programa</th>
                       <th className="px-4 py-2 text-left">Dinheiro</th>
                       <th className="px-4 py-2 text-left">Cartão</th>
-                      <th className="px-4 py-2 text-left">Mobile</th>
                       <th className="px-4 py-2 text-left">Ações</th>
                     </tr>
                   </thead>
@@ -231,12 +226,6 @@ export default function AdminPrices() {
                           <div className="flex items-center gap-1">
                             <CreditCard className="h-4 w-4 text-blue-600" />
                             <span>{p.cardPrice?.toFixed(2) ?? '0.00'}€</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-1">
-                            <Smartphone className="h-4 w-4 text-purple-600" />
-                            <span>{p.mobilePrice?.toFixed(2) ?? '0.00'}€</span>
                           </div>
                         </td>
                         <td className="px-4 py-3">
@@ -294,10 +283,6 @@ export default function AdminPrices() {
             <div>
               <label className="block text-sm font-medium mb-1">Preço Cartão (€) <span className="text-red-500">*</span></label>
               <input className="border p-2 rounded w-full" type="number" step="0.01" min="0" value={form.cardPrice} onChange={(e) => setForm({ ...form, cardPrice: e.target.value })} required />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Preço Mobile (€)</label>
-              <input className="border p-2 rounded w-full" type="number" step="0.01" min="0" value={form.mobilePrice} onChange={(e) => setForm({ ...form, mobilePrice: e.target.value })} />
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
