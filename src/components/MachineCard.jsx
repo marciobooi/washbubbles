@@ -1,9 +1,32 @@
 import React from 'react'
 import useFrameAnimation from '../hooks/useFrameAnimation'
 import { useTranslation } from 'react-i18next'
+import api from '@/services/api'
+import { isPromoActive, getEffectivePrice } from '@/lib/promo'
+import { Tag } from 'lucide-react'
 
 export default function MachineCard({ m, frames, onSelect = () => {} }) {
   const { t, i18n } = useTranslation('pos')
+  const [priceData, setPriceData] = React.useState(null)
+
+  // Fetch price data
+  React.useEffect(() => {
+    let mounted = true
+    async function loadPrice() {
+      if (m.type && m.weight) {
+        try {
+          const price = await api.getPriceByTypeWeight(m.type, m.weight)
+          if (mounted && price) {
+            setPriceData(price)
+          }
+        } catch (e) {
+          console.error('Failed to fetch price', e)
+        }
+      }
+    }
+    loadPrice()
+    return () => { mounted = false }
+  }, [m.type, m.weight])
 
   const uniqueId = m._id || m.id || ''
   const seed = Array.from(String(uniqueId)).reduce((s, c) => s * 31 + c.charCodeAt(0), 0)
@@ -15,6 +38,11 @@ export default function MachineCard({ m, frames, onSelect = () => {} }) {
     : 'cursor-not-allowed opacity-70 pointer-events-none'
 
   const fmt = new Intl.NumberFormat(i18n.language, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+  // Calculate effective prices
+  const cashPrice = priceData ? getEffectivePrice(priceData, 'cash') : (m.price || 0)
+  const cardPrice = priceData ? getEffectivePrice(priceData, 'card') : Math.max(0, (m.price || 0) - 0.5)
+  const isPromo = priceData ? isPromoActive(priceData) : false
 
   return (
     <div
@@ -30,14 +58,16 @@ export default function MachineCard({ m, frames, onSelect = () => {} }) {
         )}
       </div>
       <div className="flex-1">
-        <div className="text-lg font-semibold">{m.name}</div>
+        <div className="text-lg font-semibold flex items-center gap-2">
+          {m.name}
+          {isPromo && (
+            <span className="text-xs px-2 py-0.5 bg-orange-100 text-orange-800 rounded flex items-center gap-1">
+              <Tag className="h-3 w-3" /> PROMO
+            </span>
+          )}
+        </div>
         <div className="text-sm text-neutral-600">
-          {m.weight} {t('unit.kg')} • {fmt.format(Number(m.price || 0))}€
-          {m.price ? (
-            <>
-              {' '}• {fmt.format(Math.max(0, Number(m.price) - 0.5))}€ {t('labels.fidelity')}
-            </>
-          ) : null}
+          {m.weight} {t('unit.kg')} • {fmt.format(cashPrice)}€ dinheiro • {fmt.format(cardPrice)}€ cartão
         </div>
       </div>
       <div className="flex items-center gap-2">
