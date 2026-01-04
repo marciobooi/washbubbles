@@ -26,10 +26,19 @@ router.get('/machines', async (req, res) => {
 
 // create machine
 router.post('/machines', async (req, res) => {
-  const { name, number, brand, model, serialNumber, status, statusText, weight, price, loyaltyPrice, type, icon, interfaceId, port, activation } = req.body
+  const { name, number, brand, model, serialNumber, status, statusText, weight, price, loyaltyPrice, type, icon, interfaceId, port, activation, tImp } = req.body
   if (!name) return res.status(400).json({ error: 'Missing name' })
   if (type && !['wash', 'dry'].includes(type)) return res.status(400).json({ error: 'Invalid type' })
   if (activation && !['high', 'low'].includes(activation)) return res.status(400).json({ error: 'Invalid activation' })
+  
+  // Check if interface+port combo is already in use
+  if (interfaceId && port) {
+    const existing = await Machine.findOne({ interfaceId, port })
+    if (existing) {
+      return res.status(400).json({ error: `Porto ${port} desta interface já está em uso pela máquina "${existing.name}"` })
+    }
+  }
+  
   const finalIcon = icon || (type === 'dry' ? '/drymachine/S1.png' : '/washingmashine/L1.png')
   const machine = await Machine.create({
     name, number, brand, model, serialNumber,
@@ -39,7 +48,8 @@ router.post('/machines', async (req, res) => {
     icon: finalIcon,
     interfaceId: interfaceId || null,
     port: port || null,
-    activation: activation || 'high'
+    activation: activation || 'high',
+    tImp: type === 'dry' && tImp != null ? Number(tImp) : null
   })
   // new machine created — broadcast full list so clients get the new item
   try { await broadcastMachines() } catch (e) { console.error('[admin] broadcastMachines error', e) }
@@ -108,9 +118,18 @@ router.get('/machines/:id', async (req, res) => {
 
 // Update machine
 router.put('/machines/:id', async (req, res) => {
-  const { name, number, brand, model, serialNumber, status, statusText, weight, price, loyaltyPrice, type, icon, interfaceId, port, activation } = req.body
+  const { name, number, brand, model, serialNumber, status, statusText, weight, price, loyaltyPrice, type, icon, interfaceId, port, activation, tImp } = req.body
   if (type && !['wash', 'dry'].includes(type)) return res.status(400).json({ error: 'Invalid type' })
   if (activation && !['high', 'low'].includes(activation)) return res.status(400).json({ error: 'Invalid activation' })
+  
+  // Check if interface+port combo is already in use by another machine
+  if (interfaceId && port) {
+    const existing = await Machine.findOne({ interfaceId, port, _id: { $ne: req.params.id } })
+    if (existing) {
+      return res.status(400).json({ error: `Porto ${port} desta interface já está em uso pela máquina "${existing.name}"` })
+    }
+  }
+  
   const finalIcon = icon || (type === 'dry' ? '/drymachine/S1.png' : '/washingmashine/L1.png')
   const m = await Machine.findByIdAndUpdate(req.params.id, {
     name, number, brand, model, serialNumber,
@@ -119,7 +138,8 @@ router.put('/machines/:id', async (req, res) => {
     type, icon: finalIcon,
     interfaceId: interfaceId || null,
     port: port || null,
-    activation: activation || 'high'
+    activation: activation || 'high',
+    tImp: type === 'dry' && tImp != null ? Number(tImp) : null
   }, { new: true })
   if (!m) return res.status(404).json({ error: 'Machine not found' })
   // broadcast single updated machine to clients (more efficient)

@@ -20,6 +20,8 @@ const machineSchema = new Schema({
   interfaceId: { type: Schema.Types.ObjectId, ref: 'Interface' },
   port: { type: Number }, // port number on the interface (1-based)
   activation: { type: String, enum: ['high', 'low'], default: 'high' },
+  // Dry machine specific
+  tImp: { type: Number, default: null }, // time per impulse in minutes (only for dry machines)
   createdAt: { type: Date, default: Date.now }
 })
 

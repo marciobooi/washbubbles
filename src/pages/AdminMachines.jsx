@@ -25,6 +25,7 @@ export default function AdminMachines(){
   const [type, setType] = useState('wash')
   const [selectedInterfacePort, setSelectedInterfacePort] = useState('') // format: interfaceId:port
   const [activation, setActivation] = useState('high')
+  const [tImp, setTImp] = useState('') // time per impulse in minutes (dry machines only)
 
   // Validation state
   const [errors, setErrors] = useState({})
@@ -35,8 +36,8 @@ export default function AdminMachines(){
   async function loadInterfaces() {
     try {
       const data = await api.getInterfaces()
-      // Filter only active interfaces
-      setInterfaces(data.filter(i => i.status === 'active'))
+      // Show all interfaces, user can select any
+      setInterfaces(data)
     } catch (e) {
       console.error('Error loading interfaces', e)
     }
@@ -69,15 +70,32 @@ export default function AdminMachines(){
     return () => clearTimeout(t)
   }, [type])
 
+  // Build a set of used interface+port combos (excluding current machine being edited)
+  const usedPorts = new Set(
+    machines
+      .filter(m => m.interfaceId && m.port && (!editing || m._id !== editing._id))
+      .map(m => {
+        const ifaceId = typeof m.interfaceId === 'object' ? m.interfaceId._id : m.interfaceId
+        return `${ifaceId}:${m.port}`
+      })
+  )
+
   // Build interface+port options
   const interfacePortOptions = interfaces.flatMap(iface => {
     const ports = iface.ports || 2
-    return Array.from({ length: ports }, (_, i) => ({
-      value: `${iface._id}:${i + 1}`,
-      label: `Interface: ${iface.address}, Porto: ${i + 1}`,
-      interfaceId: iface._id,
-      port: i + 1,
-    }))
+    const statusLabel = iface.status === 'active' ? '' : iface.status === 'fault' ? ' [AVARIA]' : ' [inactivo]'
+    return Array.from({ length: ports }, (_, i) => {
+      const value = `${iface._id}:${i + 1}`
+      const isUsed = usedPorts.has(value)
+      return {
+        value,
+        label: `Interface: ${iface.address}, Porto: ${i + 1}${statusLabel}${isUsed ? ' [EM USO]' : ''}`,
+        interfaceId: iface._id,
+        port: i + 1,
+        status: iface.status,
+        disabled: isUsed,
+      }
+    })
   })
 
   function openNew() {
@@ -94,6 +112,7 @@ export default function AdminMachines(){
     setType('wash')
     setSelectedInterfacePort('')
     setActivation('high')
+    setTImp('')
     setErrors({})
     setModalOpen(true)
   }
@@ -118,6 +137,7 @@ export default function AdminMachines(){
       setSelectedInterfacePort('')
     }
     setActivation(m.activation || 'high')
+    setTImp(m.tImp !== undefined && m.tImp !== null ? String(m.tImp) : '')
     setErrors({})
     setModalOpen(true)
   }
@@ -171,6 +191,7 @@ export default function AdminMachines(){
         interfaceId,
         port,
         activation,
+        tImp: type === 'dry' && tImp !== '' ? parseFloat(tImp) : null,
       }
       if (editing) {
         await api.updateMachine(editing._id, payload)
@@ -331,7 +352,7 @@ export default function AdminMachines(){
                 <select id="machine-port" className="border p-2 rounded mt-1 w-full" value={selectedInterfacePort} onChange={(e) => setSelectedInterfacePort(e.target.value)}>
                   <option value="">-- Seleccionar --</option>
                   {interfacePortOptions.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    <option key={opt.value} value={opt.value} disabled={opt.disabled}>{opt.label}</option>
                   ))}
                 </select>
               </div>
@@ -356,6 +377,12 @@ export default function AdminMachines(){
                 <input id="machine-loyalty" className="border p-2 rounded mt-1 w-full" placeholder="Fidelidade (€)" type="number" step="0.01" value={loyaltyPrice} onChange={(e) => { setLoyaltyPrice(e.target.value); const v = parseFloat(e.target.value); if (errors.loyaltyPrice && !isNaN(v) && v >= 0) setErrors((s) => { const c = { ...s }; delete c.loyaltyPrice; return c }); }} />
                 {errors.loyaltyPrice && <div className="text-xs text-destructive mt-1">{errors.loyaltyPrice}</div>}
               </div>
+              {type === 'dry' && (
+                <div>
+                  <label htmlFor="machine-timp" className="text-sm font-medium">t/imp. [min.] <span className="text-red-500">*</span></label>
+                  <input id="machine-timp" className="border p-2 rounded mt-1 w-full" placeholder="t/imp. [min.]" type="number" step="0.1" value={tImp} onChange={(e) => setTImp(e.target.value)} />
+                </div>
+              )}
             </div>
 
           </div>
