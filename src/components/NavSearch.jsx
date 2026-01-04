@@ -73,7 +73,7 @@ export default function NavSearch({ className = '' }) {
   return (
     <div ref={ref} className={`relative hidden md:flex items-center ${className}`}>
       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none">
-        <Search className="h-4 w-4" />
+        <Search className="h-6 w-6" />
       </span>
       <Input
         id="nav-search"

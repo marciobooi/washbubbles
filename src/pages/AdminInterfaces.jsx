@@ -164,22 +164,22 @@ export default function AdminInterfaces() {
               <div className="mt-auto flex flex-wrap gap-2">
                 {iface.status !== 'active' && (
                   <button className="btn p-2 bg-green-600 text-white hover:bg-green-700" title="Activar" onClick={() => handleStatus(iface._id, 'active')}>
-                    <Check className="h-4 w-4" />
+                    <Check className="h-6 w-6" />
                   </button>
                 )}
                 {iface.status === 'active' && (
                   <button className="btn p-2 bg-neutral-200 text-neutral-800 hover:bg-neutral-300" title="Desactivar" onClick={() => handleStatus(iface._id, 'inactive')}>
-                    <X className="h-4 w-4" />
+                    <X className="h-6 w-6" />
                   </button>
                 )}
                 <button className="btn p-2" title="Editar" onClick={() => openEdit(iface)}>
-                  <Pencil className="h-4 w-4" />
+                  <Pencil className="h-6 w-6" />
                 </button>
                 <button className="btn p-2 bg-amber-500 text-white hover:bg-amber-600" title="Avaria" onClick={() => handleStatus(iface._id, 'fault')}>
-                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTriangle className="h-6 w-6" />
                 </button>
                 <button className="btn btn-destructive p-2" title="Eliminar" onClick={() => handleDelete(iface._id)}>
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="h-6 w-6" />
                 </button>
               </div>
             </div>

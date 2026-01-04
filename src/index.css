@@ -261,3 +261,11 @@
     @apply bg-background text-foreground;
   }
 }
+
+
+.\[\&_svg\]\:size-4 {
+    & svg {
+        width: calc(var(--spacing) * 6);
+        height: calc(var(--spacing) * 6);
+    }
+}

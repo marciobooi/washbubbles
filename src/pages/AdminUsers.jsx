@@ -160,10 +160,10 @@ export default function AdminUsers(){
                   <td className="px-4 py-3">
                     <div className="flex gap-2">
                       <button className="btn p-2" title="Editar" aria-label="Editar" onClick={() => openEdit(u)}>
-                        <Pencil className="h-4 w-4" />
+                        <Pencil className="h-6 w-6" />
                       </button>
                       <button className="btn btn-destructive p-2" title="Remover" aria-label="Remover" onClick={() => remove(u._id)}>
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-6 w-6" />
                       </button>
                     </div>
                   </td>

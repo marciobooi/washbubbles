@@ -90,13 +90,13 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/comp
 
 export function SidebarMenuButton({ children, isActive, asChild = false, className = '', title, Icon, ...props }) {
   const { collapsed } = useSidebar() || { collapsed: false }
-  const base = `flex items-center gap-2 w-full text-left px-3 py-2 rounded-md ${isActive ? 'bg-primary text-primary-foreground' : 'hover:bg-muted/50'}`
+  const base = `flex items-center gap-2 w-full text-left p-2 rounded-md ${isActive ? 'bg-primary text-primary-foreground' : 'hover:bg-muted/50'}`
   // set title attribute so tooltips work when collapsed
   const mergedTitle = title || (typeof children === 'string' ? children : undefined)
 
   const content = (
     <div className={`${base} ${className}`} {...props}>
-      {Icon && <Icon className="h-4 w-4" aria-hidden />}
+      {Icon && <Icon className="!h-6 !w-6 shrink-0" aria-hidden />}
       <span className={`${collapsed ? 'hidden' : ''}`}>{children}</span>
     </div>
   )
@@ -107,7 +107,7 @@ export function SidebarMenuButton({ children, isActive, asChild = false, classNa
     const childText = children.props.children
     const newChildren = (
       <>
-        {Icon && <Icon className="h-4 w-4" aria-hidden />}
+        {Icon && <Icon className="!h-6 !w-6 shrink-0" aria-hidden />}
         <span className={`${collapsed ? 'hidden' : ''}`}>{childText}</span>
       </>
     )
@@ -160,7 +160,7 @@ export function SidebarTrigger({ className = '' }) {
       title={ctx.collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
     >
       <span className={`inline-block transform transition-transform`}>
-        {ctx.collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+        {ctx.collapsed ? <ChevronRight className="h-6 w-6" /> : <ChevronLeft className="h-6 w-6" />}
       </span>
     </button>
   )
