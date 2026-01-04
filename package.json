@@ -16,7 +16,9 @@
     "electron:load": "electron . --url=dist/index.html",
     "electron:dev": "echo 'Run `npm run dev` in a terminal and, in another, run `npm run electron:start`'",
     "dev:electron": "concurrently \"npm run dev\" \"cross-env ELECTRON_START_URL=http://localhost:5173 electron .\"",
-    "dev:full": "concurrently \"npm run dev\" \"cross-env ELECTRON_START_URL=http://localhost:5173 electron .\""
+    "dev:full": "concurrently \"npm run dev\" \"cross-env ELECTRON_START_URL=http://localhost:5173 electron .\"",
+    "package:electron": "npm run build && electron-builder --win --x64",
+    "package:agent": "pkg backend/src/agentServer.js --targets node18-win-x64 --output dist-agent/hardware-agent.exe"
   },
   "postinstall": "npm --prefix backend install",
   "dependencies": {
@@ -50,11 +52,33 @@
     "concurrently": "^7.6.0",
     "cross-env": "^7.0.3",
     "electron": "^26.6.10",
+    "electron-builder": "^24.0.0",
+    "pkg": "^5.8.1",
     "postcss": "^8.4.0",
     "shadcn": "^3.6.2",
     "tailwindcss": "^4.0.0",
     "tailwindcss-animate": "^1.0.7",
     "vite": "^5.1.0",
     "wait-on": "^7.0.0"
+  },
+  "build": {
+    "appId": "com.washbubbles.pos",
+    "productName": "WashBubbles POS",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "public/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "public/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }
