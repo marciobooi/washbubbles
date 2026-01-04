@@ -16,6 +16,7 @@ const EMPTY_FORM = {
 
 export default function AdminPrices() {
   const [prices, setPrices] = useState([])
+  const [machines, setMachines] = useState([])
   const [loading, setLoading] = useState(true)
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null)
@@ -25,8 +26,12 @@ export default function AdminPrices() {
   async function load() {
     setLoading(true)
     try {
-      const data = await api.getPrices()
-      setPrices(data)
+      const [pricesData, machinesData] = await Promise.all([
+        api.getPrices(),
+        api.getMachines()
+      ])
+      setPrices(pricesData)
+      setMachines(machinesData)
     } catch (e) {
       console.error(e)
       toast({ title: 'Erro ao carregar preços', variant: 'destructive' })
@@ -36,6 +41,18 @@ export default function AdminPrices() {
   }
 
   useEffect(() => { load() }, [])
+
+  // Get unique weights from machines, filtered by selected type
+  const getWeightOptions = (type) => {
+    const weights = machines
+      .filter(m => m.type === type && m.weight > 0)
+      .map(m => m.weight)
+    return [...new Set(weights)].sort((a, b) => a - b)
+  }
+
+  const washWeights = getWeightOptions('wash')
+  const dryWeights = getWeightOptions('dry')
+  const currentWeightOptions = form.type === 'wash' ? washWeights : dryWeights
 
   function openCreate() {
     setEditing(null)
@@ -247,14 +264,22 @@ export default function AdminPrices() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium mb-1">Tipo <span className="text-red-500">*</span></label>
-              <select className="border p-2 rounded w-full" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+              <select className="border p-2 rounded w-full" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value, weight: '' })}>
                 <option value="wash">Lavagem (wash)</option>
                 <option value="dry">Secagem (dry)</option>
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Peso (kg) <span className="text-red-500">*</span></label>
-              <input className="border p-2 rounded w-full" type="number" min="1" value={form.weight} onChange={(e) => setForm({ ...form, weight: e.target.value })} required />
+              <select className="border p-2 rounded w-full" value={form.weight} onChange={(e) => setForm({ ...form, weight: e.target.value })} required>
+                <option value="">-- Seleccionar --</option>
+                {currentWeightOptions.map(w => (
+                  <option key={w} value={w}>{w} kg</option>
+                ))}
+              </select>
+              {currentWeightOptions.length === 0 && (
+                <div className="text-xs text-amber-600 mt-1">Nenhuma máquina de {form.type === 'wash' ? 'lavagem' : 'secagem'} com peso definido.</div>
+              )}
             </div>
             {form.type === 'wash' && (
               <div>
