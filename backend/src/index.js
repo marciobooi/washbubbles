@@ -7,6 +7,7 @@ import authRoutes from './routes/auth.js'
 import adminRoutes from './routes/admin.js'
 import posRoutes from './routes/pos.js'
 import { initWebSocket } from './wsServer.js'
+import hardwareAgentServer from './hardwareAgentServer.js'
 import coinMachine from './services/coinMachine.js'
 
 // Enforce presence of JWT secret in production-like environments
@@ -41,6 +42,28 @@ app.get('/api/health', (req, res) => res.json({ ok: true }))
 
 // Initialize WebSocket server (models will be imported in wsServer.js)
 initWebSocket(server)
+
+// Initialize Hardware Agent WebSocket server
+hardwareAgentServer.init(server)
+
+// Listen for hardware events and integrate with coinMachine
+hardwareAgentServer.on('peripheral:credit', (data) => {
+  console.log('[Backend] Peripheral credit event:', data)
+  // Forward to coinMachine system
+  coinMachine.emit('remote-credits', data)
+})
+
+hardwareAgentServer.on('interface:status', (data) => {
+  console.log('[Backend] Interface status event:', data)
+  // Forward to coinMachine for machine status updates
+  coinMachine.emit('machine-status-update', data)
+})
+
+hardwareAgentServer.on('rfid:card_detected', (data) => {
+  console.log('[Backend] RFID card detected:', data)
+  // Forward to coinMachine for card handling
+  coinMachine.emit('card-detected', data)
+})
 
 const port = process.env.PORT || 3000
 async function start() {
