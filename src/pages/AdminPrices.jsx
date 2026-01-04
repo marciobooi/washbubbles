@@ -173,12 +173,6 @@ export default function AdminPrices() {
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex items-center gap-1">
-                            <Smartphone className="h-4 w-4 text-purple-600" />
-                            <span>{p.mobilePrice?.toFixed(2) ?? '0.00'}€</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
                           <div className="flex gap-2">
                             <button className="btn p-2" title="Editar" onClick={() => openEdit(p)}>
                               <Pencil className="h-4 w-4" />
