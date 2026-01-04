@@ -7,7 +7,7 @@ export function isPromoActive(price) {
   if (!price || !price.promoActive) return false
   
   const now = new Date()
-  const currentDay = now.toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase()
+  const currentDay = now.toLocaleDateString('pt-PT', { weekday: 'long' }).toLowerCase()
   const currentTime = now.toTimeString().slice(0, 5) // HH:mm format
   
   // Check if today is a promo day
