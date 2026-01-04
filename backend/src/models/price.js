@@ -6,6 +6,15 @@ const priceSchema = new mongoose.Schema({
   duration: { type: Number, default: null }, // minutes (for wash machines)
   cashPrice: { type: Number, required: true, default: 0 }, // price for cash payment
   cardPrice: { type: Number, required: true, default: 0 }, // price for card payment
+  
+  // Promotional pricing
+  promoActive: { type: Boolean, default: false },
+  promoCashPrice: { type: Number, default: null },
+  promoCardPrice: { type: Number, default: null },
+  promoStartTime: { type: String, default: null }, // HH:mm format
+  promoEndTime: { type: String, default: null }, // HH:mm format
+  promoDays: { type: [String], default: [] }, // ['monday', 'tuesday', etc.]
+  
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
 })

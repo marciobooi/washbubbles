@@ -3,7 +3,7 @@ import api from '@/services/api'
 import { toast } from '@/components/ui/Toast'
 import Modal from '@/components/ui/Modal'
 import { Button } from '@/components/ui/button'
-import { Plus, Pencil, Trash2, Clock, Banknote, CreditCard } from 'lucide-react'
+import { Plus, Pencil, Trash2, Clock, Banknote, CreditCard, Tag } from 'lucide-react'
 
 const EMPTY_FORM = {
   type: 'wash',
@@ -11,6 +11,12 @@ const EMPTY_FORM = {
   duration: '',
   cashPrice: '',
   cardPrice: '',
+  promoActive: false,
+  promoCashPrice: '',
+  promoCardPrice: '',
+  promoStartTime: '',
+  promoEndTime: '',
+  promoDays: [],
 }
 
 export default function AdminPrices() {
@@ -21,6 +27,7 @@ export default function AdminPrices() {
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
+  const [showPromo, setShowPromo] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -56,6 +63,7 @@ export default function AdminPrices() {
   function openCreate() {
     setEditing(null)
     setForm(EMPTY_FORM)
+    setShowPromo(false)
     setModalOpen(true)
   }
 
@@ -67,7 +75,14 @@ export default function AdminPrices() {
       duration: price.duration != null ? String(price.duration) : '',
       cashPrice: String(price.cashPrice ?? ''),
       cardPrice: String(price.cardPrice ?? ''),
+      promoActive: price.promoActive || false,
+      promoCashPrice: price.promoCashPrice != null ? String(price.promoCashPrice) : '',
+      promoCardPrice: price.promoCardPrice != null ? String(price.promoCardPrice) : '',
+      promoStartTime: price.promoStartTime || '',
+      promoEndTime: price.promoEndTime || '',
+      promoDays: price.promoDays || [],
     })
+    setShowPromo(price.promoActive || false)
     setModalOpen(true)
   }
 
@@ -85,6 +100,12 @@ export default function AdminPrices() {
         duration: form.duration !== '' ? Number(form.duration) : null,
         cashPrice: Number(form.cashPrice),
         cardPrice: Number(form.cardPrice),
+        promoActive: form.promoActive && showPromo,
+        promoCashPrice: showPromo && form.promoCashPrice !== '' ? Number(form.promoCashPrice) : null,
+        promoCardPrice: showPromo && form.promoCardPrice !== '' ? Number(form.promoCardPrice) : null,
+        promoStartTime: showPromo ? form.promoStartTime || null : null,
+        promoEndTime: showPromo ? form.promoEndTime || null : null,
+        promoDays: showPromo ? form.promoDays : [],
       }
       if (editing) {
         await api.updatePrice(editing._id, payload)
@@ -153,7 +174,16 @@ export default function AdminPrices() {
                   <tbody className="divide-y">
                     {washPrices.map(p => (
                       <tr key={p._id} className="hover:bg-muted/30">
-                        <td className="px-4 py-3 font-medium">Lavar {p.weight}Kg</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">Lavar {p.weight}Kg</span>
+                            {p.promoActive && (
+                              <span className="text-xs px-2 py-0.5 bg-orange-100 text-orange-800 rounded flex items-center gap-1">
+                                <Tag className="h-3 w-3" /> PROMO
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1">
                             <Clock className="h-4 w-4 text-neutral-400" />
@@ -209,7 +239,16 @@ export default function AdminPrices() {
                   <tbody className="divide-y">
                     {dryPrices.map(p => (
                       <tr key={p._id} className="hover:bg-muted/30">
-                        <td className="px-4 py-3 font-medium">Secar {p.weight}Kg</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">Secar {p.weight}Kg</span>
+                            {p.promoActive && (
+                              <span className="text-xs px-2 py-0.5 bg-orange-100 text-orange-800 rounded flex items-center gap-1">
+                                <Tag className="h-3 w-3" /> PROMO
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1">
                             <Banknote className="h-4 w-4 text-green-600" />
@@ -279,6 +318,81 @@ export default function AdminPrices() {
               <input className="border p-2 rounded w-full" type="number" step="0.01" min="0" value={form.cardPrice} onChange={(e) => setForm({ ...form, cardPrice: e.target.value })} required />
             </div>
           </div>
+
+          {/* Promotional Section */}
+          {!showPromo ? (
+            <div className="pt-2">
+              <Button type="button" variant="outline" onClick={() => setShowPromo(true)}>
+                <Plus className="h-4 w-4 mr-2" /> Adicionar Promoção
+              </Button>
+            </div>
+          ) : (
+            <div className="border-t pt-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold">Preços Promocionais</h3>
+                <Button type="button" variant="ghost" size="sm" onClick={() => { setShowPromo(false); setForm({ ...form, promoActive: false }) }}>
+                  Remover Promoção
+                </Button>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <input 
+                  type="checkbox" 
+                  id="promo-active" 
+                  checked={form.promoActive} 
+                  onChange={(e) => setForm({ ...form, promoActive: e.target.checked })}
+                  className="w-4 h-4"
+                />
+                <label htmlFor="promo-active" className="text-sm font-medium">Promoção Ativa</label>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Preço Promo Dinheiro (€)</label>
+                  <input className="border p-2 rounded w-full" type="number" step="0.01" min="0" value={form.promoCashPrice} onChange={(e) => setForm({ ...form, promoCashPrice: e.target.value })} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Preço Promo Cartão (€)</label>
+                  <input className="border p-2 rounded w-full" type="number" step="0.01" min="0" value={form.promoCardPrice} onChange={(e) => setForm({ ...form, promoCardPrice: e.target.value })} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Hora Início</label>
+                  <input className="border p-2 rounded w-full" type="time" value={form.promoStartTime} onChange={(e) => setForm({ ...form, promoStartTime: e.target.value })} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Hora Fim</label>
+                  <input className="border p-2 rounded w-full" type="time" value={form.promoEndTime} onChange={(e) => setForm({ ...form, promoEndTime: e.target.value })} />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">Dias da Semana</label>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(day => {
+                    const labels = { monday: 'Segunda', tuesday: 'Terça', wednesday: 'Quarta', thursday: 'Quinta', friday: 'Sexta', saturday: 'Sábado', sunday: 'Domingo' }
+                    return (
+                      <label key={day} className="flex items-center gap-2 text-sm">
+                        <input 
+                          type="checkbox" 
+                          checked={form.promoDays.includes(day)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setForm({ ...form, promoDays: [...form.promoDays, day] })
+                            } else {
+                              setForm({ ...form, promoDays: form.promoDays.filter(d => d !== day) })
+                            }
+                          }}
+                          className="w-4 h-4"
+                        />
+                        {labels[day]}
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => setModalOpen(false)}>Cancelar</Button>
             <Button type="submit" disabled={saving}>{saving ? 'A guardar...' : 'Guardar'}</Button>
