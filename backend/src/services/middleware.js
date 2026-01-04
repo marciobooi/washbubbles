@@ -462,6 +462,7 @@ class Middleware extends EventEmitter {
 
   /**
    * Dispense card
+   * Sends ccTalk or pulse command to card dispenser
    */
   async dispenseCard(peripheralId) {
     const connection = this.connections.get(peripheralId.toString())
@@ -470,9 +471,93 @@ class Middleware extends EventEmitter {
       throw new Error('Card dispenser not available')
     }
 
-    // Send pulse or command to dispense card
-    console.log('Dispensing card...')
+    const peripheral = connection.peripheral
+    console.log(`Dispensing card from ${peripheral.name}...`)
+    
+    // Send command based on protocol
+    if (peripheral.protocol === 'cctalk') {
+      await this.sendCardDispenserCCTalkCommand(connection)
+    } else if (peripheral.protocol === 'pulse') {
+      await this.sendCardDispenserPulseCommand(connection)
+    } else {
+      // Generic trigger
+      if (connection.port) {
+        await this.send(peripheralId, Buffer.from([0xFF])) // Trigger signal
+      }
+    }
+    
     this.emit('card-dispensed', { peripheral: connection.peripheral })
+    return { success: true }
+  }
+
+  /**
+   * Send ccTalk command to card dispenser
+   */
+  async sendCardDispenserCCTalkCommand(connection) {
+    if (!connection.port) return
+    
+    const address = parseInt(connection.peripheral.address) || 4
+    const command = 192 // Dispense card command (0xC0)
+    const source = 1
+    const dataBytes = [0x01] // Dispense 1 card
+    const length = dataBytes.length + 2
+    
+    const packet = [address, length, source, command, ...dataBytes]
+    const sum = packet.reduce((acc, byte) => acc + byte, 0)
+    const checksum = (256 - (sum % 256)) & 0xFF
+    packet.push(checksum)
+    
+    console.log(`Card dispenser command:`, packet.map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '))
+    
+    const buffer = Buffer.from(packet)
+    await new Promise((resolve, reject) => {
+      connection.port.write(buffer, (err) => {
+        if (err) reject(err)
+        else resolve()
+      })
+    })
+    
+    await this.waitForResponse(connection.port, 1000)
+  }
+
+  /**
+   * Send pulse command to card dispenser
+   */
+  async sendCardDispenserPulseCommand(connection) {
+    if (!connection.port) return
+    
+    // Simple pulse: HIGH for 200ms, then LOW
+    const highSignal = Buffer.from([0xFF])
+    const lowSignal = Buffer.from([0x00])
+    
+    connection.port.write(highSignal)
+    await new Promise(resolve => setTimeout(resolve, 200))
+    connection.port.write(lowSignal)
+  }
+
+  /**
+   * Generic response wait helper
+   */
+  async waitForResponse(port, timeout = 500) {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        port.removeListener('data', handler)
+        resolve(null)
+      }, timeout)
+      
+      const handler = (data) => {
+        clearTimeout(timer)
+        port.removeListener('data', handler)
+        resolve(data)
+      }
+      
+      if (port) {
+        port.once('data', handler)
+      } else {
+        clearTimeout(timer)
+        resolve(null)
+      }
+    })
   }
 
   /**
@@ -610,6 +695,7 @@ class Middleware extends EventEmitter {
 
   /**
    * Print receipt
+   * Supports ESC/POS thermal printers
    */
   async print(peripheralId, content) {
     const connection = this.connections.get(peripheralId.toString())
@@ -619,10 +705,47 @@ class Middleware extends EventEmitter {
     }
 
     console.log('Printing receipt...')
-    // Send print commands
-    if (connection.port) {
-      await this.send(peripheralId, Buffer.from(content))
+    
+    // Build ESC/POS commands for thermal printer
+    const commands = []
+    
+    // Initialize printer
+    commands.push(Buffer.from([0x1B, 0x40])) // ESC @ - Initialize
+    
+    // Set alignment center
+    commands.push(Buffer.from([0x1B, 0x61, 0x01])) // ESC a 1 - Center align
+    
+    // Print content (split by lines)
+    const lines = content.split('\n')
+    for (const line of lines) {
+      if (line.startsWith('**')) {
+        // Bold text
+        commands.push(Buffer.from([0x1B, 0x45, 0x01])) // ESC E 1 - Bold on
+        commands.push(Buffer.from(line.replace(/\*\*/g, ''), 'utf-8'))
+        commands.push(Buffer.from([0x1B, 0x45, 0x00])) // ESC E 0 - Bold off
+      } else if (line.startsWith('--')) {
+        // Separator line
+        commands.push(Buffer.from('--------------------------------\n', 'utf-8'))
+      } else {
+        commands.push(Buffer.from(line, 'utf-8'))
+      }
+      commands.push(Buffer.from('\n', 'utf-8'))
     }
+    
+    // Feed and cut
+    commands.push(Buffer.from([0x1B, 0x64, 0x03])) // ESC d 3 - Feed 3 lines
+    commands.push(Buffer.from([0x1D, 0x56, 0x00])) // GS V 0 - Cut paper
+    
+    // Send all commands
+    if (connection.port) {
+      for (const cmd of commands) {
+        await this.send(peripheralId, cmd)
+        await new Promise(resolve => setTimeout(resolve, 10)) // Small delay between commands
+      }
+    }
+    
+    this.emit('receipt-printed', { peripheral: connection.peripheral })
+    return { success: true }
   }
 
   /**
