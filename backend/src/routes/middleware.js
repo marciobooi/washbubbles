@@ -1,0 +1,177 @@
+import express from 'express'
+import coinMachine from '../services/coinMachine.js'
+import { requireAdmin } from '../middleware/auth.js'
+
+const router = express.Router()
+
+/**
+ * Get current client state (balance, credits, card info)
+ */
+router.get('/client', (req, res) => {
+  const state = coinMachine.getClientState()
+  res.json(state)
+})
+
+/**
+ * Get balance summary
+ */
+router.get('/client/balance', (req, res) => {
+  const summary = coinMachine.client.getBalanceSummary()
+  res.json(summary)
+})
+
+/**
+ * Reset client session
+ */
+router.post('/client/reset', (req, res) => {
+  coinMachine.resetClient()
+  res.json({ success: true })
+})
+
+/**
+ * Remove card but keep cash balance
+ */
+router.post('/client/remove-card', (req, res) => {
+  coinMachine.removeCard()
+  res.json({ success: true })
+})
+
+/**
+ * Manually add cash balance (for testing)
+ */
+router.post('/client/add-cash', (req, res) => {
+  const { amount } = req.body
+  if (!amount || amount <= 0) {
+    return res.status(400).json({ error: 'Invalid amount' })
+  }
+  
+  coinMachine.client.addToBalance(amount)
+  res.json({ balance: coinMachine.client.getState().balance })
+})
+
+/**
+ * Load card by number
+ */
+router.post('/client/load-card', async (req, res) => {
+  const { cardNumber } = req.body
+  if (!cardNumber) {
+    return res.status(400).json({ error: 'Missing cardNumber' })
+  }
+
+  const loaded = await coinMachine.client.setClientInfoByCard(cardNumber)
+  
+  if (loaded) {
+    res.json({ success: true, client: coinMachine.getClientState() })
+  } else {
+    res.status(404).json({ error: 'Card not found' })
+  }
+})
+
+/**
+ * Process payment for a machine
+ */
+router.post('/payment', async (req, res) => {
+  try {
+    const { machineId, amount, paymentType } = req.body
+    
+    if (!machineId || !amount) {
+      return res.status(400).json({ error: 'Missing machineId or amount' })
+    }
+
+    const result = await coinMachine.processPayment(machineId, amount, paymentType)
+    res.json(result)
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
+})
+
+/**
+ * Dispense new card with initial balance
+ */
+router.post('/dispense-card', requireAdmin, async (req, res) => {
+  try {
+    const { peripheralId, initialBalance } = req.body
+    
+    if (!peripheralId) {
+      return res.status(400).json({ error: 'Missing peripheralId' })
+    }
+
+    const result = await coinMachine.dispenseNewCard(peripheralId, initialBalance || 0)
+    res.json(result)
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
+})
+
+/**
+ * Dispense change
+ */
+router.post('/dispense-change', requireAdmin, async (req, res) => {
+  try {
+    const { peripheralId, amount } = req.body
+    
+    if (!peripheralId || !amount) {
+      return res.status(400).json({ error: 'Missing peripheralId or amount' })
+    }
+
+    const result = await coinMachine.dispenseChange(peripheralId, amount)
+    res.json(result)
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
+})
+
+/**
+ * Print receipt
+ */
+router.post('/print', requireAdmin, async (req, res) => {
+  try {
+    const { peripheralId, content } = req.body
+    
+    if (!peripheralId || !content) {
+      return res.status(400).json({ error: 'Missing peripheralId or content' })
+    }
+
+    const result = await coinMachine.printReceipt(peripheralId, content)
+    res.json(result)
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
+})
+
+/**
+ * Get coin machine status
+ */
+router.get('/status', (req, res) => {
+  res.json({
+    running: coinMachine.running,
+    clientState: coinMachine.getClientState(),
+    peripheralCount: coinMachine.middleware.connections.size
+  })
+})
+
+/**
+ * Start coin machine (admin only)
+ */
+router.post('/start', requireAdmin, async (req, res) => {
+  try {
+    await coinMachine.start()
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+/**
+ * Stop coin machine (admin only)
+ */
+router.post('/stop', requireAdmin, async (req, res) => {
+  try {
+    await coinMachine.stop()
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+export default router

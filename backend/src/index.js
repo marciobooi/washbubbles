@@ -7,6 +7,7 @@ import authRoutes from './routes/auth.js'
 import adminRoutes from './routes/admin.js'
 import posRoutes from './routes/pos.js'
 import { initWebSocket } from './wsServer.js'
+import coinMachine from './services/coinMachine.js'
 
 // Enforce presence of JWT secret in production-like environments
 if (!process.env.JWT_SECRET) {
@@ -32,6 +33,10 @@ app.use('/api', posRoutes)
 import gatewaysRoutes from './routes/gateways.js'
 app.use('/api/gateways', gatewaysRoutes)
 
+// Middleware (coin machine)
+import middlewareRoutes from './routes/middleware.js'
+app.use('/api/middleware', middlewareRoutes)
+
 app.get('/api/health', (req, res) => res.json({ ok: true }))
 
 // Initialize WebSocket server (models will be imported in wsServer.js)
@@ -42,6 +47,16 @@ async function start() {
   const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017/washstore'
   try {
     await connectMongo(MONGODB_URL)
+    
+    // Start coin machine system after DB connection
+    if (process.env.ENABLE_COIN_MACHINE !== 'false') {
+      try {
+        await coinMachine.start()
+        console.log('CoinMachine system initialized')
+      } catch (err) {
+        console.warn('Failed to initialize CoinMachine (peripherals may not be connected):', err.message)
+      }
+    }
   } catch (err) {
     console.error('Warning: Failed to connect to MongoDB at startup — continuing without DB (some endpoints will fail).', err.message || err)
   }
@@ -52,3 +67,12 @@ async function start() {
 }
 
 start()
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM signal received: closing HTTP server')
+  await coinMachine.stop()
+  server.close(() => {
+    console.log('HTTP server closed')
+  })
+})
