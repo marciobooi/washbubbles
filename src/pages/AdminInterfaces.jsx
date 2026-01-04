@@ -11,6 +11,7 @@ const EMPTY_FORM = {
   model: '',
   serialNumber: '',
   address: '',
+  ports: '2',
   tOn: '100',
   tOff: '100',
 }
@@ -52,6 +53,7 @@ export default function AdminInterfaces() {
       model: iface.model || '',
       serialNumber: iface.serialNumber || '',
       address: String(iface.address ?? ''),
+      ports: String(iface.ports ?? '2'),
       tOn: String(iface.tOn ?? '100'),
       tOff: String(iface.tOff ?? '100'),
     })
@@ -60,7 +62,7 @@ export default function AdminInterfaces() {
 
   async function handleSubmit(e) {
     e.preventDefault()
-    if (!form.name || !form.serialNumber || form.address === '' || form.tOn === '' || form.tOff === '') {
+    if (!form.name || !form.serialNumber || form.address === '' || form.ports === '' || form.tOn === '' || form.tOff === '') {
       toast({ title: 'Preencha os campos obrigatórios', variant: 'destructive' })
       return
     }
@@ -72,6 +74,7 @@ export default function AdminInterfaces() {
         model: form.model,
         serialNumber: form.serialNumber,
         address: Number(form.address),
+        ports: Number(form.ports),
         tOn: Number(form.tOn),
         tOff: Number(form.tOff),
       }
@@ -155,7 +158,7 @@ export default function AdminInterfaces() {
                 </span>
               </div>
               <div className="text-xs text-neutral-600 mb-3 space-y-1">
-                <div><span className="font-medium">Endereço:</span> {iface.address}</div>
+                <div><span className="font-medium">Endereço:</span> {iface.address} | <span className="font-medium">Portos:</span> {iface.ports || 2}</div>
                 <div><span className="font-medium">t_on:</span> {iface.tOn} ms | <span className="font-medium">t_off:</span> {iface.tOff} ms</div>
               </div>
               <div className="mt-auto flex flex-wrap gap-2">
@@ -206,6 +209,10 @@ export default function AdminInterfaces() {
             <div>
               <label className="block text-sm font-medium mb-1">Endereço <span className="text-red-500">*</span></label>
               <input className="border p-2 rounded w-full" type="number" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Portos <span className="text-red-500">*</span></label>
+              <input className="border p-2 rounded w-full" type="number" min="1" max="16" value={form.ports} onChange={(e) => setForm({ ...form, ports: e.target.value })} required />
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">t_on [ms] <span className="text-red-500">*</span></label>

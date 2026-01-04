@@ -20,17 +20,27 @@ router.use(requireAdmin)
 
 // list machines
 router.get('/machines', async (req, res) => {
-  const machines = await Machine.find().sort({ createdAt: -1 })
+  const machines = await Machine.find().populate('interfaceId', 'name address').sort({ createdAt: -1 })
   res.json(machines)
 })
 
 // create machine
 router.post('/machines', async (req, res) => {
-  const { name, status, statusText, weight, price, loyaltyPrice, type, icon } = req.body
+  const { name, number, brand, model, serialNumber, status, statusText, weight, price, loyaltyPrice, type, icon, interfaceId, port, activation } = req.body
   if (!name) return res.status(400).json({ error: 'Missing name' })
   if (type && !['wash', 'dry'].includes(type)) return res.status(400).json({ error: 'Invalid type' })
+  if (activation && !['high', 'low'].includes(activation)) return res.status(400).json({ error: 'Invalid activation' })
   const finalIcon = icon || (type === 'dry' ? '/drymachine/S1.png' : '/washingmashine/L1.png')
-  const machine = await Machine.create({ name, status, statusText, weight, price, loyaltyPrice: loyaltyPrice || 0, type: type || 'wash', icon: finalIcon })
+  const machine = await Machine.create({
+    name, number, brand, model, serialNumber,
+    status, statusText, weight, price,
+    loyaltyPrice: loyaltyPrice || 0,
+    type: type || 'wash',
+    icon: finalIcon,
+    interfaceId: interfaceId || null,
+    port: port || null,
+    activation: activation || 'high'
+  })
   // new machine created — broadcast full list so clients get the new item
   try { await broadcastMachines() } catch (e) { console.error('[admin] broadcastMachines error', e) }
   res.json(machine)
@@ -98,10 +108,19 @@ router.get('/machines/:id', async (req, res) => {
 
 // Update machine
 router.put('/machines/:id', async (req, res) => {
-  const { name, status, statusText, weight, price, loyaltyPrice, type, icon } = req.body
+  const { name, number, brand, model, serialNumber, status, statusText, weight, price, loyaltyPrice, type, icon, interfaceId, port, activation } = req.body
   if (type && !['wash', 'dry'].includes(type)) return res.status(400).json({ error: 'Invalid type' })
+  if (activation && !['high', 'low'].includes(activation)) return res.status(400).json({ error: 'Invalid activation' })
   const finalIcon = icon || (type === 'dry' ? '/drymachine/S1.png' : '/washingmashine/L1.png')
-  const m = await Machine.findByIdAndUpdate(req.params.id, { name, status, statusText, weight, price, loyaltyPrice: loyaltyPrice || 0, type, icon: finalIcon }, { new: true })
+  const m = await Machine.findByIdAndUpdate(req.params.id, {
+    name, number, brand, model, serialNumber,
+    status, statusText, weight, price,
+    loyaltyPrice: loyaltyPrice || 0,
+    type, icon: finalIcon,
+    interfaceId: interfaceId || null,
+    port: port || null,
+    activation: activation || 'high'
+  }, { new: true })
   if (!m) return res.status(404).json({ error: 'Machine not found' })
   // broadcast single updated machine to clients (more efficient)
   try { await broadcastMachine(m) } catch (e) { console.error('[admin] broadcastMachine error', e) }
@@ -332,7 +351,7 @@ router.get('/interfaces/:id', async (req, res) => {
 
 // Create interface
 router.post('/interfaces', async (req, res) => {
-  const { name, brand, model, serialNumber, address, tOn, tOff, status } = req.body
+  const { name, brand, model, serialNumber, address, ports, tOn, tOff, status } = req.body
   if (!name) return res.status(400).json({ error: 'Missing name' })
   if (!serialNumber) return res.status(400).json({ error: 'Missing serial number' })
   if (address == null) return res.status(400).json({ error: 'Missing address' })
@@ -349,6 +368,7 @@ router.post('/interfaces', async (req, res) => {
     model: model || '',
     serialNumber,
     address: Number(address),
+    ports: ports ? Number(ports) : 2,
     tOn: Number(tOn),
     tOff: Number(tOff),
     status: status || 'inactive',
@@ -358,13 +378,14 @@ router.post('/interfaces', async (req, res) => {
 
 // Update interface
 router.put('/interfaces/:id', async (req, res) => {
-  const { name, brand, model, serialNumber, address, tOn, tOff, status } = req.body
+  const { name, brand, model, serialNumber, address, ports, tOn, tOff, status } = req.body
   const update = {}
   if (name !== undefined) update.name = name
   if (brand !== undefined) update.brand = brand
   if (model !== undefined) update.model = model
   if (serialNumber !== undefined) update.serialNumber = serialNumber
   if (address !== undefined) update.address = Number(address)
+  if (ports !== undefined) update.ports = Number(ports)
   if (tOn !== undefined) update.tOn = Number(tOn)
   if (tOff !== undefined) update.tOff = Number(tOff)
   if (status !== undefined) update.status = status

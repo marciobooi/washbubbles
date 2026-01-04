@@ -6,6 +6,7 @@ const interfaceSchema = new mongoose.Schema({
   model: { type: String, default: '' },
   serialNumber: { type: String, required: true, unique: true },
   address: { type: Number, required: true },
+  ports: { type: Number, required: true, default: 2 }, // number of ports on this interface
   tOn: { type: Number, required: true, default: 100 }, // t_on in ms
   tOff: { type: Number, required: true, default: 100 }, // t_off in ms
   status: { type: String, enum: ['active', 'inactive', 'fault'], default: 'inactive' },

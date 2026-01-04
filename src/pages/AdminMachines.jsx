@@ -9,21 +9,38 @@ import { Button } from '@/components/ui/button'
 export default function AdminMachines(){
   const navigate = useNavigate()
   const [machines, setMachines] = useState([])
+  const [interfaces, setInterfaces] = useState([])
   const [loading, setLoading] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null)
   const [name, setName] = useState('')
+  const [machineNumber, setMachineNumber] = useState('')
+  const [machineBrand, setMachineBrand] = useState('')
+  const [machineModel, setMachineModel] = useState('')
+  const [machineSerial, setMachineSerial] = useState('')
   const [status, setStatus] = useState('free')
   const [weight, setWeight] = useState('')
   const [moneyPrice, setMoneyPrice] = useState('')
   const [loyaltyPrice, setLoyaltyPrice] = useState('')
   const [type, setType] = useState('wash')
+  const [selectedInterfacePort, setSelectedInterfacePort] = useState('') // format: interfaceId:port
+  const [activation, setActivation] = useState('high')
 
   // Validation state
   const [errors, setErrors] = useState({})
   const [isSaving, setIsSaving] = useState(false)
   // animate preview when type changes
   const [animating, setAnimating] = useState(false)
+
+  async function loadInterfaces() {
+    try {
+      const data = await api.getInterfaces()
+      // Filter only active interfaces
+      setInterfaces(data.filter(i => i.status === 'active'))
+    } catch (e) {
+      console.error('Error loading interfaces', e)
+    }
+  }
 
   async function load() {
     setLoading(true)
@@ -43,7 +60,7 @@ export default function AdminMachines(){
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load(); loadInterfaces() }, [])
 
   // animate preview when type changes
   useEffect(() => {
@@ -52,14 +69,31 @@ export default function AdminMachines(){
     return () => clearTimeout(t)
   }, [type])
 
+  // Build interface+port options
+  const interfacePortOptions = interfaces.flatMap(iface => {
+    const ports = iface.ports || 2
+    return Array.from({ length: ports }, (_, i) => ({
+      value: `${iface._id}:${i + 1}`,
+      label: `Interface: ${iface.address}, Porto: ${i + 1}`,
+      interfaceId: iface._id,
+      port: i + 1,
+    }))
+  })
+
   function openNew() {
     setEditing(null)
     setName('')
+    setMachineNumber('')
+    setMachineBrand('')
+    setMachineModel('')
+    setMachineSerial('')
     setStatus('free')
     setWeight('')
     setMoneyPrice('')
     setLoyaltyPrice('')
     setType('wash')
+    setSelectedInterfacePort('')
+    setActivation('high')
     setErrors({})
     setModalOpen(true)
   }
@@ -67,11 +101,23 @@ export default function AdminMachines(){
   function openEdit(m) {
     setEditing(m)
     setName(m.name)
+    setMachineNumber(m.number !== undefined && m.number !== null ? String(m.number) : '')
+    setMachineBrand(m.brand || '')
+    setMachineModel(m.model || '')
+    setMachineSerial(m.serialNumber || '')
     setStatus(m.status || 'free')
     setWeight(m.weight !== undefined && m.weight !== null ? String(m.weight) : '')
     setMoneyPrice(m.price !== undefined && m.price !== null ? String(m.price) : '')
     setLoyaltyPrice(m.loyaltyPrice !== undefined && m.loyaltyPrice !== null ? String(m.loyaltyPrice) : '')
     setType(m.type || 'wash')
+    // Set interface+port combo
+    if (m.interfaceId && m.port) {
+      const ifaceId = typeof m.interfaceId === 'object' ? m.interfaceId._id : m.interfaceId
+      setSelectedInterfacePort(`${ifaceId}:${m.port}`)
+    } else {
+      setSelectedInterfacePort('')
+    }
+    setActivation(m.activation || 'high')
     setErrors({})
     setModalOpen(true)
   }
@@ -99,9 +145,33 @@ export default function AdminMachines(){
       return
     }
 
+    // Parse interface+port selection
+    let interfaceId = null
+    let port = null
+    if (selectedInterfacePort) {
+      const [ifId, portNum] = selectedInterfacePort.split(':')
+      interfaceId = ifId
+      port = parseInt(portNum, 10)
+    }
+
     setIsSaving(true)
     try {
-      const payload = { name, status, statusText: 'Livre', weight: weight === '' ? 0 : parseFloat(weight), price: parseFloat(moneyPrice), loyaltyPrice: loyaltyPrice === '' ? 0 : parseFloat(loyaltyPrice), type }
+      const payload = {
+        name,
+        number: machineNumber ? parseInt(machineNumber, 10) : null,
+        brand: machineBrand,
+        model: machineModel,
+        serialNumber: machineSerial,
+        status,
+        statusText: 'Livre',
+        weight: weight === '' ? 0 : parseFloat(weight),
+        price: parseFloat(moneyPrice),
+        loyaltyPrice: loyaltyPrice === '' ? 0 : parseFloat(loyaltyPrice),
+        type,
+        interfaceId,
+        port,
+        activation,
+      }
       if (editing) {
         await api.updateMachine(editing._id, payload)
         toast({ title: 'Máquina atualizada', variant: 'success' })
@@ -154,38 +224,42 @@ export default function AdminMachines(){
         <table className="min-w-full divide-y text-sm">
           <thead className="bg-muted-foreground/5">
             <tr>
+              <th className="px-4 py-2 text-left">Nº</th>
               <th className="px-4 py-2 text-left">Nome</th>
               <th className="px-4 py-2 text-left">Tipo</th>
+              <th className="px-4 py-2 text-left">Porto</th>
               <th className="px-4 py-2 text-left">Preço</th>
-              <th className="px-4 py-2 text-left">Fidelidade</th>
               <th className="px-4 py-2 text-left">Estado</th>
-              <th className="px-4 py-2 text-left">Criado</th>
               <th className="px-4 py-2 text-left">Ações</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {loading ? (
               <tr>
-                <td colSpan={4} className="p-4">Loading...</td>
+                <td colSpan={7} className="p-4">Loading...</td>
               </tr>
             ) : machines.length === 0 ? (
               <tr>
-                <td colSpan={4} className="p-4">Nenhuma máquina</td>
+                <td colSpan={7} className="p-4">Nenhuma máquina</td>
               </tr>
             ) : (
               machines.map((m) => (
                 <tr key={m._id} className="hover:bg-muted/30">
+                  <td className="px-4 py-3 text-center font-semibold">{m.number || '—'}</td>
                   <td className="px-4 py-3 flex items-center gap-2">
                     {m.icon && <img src={m.icon} alt="icon" className="h-8 w-8 object-contain" />}
                     <div>{m.name}</div>
                   </td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">{m.type}</td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">{m.type === 'wash' ? 'Lavagem' : 'Secagem'}</td>
+                  <td className="px-4 py-3 text-xs">
+                    {m.interfaceId ? (
+                      <span>Interface: {m.interfaceId.address || m.interfaceId}, Porto: {m.port}</span>
+                    ) : '—'}
+                  </td>
                   <td className="px-4 py-3">{typeof m.price === 'number' ? m.price.toFixed(2) + '€' : m.price}</td>
-                  <td className="px-4 py-3">{typeof m.loyaltyPrice === 'number' ? m.loyaltyPrice.toFixed(2) + '€' : m.loyaltyPrice}</td>
                   <td className="px-4 py-3">
                     <span className={`text-xs px-2 py-1 rounded ${m.status === 'working' ? 'bg-yellow-100 text-yellow-800' : m.status === 'offline' ? 'bg-gray-100 text-gray-800' : 'bg-green-100 text-green-800'}`}>{m.statusText || (m.status === 'working' ? 'Ocupado' : m.status === 'offline' ? 'Offline' : 'Livre')}</span>
                   </td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(m.createdAt).toLocaleString()}</td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2">
                       <button className="btn p-2" title="Editar" aria-label="Editar" onClick={() => openEdit(m)}>
@@ -207,17 +281,33 @@ export default function AdminMachines(){
         <form onSubmit={save} className="machine-form grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch">
           {/* Left column: main fields */}
           <div className="md:col-span-2 space-y-3">
-            <div>
-              <label htmlFor="machine-name" className="text-sm font-medium">Nome</label>
-              <input id="machine-name" className="border p-2 rounded mt-1 w-full" placeholder="Nome" value={name} onChange={(e) => { setName(e.target.value); if (errors.name && e.target.value.trim()) setErrors((s) => { const c = { ...s }; delete c.name; return c }); }} />
-              {errors.name && <div className="text-xs text-destructive mt-1">{errors.name}</div>}
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label htmlFor="machine-number" className="text-sm font-medium">Número <span className="text-red-500">*</span></label>
+                <input id="machine-number" className="border p-2 rounded mt-1 w-full" placeholder="Número" type="number" value={machineNumber} onChange={(e) => setMachineNumber(e.target.value)} />
+              </div>
+              <div>
+                <label htmlFor="machine-name" className="text-sm font-medium">Nome <span className="text-red-500">*</span></label>
+                <input id="machine-name" className="border p-2 rounded mt-1 w-full" placeholder="Nome" value={name} onChange={(e) => { setName(e.target.value); if (errors.name && e.target.value.trim()) setErrors((s) => { const c = { ...s }; delete c.name; return c }); }} />
+                {errors.name && <div className="text-xs text-destructive mt-1">{errors.name}</div>}
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label htmlFor="machine-weight" className="text-sm font-medium">Peso (kg)</label>
-                <input id="machine-weight" className="border p-2 rounded mt-1 w-full" placeholder="Peso (kg)" type="number" value={weight} onChange={(e) => { setWeight(e.target.value); const v = parseFloat(e.target.value); if (errors.weight && !isNaN(v) && v >= 0) setErrors((s) => { const c = { ...s }; delete c.weight; return c }); }} />
-                {errors.weight && <div className="text-xs text-destructive mt-1">{errors.weight}</div>}
+                <label htmlFor="machine-brand" className="text-sm font-medium">Marca</label>
+                <input id="machine-brand" className="border p-2 rounded mt-1 w-full" placeholder="Marca" value={machineBrand} onChange={(e) => setMachineBrand(e.target.value)} />
+              </div>
+              <div>
+                <label htmlFor="machine-model" className="text-sm font-medium">Modelo</label>
+                <input id="machine-model" className="border p-2 rounded mt-1 w-full" placeholder="Modelo" value={machineModel} onChange={(e) => setMachineModel(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label htmlFor="machine-serial" className="text-sm font-medium">Número de série <span className="text-red-500">*</span></label>
+                <input id="machine-serial" className="border p-2 rounded mt-1 w-full" placeholder="Número de série" value={machineSerial} onChange={(e) => setMachineSerial(e.target.value)} />
               </div>
               <div>
                 <label htmlFor="machine-type" className="text-sm font-medium">Tipo</label>
@@ -230,18 +320,43 @@ export default function AdminMachines(){
 
             <div className="grid grid-cols-2 gap-2">
               <div>
+                <label htmlFor="machine-activation" className="text-sm font-medium">Activação <span className="text-red-500">*</span></label>
+                <select id="machine-activation" className="border p-2 rounded mt-1 w-full" value={activation} onChange={(e) => setActivation(e.target.value)}>
+                  <option value="high">high</option>
+                  <option value="low">low</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="machine-port" className="text-sm font-medium">Porto <span className="text-red-500">*</span></label>
+                <select id="machine-port" className="border p-2 rounded mt-1 w-full" value={selectedInterfacePort} onChange={(e) => setSelectedInterfacePort(e.target.value)}>
+                  <option value="">-- Seleccionar --</option>
+                  {interfacePortOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label htmlFor="machine-weight" className="text-sm font-medium">Peso (kg)</label>
+                <input id="machine-weight" className="border p-2 rounded mt-1 w-full" placeholder="Peso (kg)" type="number" value={weight} onChange={(e) => { setWeight(e.target.value); const v = parseFloat(e.target.value); if (errors.weight && !isNaN(v) && v >= 0) setErrors((s) => { const c = { ...s }; delete c.weight; return c }); }} />
+                {errors.weight && <div className="text-xs text-destructive mt-1">{errors.weight}</div>}
+              </div>
+              <div>
                 <label htmlFor="machine-price" className="text-sm font-medium">Preço (€)</label>
                 <input id="machine-price" className="border p-2 rounded mt-1 w-full" placeholder="Preço (€)" type="number" step="0.01" value={moneyPrice} onChange={(e) => { setMoneyPrice(e.target.value); const v = parseFloat(e.target.value); if (errors.moneyPrice && !isNaN(v) && v >= 0) setErrors((s) => { const c = { ...s }; delete c.moneyPrice; return c }); }} />
                 {errors.moneyPrice && <div className="text-xs text-destructive mt-1">{errors.moneyPrice}</div>}
               </div>
+            </div>
 
+            <div className="grid grid-cols-2 gap-2">
               <div>
                 <label htmlFor="machine-loyalty" className="text-sm font-medium">Fidelidade (€)</label>
                 <input id="machine-loyalty" className="border p-2 rounded mt-1 w-full" placeholder="Fidelidade (€)" type="number" step="0.01" value={loyaltyPrice} onChange={(e) => { setLoyaltyPrice(e.target.value); const v = parseFloat(e.target.value); if (errors.loyaltyPrice && !isNaN(v) && v >= 0) setErrors((s) => { const c = { ...s }; delete c.loyaltyPrice; return c }); }} />
                 {errors.loyaltyPrice && <div className="text-xs text-destructive mt-1">{errors.loyaltyPrice}</div>}
               </div>
             </div>
-
 
           </div>
 
