@@ -1,20 +1,23 @@
 import EventEmitter from 'events'
 import { SerialPort } from 'serialport'
 import Peripheral from '../models/peripheral.js'
+import Interface from '../models/interface.js'
 
 /**
  * Middleware service for communicating with peripherals via serial/other protocols
  * Handles coin acceptors, bill acceptors, card dispensers, hoppers, printers, RFID readers
+ * Also manages machine control interfaces
  */
 class Middleware extends EventEmitter {
   constructor() {
     super()
     this.connections = new Map() // peripheral._id -> connection instance
+    this.interfaces = new Map()  // interface._id -> connection instance
     this.subscriptions = []
   }
 
   /**
-   * Initialize connections to all enabled peripherals
+   * Initialize connections to all enabled peripherals and active interfaces
    */
   async initialize() {
     try {
@@ -25,6 +28,15 @@ class Middleware extends EventEmitter {
       }
 
       console.log(`Middleware initialized with ${this.connections.size} peripheral(s)`)
+
+      // Load and connect interfaces (for machine control)
+      const interfaces = await Interface.find({ status: 'active' })
+      
+      for (const iface of interfaces) {
+        await this.connectInterface(iface)
+      }
+
+      console.log(`Connected to ${this.interfaces.size} interface(s)`)
     } catch (err) {
       console.error('Failed to initialize middleware:', err)
     }
@@ -145,6 +157,132 @@ class Middleware extends EventEmitter {
     console.log(`Ethernet connection for ${peripheral.name} - implementation pending`)
     this.connections.set(peripheral._id.toString(), { type: 'ethernet', peripheral })
     await this.updatePeripheralStatus(peripheral._id, 'ok')
+  }
+
+  /**
+   * Connect to Interface hardware (for machine control)
+   * Interfaces use serial (RS232) communication for sending commands AND receiving status updates
+   */
+  async connectInterface(iface) {
+    try {
+      if (this.interfaces.has(iface._id.toString())) {
+        console.log(`Interface ${iface.name} already connected`)
+        return
+      }
+
+      // Open serial connection if address is a COM port
+      let serialPort = null
+      if (iface.address && typeof iface.address === 'string' && iface.address.startsWith('COM')) {
+        try {
+          serialPort = new SerialPort({
+            path: iface.address,
+            baudRate: 9600,
+            dataBits: 8,
+            parity: 'none',
+            stopBits: 1
+          })
+
+          // Buffer for incoming data (Interface uses STX/ETX framing)
+          let buffer = Buffer.alloc(0)
+
+          serialPort.on('data', (data) => {
+            buffer = Buffer.concat([buffer, data])
+            
+            // Look for complete packets (STX...ETX)
+            while (buffer.length > 0) {
+              const stxIndex = buffer.indexOf(0x02) // STX
+              if (stxIndex === -1) {
+                buffer = Buffer.alloc(0)
+                break
+              }
+
+              const etxIndex = buffer.indexOf(0x03, stxIndex) // ETX
+              if (etxIndex === -1) break // Wait for more data
+
+              // Extract packet
+              const packet = buffer.slice(stxIndex, etxIndex + 2) // Include STX and checksum after ETX
+              buffer = buffer.slice(etxIndex + 2)
+
+              // Parse and handle packet
+              this.handleInterfaceData(iface, packet)
+            }
+          })
+
+          serialPort.on('error', (err) => {
+            console.error(`Interface ${iface.name} serial error:`, err)
+            this.emit('interface-error', { interface: iface, error: err.message })
+          })
+
+          console.log(`Interface ${iface.name} serial connected on ${iface.address}`)
+        } catch (err) {
+          console.warn(`Could not open serial port for Interface ${iface.name}:`, err.message)
+        }
+      }
+
+      // Store interface connection
+      this.interfaces.set(iface._id.toString(), {
+        interface: iface,
+        serialPort: serialPort,
+        type: 'interface',
+        connected: true
+      })
+
+      console.log(`Interface registered: ${iface.name} at address ${iface.address}`)
+    } catch (err) {
+      console.error(`Failed to register interface ${iface.name}:`, err)
+    }
+  }
+
+  /**
+   * Handle incoming data from Interface hardware
+   * Status updates include: door closed/open, occupied, fault, machine running, etc.
+   */
+  handleInterfaceData(iface, packet) {
+    try {
+      // Packet format: [STX][CMD][PORT][STATUS_DATA...][ETX][CHK]
+      if (packet.length < 5) return // Too short
+
+      const cmd = packet[1]
+      const port = packet[2]
+      
+      // Status update command (0x53 = 'S')
+      if (cmd === 0x53) {
+        const statusByte = packet[3]
+        
+        // Parse status bits
+        const status = {
+          port: port,
+          doorClosed: !!(statusByte & 0x01),    // Bit 0: Door closed
+          occupied: !!(statusByte & 0x02),       // Bit 1: Machine occupied/running
+          fault: !!(statusByte & 0x04),          // Bit 2: Fault detected
+          reserved: !!(statusByte & 0x08),       // Bit 3: Machine reserved
+          heatingUp: !!(statusByte & 0x10),      // Bit 4: Heating up (dryers)
+          doorLocked: !!(statusByte & 0x20)      // Bit 5: Door locked
+        }
+
+        console.log(`Interface ${iface.name} Port ${port} status:`, status)
+        
+        // Emit status event for coinMachine to handle
+        this.emit('machine-status-update', {
+          interfaceId: iface._id,
+          port: port,
+          status: status
+        })
+      }
+      // Fault/Error command (0x45 = 'E')
+      else if (cmd === 0x45) {
+        const errorCode = packet[3]
+        console.log(`Interface ${iface.name} Port ${port} error: ${errorCode}`)
+        
+        this.emit('machine-fault', {
+          interfaceId: iface._id,
+          port: port,
+          errorCode: errorCode
+        })
+      }
+    } catch (err) {
+      console.error(`Error parsing Interface data:`, err)
+    }
   }
 
   /**
@@ -424,6 +562,164 @@ class Middleware extends EventEmitter {
         this.on('package', handler)
         return { unsubscribe: () => this.off('package', handler) }
       }
+    }
+  }
+
+  /**
+   * Activate a machine (send command to low-level device)
+   * Based on old code: { op: 'activate-machine', data: [{id, chn, impulses}] }
+   */
+  async activateMachine(machineData) {
+    const pkg = {
+      op: 'activate-machine',
+      data: Array.isArray(machineData) ? machineData : [machineData]
+    }
+
+    // Send through websocket if available
+    this.send(pkg)
+    
+    // Also emit local event
+    this.emit('machine-activated', pkg.data)
+    
+    console.log('Machine activation command sent:', JSON.stringify(pkg.data))
+    return true
+  }
+
+  /**
+   * Send machine activation pulse through Interface hardware
+   * Uses interface address, port, tOn/tOff timing for pulse control
+   */
+  async sendMachineActivation(machine, iface) {
+    if (!iface) {
+      throw new Error('Interface not configured for this machine')
+    }
+
+    const { address, tOn, tOff } = iface
+    const { port, activation, impulses } = machine
+
+    console.log(`Activating machine via Interface: addr=${address}, port=${port}, impulses=${impulses || '1'}, tOn=${tOn}ms, tOff=${tOff}ms, level=${activation}`)
+
+    // Build activation command based on your Interface protocol
+    // This is a generic example - adjust to your specific hardware protocol
+    const command = {
+      address: address,
+      port: port,
+      impulses: parseInt(impulses) || 1,
+      tOn: tOn,
+      tOff: tOff,
+      activation: activation || 'high'
+    }
+
+    // Send pulse command to the interface
+    // Format: [STX][ADDR][PORT][IMPULSES][T_ON_H][T_ON_L][T_OFF_H][T_OFF_L][LEVEL][ETX][CHK]
+    const buffer = this.buildInterfaceCommand(command)
+    
+    // Emit activation event for logging/monitoring
+    this.emit('interface-activation', { machine: machine._id, interface: iface._id, command })
+    
+    console.log(`Activation pulse sent to Interface addr=${address}, port=${port}`)
+    return buffer
+  }
+
+  /**
+   * Build interface activation command buffer
+   * Protocol-specific implementation for KITSEC or similar interface
+   */
+  buildInterfaceCommand(cmd) {
+    // Example protocol format (adjust to your actual interface protocol):
+    // STX (0x02) + Address + Port + Impulses + tOn_High + tOn_Low + tOff_High + tOff_Low + Level + ETX (0x03) + Checksum
+    
+    const STX = 0x02
+    const ETX = 0x03
+    
+    // Split timing into high/low bytes (little-endian)
+    const tOnHigh = (cmd.tOn >> 8) & 0xFF
+    const tOnLow = cmd.tOn & 0xFF
+    const tOffHigh = (cmd.tOff >> 8) & 0xFF
+    const tOffLow = cmd.tOff & 0xFF
+    
+    const level = cmd.activation === 'high' ? 0x01 : 0x00
+    
+    const buffer = Buffer.from([
+      STX,
+      cmd.address,
+      cmd.port,
+      cmd.impulses,
+      tOnHigh,
+      tOnLow,
+      tOffHigh,
+      tOffLow,
+      level,
+      ETX
+    ])
+    
+    // Calculate checksum (XOR of all bytes except STX and checksum itself)
+    let checksum = 0
+    for (let i = 1; i < buffer.length; i++) {
+      checksum ^= buffer[i]
+    }
+    
+    // Append checksum
+    return Buffer.concat([buffer, Buffer.from([checksum])])
+  }
+
+  /**
+   * Send package to connected clients/low-level device
+   * Wraps payload with framing for low-level: { cl: length, c: payload }
+   */
+  send(pkg) {
+    // Calculate frame length (same logic as old middleware)
+    const dataStr = JSON.stringify(pkg)
+    const dataLength = dataStr.length
+    const pkgLength = dataLength + dataLength.toString().length + 14
+    
+    const newPkg = {
+      cl: pkgLength.toString(),
+      c: pkg
+    }
+
+    // Emit to connected clients via websocket
+    this.emit('send', newPkg)
+    
+    // If we have a TCP connection to low-level device, write to it
+    // (This would require extending Middleware to support TCP connections)
+    
+    console.log('Package sent:', JSON.stringify(newPkg))
+  }
+
+  /**
+   * Handle incoming package from low-level device or websocket
+   * Processes machine-related events
+   */
+  handlePackage(pkg) {
+    if (!pkg || !pkg.op) return
+
+    this.emit('package', pkg)
+
+    switch (pkg.op) {
+      case 'machine-started':
+        this.emit('machine-started', pkg.data)
+        break
+      case 'machine-reserved':
+        this.emit('machine-reserved', pkg.data)
+        break
+      case 'machine-res-canceled':
+        this.emit('machine-res-canceled', pkg.data)
+        break
+      case 'machine-issue':
+        this.emit('machine-issue', pkg.data)
+        break
+      case 'status_int':
+        this.emit('status_int', pkg.data)
+        break
+      case 'remote-credits':
+        this.emit('remote-credits', pkg.data)
+        break
+      case 'card-removed':
+        this.emit('card-removed', pkg.data)
+        break
+      default:
+        console.log('Unhandled package:', pkg.op)
     }
   }
 }

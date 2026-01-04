@@ -174,4 +174,48 @@ router.post('/stop', requireAdmin, async (req, res) => {
   }
 })
 
+/**
+ * Activate machine(s)
+ * Body: { machines: [{id: intId, chn: channel, impulses: '1'}] } or { id, chn, impulses }
+ */
+router.post('/activate-machine', async (req, res) => {
+  try {
+    const { machines, id, chn, impulses } = req.body
+    
+    // Support both single machine and array format
+    const activationData = machines || { id, chn, impulses: impulses || '1' }
+    
+    if (!activationData) {
+      return res.status(400).json({ error: 'Missing activation data' })
+    }
+
+    const result = await coinMachine.activateMachine(activationData)
+    res.json(result)
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
+})
+
+/**
+ * Get machine states
+ */
+router.get('/machines', (req, res) => {
+  const machines = coinMachine.getMachineStates()
+  res.json(machines)
+})
+
+/**
+ * Get specific machine state
+ */
+router.get('/machines/:id', (req, res) => {
+  const machineId = parseInt(req.params.id)
+  const machine = coinMachine.getMachineState(machineId)
+  
+  if (machine) {
+    res.json(machine)
+  } else {
+    res.status(404).json({ error: 'Machine not found' })
+  }
+})
+
 export default router

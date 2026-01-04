@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
+import * as ws from '@/services/websocket'
 import Modal from '@/components/ui/Modal'
 import { Pencil, Trash2, Plus, Check, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -60,6 +61,47 @@ export default function AdminMachines(){
   }
 
   useEffect(() => { load(); loadInterfaces() }, [])
+
+  // WebSocket subscription for real-time machine updates
+  useEffect(() => {
+    // Connect to WebSocket
+    ws.connect()
+    
+    // Subscribe to machine updates
+    const unsubscribe = ws.subscribe((data) => {
+      if (!data || typeof data !== 'object') return
+      
+      // Handle machine-status (full list)
+      if (data.type === 'machine-status' && Array.isArray(data.payload)) {
+        setMachines(data.payload)
+        console.log('[AdminMachines] Received machine-status update:', data.payload.length, 'machines')
+      }
+      
+      // Handle machine-update (single machine)
+      if (data.type === 'machine-update' && data.payload) {
+        const updated = data.payload
+        setMachines(prev => {
+          const idx = prev.findIndex(m => m._id === updated._id)
+          if (idx === -1) {
+            // New machine, add it
+            return [...prev, updated]
+          } else {
+            // Update existing machine
+            const next = [...prev]
+            next[idx] = updated
+            return next
+          }
+        })
+        console.log('[AdminMachines] Received machine-update:', updated._id, updated.status)
+      }
+    })
+    
+    // Cleanup on unmount
+    return () => {
+      unsubscribe()
+      ws.disconnect()
+    }
+  }, [])
 
   // animate preview when type changes
   useEffect(() => {

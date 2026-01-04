@@ -13,6 +13,7 @@ async function main() {
   // Dynamically load models
   const User = require('../src/models/user.js').default
   const Machine = require('../src/models/machine.js').default
+  const Setting = require('../src/models/setting.js').default
 
   const adminPassword = process.env.ADMIN_PASSWORD || 'admin1234'
   const kioskPassword = process.env.KIOSK_PASSWORD || 'kiosk1234'
@@ -30,6 +31,58 @@ async function main() {
   if (count === 0) {
     await Machine.create([{ name: 'Machine A' }, { name: 'Machine B' }])
   }
+
+  // Insert default settings for coin/bill equivalence tables and bonuses
+  await Setting.updateOne(
+    { key: 'coinEqTable' },
+    { 
+      $setOnInsert: { 
+        key: 'coinEqTable', 
+        value: [
+          { key: '0x01', value: 0.05 },
+          { key: '0x02', value: 0.10 },
+          { key: '0x03', value: 0.20 },
+          { key: '0x04', value: 0.50 },
+          { key: '0x05', value: 1.00 },
+          { key: '0x06', value: 2.00 }
+        ] 
+      } 
+    },
+    { upsert: true }
+  )
+
+  await Setting.updateOne(
+    { key: 'billEqTable' },
+    { 
+      $setOnInsert: { 
+        key: 'billEqTable', 
+        value: [
+          { key: '0x10', value: 5 },
+          { key: '0x11', value: 10 },
+          { key: '0x12', value: 20 }
+        ] 
+      } 
+    },
+    { upsert: true }
+  )
+
+  await Setting.updateOne(
+    { key: 'rechargeCoinBonus' },
+    { $setOnInsert: { key: 'rechargeCoinBonus', value: 0 } },
+    { upsert: true }
+  )
+
+  await Setting.updateOne(
+    { key: 'rechargeBillBonus' },
+    { $setOnInsert: { key: 'rechargeBillBonus', value: 0 } },
+    { upsert: true }
+  )
+
+  await Setting.updateOne(
+    { key: 'autoCharge' },
+    { $setOnInsert: { key: 'autoCharge', value: false } },
+    { upsert: true }
+  )
 
   console.log('Seed complete - admin user: admin (password: ' + adminPassword + ')')
   console.log('Seed complete - kiosk user: kiosk (password: ' + kioskPassword + ')')

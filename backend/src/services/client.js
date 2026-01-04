@@ -20,7 +20,11 @@ class Client extends EventEmitter {
       credits: 0,           // Total credits available
       admin: false,
       hasCard: false,
-      initBalance: 0
+      initBalance: 0,
+      // Auto-charge tracking arrays
+      bonusArr: [],         // Bonus values accumulated
+      chargedArr: [],       // Charges to be recorded
+      moneyArr: []          // Money values accumulated
     }
 
     this.clientStream = []
@@ -41,7 +45,10 @@ class Client extends EventEmitter {
       credits: 0,
       admin: false,
       hasCard: false,
-      initBalance: 0
+      initBalance: 0,
+      bonusArr: [],
+      chargedArr: [],
+      moneyArr: []
     }
     
     this.notifySubscribers()
@@ -51,7 +58,9 @@ class Client extends EventEmitter {
   /**
    * Reset card-specific info but keep cash balance
    */
-  resetCardInfo() {
+  async resetCardInfo() {
+    const cardNumber = this.client.cardNumber
+    
     this.client.name = null
     this.client.addr = null
     this.client.cardNumber = null
@@ -61,9 +70,44 @@ class Client extends EventEmitter {
     this.client.admin = false
     this.client.hasCard = false
     
+    // Send charge request before clearing arrays
+    await this.sendChargeRequest(cardNumber)
+    
     this.updateCredits()
     this.notifySubscribers()
     this.emit('card-removed')
+  }
+
+  /**
+   * Send charge request for accumulated charges (auto-charge)
+   */
+  async sendChargeRequest(cardNumber) {
+    if (!cardNumber || !this.client.chargedArr || this.client.chargedArr.length === 0) {
+      this.client.bonusArr = []
+      this.client.chargedArr = []
+      this.client.moneyArr = []
+      return
+    }
+
+    try {
+      const priceTotal = this.client.chargedArr.reduce((a, b) => a + b, 0)
+      
+      // Update card balance in database
+      const card = await Card.findOne({ code: cardNumber })
+      if (card) {
+        card.balance = (card.balance || 0) + Math.round(priceTotal * 100) // Convert to cents
+        await card.save()
+        
+        console.log(`Auto-charge: Added €${priceTotal.toFixed(2)} to card ${cardNumber}`)
+        this.emit('auto-charge', { cardNumber, amount: priceTotal })
+      }
+    } catch (err) {
+      console.error('Failed to send charge request:', err)
+    } finally {
+      this.client.bonusArr = []
+      this.client.chargedArr = []
+      this.client.moneyArr = []
+    }
   }
 
   /**

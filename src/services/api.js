@@ -379,6 +379,23 @@ export function createApi(config) {
     return request(`/admin/peripherals/${id}`, { method: 'DELETE', expect: 'json' });
   }
 
+  // Middleware / CoinMachine
+  function activateMachine(machineData) {
+    return request('/middleware/activate-machine', { method: 'POST', json: machineData, expect: 'json' });
+  }
+
+  function getMiddlewareClient() {
+    return request('/middleware/client', { method: 'GET', expect: 'json' });
+  }
+
+  function getMiddlewareMachines() {
+    return request('/middleware/machines', { method: 'GET', expect: 'json' });
+  }
+
+  function getMiddlewareMachine(id) {
+    return request(`/middleware/machines/${id}`, { method: 'GET', expect: 'json' });
+  }
+
   // Note: `me()` removed — use tokens returned from /auth/login and backend-provided JWT payloads when needed.
 
   return {
@@ -444,6 +461,12 @@ export function createApi(config) {
     createPeripheral,
     updatePeripheral,
     deletePeripheral,
+
+    // Middleware
+    activateMachine,
+    getMiddlewareClient,
+    getMiddlewareMachines,
+    getMiddlewareMachine,
   };
 }
 
@@ -504,6 +527,10 @@ export const {
   createPeripheral,
   updatePeripheral,
   deletePeripheral,
+  activateMachine,
+  getMiddlewareClient,
+  getMiddlewareMachines,
+  getMiddlewareMachine,
 } = api;
 
 export default api;
