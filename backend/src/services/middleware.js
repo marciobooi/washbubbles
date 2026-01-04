@@ -476,7 +476,35 @@ class Middleware extends EventEmitter {
   }
 
   /**
+   * Calculate coin breakdown for change dispensing
+   * Returns array of coins to dispense for exact change
+   */
+  calculateCoinBreakdown(amount, availableCoins = [2.00, 1.00, 0.50, 0.20, 0.10, 0.05]) {
+    const result = []
+    let remaining = Math.round(amount * 100) / 100 // Round to 2 decimals
+    
+    // Sort coins descending (largest first)
+    const sortedCoins = [...availableCoins].sort((a, b) => b - a)
+    
+    for (const coin of sortedCoins) {
+      const count = Math.floor((remaining / coin) + 0.001) // Add small epsilon for floating point
+      if (count > 0) {
+        result.push({ denomination: coin, count })
+        remaining = Math.round((remaining - (coin * count)) * 100) / 100
+      }
+    }
+    
+    // Check if we have exact change
+    if (remaining > 0.001) {
+      throw new Error(`Cannot provide exact change for €${amount.toFixed(2)}. Remaining: €${remaining.toFixed(2)}`)
+    }
+    
+    return result
+  }
+
+  /**
    * Dispense change via hopper
+   * Calculates optimal coin breakdown and sends ccTalk commands to hopper
    */
   async dispenseChange(peripheralId, amount) {
     const connection = this.connections.get(peripheralId.toString())
@@ -485,9 +513,99 @@ class Middleware extends EventEmitter {
       throw new Error('Hopper not available')
     }
 
-    console.log(`Dispensing €${amount.toFixed(2)} change...`)
-    // Send commands to hopper to dispense coins
-    this.emit('change-dispensed', { peripheral: connection.peripheral, amount })
+    const peripheral = connection.peripheral
+    
+    // Get available coin denominations from hopper config
+    const availableCoins = peripheral.hopperConfig?.coinDenominations || [2.00, 1.00, 0.50, 0.20, 0.10, 0.05]
+    
+    // Calculate coin breakdown
+    const breakdown = this.calculateCoinBreakdown(amount, availableCoins)
+    
+    console.log(`Dispensing €${amount.toFixed(2)} change:`, breakdown)
+    
+    // Send ccTalk commands to hopper for each coin denomination
+    for (const item of breakdown) {
+      await this.sendHopperDispenseCommand(connection, item.denomination, item.count)
+    }
+    
+    this.emit('change-dispensed', { peripheral, amount, breakdown })
+    
+    return { success: true, breakdown }
+  }
+
+  /**
+   * Send ccTalk command to hopper to dispense specific coins
+   */
+  async sendHopperDispenseCommand(connection, denomination, count) {
+    if (!connection.port) {
+      console.warn('No serial port connection for hopper')
+      return
+    }
+
+    // ccTalk command to dispense coins
+    // Format: [Destination, Length, Source, Command, Data..., Checksum]
+    const address = parseInt(connection.peripheral.address) || 3
+    const command = 167 // Dispense coins command (0xA7)
+    
+    // Build ccTalk packet
+    const destination = address
+    const source = 1 // Host address
+    const dataBytes = [count & 0xFF] // Number of coins to dispense
+    const length = dataBytes.length + 2 // Command + data
+    
+    const packet = [destination, length, source, command, ...dataBytes]
+    
+    // Calculate checksum (sum of all bytes modulo 256, then 256 - result)
+    const sum = packet.reduce((acc, byte) => acc + byte, 0)
+    const checksum = (256 - (sum % 256)) & 0xFF
+    packet.push(checksum)
+    
+    console.log(`Hopper dispense command (${count}x €${denomination.toFixed(2)}):`, 
+                packet.map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '))
+    
+    // Write to serial port
+    try {
+      const buffer = Buffer.from(packet)
+      await new Promise((resolve, reject) => {
+        connection.port.write(buffer, (err) => {
+          if (err) reject(err)
+          else resolve()
+        })
+      })
+      
+      // Wait for response (optional - hopper should ACK)
+      await this.waitForHopperResponse(connection, 500) // 500ms timeout
+      
+    } catch (err) {
+      console.error('Failed to send hopper command:', err)
+      throw err
+    }
+  }
+
+  /**
+   * Wait for hopper response (ACK or error)
+   */
+  async waitForHopperResponse(connection, timeout = 500) {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        connection.port.removeListener('data', handler)
+        resolve(null) // Timeout - proceed anyway
+      }, timeout)
+      
+      const handler = (data) => {
+        clearTimeout(timer)
+        connection.port.removeListener('data', handler)
+        console.log('Hopper response:', data.toString('hex'))
+        resolve(data)
+      }
+      
+      if (connection.port) {
+        connection.port.once('data', handler)
+      } else {
+        clearTimeout(timer)
+        resolve(null)
+      }
+    })
   }
 
   /**

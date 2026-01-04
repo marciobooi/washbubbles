@@ -23,7 +23,21 @@ const peripheralSchema = new mongoose.Schema({
     enum: ['ok', 'fault', 'offline', 'unknown'],
     default: 'unknown'
   },
-  image: { type: String, default: '' }
+  image: { type: String, default: '' },
+  
+  // Hopper-specific configuration
+  hopperConfig: {
+    coinDenominations: { 
+      type: [Number], 
+      default: [2.00, 1.00, 0.50, 0.20, 0.10, 0.05] // Euro coins
+    },
+    maxStock: { type: Number, default: 500 }, // Maximum coins per denomination
+    currentStock: { 
+      type: Map, 
+      of: Number,
+      default: {} // { '2.00': 100, '1.00': 150, ... }
+    }
+  }
 }, { timestamps: true })
 
 export default mongoose.model('Peripheral', peripheralSchema)
