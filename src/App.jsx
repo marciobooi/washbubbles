@@ -20,6 +20,7 @@ import AdminTransactions from './pages/AdminTransactions'
 import AdminOperations from './pages/AdminOperations'
 import AdminSettings from './pages/AdminSettings'
 import AdminProfile from './pages/AdminProfile'
+import AdminInterfaces from './pages/AdminInterfaces'
 import RequireAdmin from './components/RequireAdmin'
 
 import { BrandingProvider } from './context/BrandingContext'
@@ -322,6 +323,7 @@ function AppInner() {
             <Route path="dashboard" element={<Navigate to="operations" replace />} />
             <Route path="users" element={<AdminUsers />} />
             <Route path="machines" element={<AdminMachines />} />
+            <Route path="interfaces" element={<AdminInterfaces />} />
             <Route path="transactions" element={<AdminTransactions />} />
             <Route path="operations" element={<AdminOperations />} />
             <Route path="settings" element={<AdminSettings />} />

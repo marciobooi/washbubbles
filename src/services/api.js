@@ -308,6 +308,31 @@ export function createApi(config) {
     return request(`/admin/settings/${encodeURIComponent(key)}`, { method: 'DELETE', expect: 'json' });
   }
 
+  // Interfaces
+  function getInterfaces() {
+    return request('/admin/interfaces', { method: 'GET', expect: 'json' });
+  }
+
+  function getInterface(id) {
+    return request(`/admin/interfaces/${id}`, { method: 'GET', expect: 'json' });
+  }
+
+  function createInterface(payload) {
+    return request('/admin/interfaces', { method: 'POST', json: payload, expect: 'json' });
+  }
+
+  function updateInterface(id, payload) {
+    return request(`/admin/interfaces/${id}`, { method: 'PUT', json: payload, expect: 'json' });
+  }
+
+  function deleteInterface(id) {
+    return request(`/admin/interfaces/${id}`, { method: 'DELETE', expect: 'json' });
+  }
+
+  function setInterfaceStatus(id, status) {
+    return request(`/admin/interfaces/${id}/status`, { method: 'POST', json: { status }, expect: 'json' });
+  }
+
   // Note: `me()` removed — use tokens returned from /auth/login and backend-provided JWT payloads when needed.
 
   return {
@@ -350,6 +375,14 @@ export function createApi(config) {
     gatewayTopupCard,
     gatewayCardPay,
     gatewayCashPay,
+
+    // Interfaces
+    getInterfaces,
+    getInterface,
+    createInterface,
+    updateInterface,
+    deleteInterface,
+    setInterfaceStatus,
   };
 }
 
@@ -393,6 +426,12 @@ export const {
   gatewayTopupCard,
   gatewayCardPay,
   gatewayCashPay,
+  getInterfaces,
+  getInterface,
+  createInterface,
+  updateInterface,
+  deleteInterface,
+  setInterfaceStatus,
 } = api;
 
 export default api;

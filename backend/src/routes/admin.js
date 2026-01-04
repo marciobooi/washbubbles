@@ -4,6 +4,7 @@ import Machine from '../models/machine.js'
 import User from '../models/user.js'
 import Sale from '../models/sale.js'
 import Setting from '../models/setting.js'
+import Interface from '../models/interface.js'
 import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import fs from 'fs'
@@ -310,6 +311,84 @@ router.post('/settings/logo', (req, res) => {
 router.delete('/settings/:key', async (req, res) => {
   await Setting.findOneAndDelete({ key: req.params.key })
   res.json({ success: true })
+})
+
+// =====================
+// Interfaces CRUD
+// =====================
+
+// List all interfaces
+router.get('/interfaces', async (req, res) => {
+  const interfaces = await Interface.find().sort({ createdAt: -1 })
+  res.json(interfaces)
+})
+
+// Get single interface
+router.get('/interfaces/:id', async (req, res) => {
+  const iface = await Interface.findById(req.params.id).lean()
+  if (!iface) return res.status(404).json({ error: 'Interface not found' })
+  res.json(iface)
+})
+
+// Create interface
+router.post('/interfaces', async (req, res) => {
+  const { name, brand, model, serialNumber, address, tOn, tOff, status } = req.body
+  if (!name) return res.status(400).json({ error: 'Missing name' })
+  if (!serialNumber) return res.status(400).json({ error: 'Missing serial number' })
+  if (address == null) return res.status(400).json({ error: 'Missing address' })
+  if (tOn == null) return res.status(400).json({ error: 'Missing t_on' })
+  if (tOff == null) return res.status(400).json({ error: 'Missing t_off' })
+
+  // Check for duplicate serial number
+  const existing = await Interface.findOne({ serialNumber })
+  if (existing) return res.status(400).json({ error: 'Serial number already exists' })
+
+  const iface = await Interface.create({
+    name,
+    brand: brand || '',
+    model: model || '',
+    serialNumber,
+    address: Number(address),
+    tOn: Number(tOn),
+    tOff: Number(tOff),
+    status: status || 'inactive',
+  })
+  res.json(iface)
+})
+
+// Update interface
+router.put('/interfaces/:id', async (req, res) => {
+  const { name, brand, model, serialNumber, address, tOn, tOff, status } = req.body
+  const update = {}
+  if (name !== undefined) update.name = name
+  if (brand !== undefined) update.brand = brand
+  if (model !== undefined) update.model = model
+  if (serialNumber !== undefined) update.serialNumber = serialNumber
+  if (address !== undefined) update.address = Number(address)
+  if (tOn !== undefined) update.tOn = Number(tOn)
+  if (tOff !== undefined) update.tOff = Number(tOff)
+  if (status !== undefined) update.status = status
+
+  const iface = await Interface.findByIdAndUpdate(req.params.id, update, { new: true })
+  if (!iface) return res.status(404).json({ error: 'Interface not found' })
+  res.json(iface)
+})
+
+// Delete interface
+router.delete('/interfaces/:id', async (req, res) => {
+  await Interface.findByIdAndDelete(req.params.id)
+  res.json({ success: true })
+})
+
+// Toggle interface status (activate/deactivate/fault)
+router.post('/interfaces/:id/status', async (req, res) => {
+  const { status } = req.body
+  if (!['active', 'inactive', 'fault'].includes(status)) {
+    return res.status(400).json({ error: 'Invalid status. Must be active, inactive, or fault' })
+  }
+  const iface = await Interface.findByIdAndUpdate(req.params.id, { status }, { new: true })
+  if (!iface) return res.status(404).json({ error: 'Interface not found' })
+  res.json(iface)
 })
 
 export default router
