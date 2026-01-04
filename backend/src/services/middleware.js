@@ -40,6 +40,12 @@ class Middleware extends EventEmitter {
         return
       }
 
+      // Skip if no address configured
+      if (!peripheral.address && peripheral.protocol !== 'pulse') {
+        console.log(`Skipping ${peripheral.name} - no address configured`)
+        return
+      }
+
       // Handle different connection types based on protocol
       switch (peripheral.protocol) {
         case 'rs232':
@@ -60,7 +66,7 @@ class Middleware extends EventEmitter {
           console.warn(`Unknown protocol ${peripheral.protocol} for ${peripheral.name}`)
       }
     } catch (err) {
-      console.error(`Failed to connect to ${peripheral.name}:`, err)
+      console.error(`Failed to connect to ${peripheral.name}:`, err.message)
       await this.updatePeripheralStatus(peripheral._id, 'fault')
     }
   }
