@@ -6,6 +6,7 @@ import Sale from '../models/sale.js'
 import Setting from '../models/setting.js'
 import Interface from '../models/interface.js'
 import Price from '../models/price.js'
+import Peripheral from '../models/peripheral.js'
 import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import fs from 'fs'
@@ -514,6 +515,52 @@ router.put('/prices/:id', async (req, res) => {
 // Delete price
 router.delete('/prices/:id', async (req, res) => {
   await Price.findByIdAndDelete(req.params.id)
+  res.json({ success: true })
+})
+
+// ===== PERIPHERALS =====
+
+// List peripherals
+router.get('/peripherals', async (req, res) => {
+  const peripherals = await Peripheral.find().sort({ type: 1, name: 1 })
+  res.json(peripherals)
+})
+
+// Create peripheral
+router.post('/peripherals', async (req, res) => {
+  const { name, type, enabled, protocol, address, brand, model, serialNumber, status, image } = req.body
+  if (!name || !type) return res.status(400).json({ error: 'Missing required fields' })
+  
+  const peripheral = await Peripheral.create({
+    name, type, enabled, protocol, address, brand, model, serialNumber, status, image
+  })
+  res.json(peripheral)
+})
+
+// Update peripheral
+router.put('/peripherals/:id', async (req, res) => {
+  const { name, type, enabled, protocol, address, brand, model, serialNumber, status, image } = req.body
+  
+  const update = {}
+  if (name !== undefined) update.name = name
+  if (type !== undefined) update.type = type
+  if (enabled !== undefined) update.enabled = enabled
+  if (protocol !== undefined) update.protocol = protocol
+  if (address !== undefined) update.address = address
+  if (brand !== undefined) update.brand = brand
+  if (model !== undefined) update.model = model
+  if (serialNumber !== undefined) update.serialNumber = serialNumber
+  if (status !== undefined) update.status = status
+  if (image !== undefined) update.image = image
+  
+  const peripheral = await Peripheral.findByIdAndUpdate(req.params.id, update, { new: true })
+  if (!peripheral) return res.status(404).json({ error: 'Peripheral not found' })
+  res.json(peripheral)
+})
+
+// Delete peripheral
+router.delete('/peripherals/:id', async (req, res) => {
+  await Peripheral.findByIdAndDelete(req.params.id)
   res.json({ success: true })
 })
 

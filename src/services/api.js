@@ -358,6 +358,27 @@ export function createApi(config) {
     return request(`/admin/prices/${id}`, { method: 'DELETE', expect: 'json' });
   }
 
+  // Peripherals
+  function getPeripherals() {
+    return request('/admin/peripherals', { method: 'GET', expect: 'json' });
+  }
+
+  function getPeripheral(id) {
+    return request(`/admin/peripherals/${id}`, { method: 'GET', expect: 'json' });
+  }
+
+  function createPeripheral(payload) {
+    return request('/admin/peripherals', { method: 'POST', json: payload, expect: 'json' });
+  }
+
+  function updatePeripheral(id, payload) {
+    return request(`/admin/peripherals/${id}`, { method: 'PUT', json: payload, expect: 'json' });
+  }
+
+  function deletePeripheral(id) {
+    return request(`/admin/peripherals/${id}`, { method: 'DELETE', expect: 'json' });
+  }
+
   // Note: `me()` removed — use tokens returned from /auth/login and backend-provided JWT payloads when needed.
 
   return {
@@ -416,6 +437,13 @@ export function createApi(config) {
     createPrice,
     updatePrice,
     deletePrice,
+
+    // Peripherals
+    getPeripherals,
+    getPeripheral,
+    createPeripheral,
+    updatePeripheral,
+    deletePeripheral,
   };
 }
 
@@ -471,6 +499,11 @@ export const {
   createPrice,
   updatePrice,
   deletePrice,
+  getPeripherals,
+  getPeripheral,
+  createPeripheral,
+  updatePeripheral,
+  deletePeripheral,
 } = api;
 
 export default api;

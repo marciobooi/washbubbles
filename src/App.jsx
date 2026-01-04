@@ -21,6 +21,7 @@ import AdminOperations from './pages/AdminOperations'
 import AdminSettings from './pages/AdminSettings'
 import AdminProfile from './pages/AdminProfile'
 import AdminInterfaces from './pages/AdminInterfaces'
+import AdminPeripherals from './pages/AdminPeripherals'
 import AdminPrices from './pages/AdminPrices'
 import RequireAdmin from './components/RequireAdmin'
 
@@ -325,6 +326,7 @@ function AppInner() {
             <Route path="users" element={<AdminUsers />} />
             <Route path="machines" element={<AdminMachines />} />
             <Route path="interfaces" element={<AdminInterfaces />} />
+            <Route path="peripherals" element={<AdminPeripherals />} />
             <Route path="prices" element={<AdminPrices />} />
             <Route path="transactions" element={<AdminTransactions />} />
             <Route path="operations" element={<AdminOperations />} />
