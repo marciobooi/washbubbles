@@ -333,6 +333,31 @@ export function createApi(config) {
     return request(`/admin/interfaces/${id}/status`, { method: 'POST', json: { status }, expect: 'json' });
   }
 
+  // Prices
+  function getPrices() {
+    return request('/admin/prices', { method: 'GET', expect: 'json' });
+  }
+
+  function getPrice(id) {
+    return request(`/admin/prices/${id}`, { method: 'GET', expect: 'json' });
+  }
+
+  function getPriceByTypeWeight(type, weight) {
+    return request(`/admin/prices/lookup?type=${type}&weight=${weight}`, { method: 'GET', expect: 'json' });
+  }
+
+  function createPrice(payload) {
+    return request('/admin/prices', { method: 'POST', json: payload, expect: 'json' });
+  }
+
+  function updatePrice(id, payload) {
+    return request(`/admin/prices/${id}`, { method: 'PUT', json: payload, expect: 'json' });
+  }
+
+  function deletePrice(id) {
+    return request(`/admin/prices/${id}`, { method: 'DELETE', expect: 'json' });
+  }
+
   // Note: `me()` removed — use tokens returned from /auth/login and backend-provided JWT payloads when needed.
 
   return {
@@ -383,6 +408,14 @@ export function createApi(config) {
     updateInterface,
     deleteInterface,
     setInterfaceStatus,
+
+    // Prices
+    getPrices,
+    getPrice,
+    getPriceByTypeWeight,
+    createPrice,
+    updatePrice,
+    deletePrice,
   };
 }
 
@@ -432,6 +465,12 @@ export const {
   updateInterface,
   deleteInterface,
   setInterfaceStatus,
+  getPrices,
+  getPrice,
+  getPriceByTypeWeight,
+  createPrice,
+  updatePrice,
+  deletePrice,
 } = api;
 
 export default api;

@@ -11,9 +11,7 @@ const machineSchema = new Schema({
   status: { type: String, enum: ['free','working','offline'], default: 'free' },
   statusText: { type: String },
   cycle: { type: Number, default: 0 },
-  weight: { type: Number, default: 0 },
-  price: { type: Number, default: 0 },
-  loyaltyPrice: { type: Number, default: 0 },
+  weight: { type: Number, default: 0 }, // kg - used to lookup price from Price collection
   type: { type: String, enum: ['wash','dry'], default: 'wash' },
   icon: { type: String },
   // Interface linking

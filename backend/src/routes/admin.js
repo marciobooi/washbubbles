@@ -5,6 +5,7 @@ import User from '../models/user.js'
 import Sale from '../models/sale.js'
 import Setting from '../models/setting.js'
 import Interface from '../models/interface.js'
+import Price from '../models/price.js'
 import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import fs from 'fs'
@@ -26,7 +27,7 @@ router.get('/machines', async (req, res) => {
 
 // create machine
 router.post('/machines', async (req, res) => {
-  const { name, number, brand, model, serialNumber, status, statusText, weight, price, loyaltyPrice, type, icon, interfaceId, port, activation, tImp } = req.body
+  const { name, number, brand, model, serialNumber, status, statusText, weight, type, icon, interfaceId, port, activation, tImp } = req.body
   if (!name) return res.status(400).json({ error: 'Missing name' })
   if (type && !['wash', 'dry'].includes(type)) return res.status(400).json({ error: 'Invalid type' })
   if (activation && !['high', 'low'].includes(activation)) return res.status(400).json({ error: 'Invalid activation' })
@@ -42,8 +43,8 @@ router.post('/machines', async (req, res) => {
   const finalIcon = icon || (type === 'dry' ? '/drymachine/S1.png' : '/washingmashine/L1.png')
   const machine = await Machine.create({
     name, number, brand, model, serialNumber,
-    status, statusText, weight, price,
-    loyaltyPrice: loyaltyPrice || 0,
+    status, statusText,
+    weight: weight || 0,
     type: type || 'wash',
     icon: finalIcon,
     interfaceId: interfaceId || null,
@@ -118,7 +119,7 @@ router.get('/machines/:id', async (req, res) => {
 
 // Update machine
 router.put('/machines/:id', async (req, res) => {
-  const { name, number, brand, model, serialNumber, status, statusText, weight, price, loyaltyPrice, type, icon, interfaceId, port, activation, tImp } = req.body
+  const { name, number, brand, model, serialNumber, status, statusText, weight, type, icon, interfaceId, port, activation, tImp } = req.body
   if (type && !['wash', 'dry'].includes(type)) return res.status(400).json({ error: 'Invalid type' })
   if (activation && !['high', 'low'].includes(activation)) return res.status(400).json({ error: 'Invalid activation' })
   
@@ -133,8 +134,8 @@ router.put('/machines/:id', async (req, res) => {
   const finalIcon = icon || (type === 'dry' ? '/drymachine/S1.png' : '/washingmashine/L1.png')
   const m = await Machine.findByIdAndUpdate(req.params.id, {
     name, number, brand, model, serialNumber,
-    status, statusText, weight, price,
-    loyaltyPrice: loyaltyPrice || 0,
+    status, statusText,
+    weight: weight || 0,
     type, icon: finalIcon,
     interfaceId: interfaceId || null,
     port: port || null,
@@ -430,6 +431,90 @@ router.post('/interfaces/:id/status', async (req, res) => {
   const iface = await Interface.findByIdAndUpdate(req.params.id, { status }, { new: true })
   if (!iface) return res.status(404).json({ error: 'Interface not found' })
   res.json(iface)
+})
+
+// ==================== PRICES ====================
+
+// List all prices
+router.get('/prices', async (req, res) => {
+  const prices = await Price.find().sort({ type: 1, weight: 1 })
+  res.json(prices)
+})
+
+// Get price by type and weight (for machine lookup)
+router.get('/prices/lookup', async (req, res) => {
+  const { type, weight } = req.query
+  if (!type || !weight) return res.status(400).json({ error: 'Missing type or weight' })
+  const price = await Price.findOne({ type, weight: Number(weight) })
+  if (!price) return res.status(404).json({ error: 'Price not found for this type/weight' })
+  res.json(price)
+})
+
+// Get single price
+router.get('/prices/:id', async (req, res) => {
+  const price = await Price.findById(req.params.id)
+  if (!price) return res.status(404).json({ error: 'Price not found' })
+  res.json(price)
+})
+
+// Create price
+router.post('/prices', async (req, res) => {
+  const { type, weight, duration, cashPrice, cardPrice, mobilePrice } = req.body
+  if (!type || !['wash', 'dry'].includes(type)) return res.status(400).json({ error: 'Invalid type' })
+  if (weight == null || weight <= 0) return res.status(400).json({ error: 'Invalid weight' })
+
+  // Check for duplicate type+weight
+  const existing = await Price.findOne({ type, weight: Number(weight) })
+  if (existing) return res.status(400).json({ error: `Preço para ${type} ${weight}kg já existe` })
+
+  const price = await Price.create({
+    type,
+    weight: Number(weight),
+    duration: duration != null ? Number(duration) : null,
+    cashPrice: Number(cashPrice) || 0,
+    cardPrice: Number(cardPrice) || 0,
+    mobilePrice: Number(mobilePrice) || 0,
+  })
+  res.json(price)
+})
+
+// Update price
+router.put('/prices/:id', async (req, res) => {
+  const { type, weight, duration, cashPrice, cardPrice, mobilePrice } = req.body
+  
+  // Check if changing type+weight would conflict with existing
+  if (type || weight) {
+    const current = await Price.findById(req.params.id)
+    if (!current) return res.status(404).json({ error: 'Price not found' })
+    
+    const newType = type || current.type
+    const newWeight = weight != null ? Number(weight) : current.weight
+    
+    const conflict = await Price.findOne({ 
+      type: newType, 
+      weight: newWeight, 
+      _id: { $ne: req.params.id } 
+    })
+    if (conflict) return res.status(400).json({ error: `Preço para ${newType} ${newWeight}kg já existe` })
+  }
+
+  const update = {}
+  if (type !== undefined) update.type = type
+  if (weight !== undefined) update.weight = Number(weight)
+  if (duration !== undefined) update.duration = duration != null ? Number(duration) : null
+  if (cashPrice !== undefined) update.cashPrice = Number(cashPrice)
+  if (cardPrice !== undefined) update.cardPrice = Number(cardPrice)
+  if (mobilePrice !== undefined) update.mobilePrice = Number(mobilePrice)
+
+  const price = await Price.findByIdAndUpdate(req.params.id, update, { new: true })
+  if (!price) return res.status(404).json({ error: 'Price not found' })
+  res.json(price)
+})
+
+// Delete price
+router.delete('/prices/:id', async (req, res) => {
+  await Price.findByIdAndDelete(req.params.id)
+  res.json({ success: true })
 })
 
 export default router

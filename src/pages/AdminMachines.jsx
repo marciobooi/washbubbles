@@ -20,8 +20,6 @@ export default function AdminMachines(){
   const [machineSerial, setMachineSerial] = useState('')
   const [status, setStatus] = useState('free')
   const [weight, setWeight] = useState('')
-  const [moneyPrice, setMoneyPrice] = useState('')
-  const [loyaltyPrice, setLoyaltyPrice] = useState('')
   const [type, setType] = useState('wash')
   const [selectedInterfacePort, setSelectedInterfacePort] = useState('') // format: interfaceId:port
   const [activation, setActivation] = useState('high')
@@ -107,8 +105,6 @@ export default function AdminMachines(){
     setMachineSerial('')
     setStatus('free')
     setWeight('')
-    setMoneyPrice('')
-    setLoyaltyPrice('')
     setType('wash')
     setSelectedInterfacePort('')
     setActivation('high')
@@ -126,8 +122,6 @@ export default function AdminMachines(){
     setMachineSerial(m.serialNumber || '')
     setStatus(m.status || 'free')
     setWeight(m.weight !== undefined && m.weight !== null ? String(m.weight) : '')
-    setMoneyPrice(m.price !== undefined && m.price !== null ? String(m.price) : '')
-    setLoyaltyPrice(m.loyaltyPrice !== undefined && m.loyaltyPrice !== null ? String(m.loyaltyPrice) : '')
     setType(m.type || 'wash')
     // Set interface+port combo
     if (m.interfaceId && m.port) {
@@ -147,13 +141,6 @@ export default function AdminMachines(){
     // Client-side validation
     const newErrors = {}
     if (!name || !name.trim()) newErrors.name = 'Nome é obrigatório.'
-    const mp = parseFloat(moneyPrice)
-    if (moneyPrice === '' || Number.isNaN(mp)) newErrors.moneyPrice = 'Preço é obrigatório.'
-    else if (mp < 0) newErrors.moneyPrice = 'Preço deve ser maior ou igual a 0.'
-    if (loyaltyPrice !== '') {
-      const lp = parseFloat(loyaltyPrice)
-      if (Number.isNaN(lp) || lp < 0) newErrors.loyaltyPrice = 'Fidelidade deve ser maior ou igual a 0.'
-    }
 
     if (weight !== '') {
       const w = parseFloat(weight)
@@ -185,8 +172,6 @@ export default function AdminMachines(){
         status,
         statusText: 'Livre',
         weight: weight === '' ? 0 : parseFloat(weight),
-        price: parseFloat(moneyPrice),
-        loyaltyPrice: loyaltyPrice === '' ? 0 : parseFloat(loyaltyPrice),
         type,
         interfaceId,
         port,
@@ -248,8 +233,8 @@ export default function AdminMachines(){
               <th className="px-4 py-2 text-left">Nº</th>
               <th className="px-4 py-2 text-left">Nome</th>
               <th className="px-4 py-2 text-left">Tipo</th>
+              <th className="px-4 py-2 text-left">Peso</th>
               <th className="px-4 py-2 text-left">Porto</th>
-              <th className="px-4 py-2 text-left">Preço</th>
               <th className="px-4 py-2 text-left">Estado</th>
               <th className="px-4 py-2 text-left">Ações</th>
             </tr>
@@ -272,12 +257,12 @@ export default function AdminMachines(){
                     <div>{m.name}</div>
                   </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{m.type === 'wash' ? 'Lavagem' : 'Secagem'}</td>
+                  <td className="px-4 py-3">{m.weight ? m.weight + ' kg' : '—'}</td>
                   <td className="px-4 py-3 text-xs">
                     {m.interfaceId ? (
                       <span>Interface: {m.interfaceId.address || m.interfaceId}, Porto: {m.port}</span>
                     ) : '—'}
                   </td>
-                  <td className="px-4 py-3">{typeof m.price === 'number' ? m.price.toFixed(2) + '€' : m.price}</td>
                   <td className="px-4 py-3">
                     <span className={`text-xs px-2 py-1 rounded ${m.status === 'working' ? 'bg-yellow-100 text-yellow-800' : m.status === 'offline' ? 'bg-gray-100 text-gray-800' : 'bg-green-100 text-green-800'}`}>{m.statusText || (m.status === 'working' ? 'Ocupado' : m.status === 'offline' ? 'Offline' : 'Livre')}</span>
                   </td>
@@ -360,22 +345,10 @@ export default function AdminMachines(){
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label htmlFor="machine-weight" className="text-sm font-medium">Peso (kg)</label>
+                <label htmlFor="machine-weight" className="text-sm font-medium">Peso (kg) <span className="text-red-500">*</span></label>
                 <input id="machine-weight" className="border p-2 rounded mt-1 w-full" placeholder="Peso (kg)" type="number" value={weight} onChange={(e) => { setWeight(e.target.value); const v = parseFloat(e.target.value); if (errors.weight && !isNaN(v) && v >= 0) setErrors((s) => { const c = { ...s }; delete c.weight; return c }); }} />
                 {errors.weight && <div className="text-xs text-destructive mt-1">{errors.weight}</div>}
-              </div>
-              <div>
-                <label htmlFor="machine-price" className="text-sm font-medium">Preço (€)</label>
-                <input id="machine-price" className="border p-2 rounded mt-1 w-full" placeholder="Preço (€)" type="number" step="0.01" value={moneyPrice} onChange={(e) => { setMoneyPrice(e.target.value); const v = parseFloat(e.target.value); if (errors.moneyPrice && !isNaN(v) && v >= 0) setErrors((s) => { const c = { ...s }; delete c.moneyPrice; return c }); }} />
-                {errors.moneyPrice && <div className="text-xs text-destructive mt-1">{errors.moneyPrice}</div>}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label htmlFor="machine-loyalty" className="text-sm font-medium">Fidelidade (€)</label>
-                <input id="machine-loyalty" className="border p-2 rounded mt-1 w-full" placeholder="Fidelidade (€)" type="number" step="0.01" value={loyaltyPrice} onChange={(e) => { setLoyaltyPrice(e.target.value); const v = parseFloat(e.target.value); if (errors.loyaltyPrice && !isNaN(v) && v >= 0) setErrors((s) => { const c = { ...s }; delete c.loyaltyPrice; return c }); }} />
-                {errors.loyaltyPrice && <div className="text-xs text-destructive mt-1">{errors.loyaltyPrice}</div>}
+                <div className="text-xs text-muted-foreground mt-1">O preço é definido automaticamente com base no peso e tipo.</div>
               </div>
               {type === 'dry' && (
                 <div>
@@ -394,7 +367,6 @@ export default function AdminMachines(){
                 <div>
                   <div className="font-semibold">{name || (editing ? editing.name : 'Nome da máquina')}</div>
                   <div className="text-xs text-muted-foreground">{type === 'wash' ? 'Lavagem' : 'Secagem'} • {weight !== '' ? weight + ' kg' : '—'}</div>
-                  <div className="text-sm mt-1">{moneyPrice !== '' ? Number(moneyPrice).toFixed(2) : (editing && editing.price ? editing.price.toFixed(2) : '—')}€ • Fidelidade: {loyaltyPrice !== '' ? Number(loyaltyPrice).toFixed(2) : (editing && typeof editing.loyaltyPrice === 'number' ? editing.loyaltyPrice.toFixed(2) : '—')}€</div>
                 </div>
 
                 <div>
