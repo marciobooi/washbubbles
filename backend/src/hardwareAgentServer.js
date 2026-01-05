@@ -15,27 +15,66 @@ class HardwareAgentServer extends EventEmitter {
   }
 
   init(server) {
-    this.wss = new WebSocketServer({ server, path: '/hardware-agent' })
+    console.log('[HardwareAgentServer] Initializing WebSocket server on path /hardware-agent')
+    
+    // Use noServer mode and handle upgrade manually to avoid conflicts with other WebSocket servers
+    this.wss = new WebSocketServer({ noServer: true })
+    
+    // Handle HTTP upgrade requests manually
+    server.on('upgrade', (request, socket, head) => {
+      const pathname = new URL(request.url, 'http://localhost').pathname
+      
+      if (pathname === '/hardware-agent') {
+        console.log('[HardwareAgentServer] Handling upgrade for /hardware-agent')
+        console.log('[HardwareAgentServer] Upgrade headers:', {
+          'x-api-key': request.headers['x-api-key'] ? '***' : 'missing',
+          'authorization': request.headers['authorization'] ? request.headers['authorization'].substring(0, 20) + '...' : 'missing'
+        })
+        
+        this.wss.handleUpgrade(request, socket, head, (ws) => {
+          console.log('[HardwareAgentServer] Upgrade complete, emitting connection')
+          this.wss.emit('connection', ws, request)
+        })
+      }
+      // Let other paths be handled by other WebSocket servers
+    })
+    
+    console.log('[HardwareAgentServer] WebSocket server created, setting up connection handler...')
     
     this.wss.on('connection', async (socket, request) => {
-      // Authenticate hardware agent via API key
-      const apiKeyHeader = request.headers['x-api-key'] || 
-        (request.headers['authorization'] && request.headers['authorization'].startsWith('ApiKey ') 
-          ? request.headers['authorization'].split(' ')[1] 
-          : null)
-      
-      if (!apiKeyHeader) {
-        console.warn('[HardwareAgentServer] No API key provided')
-        socket.close(1008, 'Unauthorized: API key required')
-        return
-      }
-      
-      const userModel = await User.findOne({ apiKey: apiKeyHeader })
-      if (!userModel || userModel.role !== 'KIOSK') {
-        console.warn('[HardwareAgentServer] Invalid API key or not a KIOSK user')
-        socket.close(1008, 'Unauthorized: Invalid API key')
-        return
-      }
+      console.log('[HardwareAgentServer] *** CONNECTION EVENT FIRED ***')
+      try {
+        // Authenticate hardware agent via API key
+        // Note: WebSocket headers are lowercase
+        const apiKeyHeader = request.headers['x-api-key'] || 
+          (request.headers['authorization'] && request.headers['authorization'].startsWith('ApiKey ') 
+            ? request.headers['authorization'].split(' ')[1] 
+            : null)
+        
+        console.log('[HardwareAgentServer] Connection established, authenticating...')
+        console.log('[HardwareAgentServer] API Key received:', apiKeyHeader ? apiKeyHeader.substring(0, 20) + '...' : 'NONE')
+        
+        if (!apiKeyHeader) {
+          console.warn('[HardwareAgentServer] No API key provided')
+          socket.close(1008, 'Unauthorized: API key required')
+          return
+        }
+        
+        console.log('[HardwareAgentServer] Looking up user in database...')
+        const userModel = await User.findOne({ apiKey: apiKeyHeader })
+        console.log('[HardwareAgentServer] User lookup result:', userModel ? `Found: ${userModel.username}` : 'NOT FOUND')
+        
+        if (!userModel) {
+          console.warn('[HardwareAgentServer] Invalid API key - user not found')
+          socket.close(1008, 'Unauthorized: Invalid API key')
+          return
+        }
+        
+        if (userModel.role !== 'KIOSK') {
+          console.warn('[HardwareAgentServer] User is not a KIOSK user, role:', userModel.role)
+          socket.close(1008, 'Unauthorized: Not a KIOSK user')
+          return
+        }
       
       const agentId = userModel._id.toString()
       socket._agentId = agentId
@@ -70,6 +109,20 @@ class HardwareAgentServer extends EventEmitter {
       socket.on('error', (err) => {
         console.error(`[HardwareAgentServer] Agent ${agentId} error:`, err.message)
       })
+    } catch (err) {
+      console.error('[HardwareAgentServer] Connection handler error:', err)
+      console.error('[HardwareAgentServer] Error stack:', err.stack)
+      try {
+        socket.close(1011, 'Server error')
+      } catch (e) {
+        console.error('[HardwareAgentServer] Failed to close socket:', e)
+      }
+    }
+  })
+    
+    // Add error handler for the WebSocket server itself
+    this.wss.on('error', (err) => {
+      console.error('[HardwareAgentServer] WebSocket server error:', err)
     })
     
     // Heartbeat monitor

@@ -76,8 +76,23 @@ export function disconnectClient(id) {
 }
 
 export function initWebSocket(server) {
-  const wss = new WebSocketServer({ server, path: '/ws' })
+  // Use noServer mode and handle upgrade manually to avoid conflicts with other WebSocket servers
+  const wss = new WebSocketServer({ noServer: true })
   _wss = wss
+
+  // Handle HTTP upgrade requests manually
+  server.on('upgrade', (request, socket, head) => {
+    const pathname = new URL(request.url, 'http://localhost').pathname
+    
+    // Only handle /ws path (or requests without path for backward compatibility)
+    if (pathname === '/ws' || pathname === '/') {
+      console.log('[ws] Handling upgrade for', pathname)
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit('connection', ws, request)
+      })
+    }
+    // Let other paths be handled by other WebSocket servers (like /hardware-agent)
+  })
 
   wss.on('connection', async (socket, request) => {
     // assign per-socket metadata
@@ -115,13 +130,22 @@ export function initWebSocket(server) {
         console.info('[ws] authenticated via apiKey (header)')
       } else if (token) {
         try {
-          const decoded = jwt.verify(token, JWT_SECRET)
-          userModel = await User.findById(decoded.sub)
-          if (!userModel) throw new Error('User not found')
-          console.info('[ws] authenticated via token')
+          if (!JWT_SECRET) {
+            console.error('[ws] JWT_SECRET not available, cannot verify token')
+            userModel = null
+          } else {
+            const decoded = jwt.verify(token, JWT_SECRET)
+            userModel = await User.findById(decoded.sub)
+            if (!userModel) {
+              console.warn('[ws] token valid but user not found:', decoded.sub)
+              userModel = null
+            } else {
+              console.info('[ws] authenticated via token:', userModel.username, '(', userModel.role, ')')
+            }
+          }
         } catch (err) {
           // Token invalid — don't close connection; allow anonymous read-only fallback
-          console.warn('[ws] invalid token on connect, falling back to anonymous', err.message || err)
+          console.warn('[ws] invalid token on connect, falling back to anonymous:', err.message || err)
           userModel = null
         }
       } else {

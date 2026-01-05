@@ -1,0 +1,13 @@
+{
+  "serverUrl": "ws://localhost:3000/hardware-agent",
+  "apiKey": "b6f3c9a1d4e78b2f90c3a4d6e1f2b3c4d5e6f7890a1b2c3d",
+  "peripherals": {
+    "coin_acceptor": { "enabled": false },
+    "bill_acceptor": { "enabled": false },
+    "interface": { "enabled": true, "port": "COM3" },
+    "hopper": { "enabled": false },
+    "card_dispenser": { "enabled": false },
+    "printer": { "enabled": false },
+    "rfid_reader": { "enabled": false }
+  }
+}

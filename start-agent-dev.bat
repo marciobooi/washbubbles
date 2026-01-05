@@ -9,22 +9,28 @@ echo.
 
 cd /d "%~dp0backend"
 
-REM Check if .env.agent exists
-if not exist ".env.agent" (
-    echo WARNING: .env.agent not found!
+REM Check if config.json exists, create it if not
+if not exist "config.json" (
+    echo Creating config.json...
+    (
+        echo {
+        echo   "serverUrl": "ws://localhost:3000/hardware-agent",
+        echo   "apiKey": "b6f3c9a1d4e78b2f90c3a4d6e1f2b3c4d5e6f7890a1b2c3d",
+        echo   "peripherals": {
+        echo     "coin_acceptor": { "enabled": false },
+        echo     "bill_acceptor": { "enabled": false },
+        echo     "interface": { "enabled": true, "port": "COM3" },
+        echo     "hopper": { "enabled": false },
+        echo     "card_dispenser": { "enabled": false },
+        echo     "printer": { "enabled": false },
+        echo     "rfid_reader": { "enabled": false }
+        echo   }
+        echo }
+    ) > config.json
+    echo config.json created with localhost server and COM3 interface enabled
     echo.
-    echo Create backend\.env.agent with:
-    echo   HARDWARE_SERVER_URL=ws://localhost:3000/hardware-agent
-    echo   HARDWARE_AGENT_API_KEY=your-kiosk-api-key
-    echo.
-    echo Or set environment variables and press any key to continue...
-    pause >nul
 )
 
-REM Start agent
+REM Start agent with config.json
 echo Starting hardware agent...
-if exist ".env.agent" (
-    node --env-file=.env.agent src/agentServer.js
-) else (
-    node src/agentServer.js
-)
+node src/agentServer.js config.json
