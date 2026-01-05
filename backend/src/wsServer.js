@@ -55,6 +55,21 @@ export async function broadcastMachine(machine) {
   }
 }
 
+// Broadcast hardware events to all connected clients
+export function broadcastHardwareEvent(type, payload) {
+  try {
+    if (!_wss) return
+    const clients = _wss.clients ? _wss.clients.size : 0
+    const msg = JSON.stringify({ type, payload })
+    console.log(`[ws] broadcasting ${type} to ${clients} clients`)
+    _wss.clients.forEach((client) => {
+      if (client.readyState === client.OPEN) client.send(msg)
+    })
+  } catch (err) {
+    console.error('[ws] broadcastHardwareEvent error', err.message || err)
+  }
+}
+
 export function listClients() {
   if (!_wss) return []
   return Array.from(_wss.clients)

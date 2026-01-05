@@ -4,6 +4,7 @@ import { useCart } from '../context/CartContext'
 import CashModal from './CashModal'
 import api from '@/services/api'
 import { toast } from '@/components/ui/Toast'
+import * as websocket from '@/services/websocket'
 
 export default function CartModal({ open, onClose, onPay = () => {}, onClear = () => {} }) {
   const { cart, removeFromCart, clearCart } = useCart()
@@ -18,6 +19,10 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
   const [cardNeedsTopup, setCardNeedsTopup] = React.useState(false)
   const [topupAmount, setTopupAmount] = React.useState(0)
 
+  // Auto-detection state
+  const [cashInserted, setCashInserted] = React.useState(0)
+  const [detectedCardCode, setDetectedCardCode] = React.useState(null)
+
   // Separate purchase items (machines/services) from recharge items
   const purchaseTotal = cart.reduce((s, i) => (i.type === 'Recarga de Cartão' ? s : s + (i.price || i.amount || 0)), 0)
   const rechargeTotal = cart.reduce((s, i) => (i.type === 'Recarga de Cartão' ? s + (i.price || i.amount || 0) : s), 0)
@@ -25,6 +30,75 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
 
   // Check if cart contains recharge items
   const hasRecharge = rechargeTotal > 0
+
+  // Listen for hardware events (coins, bills, cards)
+  React.useEffect(() => {
+    if (!open) {
+      // Reset detection state when modal closes
+      setCashInserted(0)
+      setDetectedCardCode(null)
+      return
+    }
+
+    const unsubscribe = websocket.subscribe((data) => {
+      if (!data || typeof data !== 'object') return
+
+      // Handle peripheral credit events (coins/bills inserted)
+      if (data.type === 'peripheral:credit') {
+        const { amount } = data.payload || {}
+        if (amount && amount > 0) {
+          setCashInserted(prev => {
+            const newTotal = prev + amount
+            console.log('[CartModal] Cash inserted:', amount, 'Total:', newTotal)
+            toast({ title: `Dinheiro inserido: ${amount.toFixed(2)}€`, variant: 'success' })
+            
+            // Auto-process payment if enough cash inserted
+            if (newTotal >= total) {
+              console.log('[CartModal] Sufficient cash, auto-processing payment...')
+              setTimeout(() => {
+                handleCashConfirm(newTotal)
+              }, 500)
+            }
+            return newTotal
+          })
+        }
+      }
+
+      // Handle RFID card detection
+      if (data.type === 'rfid:card_detected') {
+        const { cardCode } = data.payload || {}
+        if (cardCode) {
+          console.log('[CartModal] Card detected:', cardCode)
+          setDetectedCardCode(cardCode)
+          toast({ title: 'Cartão detetado', variant: 'success' })
+          
+          // Auto-process card payment
+          setTimeout(() => {
+            handleCardPayAutomatic(cardCode)
+          }, 500)
+        }
+      }
+    })
+
+    return unsubscribe
+  }, [open, total])
+
+  async function handleCardPayAutomatic(code) {
+    // Auto-pay with detected card
+    console.log('[CartModal] Auto-processing card payment with code:', code)
+    setCheckingCard(true)
+    setCardError(null)
+    try {
+      await onPay(cart, { method: 'card', cardCode: code })
+      onClose()
+    } catch (e) {
+      console.error('Auto card payment failed', e)
+      setCardError(e?.message || 'Erro ao processar pagamento com cartão')
+      toast({ title: 'Erro no pagamento', description: e?.message, variant: 'error' })
+    } finally {
+      setCheckingCard(false)
+    }
+  }
 
   async function handleCardPay() {
     // If recharges already cover purchases, keep old behaviour (no external card required)
@@ -170,36 +244,43 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
               <div className="text-3xl font-bold text-teal-600">{total.toFixed(2)}€</div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex gap-3">
-              <button 
-                onClick={handleCardPay} 
-                className={`flex-1 py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-3 ${purchaseTotal > rechargeTotal ? 'bg-teal-500 hover:bg-teal-600 text-white shadow-lg' : 'bg-teal-600 hover:bg-teal-700 text-white shadow-lg'}`}
-              >
-                {/* Card icon */}
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 6h18M5 14h.01M9 14h6" />
-                </svg>
-                <span>Cartão</span>
-              </button>
+            {/* Auto-detection waiting state */}
+            <div className="flex flex-col gap-4 py-6 text-center">
+              <div className="flex items-center justify-center gap-3">
+                <div className="w-3 h-3 bg-teal-600 rounded-full animate-pulse"></div>
+                <p className="text-lg font-semibold text-neutral-700">Aguardando pagamento...</p>
+              </div>
+              
+              <div className="space-y-2 text-sm text-neutral-600">
+                <p className="flex items-center justify-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>Insira moedas ou notas</span>
+                </p>
+                <p className="flex items-center justify-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 6h18M5 14h.01M9 14h6" />
+                  </svg>
+                  <span>Aproxime o cartão</span>
+                </p>
+              </div>
 
-              <button 
-                onClick={openCashModal} 
-                className="flex-1 bg-white border border-neutral-300 text-neutral-700 py-4 rounded-xl font-bold text-lg shadow-sm transition-all hover:bg-neutral-50 flex items-center justify-center gap-3"
-              >
-                {/* Note: Cash payments will open a cash modal that accepts inserted amount. */}
-                {/* Cash icon */}
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6M7 10h10M7 6h10" />
-                </svg>
-                <span>Dinheiro</span>
-              </button>
+              {cashInserted > 0 && (
+                <div className="mt-3 p-4 bg-teal-50 rounded-xl">
+                  <p className="text-sm text-neutral-600">Dinheiro inserido</p>
+                  <p className="text-2xl font-bold text-teal-700">{cashInserted.toFixed(2)}€</p>
+                  {cashInserted < total && (
+                    <p className="text-xs text-neutral-500 mt-1">Faltam {(total - cashInserted).toFixed(2)}€</p>
+                  )}
+                </div>
+              )}
 
               <button 
                 onClick={onClose}
-                className="px-6 py-4 rounded-xl bg-neutral-100 text-neutral-700 hover:bg-neutral-200 font-semibold transition-all"
+                className="mt-4 px-6 py-3 rounded-xl bg-neutral-100 text-neutral-700 hover:bg-neutral-200 font-semibold transition-all"
               >
-                Fechar
+                Cancelar
               </button>
             </div>
           </>

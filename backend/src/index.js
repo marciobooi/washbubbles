@@ -6,7 +6,7 @@ import { connectMongo } from './db.js'
 import authRoutes from './routes/auth.js'
 import adminRoutes from './routes/admin.js'
 import posRoutes from './routes/pos.js'
-import { initWebSocket } from './wsServer.js'
+import { initWebSocket, broadcastHardwareEvent } from './wsServer.js'
 import hardwareAgentServer from './hardwareAgentServer.js'
 import coinMachine from './services/coinMachine.js'
 
@@ -49,18 +49,24 @@ hardwareAgentServer.init(server)
 // Listen for hardware events and integrate with coinMachine
 hardwareAgentServer.on('peripheral:credit', (data) => {
   console.log('[Backend] Peripheral credit event:', data)
+  // Broadcast to all WebSocket clients (POS screens)
+  broadcastHardwareEvent('peripheral:credit', data)
   // Forward to coinMachine system
   coinMachine.emit('remote-credits', data)
 })
 
 hardwareAgentServer.on('interface:status', (data) => {
   console.log('[Backend] Interface status event:', data)
+  // Broadcast to all WebSocket clients
+  broadcastHardwareEvent('interface:status', data)
   // Forward to coinMachine for machine status updates
   coinMachine.emit('machine-status-update', data)
 })
 
 hardwareAgentServer.on('rfid:card_detected', (data) => {
   console.log('[Backend] RFID card detected:', data)
+  // Broadcast to all WebSocket clients
+  broadcastHardwareEvent('rfid:card_detected', data)
   // Forward to coinMachine for card handling
   coinMachine.emit('card-detected', data)
 })
