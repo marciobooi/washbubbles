@@ -1,0 +1,13 @@
+{
+  "serverUrl": "ws://192.168.1.100:3000/hardware-agent",
+  "apiKey": "YOUR-KIOSK-API-KEY-HERE",
+  "peripherals": {
+    "coin_acceptor": { "enabled": false, "port": "COM1" },
+    "bill_acceptor": { "enabled": false, "port": "COM2" },
+    "interface": { "enabled": true, "port": "COM3" },
+    "hopper": { "enabled": false, "port": "COM4" },
+    "card_dispenser": { "enabled": false, "port": "COM5" },
+    "printer": { "enabled": false, "port": "COM6" },
+    "rfid_reader": { "enabled": false, "port": "COM7" }
+  }
+}
