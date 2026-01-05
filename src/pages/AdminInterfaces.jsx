@@ -4,6 +4,7 @@ import { toast } from '@/components/ui/Toast'
 import Modal from '@/components/ui/Modal'
 import { Button } from '@/components/ui/button'
 import { Plus, Pencil, Trash2, Check, X } from 'lucide-react'
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 
 const EMPTY_FORM = {
   name: '',
@@ -141,44 +142,98 @@ export default function AdminInterfaces() {
       ) : interfaces.length === 0 ? (
         <div className="text-neutral-500">Nenhuma interface registada.</div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {interfaces.map((iface) => (
-            <div key={iface._id} className="bg-white rounded-lg shadow p-4 flex flex-col">
-              <div className="flex items-start gap-3 mb-3">
-                <img src="/geral/interface.png" alt="Interface" className="w-16 h-16 object-contain rounded" />
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold truncate">{iface.name}</div>
-                  <div className="text-xs text-neutral-500">S/N: {iface.serialNumber}</div>
-                  {iface.brand && <div className="text-xs text-neutral-400">{iface.brand} {iface.model}</div>}
+        <TooltipProvider>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {interfaces.map((iface) => (
+              <div key={iface._id} className="bg-white rounded-lg shadow hover:shadow-md transition-shadow">
+                {/* Header */}
+                <div className="p-4 border-b">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-semibold text-lg">{iface.name}</h3>
+                    <span className={`text-xs px-3 py-1 rounded-full font-medium ${statusColors[iface.status] || statusColors.inactive}`}>
+                      {statusLabels[iface.status] || iface.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <img src="/geral/interface.png" alt="Interface" className="w-12 h-12 object-contain rounded" />
+                    <div className="flex-1 text-sm text-neutral-600">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">S/N:</span>
+                        <span className="text-neutral-800">{iface.serialNumber}</span>
+                      </div>
+                      {iface.brand && (
+                        <div className="text-neutral-500 text-xs mt-0.5">
+                          {iface.brand} {iface.model}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <span className={`text-xs px-2 py-1 rounded ${statusColors[iface.status] || statusColors.inactive}`}>
-                  {statusLabels[iface.status] || iface.status}
-                </span>
+
+                {/* Specs Grid */}
+                <div className="p-4 p-4 border-b">
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="bg-white rounded px-3 py-2">
+                      <div className="text-xs text-neutral-500 mb-0.5">Endereço</div>
+                      <div className="font-semibold text-neutral-800">{iface.address}</div>
+                    </div>
+                    <div className="bg-white rounded px-3 py-2">
+                      <div className="text-xs text-neutral-500 mb-0.5">Portos</div>
+                      <div className="font-semibold text-neutral-800">{iface.ports || 2}</div>
+                    </div>
+                    <div className="bg-white rounded px-3 py-2">
+                      <div className="text-xs text-neutral-500 mb-0.5">t_on</div>
+                      <div className="font-semibold text-neutral-800">{iface.tOn} ms</div>
+                    </div>
+                    <div className="bg-white rounded px-3 py-2">
+                      <div className="text-xs text-neutral-500 mb-0.5">t_off</div>
+                      <div className="font-semibold text-neutral-800">{iface.tOff} ms</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="p-4 flex gap-2">
+                  {iface.status === 'active' ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button className="btn p-2 bg-green-600 text-white hover:bg-green-700 transition-colors" onClick={() => handleStatus(iface._id, 'inactive')}>
+                          <Check className="h-5 w-5" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent sideOffset={6}>Activo - Clique para desactivar</TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button className="btn p-2 bg-neutral-200 text-neutral-800 hover:bg-neutral-300 transition-colors" onClick={() => handleStatus(iface._id, 'active')}>
+                          <X className="h-5 w-5" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent sideOffset={6}>Inactivo - Clique para activar</TooltipContent>
+                    </Tooltip>
+                  )}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button className="btn p-2 hover:bg-neutral-100 transition-colors" onClick={() => openEdit(iface)}>
+                        <Pencil className="h-5 w-5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent sideOffset={6}>Editar</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button className="btn btn-destructive p-2 ml-auto hover:bg-red-700 transition-colors" onClick={() => handleDelete(iface._id)}>
+                        <Trash2 className="h-5 w-5" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent sideOffset={6}>Eliminar</TooltipContent>
+                  </Tooltip>
+                </div>
               </div>
-              <div className="text-xs text-neutral-600 mb-3 space-y-1">
-                <div><span className="font-medium">Endereço:</span> {iface.address} | <span className="font-medium">Portos:</span> {iface.ports || 2}</div>
-                <div><span className="font-medium">t_on:</span> {iface.tOn} ms | <span className="font-medium">t_off:</span> {iface.tOff} ms</div>
-              </div>
-              <div className="mt-auto flex flex-wrap gap-2">
-                {iface.status === 'active' ? (
-                  <button className="btn p-2 bg-green-600 text-white hover:bg-green-700" title="Activo" onClick={() => handleStatus(iface._id, 'inactive')}>
-                    <Check className="h-6 w-6" />
-                  </button>
-                ) : (
-                  <button className="btn p-2 bg-neutral-200 text-neutral-800 hover:bg-neutral-300" title="Inactivo" onClick={() => handleStatus(iface._id, 'active')}>
-                    <X className="h-6 w-6" />
-                  </button>
-                )}
-                <button className="btn p-2" title="Editar" onClick={() => openEdit(iface)}>
-                  <Pencil className="h-6 w-6" />
-                </button>
-                <button className="btn btn-destructive p-2" title="Eliminar" onClick={() => handleDelete(iface._id)}>
-                  <Trash2 className="h-6 w-6" />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </TooltipProvider>
       )}
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? 'Editar Interface' : 'Nova Interface'}>
