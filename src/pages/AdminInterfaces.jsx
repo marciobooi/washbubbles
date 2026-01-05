@@ -3,7 +3,7 @@ import api from '@/services/api'
 import { toast } from '@/components/ui/Toast'
 import Modal from '@/components/ui/Modal'
 import { Button } from '@/components/ui/button'
-import { Plus, Pencil, Trash2, Check, X, AlertTriangle } from 'lucide-react'
+import { Plus, Pencil, Trash2, Check, X } from 'lucide-react'
 
 const EMPTY_FORM = {
   name: '',
@@ -122,13 +122,11 @@ export default function AdminInterfaces() {
   const statusColors = {
     active: 'bg-green-100 text-green-800',
     inactive: 'bg-neutral-100 text-neutral-700',
-    fault: 'bg-red-100 text-red-800',
   }
 
   const statusLabels = {
     active: 'Activo',
     inactive: 'Inactivo',
-    fault: 'Avaria',
   }
 
   return (
@@ -162,21 +160,17 @@ export default function AdminInterfaces() {
                 <div><span className="font-medium">t_on:</span> {iface.tOn} ms | <span className="font-medium">t_off:</span> {iface.tOff} ms</div>
               </div>
               <div className="mt-auto flex flex-wrap gap-2">
-                {iface.status !== 'active' && (
-                  <button className="btn p-2 bg-green-600 text-white hover:bg-green-700" title="Activar" onClick={() => handleStatus(iface._id, 'active')}>
+                {iface.status === 'active' ? (
+                  <button className="btn p-2 bg-green-600 text-white hover:bg-green-700" title="Activo" onClick={() => handleStatus(iface._id, 'inactive')}>
                     <Check className="h-6 w-6" />
                   </button>
-                )}
-                {iface.status === 'active' && (
-                  <button className="btn p-2 bg-neutral-200 text-neutral-800 hover:bg-neutral-300" title="Desactivar" onClick={() => handleStatus(iface._id, 'inactive')}>
+                ) : (
+                  <button className="btn p-2 bg-neutral-200 text-neutral-800 hover:bg-neutral-300" title="Inactivo" onClick={() => handleStatus(iface._id, 'active')}>
                     <X className="h-6 w-6" />
                   </button>
                 )}
                 <button className="btn p-2" title="Editar" onClick={() => openEdit(iface)}>
                   <Pencil className="h-6 w-6" />
-                </button>
-                <button className="btn p-2 bg-amber-500 text-white hover:bg-amber-600" title="Avaria" onClick={() => handleStatus(iface._id, 'fault')}>
-                  <AlertTriangle className="h-6 w-6" />
                 </button>
                 <button className="btn btn-destructive p-2" title="Eliminar" onClick={() => handleDelete(iface._id)}>
                   <Trash2 className="h-6 w-6" />
