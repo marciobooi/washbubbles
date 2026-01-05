@@ -86,7 +86,24 @@ export default function Machines() {
   const { processPayment } = usePayment()
 
   async function openForAdd(m) {
-    addToCart(m)
+    // Fetch fresh price data before adding to cart
+    let machineWithPrice = { ...m }
+    if (m.type && m.weight) {
+      try {
+        const priceData = await api.getPriceByTypeWeightPublic(m.type, m.weight)
+        if (priceData) {
+          // Add calculated prices to the machine object
+          const { getEffectivePrice } = await import('@/lib/promo')
+          machineWithPrice.cashPrice = getEffectivePrice(priceData, 'cash')
+          machineWithPrice.cardPrice = getEffectivePrice(priceData, 'card')
+          machineWithPrice.price = priceData.cardPrice || priceData.cashPrice || m.price || 0
+        }
+      } catch (e) {
+        console.error('Failed to fetch price for cart', e)
+      }
+    }
+    
+    addToCart(machineWithPrice)
     // Don't auto-open cart; show toast with action to view cart
     try {
       const sonner = await import('sonner')
@@ -99,10 +116,7 @@ export default function Machines() {
   }
 
   function handleAddToCart(m) {
-    addToCart(m)
-    // Simple feedback for now
-    toast({ title: `${m.name} adicionado ao carrinho`, variant: 'success' })
-    console.log('Added to cart', m)
+    openForAdd(m)
   }
 
   async function pay(m, opts = { useFidelity: false, method: 'card', inserted: null }) {
