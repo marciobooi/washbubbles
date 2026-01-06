@@ -7,8 +7,8 @@ const saleSchema = new Schema({
   machineId: { type: Schema.Types.ObjectId, ref: 'Machine' },
   amount: { type: Number, required: true },
   items: { type: Schema.Types.Mixed },
-  // Transaction type: payment, recharge, admin_start, etc.
-  type: { type: String, enum: ['payment', 'recharge', 'admin_start', 'other'], default: 'payment' },
+  // Transaction type: payment, recharge, card_purchase, admin_start, etc.
+  type: { type: String, enum: ['payment', 'recharge', 'card_purchase', 'admin_start', 'other'], default: 'payment' },
   // Payment method (card, cash, kiosk)
   method: { type: String },
   // Optional batch id to group multi-sale payments into one logical transaction

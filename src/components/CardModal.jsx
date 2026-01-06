@@ -120,7 +120,31 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
           <div className="shrink-0 ">
             <div className="bg-white rounded-3xl p-6 lg:p-8 shadow-xl border border-neutral-100 relative overflow-hidden group shrink-0 flex flex-col justify-between gap-6 h-full">
               <div className="absolute top-0 right-0 -mt-10 -mr-10 w-40 h-40 bg-primary-50 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-700"></div>
-              with +/- Controls */}
+              
+              {/* Balance & Info Section */}
+              <div className="relative z-10 grid grid-cols-2 gap-4 items-center flex-grow">
+                
+                <div className="flex flex-col justify-center gap-4 border-r border-neutral-100 pr-4">
+                  <div className="flex flex-col">
+                    <span className="text-neutral-400 text-xs uppercase tracking-wider font-bold mb-1">{t('card.idLabel')}</span>
+                    <span className="font-mono font-bold text-neutral-700 text-lg">**** 8821</span>
+                  </div>
+                  <div>
+                    <span className="inline-flex items-center px-3 py-1 bg-green-50 text-green-700 border border-green-200 rounded-full text-xs font-bold shadow-sm gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
+                      {t('card.active')}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="text-right flex flex-col justify-center h-full">
+                  <p className="text-neutral-400 text-xs font-bold uppercase tracking-wider mb-1">{t('card.balanceLabel')}</p>
+                  <p className="text-4xl lg:text-5xl font-bold tracking-tight text-primary-600">{balance.toFixed(2)}€</p>
+                </div>
+
+              </div>
+
+              {/* Amount Selection with +/- Controls */}
               <div className="relative z-10 space-y-4">
                 {/* Custom Amount with +/- */}
                 <div className="flex items-center justify-center gap-4">
@@ -178,30 +202,6 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
                     addedToCart
                       ? 'bg-green-600 text-white shadow-lg shadow-green-600/30'
                       : selectedAmount > 0
-
-              {/* Amount Selection */}
-              <div className="relative z-10 flex items-center gap-3">
-                {[5, 10, 20].map((amount) => (
-                  <button
-                    key={amount}
-                    onClick={() => setSelectedAmount(amount)}
-                    className={`flex-1 py-3 rounded-xl font-bold text-lg transition-all ${
-                      selectedAmount === amount
-                        ? 'bg-teal-600 text-white shadow-lg shadow-teal-600/30 scale-105'
-                        : 'border-2 border-teal-600 text-teal-600 hover:bg-teal-50'
-                    }`}
-                  >
-                    {amount}€
-                  </button>
-                ))}
-                
-                <button 
-                  onClick={handleAddToCart}
-                  disabled={!selectedAmount || addedToCart}
-                  className={`flex-[2] py-3 rounded-xl font-bold text-base transition-all flex items-center justify-center gap-2 ${
-                    addedToCart
-                      ? 'bg-green-600 text-white shadow-lg shadow-green-600/30'
-                      : selectedAmount
                       ? 'bg-teal-600 hover:bg-teal-700 text-white shadow-lg shadow-teal-600/20 active:scale-[0.98]'
                       : 'bg-neutral-200 text-neutral-400 cursor-not-allowed'
                   }`}

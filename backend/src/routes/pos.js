@@ -169,9 +169,9 @@ router.post('/card/purchase', requireKiosk, async (req, res) => {
   }
 
   try {
-    // Get card purchase settings
-    const purchasePrice = await Setting.findOne({ key: 'cardPurchase.price' })
-    const initialCredit = await Setting.findOne({ key: 'cardPurchase.initialCredit' })
+    // Get card purchase settings from loyaltyCard config
+    const purchasePrice = await Setting.findOne({ key: 'loyaltyCard.cost' })
+    const initialCredit = await Setting.findOne({ key: 'loyaltyCard.credit' })
     
     const price = purchasePrice?.value ? Number(purchasePrice.value) : 0
     const credit = initialCredit?.value ? Number(initialCredit.value) : 0
@@ -405,10 +405,13 @@ router.get('/cards/:code', requireKiosk, async (req, res) => {
   res.json(c)
 })
 
-// Public: lightweight settings lookup for branding keys (no auth)
+// Public: lightweight settings lookup for branding and card purchase keys (no auth)
 router.get('/settings/:key', async (req, res) => {
   const key = String(req.params.key || '')
-  if (!key.startsWith('branding.')) return res.status(404).json({ error: 'Not found' })
+  // Allow branding and cardPurchase settings to be accessed publicly
+  if (!key.startsWith('branding.') && !key.startsWith('cardPurchase.') && !key.startsWith('loyaltyCard.')) {
+    return res.status(404).json({ error: 'Not found' })
+  }
   const s = await Setting.findOne({ key }).lean()
   if (!s) return res.status(404).json({ error: 'Setting not found' })
   res.json(s)

@@ -48,14 +48,33 @@ export default function BuyCardModal({ open, onClose }) {
 
   async function loadSettings() {
     try {
-      const price = await api.getSetting('cardPurchase.price').catch(() => ({ value: 5 }))
-      const credit = await api.getSetting('cardPurchase.initialCredit').catch(() => ({ value: 5 }))
+      // Use public POS endpoint for loyalty card settings (no auth required)
+      const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey 
+        ? window.electronAPI.kioskKey() 
+        : null
+      const kioskKey = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
+
+      const price = await api.request('/pos/settings/loyaltyCard.cost', {
+        method: 'GET',
+        headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined,
+        skipAuth: true,
+        expect: 'json'
+      }).catch(() => ({ value: 5 }))
+      
+      const credit = await api.request('/pos/settings/loyaltyCard.credit', {
+        method: 'GET',
+        headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined,
+        skipAuth: true,
+        expect: 'json'
+      }).catch(() => ({ value: 5 }))
       
       setCardPrice(Number(price?.value || 5))
       setInitialCredit(Number(credit?.value || 5))
     } catch (e) {
       console.error('Failed to load card purchase settings', e)
-      toast({ title: 'Erro ao carregar configurações', variant: 'destructive' })
+      // Use defaults on error
+      setCardPrice(5)
+      setInitialCredit(5)
     }
   }
 
