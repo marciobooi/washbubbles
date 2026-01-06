@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import Modal from './ui/Modal'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
@@ -26,6 +26,12 @@ export default function BuyCardModal({ open, onClose }) {
     phone: '',
     contribuinte: ''
   })
+
+  // Input refs for sequential navigation
+  const nameRef = useRef(null)
+  const emailRef = useRef(null)
+  const phoneRef = useRef(null)
+  const contribuinteRef = useRef(null)
 
   // Card purchase settings
   const [cardPrice, setCardPrice] = useState(0)
@@ -228,8 +234,57 @@ export default function BuyCardModal({ open, onClose }) {
   }
 
   function handleClose() {
+    // Hide virtual keyboard when closing
+    if (window.electronAPI?.hideKeyboard) {
+      window.electronAPI.hideKeyboard()
+    }
     resetForm()
     onClose()
+  }
+
+  function handleFieldFocus() {
+    // Show virtual keyboard when any field is focused
+    if (window.electronAPI?.showKeyboard) {
+      window.electronAPI.showKeyboard()
+    }
+  }
+
+  function handleFieldBlur(e) {
+    // Hide keyboard when clicking outside (not on another input)
+    setTimeout(() => {
+      const activeElement = document.activeElement
+      const isInputFocused = activeElement && 
+        (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')
+      
+      if (!isInputFocused && window.electronAPI?.hideKeyboard) {
+        window.electronAPI.hideKeyboard()
+      }
+    }, 100)
+  }
+
+  function handleKeyDown(e, currentField) {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      // Move to next field on Enter
+      switch (currentField) {
+        case 'name':
+          emailRef.current?.focus()
+          break
+        case 'email':
+          phoneRef.current?.focus()
+          break
+        case 'phone':
+          contribuinteRef.current?.focus()
+          break
+        case 'contribuinte':
+          // Last field - hide keyboard and move to next step
+          if (window.electronAPI?.hideKeyboard) {
+            window.electronAPI.hideKeyboard()
+          }
+          handleNext()
+          break
+      }
+    }
   }
 
   function renderStepContent() {
@@ -257,10 +312,14 @@ export default function BuyCardModal({ open, onClose }) {
                 <div className="flex items-center gap-2">
                   <User className="h-4 w-4 text-muted-foreground" />
                   <Input
+                    ref={nameRef}
                     id="name"
                     placeholder="Nome completo (opcional)"
                     value={formData.name}
                     onChange={(e) => handleInputChange('name', e.target.value)}
+                    onFocus={handleFieldFocus}
+                    onBlur={handleFieldBlur}
+                    onKeyDown={(e) => handleKeyDown(e, 'name')}
                   />
                 </div>
               </div>
@@ -270,11 +329,15 @@ export default function BuyCardModal({ open, onClose }) {
                 <div className="flex items-center gap-2">
                   <Mail className="h-4 w-4 text-muted-foreground" />
                   <Input
+                    ref={emailRef}
                     id="email"
                     type="email"
                     placeholder="email@exemplo.com (opcional)"
                     value={formData.email}
                     onChange={(e) => handleInputChange('email', e.target.value)}
+                    onFocus={handleFieldFocus}
+                    onBlur={handleFieldBlur}
+                    onKeyDown={(e) => handleKeyDown(e, 'email')}
                   />
                 </div>
               </div>
@@ -284,11 +347,15 @@ export default function BuyCardModal({ open, onClose }) {
                 <div className="flex items-center gap-2">
                   <Phone className="h-4 w-4 text-muted-foreground" />
                   <Input
+                    ref={phoneRef}
                     id="phone"
                     type="tel"
                     placeholder="+351 912 345 678 (opcional)"
                     value={formData.phone}
                     onChange={(e) => handleInputChange('phone', e.target.value)}
+                    onFocus={handleFieldFocus}
+                    onBlur={handleFieldBlur}
+                    onKeyDown={(e) => handleKeyDown(e, 'phone')}
                   />
                 </div>
               </div>
@@ -298,20 +365,41 @@ export default function BuyCardModal({ open, onClose }) {
                 <div className="flex items-center gap-2">
                   <FileText className="h-4 w-4 text-muted-foreground" />
                   <Input
+                    ref={contribuinteRef}
                     id="contribuinte"
                     placeholder="123456789 (opcional)"
                     value={formData.contribuinte}
                     onChange={(e) => handleInputChange('contribuinte', e.target.value)}
+                    onFocus={handleFieldFocus}
+                    onBlur={handleFieldBlur}
+                    onKeyDown={(e) => handleKeyDown(e, 'contribuinte')}
                   />
                 </div>
               </div>
             </div>
 
             <div className="flex gap-3 pt-4">
-              <Button variant="outline" onClick={handleSkipForm} className="flex-1">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  if (window.electronAPI?.hideKeyboard) {
+                    window.electronAPI.hideKeyboard()
+                  }
+                  handleSkipForm()
+                }} 
+                className="flex-1"
+              >
                 Saltar
               </Button>
-              <Button onClick={handleNext} className="flex-1">
+              <Button 
+                onClick={() => {
+                  if (window.electronAPI?.hideKeyboard) {
+                    window.electronAPI.hideKeyboard()
+                  }
+                  handleNext()
+                }} 
+                className="flex-1"
+              >
                 Continuar
               </Button>
             </div>
@@ -351,7 +439,12 @@ export default function BuyCardModal({ open, onClose }) {
               <div className="pt-4">
                 <Button
                   variant="outline"
-                  onClick={() => setStep(STEPS.FORM)}
+                  onClick={() => {
+                    if (window.electronAPI?.hideKeyboard) {
+                      window.electronAPI.hideKeyboard()
+                    }
+                    setStep(STEPS.FORM)
+                  }}
                   className="w-full"
                   disabled={loading}
                 >
@@ -377,7 +470,7 @@ export default function BuyCardModal({ open, onClose }) {
             <div className="text-center mb-6">
               <CreditCard className="h-16 w-16 mx-auto mb-4 text-primary animate-pulse" />
               <h3 className="text-xl font-semibold mb-2">Insira o Cartão</h3>
-              <p className="text-muted-foreground">
+              <p className="text-red-500 animate-pulse animate-transform">
                 Por favor insira o cartão no leitor para ativar
               </p>
             </div>

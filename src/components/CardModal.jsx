@@ -102,7 +102,12 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
           <h2 className="text-2xl font-bold text-neutral-800 tracking-tight">{t('card.title')}</h2>
         </div>
         <button 
-          onClick={onClose}
+          onClick={() => {
+            if (window.electronAPI?.hideKeyboard) {
+              window.electronAPI.hideKeyboard()
+            }
+            onClose()
+          }}
           className="p-3 bg-neutral-100 hover:bg-neutral-200 active:bg-neutral-300 rounded-xl transition-colors group"
           aria-label="Fechar"
         >
@@ -221,6 +226,22 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
                       {t('card.addToCart')}
                     </>
                   )}
+                </button>
+
+                {/* Back/Close Button */}
+                <button
+                  onClick={() => {
+                    if (window.electronAPI?.hideKeyboard) {
+                      window.electronAPI.hideKeyboard()
+                    }
+                    onClose()
+                  }}
+                  className="w-full py-3 rounded-xl font-bold text-base transition-all flex items-center justify-center gap-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 border border-neutral-300 active:scale-[0.98]"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                  </svg>
+                  Voltar
                 </button>
               </div>
             </div>
