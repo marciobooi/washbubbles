@@ -22,8 +22,10 @@ function getTxIcon(type) {
 export default function CardModal({ open, onClose, transactions = [], balance = 0, onRecharge = () => {} }) {
   const { addToCart } = useCart()
   const { t } = useTranslation('pos')
-  const [selectedAmount, setSelectedAmount] = useState(null)
+  const [selectedAmount, setSelectedAmount] = useState(10)
   const [addedToCart, setAddedToCart] = useState(false)
+  const [insertedMoney, setInsertedMoney] = useState(0)
+  const [showChange, setShowChange] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -45,7 +47,7 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
   }, [open])
 
   const handleAddToCart = () => {
-    if (!selectedAmount) return
+    if (!selectedAmount || selectedAmount <= 0) return
     
     addToCart({
       id: `recharge-${Date.now()}`,
@@ -59,8 +61,32 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
     setAddedToCart(true)
     setTimeout(() => {
       setAddedToCart(false)
-      setSelectedAmount(null)
     }, 1500)
+  }
+
+  const incrementAmount = () => {
+    setSelectedAmount(prev => Math.min(prev + 1, 100))
+  }
+
+  const decrementAmount = () => {
+    setSelectedAmount(prev => Math.max(prev - 1, 1))
+  }
+
+  const handleQuickAmount = (amount) => {
+    setSelectedAmount(amount)
+  }
+
+  const handleInsertMoney = (amount) => {
+    setInsertedMoney(amount)
+    const change = amount - selectedAmount
+    if (change > 0) {
+      setShowChange(true)
+      setTimeout(() => setShowChange(false), 5000)
+    }
+  }
+
+  const calculateChange = () => {
+    return Math.max(0, insertedMoney - selectedAmount)
   }
 
   if (!open) return null
@@ -94,29 +120,64 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
           <div className="shrink-0 ">
             <div className="bg-white rounded-3xl p-6 lg:p-8 shadow-xl border border-neutral-100 relative overflow-hidden group shrink-0 flex flex-col justify-between gap-6 h-full">
               <div className="absolute top-0 right-0 -mt-10 -mr-10 w-40 h-40 bg-primary-50 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-700"></div>
-              
-              {/* Balance & Info Section */}
-              <div className="relative z-10 grid grid-cols-2 gap-4 items-center flex-grow">
+              with +/- Controls */}
+              <div className="relative z-10 space-y-4">
+                {/* Custom Amount with +/- */}
+                <div className="flex items-center justify-center gap-4">
+                  <button
+                    onClick={decrementAmount}
+                    className="w-12 h-12 rounded-xl bg-neutral-100 hover:bg-neutral-200 active:bg-neutral-300 text-neutral-700 font-bold text-2xl transition-colors flex items-center justify-center"
+                  >
+                    −
+                  </button>
+                  
+                  <div className="flex flex-col items-center">
+                    <span className="text-neutral-400 text-xs uppercase tracking-wider font-bold mb-1">Valor de Recarga</span>
+                    <span className="text-5xl font-bold text-primary-600">{selectedAmount}€</span>
+                  </div>
+                  
+                  <button
+                    onClick={incrementAmount}
+                    className="w-12 h-12 rounded-xl bg-neutral-100 hover:bg-neutral-200 active:bg-neutral-300 text-neutral-700 font-bold text-2xl transition-colors flex items-center justify-center"
+                  >
+                    +
+                  </button>
+                </div>
+
+                {/* Quick Amount Buttons */}
+                <div className="flex items-center gap-2">
+                  {[5, 10, 20, 50].map((amount) => (
+                    <button
+                      key={amount}
+                      onClick={() => handleQuickAmount(amount)}
+                      className={`flex-1 py-2 rounded-lg font-semibold text-sm transition-all ${
+                        selectedAmount === amount
+                          ? 'bg-teal-600 text-white shadow-md'
+                          : 'border border-teal-600 text-teal-600 hover:bg-teal-50'
+                      }`}
+                    >
+                      {amount}€
+                    </button>
+                  ))}
+                </div>
+
+                {/* Change Display */}
+                {showChange && calculateChange() > 0 && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-center animate-fade-in">
+                    <p className="text-sm text-yellow-800 font-semibold">
+                      Troco: <span className="text-lg">{calculateChange().toFixed(2)}€</span>
+                    </p>
+                  </div>
+                )}
                 
-                <div className="flex flex-col justify-center gap-4 border-r border-neutral-100 pr-4">
-                  <div className="flex flex-col">
-                    <span className="text-neutral-400 text-xs uppercase tracking-wider font-bold mb-1">{t('card.idLabel')}</span>
-                    <span className="font-mono font-bold text-neutral-700 text-lg">**** 8821</span>
-                  </div>
-                  <div>
-                    <span className="inline-flex items-center px-3 py-1 bg-green-50 text-green-700 border border-green-200 rounded-full text-xs font-bold shadow-sm gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-                      {t('card.active')}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="text-right flex flex-col justify-center h-full">
-                  <p className="text-neutral-400 text-xs font-bold uppercase tracking-wider mb-1">{t('card.balanceLabel')}</p>
-                  <p className="text-4xl lg:text-5xl font-bold tracking-tight text-primary-600">{balance.toFixed(2)}€</p>
-                </div>
-
-              </div>
+                {/* Add to Cart Button */}
+                <button 
+                  onClick={handleAddToCart}
+                  disabled={!selectedAmount || selectedAmount <= 0 || addedToCart}
+                  className={`w-full py-3 rounded-xl font-bold text-base transition-all flex items-center justify-center gap-2 ${
+                    addedToCart
+                      ? 'bg-green-600 text-white shadow-lg shadow-green-600/30'
+                      : selectedAmount > 0
 
               {/* Amount Selection */}
               <div className="relative z-10 flex items-center gap-3">

@@ -102,6 +102,11 @@ router.post('/recharge', requireKiosk, async (req, res) => {
   // Recharges are always card-based in this system
   if (method && String(method) !== 'card') return res.status(400).json({ error: 'Recharges must be performed with method "card"' })
 
+  // Calculate change if inserted amount provided
+  const insertedNum = Number(inserted || amount)
+  const rechargeAmount = Number(amount)
+  const changeAmount = insertedNum > rechargeAmount ? insertedNum - rechargeAmount : 0
+
   // If card specified, update its balance
   let card = null
   if (cardId || cardCode) {
@@ -113,13 +118,282 @@ router.post('/recharge', requireKiosk, async (req, res) => {
       card = await Card.create({ code: cardCode, balance: 0 })
     }
     if (card) {
-      card.balance = Number((card.balance || 0) + Number(amount))
+      card.balance = Number((card.balance || 0) + rechargeAmount)
       await card.save()
     }
   }
 
-  const sale = await Sale.create({ amount: Number(amount), items, method: method || 'card', batchId, inserted: Number(inserted || amount), change: Number(change || 0), type: 'recharge', cardId: card ? card._id : undefined, cardCode: card ? card.code : (cardCode || undefined) })
-  res.json({ sale, card })
+  // Dispense change if needed
+  let changeDispensed = false
+  if (changeAmount > 0) {
+    try {
+      // Get middleware instance and dispense change via hopper
+      const { middleware } = await import('../index.js')
+      const Peripheral = (await import('../models/peripheral.js')).default
+      const hopper = await Peripheral.findOne({ type: 'hopper', enabled: true })
+      
+      if (hopper && middleware) {
+        await middleware.dispenseChange(hopper._id, changeAmount)
+        changeDispensed = true
+        console.log(`Change dispensed: €${changeAmount.toFixed(2)}`)
+      } else {
+        console.warn('No hopper available for change dispensing')
+      }
+    } catch (e) {
+      console.error('Failed to dispense change:', e.message)
+      // Continue even if change dispensing fails - return error in response
+    }
+  }
+
+  const sale = await Sale.create({ 
+    amount: rechargeAmount, 
+    items, 
+    method: method || 'card', 
+    batchId, 
+    inserted: insertedNum, 
+    change: changeAmount, 
+    type: 'recharge', 
+    cardId: card ? card._id : undefined, 
+    cardCode: card ? card.code : (cardCode || undefined) 
+  })
+  
+  res.json({ sale, card, change: changeAmount, changeDispensed })
+})
+
+// Card purchase endpoint - handles new card purchases with customer data
+router.post('/card/purchase', requireKiosk, async (req, res) => {
+  const { inserted, customerName, customerEmail, customerPhone, customerContribuinte, batchId } = req.body
+  
+  if (!inserted || Number(inserted) <= 0) {
+    return res.status(400).json({ error: 'Missing payment amount' })
+  }
+
+  try {
+    // Get card purchase settings
+    const purchasePrice = await Setting.findOne({ key: 'cardPurchase.price' })
+    const initialCredit = await Setting.findOne({ key: 'cardPurchase.initialCredit' })
+    
+    const price = purchasePrice?.value ? Number(purchasePrice.value) : 0
+    const credit = initialCredit?.value ? Number(initialCredit.value) : 0
+    
+    if (price <= 0) {
+      return res.status(400).json({ error: 'Card purchase price not configured' })
+    }
+
+    const insertedAmount = Number(inserted)
+    
+    if (insertedAmount < price) {
+      return res.status(400).json({ error: `Insufficient payment. Card costs €${price.toFixed(2)}` })
+    }
+
+    // Calculate change
+    const changeAmount = insertedAmount - price
+
+    // Generate unique card code (10 digits)
+    const Card = (await import('../models/card.js')).default
+    const CardPurchase = (await import('../models/cardPurchase.js')).default
+    
+    let cardCode = ''
+    let cardExists = true
+    
+    // Generate unique card code
+    while (cardExists) {
+      cardCode = Math.floor(1000000000 + Math.random() * 9000000000).toString()
+      cardExists = await Card.findOne({ code: cardCode })
+    }
+
+    // Step 1: Dispense card from dispenser
+    let cardDispensed = false
+    try {
+      const { middleware } = await import('../index.js')
+      const Peripheral = (await import('../models/peripheral.js')).default
+      const dispenser = await Peripheral.findOne({ type: 'card_dispenser', enabled: true })
+      
+      if (dispenser && middleware) {
+        await middleware.dispenseCard(dispenser._id)
+        cardDispensed = true
+        console.log(`Card dispensed for code: ${cardCode}`)
+      } else {
+        console.warn('No card dispenser available')
+      }
+    } catch (e) {
+      console.error('Failed to dispense card:', e.message)
+      return res.status(500).json({ error: 'Failed to dispense card' })
+    }
+
+    // Step 2: Create card in database with customer data
+    const card = await Card.create({
+      code: cardCode,
+      balance: credit,
+      name: customerName || '',
+      email: customerEmail || '',
+      phone: customerPhone || '',
+      contribuinte: customerContribuinte || ''
+    })
+
+    // Step 3: Wait for user to insert card into reader to write data
+    // This will be handled by frontend flow - card data is already in DB
+    // RFID reader will verify card code matches when user inserts
+
+    // Create sale record
+    const sale = await Sale.create({
+      amount: price,
+      items: [{ type: 'card_purchase', amount: price, cardCode }],
+      method: 'cash',
+      batchId,
+      inserted: insertedAmount,
+      change: changeAmount,
+      type: 'card_purchase'
+    })
+
+    // Track card purchase
+    const cardPurchase = await CardPurchase.create({
+      cardId: card._id,
+      cardCode: cardCode,
+      purchasePrice: price,
+      initialCredit: credit,
+      paymentMethod: 'cash',
+      amountInserted: insertedAmount,
+      changeGiven: changeAmount,
+      customerName: customerName || '',
+      customerEmail: customerEmail || '',
+      customerPhone: customerPhone || '',
+      customerContribuinte: customerContribuinte || '',
+      saleId: sale._id,
+      batchId,
+      dispenserUsed: cardDispensed,
+      cardWritten: false // Will be updated when card is written
+    })
+
+    // Dispense change if needed
+    let changeDispensed = false
+    if (changeAmount > 0) {
+      try {
+        const { middleware } = await import('../index.js')
+        const Peripheral = (await import('../models/peripheral.js')).default
+        const hopper = await Peripheral.findOne({ type: 'hopper', enabled: true })
+        
+        if (hopper && middleware) {
+          await middleware.dispenseChange(hopper._id, changeAmount)
+          changeDispensed = true
+          console.log(`Change dispensed: €${changeAmount.toFixed(2)}`)
+        }
+      } catch (e) {
+        console.error('Failed to dispense change:', e.message)
+      }
+    }
+
+    res.json({
+      success: true,
+      card,
+      cardPurchase,
+      sale,
+      change: changeAmount,
+      changeDispensed,
+      message: 'Card dispensed. Please insert card into reader to activate.'
+    })
+  } catch (e) {
+    console.error('Card purchase error:', e)
+    res.status(500).json({ error: e.message || 'Card purchase failed' })
+  }
+})
+
+// Mark card as written after RFID write
+router.post('/card/mark-written/:code', requireKiosk, async (req, res) => {
+  const code = req.params.code
+  
+  try {
+    const CardPurchase = (await import('../models/cardPurchase.js')).default
+    
+    const purchase = await CardPurchase.findOneAndUpdate(
+      { cardCode: code, cardWritten: false },
+      { cardWritten: true },
+      { new: true }
+    )
+    
+    if (!purchase) {
+      return res.status(404).json({ error: 'Card purchase not found or already written' })
+    }
+    
+    res.json({ success: true, purchase })
+  } catch (e) {
+    console.error('Mark card written error:', e)
+    res.status(500).json({ error: e.message })
+  }
+})
+
+// Write card data to RFID card
+router.post('/card/write/:code', requireKiosk, async (req, res) => {
+  const code = req.params.code
+  
+  try {
+    const Card = (await import('../models/card.js')).default
+    const card = await Card.findOne({ code })
+    
+    if (!card) {
+      return res.status(404).json({ error: 'Card not found' })
+    }
+
+    // Get RFID reader and write data
+    const { middleware } = await import('../index.js')
+    const Peripheral = (await import('../models/peripheral.js')).default
+    const rfidReader = await Peripheral.findOne({ type: 'rfid_reader', enabled: true })
+    
+    if (!rfidReader || !middleware) {
+      return res.status(503).json({ error: 'RFID reader not available' })
+    }
+
+    // Write card data
+    const result = await middleware.writeCardData(rfidReader._id, {
+      code: card.code,
+      balance: card.balance,
+      name: card.name,
+      email: card.email,
+      phone: card.phone,
+      contribuinte: card.contribuinte
+    })
+
+    if (result.success) {
+      // Mark purchase as written
+      const CardPurchase = (await import('../models/cardPurchase.js')).default
+      await CardPurchase.findOneAndUpdate(
+        { cardCode: code },
+        { cardWritten: true }
+      )
+      
+      res.json({ success: true, message: 'Card data written successfully' })
+    } else {
+      throw new Error('Failed to write card data')
+    }
+  } catch (e) {
+    console.error('Card write error:', e)
+    res.status(500).json({ error: e.message || 'Failed to write card' })
+  }
+})
+
+// Read card data from RFID reader
+router.get('/card/read', requireKiosk, async (req, res) => {
+  try {
+    const { middleware } = await import('../index.js')
+    const Peripheral = (await import('../models/peripheral.js')).default
+    const rfidReader = await Peripheral.findOne({ type: 'rfid_reader', enabled: true })
+    
+    if (!rfidReader || !middleware) {
+      return res.status(503).json({ error: 'RFID reader not available' })
+    }
+
+    // Read card data
+    const result = await middleware.readCardData(rfidReader._id)
+
+    if (result.success) {
+      res.json({ success: true, cardData: result.cardData })
+    } else {
+      throw new Error('Failed to read card data')
+    }
+  } catch (e) {
+    console.error('Card read error:', e)
+    res.status(500).json({ error: e.message || 'Failed to read card' })
+  }
 })
 
 // Public: lookup card by code (kiosk will use this to show balance)

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import Wave from '../components/ui/wave'
 import Card from '../components/Card'
 import CardModal from '../components/CardModal'
+import BuyCardModal from '../components/BuyCardModal'
 import { toast } from '@/components/ui/Toast'
 import Banner from '../components/Banner'
 import api from '@/services/api'
@@ -22,6 +23,7 @@ export default function Pos() {
 
   const navigate = useNavigate()
   const [cardOpen, setCardOpen] = React.useState(false)
+  const [buyCardOpen, setBuyCardOpen] = React.useState(false)
   const [transactions, setTransactions] = React.useState([
     { id: 't1', ts: new Date().toISOString(), type: 'recharged', amount: 10 },
     { id: 't2', ts: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), type: 'spent_wash', amount: -3 },
@@ -36,6 +38,16 @@ export default function Pos() {
 
   function closeCard() {
     setCardOpen(false)
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('modal-close'))
+  }
+
+  function openBuyCard() {
+    setBuyCardOpen(true)
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('modal-open'))
+  }
+
+  function closeBuyCard() {
+    setBuyCardOpen(false)
     if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('modal-close'))
   }
 
@@ -74,6 +86,8 @@ export default function Pos() {
                     navigate(`/pos/machines?type=${c.id}`)
                   } else if (c.id === 'card') {
                     openCard()
+                  } else if (c.id === 'buyCard') {
+                    openBuyCard()
                   } else {
                     console.log('clicked', id)
                   }
@@ -82,6 +96,7 @@ export default function Pos() {
             ))}
           </div>
         </div>
+        <BuyCardModal open={buyCardOpen} onClose={closeBuyCard} />
 
         <CardModal open={cardOpen} onClose={closeCard} transactions={transactions} balance={transactions.reduce((s,t)=>s+t.amount,0)} onRecharge={(amt)=>handleRecharge(amt)} />
 

@@ -37,6 +37,10 @@ export default function AdminPrices() {
   const [cardCredit, setCardCredit] = useState(0)
   const [minRecharge, setMinRecharge] = useState(0)
 
+  // Card purchase settings (separate from loyalty card)
+  const [cardPurchasePrice, setCardPurchasePrice] = useState(0)
+  const [cardPurchaseCredit, setCardPurchaseCredit] = useState(0)
+
   // Coin/Bill Machine settings
   const [coinEqTable, setCoinEqTable] = useState([])
   const [billEqTable, setBillEqTable] = useState([])
@@ -75,13 +79,25 @@ export default function AdminPrices() {
     }
   }
 
+  async function loadCardPurchaseSettings() {
+    try {
+      const price = await api.getSetting('cardPurchase.price').catch(() => null)
+      const credit = await api.getSetting('cardPurchase.initialCredit').catch(() => null)
+      
+      setCardPurchasePrice(price && price.value !== undefined ? Number(price.value) : 0)
+      setCardPurchaseCredit(credit && credit.value !== undefined ? Number(credit.value) : 0)
+    } catch (e) {
+      console.warn('loadCardPurchaseSettings failed', e)
+    }
+  }
+
   async function loadCoinMachineSettings() {
     try {
       const coinEq = await api.getSetting('coinEqTable').catch(() => null)
       const billEq = await api.getSetting('billEqTable').catch(() => null)
       const coinBonus = await api.getSetting('rechargeCoinBonus').catch(() => null)
       const billBonus = await api.getSetting('rechargeBillBonus').catch(() => null)
-      const autoChargeVal = await api.getSetting('autoCharge').catch(() => null)
+      const autoChargeVal = await api.getSetting('autoChargeardPurchaseSettings(); loadC').catch(() => null)
       
       setCoinEqTable(coinEq && Array.isArray(coinEq.value) ? coinEq.value : [])
       setBillEqTable(billEq && Array.isArray(billEq.value) ? billEq.value : [])
@@ -185,7 +201,21 @@ export default function AdminPrices() {
   }
 
   // Loyalty card save
-  async function saveLoyaltyCardSettings(e) {
+  a
+
+  // Card purchase settings save
+  async function saveCardPurchaseSettings(e) {
+    e.preventDefault()
+    try {
+      await api.setSetting({ key: 'cardPurchase.price', value: cardPurchasePrice })
+      await api.setSetting({ key: 'cardPurchase.initialCredit', value: cardPurchaseCredit })
+      toast({ title: 'Card purchase settings saved', variant: 'success' })
+      loadCardPurchaseSettings()
+    } catch (e) {
+      console.error(e)
+      toast({ title: 'Failed to save settings', variant: 'destructive' })
+    }
+  }sync function saveLoyaltyCardSettings(e) {
     e.preventDefault()
     try {
       await api.setSetting({ key: 'loyaltyCard.cost', value: cardCost })
@@ -410,6 +440,69 @@ export default function AdminPrices() {
           )}
         </div>
       )}
+
+      {/* Card Purchase Settings */}
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle>Compra de Cartão</CardTitle>
+          <CardDescription>Configurações para venda de novos cartões</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={saveCardPurchaseSettings} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="cardPurchasePrice">Preço de Compra do Cartão</Label>
+                <div className="flex items-center gap-2">
+                  <CreditCard className="h-5 w-5 text-blue-600" />
+                  <Input
+                    id="cardPurchasePrice"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={cardPurchasePrice}
+                    onChange={(e) => setCardPurchasePrice(Number(e.target.value))}
+                  />
+                  <span>€</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Preço que o cliente paga para comprar o cartão
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="cardPurchaseCredit">Crédito Inicial</Label>
+                <div className="flex items-center gap-2">
+                  <Banknote className="h-5 w-5 text-green-600" />
+                  <Input
+                    id="cardPurchaseCredit"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={cardPurchaseCredit}
+                    onChange={(e) => setCardPurchaseCredit(Number(e.target.value))}
+                  />
+                  <span>€</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Saldo inicial carregado no cartão após a compra
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button type="submit">Guardar Configurações de Compra</Button>
+              <Button 
+                type="button" 
+                variant="outline"
+                onClick={() => { 
+                  loadCardPurchaseSettings(); 
+                  toast({ title: 'Revertido', variant: 'success' }) 
+                }}
+              >
+                Reverter
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
 
       {/* Loyalty Card Settings */}
       <Card className="mt-6">

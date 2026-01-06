@@ -364,6 +364,160 @@ class Middleware extends EventEmitter {
   }
 
   /**
+   * Write data to RFID card
+   * Sends commands to RFID reader to write card data
+   */
+  async writeCardData(peripheralId, cardData) {
+    const connection = this.connections.get(peripheralId.toString())
+    
+    if (!connection || connection.peripheral.type !== 'rfid_reader') {
+      throw new Error('RFID reader not available')
+    }
+
+    const peripheral = connection.peripheral
+    console.log(`Writing card data to ${peripheral.name}...`)
+    
+    try {
+      // Card data format: code, balance, name, email, phone, contribuinte
+      const dataString = JSON.stringify({
+        code: cardData.code || '',
+        balance: cardData.balance || 0,
+        name: cardData.name || '',
+        email: cardData.email || '',
+        phone: cardData.phone || '',
+        contribuinte: cardData.contribuinte || ''
+      })
+
+      // For MIFARE/NFC cards, write to sectors
+      // This is a simplified example - actual implementation depends on card type
+      if (peripheral.protocol === 'usb' || peripheral.protocol === 'rs232') {
+        await this.writeRFIDSectors(connection, dataString)
+      }
+
+      this.emit('card-written', { peripheral, cardData })
+      console.log(`Card data written successfully: ${cardData.code}`)
+      
+      return { success: true, cardCode: cardData.code }
+    } catch (err) {
+      console.error('Failed to write card data:', err)
+      throw err
+    }
+  }
+
+  /**
+   * Write data to RFID card sectors (for MIFARE cards)
+   */
+  async writeRFIDSectors(connection, dataString) {
+    if (!connection.port) {
+      console.warn('No serial port connection for RFID writer')
+      return
+    }
+
+    // Split data into 16-byte blocks (MIFARE Classic block size)
+    const dataBuffer = Buffer.from(dataString, 'utf-8')
+    const blockSize = 16
+    const blocks = []
+    
+    for (let i = 0; i < dataBuffer.length; i += blockSize) {
+      const block = dataBuffer.slice(i, i + blockSize)
+      // Pad block to 16 bytes if needed
+      const paddedBlock = Buffer.concat([block, Buffer.alloc(blockSize - block.length)])
+      blocks.push(paddedBlock)
+    }
+
+    // Write each block to card
+    // Command format depends on reader model - this is a generic example
+    for (let i = 0; i < blocks.length; i++) {
+      const blockNumber = 4 + i // Start from block 4 (sector 1)
+      const writeCommand = Buffer.concat([
+        Buffer.from([0xFF, 0xD6, 0x00, blockNumber, 0x10]), // Write block command
+        blocks[i]
+      ])
+
+      await new Promise((resolve, reject) => {
+        connection.port.write(writeCommand, (err) => {
+          if (err) reject(err)
+          else resolve()
+        })
+      })
+
+      // Wait for ACK
+      await this.waitForResponse(connection.port, 500)
+    }
+  }
+
+  /**
+   * Read card data from RFID reader
+   * Reads all sectors and reconstructs card data
+   */
+  async readCardData(peripheralId) {
+    const connection = this.connections.get(peripheralId.toString())
+    
+    if (!connection || connection.peripheral.type !== 'rfid_reader') {
+      throw new Error('RFID reader not available')
+    }
+
+    const peripheral = connection.peripheral
+    console.log(`Reading card data from ${peripheral.name}...`)
+    
+    try {
+      let cardDataString = ''
+      
+      // Read multiple blocks and concatenate
+      if (peripheral.protocol === 'usb' || peripheral.protocol === 'rs232') {
+        cardDataString = await this.readRFIDSectors(connection)
+      }
+
+      // Parse JSON data
+      const cardData = JSON.parse(cardDataString)
+      
+      this.emit('card-data-read', { peripheral, cardData })
+      console.log(`Card data read successfully: ${cardData.code}`)
+      
+      return { success: true, cardData }
+    } catch (err) {
+      console.error('Failed to read card data:', err)
+      throw err
+    }
+  }
+
+  /**
+   * Read data from RFID card sectors
+   */
+  async readRFIDSectors(connection, maxBlocks = 10) {
+    if (!connection.port) {
+      throw new Error('No serial port connection for RFID reader')
+    }
+
+    const blocks = []
+    
+    // Read blocks from card
+    for (let i = 0; i < maxBlocks; i++) {
+      const blockNumber = 4 + i // Start from block 4
+      const readCommand = Buffer.from([0xFF, 0xB0, 0x00, blockNumber, 0x10])
+
+      await new Promise((resolve, reject) => {
+        connection.port.write(readCommand, (err) => {
+          if (err) reject(err)
+          else resolve()
+        })
+      })
+
+      // Wait for block data
+      const blockData = await this.waitForResponse(connection.port, 500)
+      if (blockData && blockData.length >= 16) {
+        blocks.push(blockData.slice(0, 16))
+      }
+    }
+
+    // Concatenate all blocks and convert to string
+    const dataBuffer = Buffer.concat(blocks)
+    const dataString = dataBuffer.toString('utf-8').replace(/\0/g, '') // Remove null padding
+    
+    return dataString
+  }
+
+  /**
    * Handle hopper data
    */
   handleHopperData(peripheral, data) {
