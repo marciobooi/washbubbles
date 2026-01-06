@@ -23,6 +23,7 @@ import AdminProfile from './pages/AdminProfile'
 import AdminInterfaces from './pages/AdminInterfaces'
 import AdminPeripherals from './pages/AdminPeripherals'
 import AdminPrices from './pages/AdminPrices'
+import AdminCards from './pages/AdminCards'
 import RequireAdmin from './components/RequireAdmin'
 
 import { BrandingProvider } from './context/BrandingContext'
@@ -328,6 +329,7 @@ function AppInner() {
             <Route path="interfaces" element={<AdminInterfaces />} />
             <Route path="peripherals" element={<AdminPeripherals />} />
             <Route path="prices" element={<AdminPrices />} />
+            <Route path="cards" element={<AdminCards />} />
             <Route path="transactions" element={<AdminTransactions />} />
             <Route path="operations" element={<AdminOperations />} />
             <Route path="settings" element={<AdminSettings />} />
