@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>VSS Control UI — virtual-serial-server</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' fill='%231f6feb'/%3E%3C/text%3E%3C/svg%3E">
+  <style>
+    body{font-family:Inter,Segoe UI,Arial;margin:18px;background:#0f1724;color:#e6eef8}
+    h1{margin:0 0 12px;font-size:18px}
+    .card{background:#0b1220;border:1px solid #1f2a44;padding:14px;border-radius:8px;box-shadow:0 6px 18px rgba(2,6,23,.6)}
+    .row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+    label{font-size:12px;color:#9fb0d6;min-width:86px}
+    select,input,button,textarea{background:#071028;border:1px solid #223252;color:#cfe6ff;padding:8px;border-radius:6px}
+    button{cursor:pointer}
+    .controls{display:grid;grid-template-columns:1fr 320px;gap:12px}
+    .panel{padding:12px;background:linear-gradient(180deg,#081028 0%,#071224 100%);border-radius:6px;border:1px solid #1b2a44}
+    .log{height:320px;overflow:auto;background:#001027;padding:8px;border-radius:6px;font-family:monospace;font-size:12px;color:#cfe6ff}
+    .small{font-size:12px;padding:6px}
+    .success{color:#86efac}
+    .muted{color:#7b93be}
+    .btn-primary{background:#1f6feb;border-color:#1f6feb;color:white}
+    .btn-ghost{background:transparent;border:1px solid #264571}
+    textarea{width:100%;height:84px}
+    .col{display:flex;flex-direction:column;gap:8px}
+    .group{display:flex;gap:6px}
+  </style>
+</head>
+<body>
+  <h1>VSS Control UI — virtual-serial-server</h1>
+  <div class="card">
+    <div class="row">
+      <label>WebSocket</label>
+      <input id="host" value="ws://localhost:4002/" style="flex:1" />
+      <button id="connect" class="btn-primary small">Connect</button>
+      <span id="status" class="muted">disconnected</span>
+    </div>
+
+    <div class="controls" style="margin-top:8px">
+      <div class="panel">
+        <div class="row">
+          <label>Port</label>
+          <select id="ports" style="flex:1">
+            <option>COM10</option>
+            <option>COM11</option>
+            <option>COM12</option>
+            <option>COM13</option>
+            <option>COM14</option>
+          </select>
+          <button id="refresh" class="btn-ghost small">Refresh</button>
+        </div>
+
+        <div class="row">
+          <label>Bill</label>
+          <input id="billType" type="number" value="5" style="width:78px" />
+          <div class="group">
+            <button id="billInsert" class="small">Insert</button>
+            <button id="billReject" class="small">Reject</button>
+          </div>
+        </div>
+
+        <div class="row">
+          <label>Hopper</label>
+          <input id="hopCount" type="number" value="1" style="width:78px" />
+          <div class="group">
+            <button id="hopDispense" class="small">Dispense</button>
+            <button id="hopStatus" class="small">Status</button>
+          </div>
+        </div>
+
+        <div class="row">
+          <label>RFID</label>
+          <input id="rfidCode" value="12345678" style="flex:1" />
+          <button id="rfidSend" class="small">Send</button>
+        </div>
+
+        <div class="row">
+          <label>Interface</label>
+          <input id="ifStatusByte" value="0" style="width:78px" />
+          <button id="ifSend" class="small">Send</button>
+        </div>
+
+        <div class="row">
+          <label>Test</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button id="testPayment" class="small">Test Payment</button>
+            <label style="font-size:12px;color:#7b93be;margin-left:6px">Auto-connect:</label>
+            <input type="checkbox" id="autoConnect" checked style="width:18px;height:18px" />
+          </div>
+        </div>
+
+        <hr style="border:none;border-top:1px solid #16283f;margin:8px 0" />
+
+        <div>
+          <label style="display:block;margin-bottom:6px">Custom write</label>
+          <textarea id="customData">hex:02005301f403</textarea>
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button id="customWrite" class="small">Write</button>
+            <button id="helpBtn" class="small">Example: interface status</button>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="panel col">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div><strong>Log</strong> <span id="logCount" class="muted">(0)</span></div>
+          <div>
+            <button id="clearLog" class="small btn-ghost">Clear</button>
+          </div>
+        </div>
+        <div id="log" class="log"></div>
+      </div>
+    </div>
+
+    <p class="muted small" style="margin-top:10px">Connects to the VSS control WebSocket and sends the server actions documented in the repo (list, write, emit).</p>
+  </div>
+
+<script>(function(){
+  const hostEl = document.getElementById('host')
+  const connectBtn = document.getElementById('connect')
+  const statusEl = document.getElementById('status')
+  const portsEl = document.getElementById('ports')
+  const refreshBtn = document.getElementById('refresh')
+  const logEl = document.getElementById('log')
+  const logCountEl = document.getElementById('logCount')
+  const clearLogBtn = document.getElementById('clearLog')
+
+  let ws = null
+  let logs = []
+
+  function setStatus(s, cls='muted'){
+    statusEl.textContent = s
+    statusEl.className = cls
+  }
+
+  function appendLog(kind, obj){
+    const time = new Date().toLocaleTimeString()
+    const container = document.createElement('div')
+    container.innerHTML = `<div style="font-size:11px;margin-bottom:4px;color:#7ea6d6">[${time}] <strong>${kind}</strong></div><pre style="white-space:pre-wrap;margin:0;">${typeof obj === 'string' ? escapeHtml(obj) : escapeHtml(JSON.stringify(obj,null,2))}</pre><hr style='border:none;border-top:1px solid #081a2b;margin:8px 0'>`
+    logEl.prepend(container)
+    logs.unshift({time,kind,obj})
+    logCountEl.textContent = `(${logs.length})`
+  }
+
+  function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+
+  // namespaced helper (local) to avoid collisions with extensions
+  const vssOn = function(id, evt, fn){
+    const el = (typeof id === 'string') ? document.getElementById(id) : id
+    if (!el) { appendLog('error', `missing element: ${id}`); return }
+    if (typeof el.addEventListener === 'function') return el.addEventListener(evt, fn)
+    if (typeof el.attachEvent === 'function') return el.attachEvent('on'+evt, fn)
+    el['on'+evt] = fn
+  }
+
+  function connect(){
+    if (!hostEl.value) return alert('Enter websocket URL')
+    ws = new WebSocket(hostEl.value)
+    setStatus('connecting...', 'muted')
+    connectBtn.disabled = true
+    ws.onopen = () => {
+      setStatus('connected','success')
+      connectBtn.textContent = 'Disconnect'
+      connectBtn.disabled = false
+      appendLog('info', 'connected to '+hostEl.value)
+      send({ action: 'list' })
+    }
+    ws.onmessage = (ev) => {
+      let msg = ev.data
+      appendLog('recv', msg)
+      try {
+        const obj = JSON.parse(msg)
+        if (obj.type === 'welcome' && Array.isArray(obj.ports)) populatePortsFromArray(obj.ports)
+        if (obj.type === 'ports' && Array.isArray(obj.ports)) populatePorts(obj.ports)
+      } catch(e){ /* ignore */ }
+    }
+    ws.onclose = () => { setStatus('disconnected','muted'); connectBtn.textContent = 'Connect'; appendLog('info','disconnected'); ws=null }
+    ws.onerror = (e) => { appendLog('error','WebSocket error'); console.error(e) }
+  }
+
+  function disconnect(){ if (ws) ws.close() }
+
+  vssOn(connectBtn, 'click', () => { if (ws) disconnect(); else connect() })
+  vssOn(refreshBtn, 'click', () => { if (!ws) return appendLog('warn','not connected'); send({ action: 'list' }) })
+
+  function send(obj){
+    if (!ws || ws.readyState !== WebSocket.OPEN) return appendLog('warn','ws not open')
+    ws.send(JSON.stringify(obj))
+    appendLog('sent', obj)
+  }
+
+  function populatePorts(list){
+    // `list` expected: [{port, type}, ...]
+    portsEl.innerHTML = ''
+    list.forEach(it => {
+      const o = document.createElement('option')
+      o.value = it.port
+      o.textContent = `${it.port}  — ${it.type || 'unknown'}`
+      portsEl.appendChild(o)
+    })
+  }
+  function populatePortsFromArray(arr){ portsEl.innerHTML = ''; arr.forEach(p => portsEl.appendChild(Object.assign(document.createElement('option'), { value: p, textContent: p }))) }
+
+  // Controls wiring
+  vssOn('billInsert', 'click', () => {
+    const port = portsEl.value
+    const type = Number(document.getElementById('billType').value || 5)
+    send({ action: 'emit', port, event: 'bill:insert', payload: { type } })
+  })
+  vssOn('billReject', 'click', () => {
+    const port = portsEl.value
+    const type = Number(document.getElementById('billType').value || 5)
+    send({ action: 'emit', port, event: 'bill:reject', payload: { type } })
+  })
+  vssOn('hopDispense', 'click', () => {
+    const port = portsEl.value
+    const count = Number(document.getElementById('hopCount').value || 1)
+    send({ action: 'emit', port, event: 'hopper:dispense', payload: { count } })
+  })
+  vssOn('hopStatus', 'click', () => {
+    const port = portsEl.value
+    send({ action: 'write', port, data: 'hex:02005301f403' })
+  })
+  vssOn('rfidSend', 'click', () => {
+    const port = portsEl.value
+    const card = document.getElementById('rfidCode').value || '12345678'
+    send({ action: 'emit', port, event: 'rfid', payload: { card } })
+  })
+  vssOn('ifSend', 'click', () => {
+    const port = portsEl.value
+    const statusByte = Number(document.getElementById('ifStatusByte').value || 0)
+    send({ action: 'emit', port, event: 'interface:status', payload: { statusByte } })
+  })
+  vssOn('customWrite', 'click', () => {
+    const port = portsEl.value
+    const txt = document.getElementById('customData').value.trim()
+    // allow raw object too
+    if (txt.startsWith('{')){
+      try { const obj = JSON.parse(txt); send(obj); return } catch(e){ appendLog('error','invalid json in custom area'); return }
+    }
+    // default: send write action
+    send({ action: 'write', port, data: txt })
+  })
+
+  // Test Payment sequence: send bill insert on selected port, then hopper dispense
+  vssOn('testPayment', 'click', () => {
+    const billPort = portsEl.value
+    const billType = Number(document.getElementById('billType').value || 5)
+    if (!billPort) return appendLog('error','no port selected for bill')
+    send({ action: 'emit', port: billPort, event: 'bill:insert', payload: { type: billType } })
+    appendLog('info', `TestPayment: sent bill:insert on ${billPort} type=${billType}`)
+
+    // find a hopper port from the populated ports list (option text contains type)
+    let hopPort = null
+    for (const opt of Array.from(portsEl.options)){
+      if ((opt.textContent || '').toLowerCase().includes('hopper')) { hopPort = opt.value; break }
+    }
+    // fallback to selected port if no hopper found
+    if (!hopPort) hopPort = billPort
+
+    setTimeout(()=>{
+      send({ action: 'emit', port: hopPort, event: 'hopper:dispense', payload: { count: 1 } })
+      appendLog('info', `TestPayment: sent hopper:dispense on ${hopPort}`)
+    }, 900)
+  })
+
+  vssOn(clearLogBtn, 'click', () => { logEl.innerHTML = ''; logs = []; logCountEl.textContent = '(0)' })
+
+  // small helper examples
+  vssOn('helpBtn', 'click', () => {
+    document.getElementById('customData').value = 'hex:02005301f403'
+    appendLog('info','Example payload set')
+  })
+
+  // auto-connect if server appears reachable
+  (function tryAutoConnect(){
+    // if running locally, auto-connect when checked
+    setTimeout(()=>{
+      const should = document.getElementById('autoConnect')
+      if (should && should.checked && (hostEl.value.startsWith('ws://localhost') || hostEl.value.startsWith('ws://127.0.0.1'))) connect()
+    }, 200)
+  })()
+})();
+</script>
+</body>
+</html>

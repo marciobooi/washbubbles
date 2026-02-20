@@ -9,6 +9,10 @@ import { MockBinding } from '@serialport/binding-mock'
 import { CCTalkParser } from '@serialport/parser-cctalk'
 import { WebSocketServer } from 'ws'
 import http from 'http'
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 import net from 'node:net'
 import { Transform, Duplex } from 'node:stream'
 
@@ -93,6 +97,7 @@ async function openAllPorts() {
       if (USE_MOCK) {
         try {
           await MockBinding.createPort(p, { echo: false, record: true })
+          console.log(`[vss] MockBinding: registered mock port ${p}`)
         } catch (e) {
           if (!/exists|already/i.test(String(e.message))) console.warn(`[vss] MockBinding.createPort ${p} -> ${e.message}`)
         }
@@ -108,6 +113,8 @@ async function openAllPorts() {
         }
         serial = createInMemorySerial(p)
         console.log(`[vss] Mocked in-memory serial ${p} (type=${type})`)
+        // initialize cc state for mocked port
+        if (!ccState.has(p)) ccState.set(p, { type, queue: [], hopper: { enabled:false, pending:0 } })
       } else {
         serial = new SerialPort({ path: p, baudRate: 9600, autoOpen: false })
         await new Promise((res, rej) => serial.open(err => err ? rej(err) : res()))
@@ -115,7 +122,9 @@ async function openAllPorts() {
       }
 
       serial.on('data', (chunk) => {
-        broadcast({ event: 'data', port: p, type, dataHex: chunk.toString('hex'), text: tryToUtf8(chunk) })
+        const dh = chunk.toString('hex')
+        console.log(`[vss] serial ${p} DATA -> ${dh}`)
+        broadcast({ event: 'data', port: p, type, dataHex: dh, text: tryToUtf8(chunk) })
       })
       serial.on('error', (err) => console.error(`[vss] Serial ${p} error:`, err.message))
 
@@ -230,11 +239,13 @@ function tryToUtf8(buf) {
 function sendRfid(port, cardCode = '12345678') {
   const entry = ports.get(port); if (!entry) return false
   const buf = Buffer.from(String(cardCode).trim() + '\r\n', 'utf8')
+  console.log(`[vss] sendRfid -> port=${port} card=${String(cardCode)}`)
   entry.serial.write(buf); return true
 }
 function sendKitsecStatus(port, statusByte = 0x00) {
   const entry = ports.get(port); if (!entry) return false
   const buf = Buffer.from([0x02, 0x53, statusByte, 0x03])
+  console.log(`[vss] sendKitsecStatus -> port=${port} status=${statusByte}`)
   entry.serial.write(buf); return true
 }
 function sendBVEvent(port, eventName = 'inserted', billType = 5) {
@@ -244,11 +255,13 @@ function sendBVEvent(port, eventName = 'inserted', billType = 5) {
   st._lastType = billType
   st.queue.push(...ev(billType))
   ccState.set(port, st)
+  console.log(`[vss] sendBVEvent -> port=${port} event=${eventName} type=${billType}`)
   return true
 }
 function sendHopperDispenseCmd(port, count = 1) {
   const entry = ports.get(port); if (!entry) return false
   const pkt = ccFrame(CC.ADDR.HOP, CC.HOST, 0xA7, [count]) // 167
+  console.log(`[vss] sendHopperDispenseCmd -> port=${port} count=${count}`)
   entry.serial.write(pkt); return true
 }
 
@@ -261,7 +274,22 @@ async function createWSSWithFallback(start = CONTROL_PORT, maxTries = 20) {
   while (port < start + maxTries) {
     try {
       await new Promise((resolve, reject) => {
-        const httpServer = http.createServer()
+        const httpServer = http.createServer((req, res) => {
+          const urlPath = (req.url || '/')
+          if (urlPath === '/') { res.writeHead(302, { Location: '/ui' }); return res.end() }
+          if (urlPath === '/ui' || urlPath === '/ui.html') {
+            const uiPath = path.join(__dirname, 'ui.html')
+            fs.readFile(uiPath, 'utf8', (err, data) => {
+              if (err) { res.writeHead(500); return res.end('UI not found') }
+              res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+              res.end(data)
+            })
+            return
+          }
+          res.writeHead(404, { 'Content-Type': 'text/plain' })
+          res.end('Not found')
+        })
+
         httpServer.once('error', (err) => {
           if (err && err.code === 'EADDRINUSE') { reject(err) } else reject(err)
         })
@@ -270,6 +298,7 @@ async function createWSSWithFallback(start = CONTROL_PORT, maxTries = 20) {
           wss = server
           setupWSHandlers(server)
           console.log(`[vss] Control WebSocket listening on ws://localhost:${port}/`)
+          console.log(`[vss] UI available at http://localhost:${port}/ui`)
           resolve(null)
         })
       })
@@ -291,6 +320,7 @@ function setupWSHandlers(server) {
     ws.on('message', raw => {
       let msg
       try { msg = JSON.parse(raw.toString()) } catch { ws.send(JSON.stringify({ error: 'invalid-json' })); return }
+      console.log('[vss] WS recv:', JSON.stringify(msg))
       handleWsMessage(ws, msg)
     })
   })
@@ -307,6 +337,7 @@ function broadcast(obj) {
 
 function handleWsMessage(ws, msg) {
   const { action } = msg
+  console.log('[vss] handleWsMessage:', action, JSON.stringify(msg))
   switch (action) {
     case 'list':
       ws.send(JSON.stringify({ type: 'ports', ports: Array.from(ports.entries()).map(([p, v]) => ({ port: p, type: v.type })) }))
@@ -321,6 +352,7 @@ function handleWsMessage(ws, msg) {
       else if (typeof data === 'string') buf = Buffer.from(data, encoding)
       else if (Array.isArray(data)) buf = Buffer.from(data)
       else return ws.send(JSON.stringify({ error: 'invalid-data' }))
+      console.log(`[vss] WS write -> port=${port} data=${buf.toString('hex')}`)
       entry.serial.write(buf)
       ws.send(JSON.stringify({ ok: true }))
       break
@@ -329,6 +361,7 @@ function handleWsMessage(ws, msg) {
     case 'emit': {
       const { port, event, payload } = msg
       if (!ports.has(port)) return ws.send(JSON.stringify({ error: 'port-not-open', port }))
+      console.log(`[vss] WS emit -> port=${port} event=${event} payload=${JSON.stringify(payload)}`)
       switch (event) {
         case 'rfid':
           sendRfid(port, payload?.card || payload?.cardCode || '12345678'); ws.send(JSON.stringify({ ok: true })); break
