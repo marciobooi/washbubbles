@@ -30,6 +30,7 @@ import RequireAdmin from './components/RequireAdmin'
 
 import { BrandingProvider } from './context/BrandingContext'
 import { TenantProvider } from './context/TenantContext'
+import { useAuth } from './context/AuthContext'
 import AdminTenants from './pages/AdminTenants'
 
 export default function App() {
@@ -60,31 +61,45 @@ function AppInner() {
   // Branding (companyName / logo) pulled from settings
   const [branding, setBranding] = React.useState({ companyName: null, logo: null })
 
+  // Tenant and auth hooks must be called at top-level
+  const { tenantId, tenants } = useTenant()
+  const { token } = useAuth()
+  const tenant = React.useMemo(() => (tenants || []).find(t => t._id === tenantId) || null, [tenants, tenantId])
+
   React.useEffect(() => {
     const onExternalOpen = () => setExternalModalCount((c) => c + 1)
     const onExternalClose = () => setExternalModalCount((c) => Math.max(0, c - 1))
     window.addEventListener('modal-open', onExternalOpen)
     window.addEventListener('modal-close', onExternalClose)
 
-    // Load branding settings on mount
-    async function loadBranding() {
-      try {
-            // Use public settings endpoint for branding
-        const nameResp = await api.getPublicSetting('branding.companyName').catch(() => null)
-        const logoResp = await api.getPublicSetting('branding.logo').catch(() => null)
-        const companyName = nameResp && nameResp.value ? String(nameResp.value) : null
-        setBranding({ companyName, logo: logoResp && logoResp.value ? String(logoResp.value) : null })
-        if (companyName) {
-          try { document.title = companyName } catch (e) {}
-        }
-        // Notify other components about branding
-        try { window.dispatchEvent(new CustomEvent('branding:update', { detail: { company: companyName, logo: logoResp && logoResp.value ? String(logoResp.value) : null }})) } catch (e) {}
-      } catch (e) {
-        console.debug('Failed to load branding', e)
-      }
-    }
+    // Load branding only after a tenant is selected or after login
+    async function loadBrandingConditional() {
+    try {
+      if (!token && !tenantId) return // do not load branding on public login page
 
-    loadBranding()
+      let nameResp = null
+      let logoResp = null
+      if (tenantId) {
+        nameResp = await api.getSetting('branding.companyName').catch(() => null)
+        logoResp = await api.getSetting('branding.logo').catch(() => null)
+      } else {
+        // If logged in but no tenant selected, fall back to public settings
+        nameResp = await api.getPublicSetting('branding.companyName').catch(() => null)
+        logoResp = await api.getPublicSetting('branding.logo').catch(() => null)
+      }
+
+      const companyName = nameResp && nameResp.value ? String(nameResp.value) : null
+      setBranding({ companyName, logo: logoResp && logoResp.value ? String(logoResp.value) : null })
+      if (companyName) {
+        try { document.title = companyName } catch (e) {}
+      }
+      try { window.dispatchEvent(new CustomEvent('branding:update', { detail: { company: companyName, logo: logoResp && logoResp.value ? String(logoResp.value) : null }})) } catch (e) {}
+    } catch (e) {
+      console.debug('Failed to load branding', e)
+    }
+  }
+
+  loadBrandingConditional()
 
     const onBrandEvent = (e) => {
       const d = e && e.detail ? e.detail : {}
@@ -138,8 +153,7 @@ function AppInner() {
     return () => window.removeEventListener('machine-notice', onEvent)
   }, [])
 
-  const { tenantId, tenants } = useTenant()
-  const tenant = React.useMemo(() => (tenants || []).find(t => t._id === tenantId) || null, [tenants, tenantId])
+  
 
   // Close the cart modal automatically when the cart becomes empty
   React.useEffect(() => {

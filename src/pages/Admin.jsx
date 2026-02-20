@@ -1,10 +1,13 @@
 import React, { useEffect } from 'react'
 import LoginForm from '../components/LoginForm'
 import { useAuth } from '../context/AuthContext'
+import { useTenant } from '../context/TenantContext'
 import { useNavigate } from 'react-router-dom'
 
 export default function Admin() {
   const { role } = useAuth()
+  const { tenantId, tenants } = useTenant()
+  const tenant = (tenants || []).find(t => t._id === tenantId) || null
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -25,7 +28,11 @@ export default function Admin() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h4l3-6 4 12 3-6h4" />
               </svg>
             </div>
-            <span className="text-lg font-semibold">Acme Inc.</span>
+            {tenant ? (
+              <span className="text-lg font-semibold">{tenant.name}</span>
+            ) : (
+              <span className="text-lg font-semibold">Washstore</span>
+            )}
           </a>
         </div>
 
