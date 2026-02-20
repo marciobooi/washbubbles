@@ -26,6 +26,8 @@ import AdminInterfaces from './pages/AdminInterfaces'
 import AdminPeripherals from './pages/AdminPeripherals'
 import AdminPrices from './pages/AdminPrices'
 import AdminCards from './pages/AdminCards'
+import ForgotPassword from './pages/ForgotPassword'
+import ResetPassword from './pages/ResetPassword'
 import RequireAdmin from './components/RequireAdmin'
 
 import { BrandingProvider } from './context/BrandingContext'
@@ -345,6 +347,8 @@ function AppInner() {
 
           {/* Admin login (public) */}
           <Route path="/admin/login" element={<Admin />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
           {/* Protected admin area */}
           <Route path="/admin" element={<RequireAdmin><AdminDashboard /></RequireAdmin>}>

@@ -79,6 +79,61 @@ router.post('/change-password', requireAuth, async (req, res) => {
   res.json({ success: true })
 })
 
+// --- password recovery ---------------------------------------------------
+
+// Request a password reset link by email. Always respond 200 to avoid
+// revealing whether an address is registered.
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body
+  if (!email) return res.status(400).json({ error: 'Missing email' })
+  const user = await User.findOne({ email })
+  if (user) {
+    const token = crypto.randomBytes(32).toString('hex')
+    user.resetPasswordToken = token
+    user.resetPasswordExpires = Date.now() + 3600 * 1000 // 1h
+    await user.save()
+
+    // build link using front-end url env var
+    const frontend = process.env.FRONTEND_URL || 'http://localhost:3000'
+    const link = `${frontend}/reset-password?token=${token}`
+
+    try {
+      const { sendMail } = await import('../services/mailer.js')
+      await sendMail({
+        to: user.email,
+        subject: 'Password reset',
+        text: `You requested a password reset. Click the link to change your password: ${link}`,
+        html: `<p>You requested a password reset. Click the link to change your password:</p><p><a href="${link}">${link}</a></p>`,
+      })
+    } catch (err) {
+      console.error('failed to send reset email', err)
+    }
+  }
+  // still respond success even if user not found
+  res.json({ success: true })
+})
+
+// Resetting the password using the token
+router.post('/reset-password', async (req, res) => {
+  const { token, newPassword } = req.body
+  if (!token || !newPassword) return res.status(400).json({ error: 'Missing fields' })
+  if (typeof newPassword !== 'string' || newPassword.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters' })
+
+  const user = await User.findOne({
+    resetPasswordToken: token,
+    resetPasswordExpires: { $gt: Date.now() },
+  })
+  if (!user) return res.status(400).json({ error: 'Token invalid or expired' })
+
+  const hash = await bcrypt.hash(newPassword, 10)
+  user.password = hash
+  user.resetPasswordToken = null
+  user.resetPasswordExpires = null
+  await user.save()
+
+  res.json({ success: true })
+})
+
 // NOTE: `/auth/me` endpoint removed — prefer using token payloads returned by `/auth/login` for client-side role checks.
 // If you still need server-side user info, reintroduce an authenticated route that returns specific safe fields.
 

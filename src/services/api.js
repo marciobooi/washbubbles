@@ -193,6 +193,14 @@ export function createApi(config) {
     return request('/auth/change-password', { method: 'POST', json: payload, expect: 'json' });
   }
 
+  function forgotPassword(payload) {
+    return request('/auth/forgot-password', { method: 'POST', json: payload, expect: 'json' });
+  }
+
+  function resetPassword(payload) {
+    return request('/auth/reset-password', { method: 'POST', json: payload, expect: 'json' });
+  }
+
   function getMachines() {
     return request('/admin/machines', { method: 'GET', expect: 'json' });
   }
