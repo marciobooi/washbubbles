@@ -65,76 +65,90 @@ export default function LoginForm({ mode = 'admin', embedded = false }) {
     <form onSubmit={handleSubmit} className="space-y-6">
       {mode === 'admin' ? (
         <>
+          {/* username field */}
           <div>
-            <label className="flex items-center gap-2 text-sm font-medium" htmlFor="username">Username</label>
-            <Input
+            <label data-slot="label" className="flex items-center gap-2 text-sm leading-none font-medium select-none" htmlFor="username">
+              Username
+            </label>
+            <input
               id="username"
               name="username"
               type="text"
-              placeholder="Username"
+              autoComplete="username"
+              required
               value={username}
               onChange={e => setUsername(e.target.value)}
-              required
-              className="mt-1 w-full"
+              className="file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 border-input flex h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive mt-1"
             />
           </div>
-
+          {/* password field */}
           <div>
-            <label className="flex items-center gap-2 text-sm font-medium" htmlFor="password">Password</label>
-            <Input
+            <label data-slot="label" className="flex items-center gap-2 text-sm leading-none font-medium select-none" htmlFor="password">
+              Password
+            </label>
+            <input
               id="password"
               name="password"
               type="password"
-              placeholder="Password"
+              autoComplete="current-password"
+              required
               value={password}
               onChange={e => setPassword(e.target.value)}
-              required
-              className="mt-1 w-full"
+              className="file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 border-input flex h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive mt-1"
             />
           </div>
 
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <input
+              <button
+                type="button"
+                role="checkbox"
+                aria-checked={false}
+                data-state="unchecked"
+                value="on"
+                data-slot="checkbox"
+                className="peer border-input dark:bg-input/30 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground dark:data-[state=checked]:bg-primary data-[state=checked]:border-primary focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive size-4 shrink-0 rounded-[4px] border shadow-xs transition-shadow outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50"
                 id="rememberMe"
-                name="rememberMe"
+                onClick={() => {
+                  const cb = document.getElementById('rememberMe-checkbox');
+                  if (cb) cb.checked = !cb.checked;
+                }}
+              ></button>
+              <input
                 type="checkbox"
-                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                id="rememberMe-checkbox"
+                aria-hidden="true"
+                tabIndex={-1}
+                style={{ position: 'absolute', pointerEvents: 'none', opacity: 0, margin: 0, transform: 'translateX(-100%)', width: 16, height: 16 }}
+                value="on"
               />
-              <label htmlFor="rememberMe" className="text-sm font-medium">Remember me</label>
+              <label htmlFor="rememberMe" className="text-sm leading-none font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                Remember me
+              </label>
             </div>
             <div className="text-sm">
-              <a className="text-primary hover:text-primary/90 font-medium" href="/forgot-password">Forgot your password?</a>
+              <a className="text-primary hover:text-primary/90 font-medium" href="/forgot-password">
+                Forgot your password?
+              </a>
             </div>
           </div>
 
           {error && <div className="text-destructive text-sm">{error}</div>}
 
           <div>
-            <Button type="submit" className="w-full bg-primary text-primary-foreground" disabled={loading}>
+            <button
+              data-slot="button"
+              type="submit"
+              className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive bg-primary text-primary-foreground shadow-xs hover:bg-primary/90 h-9 px-4 py-2 has-[>svg]:px-3 w-full"
+              disabled={loading}
+            >
               {loading ? 'Signing in...' : 'Sign in'}
-            </Button>
-          </div>
-
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-300" />
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="bg-white px-2 text-gray-500">or continue with</span>
-            </div>
-          </div>
-
-          <div className="grid gap-3">
-            <button type="button" className="flex w-full items-center justify-center gap-2 rounded-md border bg-background px-4 py-2 hover:bg-accent">
-              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2a9.96 9.96 0 0 1 6.29 2.226a1 1 0 0 1 .04 1.52l-1.51 1.362a1 1 0 0 1 -1.265 .06a6 6 0 1 0 2.103 6.836l.001 -.004h-3.66a1 1 0 0 1 -.992 -.883l-.007 -.117v-2a1 1 0 0 1 1 -1h6.945a1 1 0 0 1 .994 .89c.04 .367 .061 .737 .061 1.11c0 5.523 -4.477 10 -10 10s-10 -4.477 -10 -10s4.477 -10 10 -10z" /></svg>
-              Google
-            </button>
-            <button type="button" className="flex w-full items-center justify-center gap-2 rounded-md border bg-background px-4 py-2 hover:bg-accent">
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5" /></svg>
-              GitHub
             </button>
           </div>
+
+    
+
+      
         </>
       ) : (
         <div>
@@ -149,3 +163,4 @@ export default function LoginForm({ mode = 'admin', embedded = false }) {
     </form>
   )
 }
+

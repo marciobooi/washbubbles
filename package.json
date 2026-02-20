@@ -6,7 +6,6 @@
   "main": "electron/main.cjs",
   "scripts": {
     "prepare:dev": "npm --prefix backend install --no-audit --no-fund && node -e \"const fs=require('fs'); const src='backend/.env.example'; const dst='backend/.env'; if(!fs.existsSync(dst) && fs.existsSync(src)){let s=fs.readFileSync(src,'utf8'); s=s.replace(/@db:/g,'@localhost:'); fs.writeFileSync(dst,s); console.log('Created backend/.env from example (db -> localhost)');}\"",
-    "gen:login-images": "node scripts/genLoginImages.cjs"
     "dev": "concurrently \"npm --prefix backend run dev\" \"vite\"",
     "dev:no-db": "npm run prepare:dev && concurrently \"npm --prefix backend run dev\" \"vite\"",
     "dev:db:setup": "npm --prefix backend run seed",

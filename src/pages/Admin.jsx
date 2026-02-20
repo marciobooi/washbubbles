@@ -18,7 +18,7 @@ export default function Admin() {
   }, [role, navigate])
 
   return (
-    <div className="items-center justify-center md:flex">
+    <div className="items-center justify-center md:flex min-h-screen">
       <div className="w-full">
         <div className="lg:grid lg:min-h-[760px] lg:grid-cols-2">
           <div className="flex w-full flex-col justify-center px-4 py-12 sm:px-6 lg:flex-none xl:px-24">
@@ -29,7 +29,7 @@ export default function Admin() {
               </div>
             </div>
           </div>
-          <div className="relative hidden lg:block">
+          <div className="relative h-64 lg:h-auto lg:block">
             {/* carousel of login folder images */}
             <LoginCarousel className="absolute inset-0 h-full w-full" />
           </div>
