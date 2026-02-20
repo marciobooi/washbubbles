@@ -69,6 +69,7 @@ export function createApi(config) {
   const {
     baseURL,
     getToken,
+    getTenantId,
     credentials = 'same-origin', // safe default
   } = config;
 
@@ -89,8 +90,11 @@ export function createApi(config) {
 
     const headers = new Headers(hdrs || {});
     const token = getToken?.();
+    const tenantId = getTenantId?.();
     // Only set Bearer Authorization if caller did not provide their own Authorization header and skipAuth is not set
     if (!skipAuth && token && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`);
+    // Attach tenant header when available and not already provided
+    if (tenantId && !headers.has('X-Tenant-Id')) headers.set('X-Tenant-Id', String(tenantId));
 
     let body = rawBody;
 
@@ -401,6 +405,23 @@ export function createApi(config) {
     return request(`/middleware/machines/${id}`, { method: 'GET', expect: 'json' });
   }
 
+  // Tenant management (admin)
+  function getTenants() {
+    return request('/admin/tenants', { method: 'GET', expect: 'json' })
+  }
+
+  function createTenant(payload) {
+    return request('/admin/tenants', { method: 'POST', json: payload, expect: 'json' })
+  }
+
+  function updateTenant(id, payload) {
+    return request(`/admin/tenants/${id}`, { method: 'PUT', json: payload, expect: 'json' })
+  }
+
+  function assignTenantUser(tenantId, userId, role) {
+    return request(`/admin/tenants/${tenantId}/users`, { method: 'POST', json: { userId, role }, expect: 'json' })
+  }
+
   // Note: `me()` removed — use tokens returned from /auth/login and backend-provided JWT payloads when needed.
 
   return {
@@ -479,10 +500,12 @@ export function createApi(config) {
 // ---- Default instance (adjust to your app) ----
 const BASE_URL = import.meta?.env?.VITE_API_BASE ?? '/api';
 const getToken = () => localStorage.getItem('ws_token');
+const getTenantId = () => localStorage.getItem('ws_tenant') || null;
 
 export const api = createApi({
   baseURL: BASE_URL,
   getToken,
+  getTenantId,
   // If you move to httpOnly cookies:
   // credentials: 'include',
 });

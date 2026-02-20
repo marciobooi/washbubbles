@@ -12,6 +12,8 @@ import CartModal from './components/CartModal'
 import { ToastProvider, toast } from './components/ui/Toast'
 import HelpTutorial from './components/HelpTutorial'
 import LanguageSwitcher from './components/LanguageSwitcher'
+import TenantSelector from './components/TenantSelector'
+import { useTenant } from './context/TenantContext'
 import Modal from './components/ui/Modal'
 import AdminDashboard from './pages/AdminDashboard'
 import AdminUsers from './pages/AdminUsers'
@@ -27,17 +29,21 @@ import AdminCards from './pages/AdminCards'
 import RequireAdmin from './components/RequireAdmin'
 
 import { BrandingProvider } from './context/BrandingContext'
+import { TenantProvider } from './context/TenantContext'
+import AdminTenants from './pages/AdminTenants'
 
 export default function App() {
   return (
     <BrandingProvider>
-      <PaymentProvider>
+      <TenantProvider>
+        <PaymentProvider>
         <CartProvider>
           <ToastProvider>
             <AppInner />
           </ToastProvider>
         </CartProvider>
-      </PaymentProvider>
+        </PaymentProvider>
+      </TenantProvider>
     </BrandingProvider>
   )
 }
@@ -131,6 +137,9 @@ function AppInner() {
     window.addEventListener('machine-notice', onEvent)
     return () => window.removeEventListener('machine-notice', onEvent)
   }, [])
+
+  const { tenantId, tenants } = useTenant()
+  const tenant = React.useMemo(() => (tenants || []).find(t => t._id === tenantId) || null, [tenants, tenantId])
 
   // Close the cart modal automatically when the cart becomes empty
   React.useEffect(() => {
@@ -295,7 +304,11 @@ function AppInner() {
                   <span className="absolute -top-1 -right-1 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-semibold leading-none text-white bg-red-600 rounded-full">{cartCount}</span>
                 </button>
               )}
-     {location.pathname.startsWith('/pos') && <LanguageSwitcher />}
+     {location.pathname.startsWith('/admin') && <TenantSelector className="mr-2" />}
+     {location.pathname.startsWith('/admin') && tenant && (
+       <div className="text-sm text-primary-700 mr-2">{tenant.name}</div>
+     )}
+    {location.pathname.startsWith('/pos') && <LanguageSwitcher />}
 
               <button aria-label="Ajuda" className="inline-flex items-center p-2 rounded-md hover:bg-white/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400" onClick={() => setHelpOpen(true)} title="Ajuda">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-primary-800" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
@@ -325,6 +338,7 @@ function AppInner() {
             {/* Backwards-compat: support legacy /admin/dashboard URLs */}
             <Route path="dashboard" element={<Navigate to="operations" replace />} />
             <Route path="users" element={<AdminUsers />} />
+            <Route path="tenants" element={<AdminTenants />} />
             <Route path="machines" element={<AdminMachines />} />
             <Route path="interfaces" element={<AdminInterfaces />} />
             <Route path="peripherals" element={<AdminPeripherals />} />
