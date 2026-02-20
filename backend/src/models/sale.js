@@ -3,6 +3,7 @@ import mongoose from 'mongoose'
 const { Schema } = mongoose
 
 const saleSchema = new Schema({
+  tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', required: true, index: true },
   // machineId is optional because some transactions (card recharges, admin events) do not relate to a machine
   machineId: { type: Schema.Types.ObjectId, ref: 'Machine' },
   amount: { type: Number, required: true },
@@ -21,5 +22,8 @@ const saleSchema = new Schema({
   change: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now }
 })
+
+// common query patterns: per-tenant date queries
+saleSchema.index({ tenantId: 1, createdAt: -1 })
 
 export default mongoose.model('Sale', saleSchema)

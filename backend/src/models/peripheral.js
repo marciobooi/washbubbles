@@ -1,6 +1,7 @@
 import mongoose from 'mongoose'
 
 const peripheralSchema = new mongoose.Schema({
+  tenantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', required: true, index: true },
   name: { type: String, required: true },
   type: { 
     type: String, 
@@ -39,5 +40,8 @@ const peripheralSchema = new mongoose.Schema({
     }
   }
 }, { timestamps: true })
+
+// Per-tenant lookups
+peripheralSchema.index({ tenantId: 1, type: 1 })
 
 export default mongoose.model('Peripheral', peripheralSchema)

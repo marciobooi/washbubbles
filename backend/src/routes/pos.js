@@ -5,12 +5,14 @@ import Setting from '../models/setting.js'
 import Price from '../models/price.js'
 import { requireKiosk } from '../middleware/auth.js'
 import { broadcastMachines, broadcastMachine } from '../wsServer.js'
+import { withTenant } from '../services/tenant.js'
 
 const router = express.Router()
 
 // POS routes are public (can be configured to use token if required)
 const getMachineStatus = async (req, res) => {
-  const machines = await Machine.find().sort({ createdAt: 1 })
+  const MachineT = withTenant(Machine, req)
+  const machines = await MachineT.find().sort({ createdAt: 1 })
   const data = machines.map((m) => ({ id: m.id, name: m.name, status: m.status, cycle: m.cycle }))
   res.json(data)
 }
@@ -23,7 +25,8 @@ router.get('/machine', getMachineStatus)
 router.get('/prices/lookup', async (req, res) => {
   const { type, weight } = req.query
   if (!type || !weight) return res.status(400).json({ error: 'Missing type or weight' })
-  const price = await Price.findOne({ type, weight: Number(weight) })
+  const PriceT = withTenant(Price, req)
+  const price = await PriceT.findOne({ type, weight: Number(weight) })
   if (!price) return res.status(404).json({ error: 'Price not found for this type/weight' })
   res.json(price)
 })
@@ -33,7 +36,8 @@ router.get('/prices/lookup', async (req, res) => {
 // Kiosks should use this to fetch machine metadata; status changes (occupy/free) are performed via /pos/sale.
 router.get('/machines', requireKiosk, async (req, res) => {
   const typeFilter = req.query.type
-  const machines = await Machine.find().sort({ createdAt: 1 })
+  const MachineT = withTenant(Machine, req)
+  const machines = await MachineT.find().sort({ createdAt: 1 })
   let data = machines.map((m) => ({
     _id: m._id,
     id: m.id,
@@ -58,7 +62,8 @@ router.post('/sale', requireKiosk, async (req, res) => {
   if (method && !['card', 'cash'].includes(String(method))) return res.status(400).json({ error: 'Unsupported payment method' })
 
   // Ensure machine exists
-  const machine = await Machine.findById(machineId)
+  const MachineT = withTenant(Machine, req)
+  const machine = await MachineT.findById(machineId)
   if (!machine) return res.status(404).json({ error: 'Machine not found' })
 
   // Prevent occupying a machine that is already working
@@ -70,23 +75,26 @@ router.post('/sale', requireKiosk, async (req, res) => {
   let card = null
   if ((cardId || cardCode) && method === 'card') {
     const Card = (await import('../models/card.js')).default
-    card = cardId ? await Card.findById(cardId) : await Card.findOne({ code: cardCode })
+    const CardT = withTenant(Card, req)
+    card = cardId ? await CardT.findById(cardId) : await CardT.findOne({ code: cardCode })
     if (!card) return res.status(404).json({ error: 'Card not found' })
     const price = Number(amount)
     if ((card.balance || 0) < price) return res.status(400).json({ error: 'Insufficient balance' })
     card.balance = Number((card.balance || 0) - price)
+    if (!card.tenantId && req.tenantId) card.tenantId = req.tenantId
     await card.save()
   }
 
   // Compute inserted/change defaults and create sale
   const insertedNum = Number(inserted || 0)
   const changeNum = (change != null) ? Number(change) : Math.max(0, insertedNum - Number(amount || 0))
-  const sale = await Sale.create({ machineId, amount: Number(amount), items, method, batchId, inserted: insertedNum, change: changeNum, type: type || 'payment', cardId: card ? card._id : undefined, cardCode: card ? card.code : (cardCode || undefined) })
+  const SaleT = withTenant(Sale, req)
+  const sale = await SaleT.create({ machineId, amount: Number(amount), items, method, batchId, inserted: insertedNum, change: changeNum, type: type || 'payment', cardId: card ? card._id : undefined, cardCode: card ? card.code : (cardCode || undefined) })
 
   // Update machine: increment cycle and mark as occupied after successful payment
-  await Machine.findByIdAndUpdate(machineId, { $inc: { cycle: 1 }, $set: { status: 'working', statusText: 'Ocupado' } })
+  await MachineT.findByIdAndUpdate(machineId, { $inc: { cycle: 1 }, $set: { status: 'working', statusText: 'Ocupado' } })
 
-  const updated = await Machine.findById(machineId)
+  const updated = await MachineT.findById(machineId)
   // broadcast single updated machine so clients refresh quickly
   try { await broadcastMachine(updated) } catch (e) { console.error('[pos] broadcastMachine error', e) }
 
@@ -170,8 +178,9 @@ router.post('/card/purchase', requireKiosk, async (req, res) => {
 
   try {
     // Get card purchase settings from loyaltyCard config
-    const purchasePrice = await Setting.findOne({ key: 'loyaltyCard.cost' })
-    const initialCredit = await Setting.findOne({ key: 'loyaltyCard.credit' })
+    const SettingT = withTenant(Setting, req)
+    const purchasePrice = await SettingT.findOne({ key: 'loyaltyCard.cost' })
+    const initialCredit = await SettingT.findOne({ key: 'loyaltyCard.credit' })
     
     const price = purchasePrice?.value ? Number(purchasePrice.value) : 0
     const credit = initialCredit?.value ? Number(initialCredit.value) : 0
@@ -192,6 +201,8 @@ router.post('/card/purchase', requireKiosk, async (req, res) => {
     // Generate unique card code (10 digits)
     const Card = (await import('../models/card.js')).default
     const CardPurchase = (await import('../models/cardPurchase.js')).default
+    const CardT = withTenant(Card, req)
+    const CardPurchaseT = withTenant(CardPurchase, req)
     
     let cardCode = ''
     let cardExists = true
@@ -199,7 +210,7 @@ router.post('/card/purchase', requireKiosk, async (req, res) => {
     // Generate unique card code
     while (cardExists) {
       cardCode = Math.floor(1000000000 + Math.random() * 9000000000).toString()
-      cardExists = await Card.findOne({ code: cardCode })
+      cardExists = await CardT.findOne({ code: cardCode })
     }
 
     // Step 1: Dispense card from dispenser
@@ -207,7 +218,8 @@ router.post('/card/purchase', requireKiosk, async (req, res) => {
     try {
       const { middleware } = await import('../index.js')
       const Peripheral = (await import('../models/peripheral.js')).default
-      const dispenser = await Peripheral.findOne({ type: 'card_dispenser', enabled: true })
+      const PeripheralT = withTenant(Peripheral, req)
+      const dispenser = await PeripheralT.findOne({ type: 'card_dispenser', enabled: true })
       
       if (dispenser && middleware) {
         await middleware.dispenseCard(dispenser._id)
@@ -222,7 +234,7 @@ router.post('/card/purchase', requireKiosk, async (req, res) => {
     }
 
     // Step 2: Create card in database with customer data
-    const card = await Card.create({
+    const card = await CardT.create({
       code: cardCode,
       balance: credit,
       name: customerName || '',
@@ -236,7 +248,8 @@ router.post('/card/purchase', requireKiosk, async (req, res) => {
     // RFID reader will verify card code matches when user inserts
 
     // Create sale record
-    const sale = await Sale.create({
+    const SaleT = withTenant(Sale, req)
+    const sale = await SaleT.create({
       amount: price,
       items: [{ type: 'card_purchase', amount: price, cardCode }],
       method: 'cash',
@@ -247,7 +260,7 @@ router.post('/card/purchase', requireKiosk, async (req, res) => {
     })
 
     // Track card purchase
-    const cardPurchase = await CardPurchase.create({
+    const cardPurchase = await CardPurchaseT.create({
       cardId: card._id,
       cardCode: cardCode,
       purchasePrice: price,
@@ -271,7 +284,8 @@ router.post('/card/purchase', requireKiosk, async (req, res) => {
       try {
         const { middleware } = await import('../index.js')
         const Peripheral = (await import('../models/peripheral.js')).default
-        const hopper = await Peripheral.findOne({ type: 'hopper', enabled: true })
+        const PeripheralT = withTenant(Peripheral, req)
+        const hopper = await PeripheralT.findOne({ type: 'hopper', enabled: true })
         
         if (hopper && middleware) {
           await middleware.dispenseChange(hopper._id, changeAmount)
@@ -304,8 +318,9 @@ router.post('/card/mark-written/:code', requireKiosk, async (req, res) => {
   
   try {
     const CardPurchase = (await import('../models/cardPurchase.js')).default
-    
-    const purchase = await CardPurchase.findOneAndUpdate(
+    const CardPurchaseT = withTenant(CardPurchase, req)
+
+    const purchase = await CardPurchaseT.findOneAndUpdate(
       { cardCode: code, cardWritten: false },
       { cardWritten: true },
       { new: true }
@@ -328,7 +343,8 @@ router.post('/card/write/:code', requireKiosk, async (req, res) => {
   
   try {
     const Card = (await import('../models/card.js')).default
-    const card = await Card.findOne({ code })
+    const CardT = withTenant(Card, req)
+    const card = await CardT.findOne({ code })
     
     if (!card) {
       return res.status(404).json({ error: 'Card not found' })
@@ -337,7 +353,8 @@ router.post('/card/write/:code', requireKiosk, async (req, res) => {
     // Get RFID reader and write data
     const { middleware } = await import('../index.js')
     const Peripheral = (await import('../models/peripheral.js')).default
-    const rfidReader = await Peripheral.findOne({ type: 'rfid_reader', enabled: true })
+    const PeripheralT = withTenant(Peripheral, req)
+    const rfidReader = await PeripheralT.findOne({ type: 'rfid_reader', enabled: true })
     
     if (!rfidReader || !middleware) {
       return res.status(503).json({ error: 'RFID reader not available' })
@@ -356,7 +373,8 @@ router.post('/card/write/:code', requireKiosk, async (req, res) => {
     if (result.success) {
       // Mark purchase as written
       const CardPurchase = (await import('../models/cardPurchase.js')).default
-      await CardPurchase.findOneAndUpdate(
+      const CardPurchaseT = withTenant(CardPurchase, req)
+      await CardPurchaseT.findOneAndUpdate(
         { cardCode: code },
         { cardWritten: true }
       )
@@ -376,7 +394,8 @@ router.get('/card/read', requireKiosk, async (req, res) => {
   try {
     const { middleware } = await import('../index.js')
     const Peripheral = (await import('../models/peripheral.js')).default
-    const rfidReader = await Peripheral.findOne({ type: 'rfid_reader', enabled: true })
+    const PeripheralT = withTenant(Peripheral, req)
+    const rfidReader = await PeripheralT.findOne({ type: 'rfid_reader', enabled: true })
     
     if (!rfidReader || !middleware) {
       return res.status(503).json({ error: 'RFID reader not available' })
@@ -400,7 +419,8 @@ router.get('/card/read', requireKiosk, async (req, res) => {
 router.get('/cards/:code', requireKiosk, async (req, res) => {
   const code = req.params.code
   const Card = (await import('../models/card.js')).default
-  const c = await Card.findOne({ code }).lean()
+  const CardT = withTenant(Card, req)
+  const c = await CardT.findOne({ code }).lean()
   if (!c) return res.status(404).json({ error: 'Card not found' })
   res.json(c)
 })
@@ -412,7 +432,8 @@ router.get('/settings/:key', async (req, res) => {
   if (!key.startsWith('branding.') && !key.startsWith('cardPurchase.') && !key.startsWith('loyaltyCard.')) {
     return res.status(404).json({ error: 'Not found' })
   }
-  const s = await Setting.findOne({ key }).lean()
+  const SettingT = withTenant(Setting, req)
+  const s = await SettingT.findOne({ key }).lean()
   if (!s) return res.status(404).json({ error: 'Setting not found' })
   res.json(s)
 })
@@ -423,7 +444,8 @@ router.post('/cards/:code/spend', requireKiosk, async (req, res) => {
   const { machineId, amount, items, method, batchId } = req.body
   if (!code || amount == null) return res.status(400).json({ error: 'Missing parameters' })
   const Card = (await import('../models/card.js')).default
-  const card = await Card.findOne({ code })
+  const CardT = withTenant(Card, req)
+  const card = await CardT.findOne({ code })
   if (!card) return res.status(404).json({ error: 'Card not found' })
 
   if (method && String(method) !== 'card') return res.status(400).json({ error: 'Card spending must use method "card"' })
@@ -436,16 +458,18 @@ router.post('/cards/:code/spend', requireKiosk, async (req, res) => {
 
   // Prevent occupying a machine that is already working
   if (machineId) {
-    const m = await Machine.findById(machineId)
+    const MachineT = withTenant(Machine, req)
+    const m = await MachineT.findById(machineId)
     if (m && m.status === 'working') return res.status(409).json({ error: 'Machine already in use' })
   }
 
-  const sale = await Sale.create({ machineId, amount: price, items, method: 'card', batchId, type: 'payment', cardId: card._id, cardCode: card.code })
+  const SaleT = withTenant(Sale, req)
+  const sale = await SaleT.create({ machineId, amount: price, items, method: 'card', batchId, type: 'payment', cardId: card._id, cardCode: card.code })
 
   // Update machine state if relevant
   if (machineId) {
-    await Machine.findByIdAndUpdate(machineId, { $inc: { cycle: 1 }, $set: { status: 'working', statusText: 'Ocupado' } })
-    const updated = await Machine.findById(machineId)
+    await MachineT.findByIdAndUpdate(machineId, { $inc: { cycle: 1 }, $set: { status: 'working', statusText: 'Ocupado' } })
+    const updated = await MachineT.findById(machineId)
     try { await broadcastMachine(updated) } catch (e) { console.error('[pos] broadcastMachine error', e) }
     return res.json({ sale, machine: updated, card })
   }

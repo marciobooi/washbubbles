@@ -3,7 +3,8 @@ import mongoose from 'mongoose'
 const { Schema } = mongoose
 
 const cardSchema = new Schema({
-  code: { type: String, required: true, unique: true }, // public card code
+  tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', required: true, index: true },
+  code: { type: String, required: true }, // public card code
   balance: { type: Number, default: 0 },
   
   // Optional user data (collected during card purchase)
@@ -21,5 +22,8 @@ cardSchema.pre('save', function(next) {
   this.updatedAt = new Date()
   next()
 })
+
+// Ensure card codes are unique per tenant
+cardSchema.index({ tenantId: 1, code: 1 }, { unique: true })
 
 export default mongoose.model('Card', cardSchema)

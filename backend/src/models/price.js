@@ -1,6 +1,7 @@
 import mongoose from 'mongoose'
 
 const priceSchema = new mongoose.Schema({
+  tenantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant', required: true, index: true },
   type: { type: String, enum: ['wash', 'dry'], required: true },
   weight: { type: Number, required: true }, // kg
   duration: { type: Number, default: null }, // minutes (for wash machines)
@@ -19,8 +20,8 @@ const priceSchema = new mongoose.Schema({
   updatedAt: { type: Date, default: Date.now },
 })
 
-// Compound unique index: one price per type+weight combination
-priceSchema.index({ type: 1, weight: 1 }, { unique: true })
+// Compound unique index scoped to tenant: one price per tenant+type+weight
+priceSchema.index({ tenantId: 1, type: 1, weight: 1 }, { unique: true })
 
 priceSchema.pre('save', function (next) {
   this.updatedAt = new Date()

@@ -1,6 +1,10 @@
 import express from 'express'
 import coinMachine from '../services/coinMachine.js'
 import { requireAdmin } from '../middleware/auth.js'
+import { withTenant } from '../services/tenant.js'
+import Peripheral from '../models/peripheral.js'
+import Machine from '../models/machine.js'
+import Card from '../models/card.js'
 
 const router = express.Router()
 
@@ -58,8 +62,12 @@ router.post('/client/load-card', async (req, res) => {
     return res.status(400).json({ error: 'Missing cardNumber' })
   }
 
+  // Ensure card exists within tenant
+  const CardT = withTenant(Card, req)
+  const card = await CardT.findOne({ code: cardNumber })
+  if (!card) return res.status(404).json({ error: 'Card not found' })
+
   const loaded = await coinMachine.client.setClientInfoByCard(cardNumber)
-  
   if (loaded) {
     res.json({ success: true, client: coinMachine.getClientState() })
   } else {
@@ -77,6 +85,11 @@ router.post('/payment', async (req, res) => {
     if (!machineId || !amount) {
       return res.status(400).json({ error: 'Missing machineId or amount' })
     }
+
+    // Validate machine belongs to tenant
+    const MachineT = withTenant(Machine, req)
+    const machine = await MachineT.findById(machineId) || await MachineT.findOne({ number: Number(machineId) })
+    if (!machine) return res.status(404).json({ error: 'Machine not found' })
 
     const result = await coinMachine.processPayment(machineId, amount, paymentType)
     res.json(result)
@@ -96,6 +109,11 @@ router.post('/dispense-card', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Missing peripheralId' })
     }
 
+    // Ensure peripheral belongs to tenant
+    const PeripheralT = withTenant(Peripheral, req)
+    const p = await PeripheralT.findById(peripheralId)
+    if (!p) return res.status(404).json({ error: 'Peripheral not found' })
+
     const result = await coinMachine.dispenseNewCard(peripheralId, initialBalance || 0)
     res.json(result)
   } catch (err) {
@@ -114,6 +132,11 @@ router.post('/dispense-change', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Missing peripheralId or amount' })
     }
 
+    // Ensure peripheral belongs to tenant
+    const PeripheralT = withTenant(Peripheral, req)
+    const p = await PeripheralT.findById(peripheralId)
+    if (!p) return res.status(404).json({ error: 'Peripheral not found' })
+
     const result = await coinMachine.dispenseChange(peripheralId, amount)
     res.json(result)
   } catch (err) {
@@ -131,6 +154,11 @@ router.post('/print', requireAdmin, async (req, res) => {
     if (!peripheralId || !content) {
       return res.status(400).json({ error: 'Missing peripheralId or content' })
     }
+
+    // Ensure peripheral belongs to tenant
+    const PeripheralT = withTenant(Peripheral, req)
+    const p = await PeripheralT.findById(peripheralId)
+    if (!p) return res.status(404).json({ error: 'Peripheral not found' })
 
     const result = await coinMachine.printReceipt(peripheralId, content)
     res.json(result)
@@ -187,6 +215,20 @@ router.post('/activate-machine', async (req, res) => {
     
     if (!activationData) {
       return res.status(400).json({ error: 'Missing activation data' })
+    }
+
+    // Validate referenced machines belong to tenant
+    const MachineT = withTenant(Machine, req)
+    if (Array.isArray(activationData)) {
+      for (const item of activationData) {
+        if (item && item.id != null) {
+          const m = await MachineT.findOne({ number: Number(item.id) })
+          if (!m) return res.status(404).json({ error: `Machine ${item.id} not found` })
+        }
+      }
+    } else if (activationData.id != null) {
+      const m = await MachineT.findOne({ number: Number(activationData.id) })
+      if (!m) return res.status(404).json({ error: `Machine ${activationData.id} not found` })
     }
 
     const result = await coinMachine.activateMachine(activationData)

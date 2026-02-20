@@ -4,6 +4,7 @@ import Sale from '../models/sale.js'
 import Card from '../models/card.js'
 import { requireKiosk } from '../middleware/auth.js'
 import { broadcastMachine } from '../wsServer.js'
+import { withTenant } from '../services/tenant.js'
 
 const router = express.Router()
 
@@ -11,7 +12,8 @@ const router = express.Router()
 router.get('/cards/:code', requireKiosk, async (req, res) => {
   const { code } = req.params
   if (!code) return res.status(400).json({ error: 'Missing card code' })
-  const card = await Card.findOne({ code })
+  const CardT = withTenant(Card, req)
+  const card = await CardT.findOne({ code })
   if (!card) return res.status(404).json({ error: 'Card not found' })
   res.json({ code: card.code, balance: card.balance })
 })
@@ -22,14 +24,16 @@ router.post('/cards/:code/topup', requireKiosk, async (req, res) => {
   const { amount, batchId } = req.body
   if (!code || amount == null) return res.status(400).json({ error: 'Missing parameters' })
 
-  let card = await Card.findOne({ code })
+  const CardT = withTenant(Card, req)
+  const SaleT = withTenant(Sale, req)
+  let card = await CardT.findOne({ code })
   if (!card) {
-    card = await Card.create({ code, balance: 0 })
+    card = await CardT.create({ code, balance: 0 })
   }
   card.balance = Number((card.balance || 0) + Number(amount))
   await card.save()
 
-  const sale = await Sale.create({ amount: Number(amount), items: [{ type: 'recharge', amount }], method: 'card', batchId, inserted: Number(amount), change: 0, type: 'recharge', cardId: card._id, cardCode: card.code })
+  const sale = await SaleT.create({ amount: Number(amount), items: [{ type: 'recharge', amount }], method: 'card', batchId, inserted: Number(amount), change: 0, type: 'recharge', cardId: card._id, cardCode: card.code })
 
   res.json({ success: true, sale, card })
 })
@@ -39,8 +43,12 @@ router.post('/card/pay', requireKiosk, async (req, res) => {
   const { items = [], cardCode, batchId } = req.body
   if (!Array.isArray(items) || !cardCode) return res.status(400).json({ error: 'Missing parameters' })
 
+  const CardT = withTenant(Card, req)
+  const SaleT = withTenant(Sale, req)
+  const MachineT = withTenant(Machine, req)
+
   // Fetch card
-  const card = await Card.findOne({ code: cardCode })
+  const card = await CardT.findOne({ code: cardCode })
   if (!card) return res.status(404).json({ error: 'Card not found' })
 
   // Process recharges first
@@ -48,7 +56,7 @@ router.post('/card/pay', requireKiosk, async (req, res) => {
   for (const r of recharges) {
     const amount = Number(r.amount || r.price || 0)
     card.balance = Number((card.balance || 0) + amount)
-    await Sale.create({ amount, items: r, method: 'card', batchId, inserted: amount, change: 0, type: 'recharge', cardId: card._id, cardCode: card.code })
+    await SaleT.create({ amount, items: r, method: 'card', batchId, inserted: amount, change: 0, type: 'recharge', cardId: card._id, cardCode: card.code })
   }
 
   // Now process machine payments: ensure sufficient balance for total
@@ -64,7 +72,7 @@ router.post('/card/pay', requireKiosk, async (req, res) => {
   for (const it of machineItems) {
     const price = Number(it.price || it.amount || 0)
     // double-check machine exists and is free
-    const machine = await Machine.findById(it._id || it.id)
+    const machine = await MachineT.findById(it._id || it.id) || await MachineT.findOne({ number: Number(it._id || it.id) })
     if (!machine) return res.status(404).json({ error: 'Machine not found' })
     if (machine.status === 'working') return res.status(409).json({ error: 'Machine already in use', machineId: machine._id })
 
@@ -73,12 +81,12 @@ router.post('/card/pay', requireKiosk, async (req, res) => {
     await card.save()
 
     // Create sale
-    const sale = await Sale.create({ machineId: machine._id, amount: price, items: [it], method: 'card', batchId, type: 'payment', cardId: card._id, cardCode: card.code })
+    const sale = await SaleT.create({ machineId: machine._id, amount: price, items: [it], method: 'card', batchId, type: 'payment', cardId: card._id, cardCode: card.code })
     sales.push(sale)
 
     // Update machine state
-    await Machine.findByIdAndUpdate(machine._id, { $inc: { cycle: 1 }, $set: { status: 'working', statusText: 'Ocupado' } })
-    const updated = await Machine.findById(machine._id)
+    await MachineT.findByIdAndUpdate(machine._id, { $inc: { cycle: 1 }, $set: { status: 'working', statusText: 'Ocupado' } })
+    const updated = await MachineT.findById(machine._id)
     try { await broadcastMachine(updated) } catch (e) { console.error('[gateways] broadcastMachine error', e) }
   }
 
@@ -96,9 +104,11 @@ router.post('/cash/pay', requireKiosk, async (req, res) => {
 
   const sales = []
   // Persist recharges first
+  const SaleT = withTenant(Sale, req)
+  const MachineT = withTenant(Machine, req)
   for (const r of items.filter(i => (i.type && i.type.toLowerCase().includes('recarga')) || (i.id && String(i.id).startsWith('recharge')))) {
     const amount = Number(r.amount || r.price || 0)
-    const sale = await Sale.create({ amount, items: r, method: 'card', batchId, inserted: amount, change: 0, type: 'recharge' })
+    const sale = await SaleT.create({ amount, items: r, method: 'card', batchId, inserted: amount, change: 0, type: 'recharge' })
     sales.push(sale)
   }
 
@@ -106,7 +116,7 @@ router.post('/cash/pay', requireKiosk, async (req, res) => {
   let assigned = false
   for (const it of items.filter(i => !((i.type && i.type.toLowerCase().includes('recarga')) || (i.id && String(i.id).startsWith('recharge'))))) {
     const price = Number(it.price || it.amount || 0)
-    const machine = await Machine.findById(it._id || it.id)
+    const machine = await MachineT.findById(it._id || it.id) || await MachineT.findOne({ number: Number(it._id || it.id) })
     if (!machine) return res.status(404).json({ error: 'Machine not found' })
     if (machine.status === 'working') return res.status(409).json({ error: 'Machine already in use', machineId: machine._id })
 
@@ -118,11 +128,11 @@ router.post('/cash/pay', requireKiosk, async (req, res) => {
       assigned = true
     }
 
-    const sale = await Sale.create({ machineId: machine._id, amount: price, items: [it], method: 'cash', batchId, inserted: saleInserted, change: saleChange, type: 'payment' })
+    const sale = await SaleT.create({ machineId: machine._id, amount: price, items: [it], method: 'cash', batchId, inserted: saleInserted, change: saleChange, type: 'payment' })
     sales.push(sale)
 
-    await Machine.findByIdAndUpdate(machine._id, { $inc: { cycle: 1 }, $set: { status: 'working', statusText: 'Ocupado' } })
-    const updated = await Machine.findById(machine._id)
+    await MachineT.findByIdAndUpdate(machine._id, { $inc: { cycle: 1 }, $set: { status: 'working', statusText: 'Ocupado' } })
+    const updated = await MachineT.findById(machine._id)
     try { await broadcastMachine(updated) } catch (e) { console.error('[gateways] broadcastMachine error', e) }
   }
 

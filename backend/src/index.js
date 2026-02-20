@@ -9,6 +9,9 @@ import posRoutes from './routes/pos.js'
 import { initWebSocket, broadcastHardwareEvent } from './wsServer.js'
 import hardwareAgentServer from './hardwareAgentServer.js'
 import coinMachine from './services/coinMachine.js'
+import { resolveTenant } from './middleware/tenant.js'
+import gatewaysRoutes from './routes/gateways.js'
+import middlewareRoutes from './routes/middleware.js'
 
 // Enforce presence of JWT secret in production-like environments
 if (!process.env.JWT_SECRET) {
@@ -21,6 +24,8 @@ const server = http.createServer(app)
 
 app.use(cors())
 app.use(express.json())
+// Resolve tenant early so routes can use `req.tenantFilter` and `req.tenantId`
+app.use(resolveTenant)
 // We import models directly where needed (no request-scoped ORM)
 
 // Mount under /api prefix for reverse proxying (nginx) or direct access
@@ -31,11 +36,9 @@ app.use('/api/pos', posRoutes)
 app.use('/api', posRoutes)
 
 // Gateways (kiosk)
-import gatewaysRoutes from './routes/gateways.js'
 app.use('/api/gateways', gatewaysRoutes)
 
 // Middleware (coin machine)
-import middlewareRoutes from './routes/middleware.js'
 app.use('/api/middleware', middlewareRoutes)
 
 app.get('/api/health', (req, res) => res.json({ ok: true }))

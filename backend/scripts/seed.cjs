@@ -21,68 +21,62 @@ async function main() {
   const adminHash = await bcrypt.hash(adminPassword, 10)
   const kioskHash = await bcrypt.hash(kioskPassword, 10)
 
-  // ensure admin user exists (upsert style)
-  await User.updateOne({ $or: [{ username: 'admin' }, { email: 'admin@washstore.local' }] }, { $set: { username: 'admin', email: 'admin@washstore.local', password: adminHash, role: 'ADMIN' } }, { upsert: true })
-  // ensure kiosk user exists (upsert style)
-  await User.updateOne({ $or: [{ username: 'kiosk' }, { email: 'kiosk@washstore.local' }] }, { $set: { username: 'kiosk', email: 'kiosk@washstore.local', password: kioskHash, role: 'KIOSK', apiKey: kioskApiKey } }, { upsert: true })
+  // create/get default tenant
+  const Tenant = require('../src/models/tenant.js').default
+  const TenantUser = require('../src/models/tenantUser.js').default
+  let defaultTenant = await Tenant.findOne({ slug: 'default' })
+  if (!defaultTenant) defaultTenant = await Tenant.create({ name: 'Default Tenant', slug: 'default' })
+
+  // ensure admin user exists (upsert style) and assign to tenant
+  await User.updateOne(
+    { $or: [{ username: 'admin' }, { email: 'admin@washstore.local' }] },
+    { $set: { username: 'admin', email: 'admin@washstore.local', password: adminHash, role: 'ADMIN', tenantId: defaultTenant._id } },
+    { upsert: true }
+  )
+  // ensure kiosk user exists (upsert style) and assign to tenant
+  await User.updateOne(
+    { $or: [{ username: 'kiosk' }, { email: 'kiosk@washstore.local' }] },
+    { $set: { username: 'kiosk', email: 'kiosk@washstore.local', password: kioskHash, role: 'KIOSK', apiKey: kioskApiKey, tenantId: defaultTenant._id } },
+    { upsert: true }
+  )
+
+  // ensure tenant memberships exist
+  const adminUser = await User.findOne({ username: 'admin' })
+  const kioskUser = await User.findOne({ username: 'kiosk' })
+  if (adminUser) await TenantUser.updateOne({ tenantId: defaultTenant._id, userId: adminUser._id }, { $setOnInsert: { tenantId: defaultTenant._id, userId: adminUser._id, role: 'OWNER' } }, { upsert: true })
+  if (kioskUser) await TenantUser.updateOne({ tenantId: defaultTenant._id, userId: kioskUser._id }, { $setOnInsert: { tenantId: defaultTenant._id, userId: kioskUser._id, role: 'MEMBER' } }, { upsert: true })
 
   // Insert sample machines if none exist
   const count = await Machine.countDocuments()
   if (count === 0) {
-    await Machine.create([{ name: 'Machine A' }, { name: 'Machine B' }])
+    await Machine.create([{ name: 'Machine A', tenantId: defaultTenant._id }, { name: 'Machine B', tenantId: defaultTenant._id }])
   }
 
   // Insert default settings for coin/bill equivalence tables and bonuses
   await Setting.updateOne(
-    { key: 'coinEqTable' },
+    { tenantId: defaultTenant._id, key: 'coinEqTable' },
     { 
-      $setOnInsert: { 
-        key: 'coinEqTable', 
-        value: [
-          { key: '0x01', value: 0.05 },
-          { key: '0x02', value: 0.10 },
-          { key: '0x03', value: 0.20 },
-          { key: '0x04', value: 0.50 },
-          { key: '0x05', value: 1.00 },
-          { key: '0x06', value: 2.00 }
-        ] 
-      } 
+      $setOnInsert: { tenantId: defaultTenant._id, key: 'coinEqTable', value: [
+        { key: '0x01', value: 0.05 },
+        { key: '0x02', value: 0.10 },
+        { key: '0x03', value: 0.20 },
+        { key: '0x04', value: 0.50 },
+        { key: '0x05', value: 1.00 },
+        { key: '0x06', value: 2.00 }
+      ] } 
     },
     { upsert: true }
   )
 
   await Setting.updateOne(
-    { key: 'billEqTable' },
-    { 
-      $setOnInsert: { 
-        key: 'billEqTable', 
-        value: [
-          { key: '0x10', value: 5 },
-          { key: '0x11', value: 10 },
-          { key: '0x12', value: 20 }
-        ] 
-      } 
-    },
+    { tenantId: defaultTenant._id, key: 'billEqTable' },
+    { $setOnInsert: { tenantId: defaultTenant._id, key: 'billEqTable', value: [ { key: '0x10', value: 5 }, { key: '0x11', value: 10 }, { key: '0x12', value: 20 } ] } },
     { upsert: true }
   )
 
-  await Setting.updateOne(
-    { key: 'rechargeCoinBonus' },
-    { $setOnInsert: { key: 'rechargeCoinBonus', value: 0 } },
-    { upsert: true }
-  )
-
-  await Setting.updateOne(
-    { key: 'rechargeBillBonus' },
-    { $setOnInsert: { key: 'rechargeBillBonus', value: 0 } },
-    { upsert: true }
-  )
-
-  await Setting.updateOne(
-    { key: 'autoCharge' },
-    { $setOnInsert: { key: 'autoCharge', value: false } },
-    { upsert: true }
-  )
+  await Setting.updateOne({ tenantId: defaultTenant._id, key: 'rechargeCoinBonus' }, { $setOnInsert: { tenantId: defaultTenant._id, key: 'rechargeCoinBonus', value: 0 } }, { upsert: true })
+  await Setting.updateOne({ tenantId: defaultTenant._id, key: 'rechargeBillBonus' }, { $setOnInsert: { tenantId: defaultTenant._id, key: 'rechargeBillBonus', value: 0 } }, { upsert: true })
+  await Setting.updateOne({ tenantId: defaultTenant._id, key: 'autoCharge' }, { $setOnInsert: { tenantId: defaultTenant._id, key: 'autoCharge', value: false } }, { upsert: true })
 
   console.log('Seed complete - admin user: admin (password: ' + adminPassword + ')')
   console.log('Seed complete - kiosk user: kiosk (password: ' + kioskPassword + ')')

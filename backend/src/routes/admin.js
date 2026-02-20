@@ -7,6 +7,7 @@ import Setting from '../models/setting.js'
 import Interface from '../models/interface.js'
 import Price from '../models/price.js'
 import Peripheral from '../models/peripheral.js'
+import { withTenant } from '../services/tenant.js'
 import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import fs from 'fs'
@@ -22,7 +23,8 @@ router.use(requireAdmin)
 
 // list machines
 router.get('/machines', async (req, res) => {
-  const machines = await Machine.find().populate('interfaceId', 'name address').sort({ createdAt: -1 })
+  const MachineT = withTenant(Machine, req)
+  const machines = await MachineT.find().populate('interfaceId', 'name address').sort({ createdAt: -1 })
   res.json(machines)
 })
 
@@ -42,7 +44,8 @@ router.post('/machines', async (req, res) => {
   }
   
   const finalIcon = icon || (type === 'dry' ? '/drymachine/S1.png' : '/washingmashine/L1.png')
-  const machine = await Machine.create({
+  const MachineT = withTenant(Machine, req)
+  const machine = await MachineT.create({
     name, number, brand, model, serialNumber,
     status, statusText,
     weight: weight || 0,
@@ -60,7 +63,8 @@ router.post('/machines', async (req, res) => {
 
 // List users (admin only)
 router.get('/users', async (req, res) => {
-  const users = await User.find().select('username role apiKey createdAt').lean()
+  const UserT = withTenant(User, req)
+  const users = await UserT.find().select('username role apiKey createdAt').lean()
   // mask apiKey
   const masked = users.map((u) => ({ _id: u._id, username: u.username, role: u.role, apiKey: u.apiKey ? u.apiKey.slice(0, 8) + '…' : null, createdAt: u.createdAt }))
   res.json(masked)
@@ -83,7 +87,14 @@ router.post('/users', async (req, res) => {
   }
 
   const apiKey = role === 'KIOSK' ? crypto.randomBytes(24).toString('hex') : undefined
-  const user = await User.create({ username, role: role || 'user', password: hash, apiKey })
+  const UserT = withTenant(User, req)
+  const user = await UserT.create({ username, role: role || 'user', password: hash, apiKey })
+
+  // Create tenant membership (owner/admin) for created user within this tenant
+  try {
+    const TenantUser = (await import('../models/tenantUser.js')).default
+    await TenantUser.updateOne({ tenantId: req.tenantId, userId: user._id }, { $setOnInsert: { tenantId: req.tenantId, userId: user._id, role: role === 'ADMIN' ? 'ADMIN' : 'MEMBER' } }, { upsert: true })
+  } catch (e) { /* ignore membership errors */ }
 
   const resp = { _id: user._id, username: user.username, role: user.role }
   // If admin provided a password, do not echo it back. If we generated one because admin didn't provide it, return the temp password so admin can share it.
@@ -96,7 +107,8 @@ router.post('/users', async (req, res) => {
 router.post('/users/:id/rotate', async (req, res) => {
   const id = req.params.id
   const newKey = crypto.randomBytes(24).toString('hex')
-  const user = await User.findByIdAndUpdate(id, { apiKey: newKey }, { new: true })
+  const UserT = withTenant(User, req)
+  const user = await UserT.findByIdAndUpdate(id, { apiKey: newKey }, { new: true })
   if (!user) return res.status(404).json({ error: 'User not found' })
   res.json({ _id: user._id, apiKey: newKey })
 })
@@ -106,14 +118,17 @@ router.get('/search', async (req, res) => {
   const q = (req.query.q || '').trim()
   if (!q || q.length < 1) return res.json({ users: [], machines: [] })
   const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
-  const users = await User.find({ username: regex }).limit(10).select('username role createdAt').lean()
-  const machines = await Machine.find({ name: regex }).limit(10).lean()
+  const UserT = withTenant(User, req)
+  const MachineT = withTenant(Machine, req)
+  const users = await UserT.find({ username: regex }).limit(10).select('username role createdAt').lean()
+  const machines = await MachineT.find({ name: regex }).limit(10).lean()
   res.json({ users, machines })
 })
 
 // Get single machine
 router.get('/machines/:id', async (req, res) => {
-  const m = await Machine.findById(req.params.id).lean()
+  const MachineT = withTenant(Machine, req)
+  const m = await MachineT.findById(req.params.id).lean()
   if (!m) return res.status(404).json({ error: 'Machine not found' })
   res.json(m)
 })
@@ -133,7 +148,8 @@ router.put('/machines/:id', async (req, res) => {
   }
   
   const finalIcon = icon || (type === 'dry' ? '/drymachine/S1.png' : '/washingmashine/L1.png')
-  const m = await Machine.findByIdAndUpdate(req.params.id, {
+  const MachineT = withTenant(Machine, req)
+  const m = await MachineT.findByIdAndUpdate(req.params.id, {
     name, number, brand, model, serialNumber,
     status, statusText,
     weight: weight || 0,
@@ -151,7 +167,8 @@ router.put('/machines/:id', async (req, res) => {
 
 // Delete machine
 router.delete('/machines/:id', async (req, res) => {
-  await Machine.findByIdAndDelete(req.params.id)
+  const MachineT = withTenant(Machine, req)
+  await MachineT.findByIdAndDelete(req.params.id)
   // broadcast updated machine list
   try { await broadcastMachines() } catch (e) { console.error('[admin] broadcastMachines error', e) }
   res.json({ success: true })
@@ -185,12 +202,14 @@ router.delete('/users/:id', async (req, res) => {
 
 // Transactions (Sales)
 router.get('/transactions', async (req, res) => {
-  const tx = await Sale.find().populate('machineId').populate('cardId').sort({ createdAt: -1 }).limit(200).lean()
+  const SaleT = withTenant(Sale, req)
+  const tx = await SaleT.find().populate('machineId').populate('cardId').sort({ createdAt: -1 }).limit(200).lean()
   res.json(tx)
 })
 
 router.get('/transactions/:id', async (req, res) => {
-  const t = await Sale.findById(req.params.id).populate('machineId').populate('cardId').lean()
+  const SaleT = withTenant(Sale, req)
+  const t = await SaleT.findById(req.params.id).populate('machineId').populate('cardId').lean()
   if (!t) return res.status(404).json({ error: 'Transaction not found' })
   res.json(t)
 })
@@ -198,13 +217,15 @@ router.get('/transactions/:id', async (req, res) => {
 // Loyalty Cards (admin)
 router.get('/cards', async (req, res) => {
   const Card = (await import('../models/card.js')).default
-  const list = await Card.find().sort({ createdAt: -1 }).lean()
+  const CardT = withTenant(Card, req)
+  const list = await CardT.find().sort({ createdAt: -1 }).lean()
   res.json(list)
 })
 
 router.get('/cards/:id', async (req, res) => {
   const Card = (await import('../models/card.js')).default
-  const c = await Card.findById(req.params.id).lean()
+  const CardT = withTenant(Card, req)
+  const c = await CardT.findById(req.params.id).lean()
   if (!c) return res.status(404).json({ error: 'Card not found' })
   res.json(c)
 })
@@ -213,16 +234,18 @@ router.post('/cards', async (req, res) => {
   const { code, balance = 0, metadata } = req.body
   if (!code) return res.status(400).json({ error: 'Missing code' })
   const Card = (await import('../models/card.js')).default
-  const existing = await Card.findOne({ code })
+  const CardT = withTenant(Card, req)
+  const existing = await CardT.findOne({ code })
   if (existing) return res.status(400).json({ error: 'Card already exists' })
-  const c = await Card.create({ code, balance: Number(balance || 0), metadata })
+  const c = await CardT.create({ code, balance: Number(balance || 0), metadata })
   res.json(c)
 })
 
 router.put('/cards/:id', async (req, res) => {
   const { balance, metadata } = req.body
   const Card = (await import('../models/card.js')).default
-  const c = await Card.findByIdAndUpdate(req.params.id, { balance: balance == null ? undefined : Number(balance), metadata }, { new: true })
+  const CardT = withTenant(Card, req)
+  const c = await CardT.findByIdAndUpdate(req.params.id, { balance: balance == null ? undefined : Number(balance), metadata }, { new: true })
   if (!c) return res.status(404).json({ error: 'Card not found' })
   res.json(c)
 })
@@ -234,7 +257,8 @@ router.post('/transactions', async (req, res) => {
   // For admin_start, allow amount to be omitted and default to 0
   const finalAmount = (amount == null && type === 'admin_start') ? 0 : Number(amount)
   if (finalAmount == null || Number.isNaN(finalAmount)) return res.status(400).json({ error: 'Invalid amount' })
-  const s = await Sale.create({ machineId, amount: finalAmount, items, type: type || 'payment', method, inserted: Number(inserted || 0), change: Number(change || 0) })
+  const SaleT = withTenant(Sale, req)
+  const s = await SaleT.create({ machineId, amount: finalAmount, items, type: type || 'payment', method, inserted: Number(inserted || 0), change: Number(change || 0) })
   res.json(s)
 })
 
@@ -245,7 +269,8 @@ router.delete('/transactions/:id', async (req, res) => {
 
 // Settings (simple key/value store)
 router.get('/settings', async (req, res) => {
-  const list = await Setting.find().lean()
+  const SettingT = withTenant(Setting, req)
+  const list = await SettingT.find().lean()
   res.json(list)
 })
 
@@ -264,7 +289,8 @@ router.post('/ws/clients/disconnect', async (req, res) => {
 })
 
 router.get('/settings/:key', async (req, res) => {
-  const s = await Setting.findOne({ key: req.params.key }).lean()
+  const SettingT = withTenant(Setting, req)
+  const s = await SettingT.findOne({ key: req.params.key }).lean()
   if (!s) return res.status(404).json({ error: 'Setting not found' })
   res.json(s)
 })
@@ -272,7 +298,8 @@ router.get('/settings/:key', async (req, res) => {
 router.post('/settings', async (req, res) => {
   const { key, value } = req.body
   if (!key) return res.status(400).json({ error: 'Missing key' })
-  const s = await Setting.findOneAndUpdate({ key }, { value }, { upsert: true, new: true })
+  const SettingT = withTenant(Setting, req)
+  const s = await SettingT.findOneAndUpdate({ key }, { value }, { upsert: true, new: true })
   res.json(s)
 })
 
@@ -337,9 +364,10 @@ router.post('/settings/logo', (req, res) => {
         try { fs.unlinkSync(origPath) } catch (e) { /* ignore */ }
       }
 
-      const url = `/uploads/${outName}`
-      const s = await Setting.findOneAndUpdate({ key: 'branding.logo' }, { value: url }, { upsert: true, new: true })
-      res.json({ url, setting: s })
+          const url = `/uploads/${outName}`
+          const SettingT = withTenant(Setting, req)
+          const s = await SettingT.findOneAndUpdate({ key: 'branding.logo' }, { value: url }, { upsert: true, new: true })
+          res.json({ url, setting: s })
     } catch (e) {
       // cleanup any uploaded file
       try { if (req.file && req.file.path) fs.unlinkSync(req.file.path) } catch (err) { /* ignore */ }
@@ -360,13 +388,15 @@ router.delete('/settings/:key', async (req, res) => {
 
 // List all interfaces
 router.get('/interfaces', async (req, res) => {
-  const interfaces = await Interface.find().sort({ createdAt: -1 })
+  const InterfaceT = withTenant(Interface, req)
+  const interfaces = await InterfaceT.find().sort({ createdAt: -1 })
   res.json(interfaces)
 })
 
 // Get single interface
 router.get('/interfaces/:id', async (req, res) => {
-  const iface = await Interface.findById(req.params.id).lean()
+  const InterfaceT = withTenant(Interface, req)
+  const iface = await InterfaceT.findById(req.params.id).lean()
   if (!iface) return res.status(404).json({ error: 'Interface not found' })
   res.json(iface)
 })
@@ -381,10 +411,10 @@ router.post('/interfaces', async (req, res) => {
   if (tOff == null) return res.status(400).json({ error: 'Missing t_off' })
 
   // Check for duplicate serial number
-  const existing = await Interface.findOne({ serialNumber })
+  const InterfaceT = withTenant(Interface, req)
+  const existing = await InterfaceT.findOne({ serialNumber })
   if (existing) return res.status(400).json({ error: 'Serial number already exists' })
-
-  const iface = await Interface.create({
+  const iface = await InterfaceT.create({
     name,
     brand: brand || '',
     model: model || '',
@@ -396,6 +426,49 @@ router.post('/interfaces', async (req, res) => {
     status: status || 'inactive',
   })
   res.json(iface)
+})
+
+// ---------------------
+// Tenant management (system-level)
+// ---------------------
+
+import Tenant from '../models/tenant.js'
+import TenantUser from '../models/tenantUser.js'
+
+// List tenants
+router.get('/tenants', async (req, res) => {
+  const list = await Tenant.find().sort({ createdAt: -1 }).lean()
+  res.json(list)
+})
+
+// Create tenant
+router.post('/tenants', async (req, res) => {
+  const { name, slug } = req.body
+  if (!name || !slug) return res.status(400).json({ error: 'Missing name or slug' })
+  const existing = await Tenant.findOne({ slug })
+  if (existing) return res.status(400).json({ error: 'Tenant slug already exists' })
+  const t = await Tenant.create({ name, slug })
+  res.json(t)
+})
+
+// Update tenant
+router.put('/tenants/:id', async (req, res) => {
+  const { name } = req.body
+  const t = await Tenant.findByIdAndUpdate(req.params.id, { name }, { new: true })
+  if (!t) return res.status(404).json({ error: 'Tenant not found' })
+  res.json(t)
+})
+
+// Assign user to tenant (by userId) with role
+router.post('/tenants/:id/users', async (req, res) => {
+  const tenantId = req.params.id
+  const { userId, role } = req.body
+  if (!userId) return res.status(400).json({ error: 'Missing userId' })
+  const u = await User.findById(userId)
+  if (!u) return res.status(404).json({ error: 'User not found' })
+  const r = role || 'MEMBER'
+  const mt = await TenantUser.updateOne({ tenantId, userId }, { $setOnInsert: { tenantId, userId, role: r } }, { upsert: true })
+  res.json({ success: true })
 })
 
 // Update interface

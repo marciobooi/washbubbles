@@ -3,6 +3,7 @@ import mongoose from 'mongoose'
 const { Schema } = mongoose
 
 const cardPurchaseSchema = new Schema({
+  tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', required: true, index: true },
   cardId: { type: Schema.Types.ObjectId, ref: 'Card', required: true },
   cardCode: { type: String, required: true },
   
@@ -34,5 +35,9 @@ const cardPurchaseSchema = new Schema({
 
 cardPurchaseSchema.index({ cardCode: 1 })
 cardPurchaseSchema.index({ createdAt: -1 })
+
+// Per-tenant query patterns
+cardPurchaseSchema.index({ tenantId: 1, cardCode: 1 })
+cardPurchaseSchema.index({ tenantId: 1, createdAt: -1 })
 
 export default mongoose.model('CardPurchase', cardPurchaseSchema)

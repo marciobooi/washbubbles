@@ -3,6 +3,7 @@ import mongoose from 'mongoose'
 const { Schema } = mongoose
 
 const machineSchema = new Schema({
+  tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', required: true, index: true },
   name: { type: String, required: true },
   number: { type: Number }, // machine display number
   brand: { type: String, default: '' },
@@ -40,5 +41,8 @@ const machineSchema = new Schema({
   tImp: { type: Number, default: null }, // time per impulse in minutes (only for dry machines)
   createdAt: { type: Date, default: Date.now }
 })
+
+// Machine numbers should be unique per tenant when provided
+machineSchema.index({ tenantId: 1, number: 1 }, { unique: true, sparse: true })
 
 export default mongoose.model('Machine', machineSchema)
