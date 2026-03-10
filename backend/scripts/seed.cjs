@@ -28,9 +28,10 @@ async function main() {
   if (!defaultTenant) defaultTenant = await Tenant.create({ name: 'Default Tenant', slug: 'default' })
 
   // ensure admin user exists (upsert style) and assign to tenant
+  // give seeded admin super‑admin privileges so it can create tenants
   await User.updateOne(
     { $or: [{ username: 'admin' }, { email: 'admin@washstore.local' }] },
-    { $set: { username: 'admin', email: 'admin@washstore.local', password: adminHash, role: 'ADMIN', tenantId: defaultTenant._id } },
+    { $set: { username: 'admin', email: 'admin@washstore.local', password: adminHash, role: 'SUPERADMIN', tenantId: defaultTenant._id } },
     { upsert: true }
   )
   // ensure kiosk user exists (upsert style) and assign to tenant

@@ -4,6 +4,7 @@ import { useSidebar } from './ui/sidebar'
 import Fuse from 'fuse.js'
 import Highlight from './Highlight'
 import { Cpu, Users, CreditCard, Settings, Activity, PlugZap, Coins, Cable, Wallet } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
 import {
   Sidebar,
   SidebarContent,
@@ -17,6 +18,7 @@ import {
   SidebarRail,
 } from './ui/sidebar'
 
+// base admin navigation; some items only appear for superadmins
 const navItems = [
   { title: 'Operações', url: '/admin/operations', Icon: Activity },
   { title: 'Máquinas', url: '/admin/machines', Icon: Cpu },
@@ -27,6 +29,7 @@ const navItems = [
   { title: 'Utilizadores', url: '/admin/users', Icon: Users },
   { title: 'Transacções', url: '/admin/transactions', Icon: CreditCard },
   { title: 'Definições', url: '/admin/settings', Icon: Settings },
+  { title: 'Tenants', url: '/admin/tenants', Icon: Users, superOnly: true },
 ]
 
 export function AppSidebar(props) {
@@ -34,7 +37,10 @@ export function AppSidebar(props) {
   const q = (searchQuery || '').trim()
   const location = useLocation()
 
-  let itemsToRender = navItems.map((i) => ({ ...i, matchIndices: [] }))
+  const { role } = useAuth()
+  let itemsToRender = navItems
+    .filter(i => !(i.superOnly && role !== 'SUPERADMIN'))
+    .map((i) => ({ ...i, matchIndices: [] }))
   if (q.length > 0) {
     const fuse = new Fuse(navItems, { keys: ['title'], includeMatches: true, threshold: 0.4 })
     const results = fuse.search(q)
@@ -59,7 +65,7 @@ export function AppSidebar(props) {
                   <SidebarMenuItem key={it.title}>
                     <SidebarMenuButton asChild Icon={it.Icon} title={it.title} isActive={isActive}>
                       <NavLink to={it.url} className="flex items-center gap-2">
-                        <span className="min-w-[8rem]"><Highlight text={it.title} matches={it.matchIndices} /></span>
+                        <span className="min-w-32"><Highlight text={it.title} matches={it.matchIndices} /></span>
                       </NavLink>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

@@ -1,5 +1,5 @@
 import express from 'express'
-import { requireAdmin } from '../middleware/auth.js'
+import { requireAdmin, requireSuperAdmin } from '../middleware/auth.js'
 import Machine from '../models/machine.js'
 import User from '../models/user.js'
 import Sale from '../models/sale.js'
@@ -435,14 +435,14 @@ router.post('/interfaces', async (req, res) => {
 import Tenant from '../models/tenant.js'
 import TenantUser from '../models/tenantUser.js'
 
-// List tenants
-router.get('/tenants', async (req, res) => {
+// List tenants (superadmins only)
+router.get('/tenants', requireSuperAdmin, async (req, res) => {
   const list = await Tenant.find().sort({ createdAt: -1 }).lean()
   res.json(list)
 })
 
-// Create tenant
-router.post('/tenants', async (req, res) => {
+// Create tenant (superadmins only)
+router.post('/tenants', requireSuperAdmin, async (req, res) => {
   const { name, slug } = req.body
   if (!name || !slug) return res.status(400).json({ error: 'Missing name or slug' })
   const existing = await Tenant.findOne({ slug })
@@ -451,8 +451,8 @@ router.post('/tenants', async (req, res) => {
   res.json(t)
 })
 
-// Update tenant
-router.put('/tenants/:id', async (req, res) => {
+// Update tenant (superadmins only)
+router.put('/tenants/:id', requireSuperAdmin, async (req, res) => {
   const { name } = req.body
   const t = await Tenant.findByIdAndUpdate(req.params.id, { name }, { new: true })
   if (!t) return res.status(404).json({ error: 'Tenant not found' })
@@ -460,7 +460,9 @@ router.put('/tenants/:id', async (req, res) => {
 })
 
 // Assign user to tenant (by userId) with role
-router.post('/tenants/:id/users', async (req, res) => {
+// this operation may be permitted to admins as long as they themselves are
+// superadmins or belong to the tenant, but for simplicity keep it superadmin-only
+router.post('/tenants/:id/users', requireSuperAdmin, async (req, res) => {
   const tenantId = req.params.id
   const { userId, role } = req.body
   if (!userId) return res.status(400).json({ error: 'Missing userId' })

@@ -1,6 +1,6 @@
 import React from 'react'
 import { useTenant } from '../context/TenantContext'
-import RequireAdmin from '../components/RequireAdmin'
+import RequireSuperAdmin from '../components/RequireSuperAdmin'
 
 export default function AdminTenants() {
   const { tenants = [], createTenant, updateTenant, assignUser, refreshTenants } = useTenant()
@@ -17,7 +17,7 @@ export default function AdminTenants() {
   }
 
   return (
-    <RequireAdmin>
+    <RequireSuperAdmin>
       <div className="p-4">
         <h2 className="text-lg font-semibold mb-3">Tenants</h2>
         <form onSubmit={handleCreate} className="flex gap-2 mb-4">
@@ -41,6 +41,6 @@ export default function AdminTenants() {
           ))}
         </div>
       </div>
-    </RequireAdmin>
+    </RequireSuperAdmin>
   )
 }

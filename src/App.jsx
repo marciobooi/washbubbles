@@ -284,7 +284,7 @@ function AppInner() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-primary-50 via-primary-100 to-primary-200">
+    <div className="min-h-screen flex flex-col bg-linear-to-br from-primary-50 via-primary-100 to-primary-200">
       {!location.pathname.startsWith('/admin') && (
         <header className="p-4 border-b border-primary-100 bg-white/70 backdrop-blur">
           <div className="container mx-auto flex items-center justify-between">

@@ -5,6 +5,7 @@ import api from '@/services/api'
 import Modal from '@/components/ui/Modal'
 import { Pencil, Trash2, Plus, Check, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useAuth } from '../context/AuthContext' 
 
 export default function AdminUsers(){
   const navigate = useNavigate()
@@ -13,7 +14,8 @@ export default function AdminUsers(){
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null)
   const [username, setUsername] = useState('')
-  const [role, setRole] = useState('user')
+  const [role, setRole] = useState('USER')
+  const { role: myRole } = useAuth()
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [isSaving, setIsSaving] = useState(false)
@@ -41,7 +43,7 @@ export default function AdminUsers(){
   function openNew() {
     setEditing(null)
     setUsername('')
-    setRole('user')
+    setRole('USER')
     setPassword('')
     setConfirmPassword('')
     setModalOpen(true)
@@ -50,7 +52,7 @@ export default function AdminUsers(){
   function openEdit(u) {
     setEditing(u)
     setUsername(u.username)
-    setRole(u.role)
+    setRole((u.role || 'USER').toUpperCase())
     setPassword('')
     setConfirmPassword('')
     setModalOpen(true)
@@ -59,7 +61,7 @@ export default function AdminUsers(){
   function resetForm() {
     setEditing(null)
     setUsername('')
-    setRole('user')
+    setRole('USER')
     setPassword('')
     setConfirmPassword('')
     setModalOpen(false)
@@ -185,8 +187,10 @@ export default function AdminUsers(){
             <div>
               <label htmlFor="user-role" className="text-sm font-medium">Role</label>
               <select id="user-role" className="border p-2 rounded mt-1 w-full" value={role} onChange={(e) => setRole(e.target.value)}>
-                <option value="user">user</option>
-                <option value="admin">admin</option>
+                <option value="USER">user</option>
+                <option value="ADMIN">admin</option>
+                <option value="KIOSK">kiosk</option>
+                {myRole === 'SUPERADMIN' && <option value="SUPERADMIN">superadmin</option>}
               </select>
             </div>
 

@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { Link } from 'react-router'
 import { useAuth } from '../context/AuthContext'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -107,7 +108,7 @@ export default function LoginForm({ mode = 'admin', embedded = false }) {
                 data-state="unchecked"
                 value="on"
                 data-slot="checkbox"
-                className="peer dark:bg-input/30 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground dark:data-[state=checked]:bg-primary data-[state=checked]:border-primary focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive size-4 shrink-0 rounded-[4px] border shadow-xs transition-shadow outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 border-[#7caaa1]"
+                className="peer dark:bg-input/30 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground dark:data-[state=checked]:bg-primary data-[state=checked]:border-primary focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive size-4 shrink-0 rounded-lg border shadow-xs transition-shadow outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 border-[#7caaa1]"
                 id="rememberMe"
                 onClick={() => {
                   const cb = document.getElementById('rememberMe-checkbox');
@@ -127,9 +128,9 @@ export default function LoginForm({ mode = 'admin', embedded = false }) {
               </label>
             </div>
             <div className="text-sm">
-              <a className="text-primary hover:text-primary/90 font-medium hover:underline" href="/forgot-password">
+              <Link className="text-primary hover:text-primary/90 font-medium hover:underline" to="/forgot-password">
                 Forgot your password?
-              </a>
+              </Link>
             </div>
           </div>
 

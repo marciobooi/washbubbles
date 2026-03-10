@@ -44,8 +44,18 @@ export async function requireAuth(req, res, next) {
 }
 
 export async function requireAdmin(req, res, next) {
+  // Superadmins are implicitly admins too
   await requireAuth(req, res, async () => {
-    if (!req.userModel || req.userModel.role !== 'ADMIN') return res.status(403).json({ error: 'Forbidden' })
+    const role = req.userModel && req.userModel.role
+    if (role !== 'ADMIN' && role !== 'SUPERADMIN') return res.status(403).json({ error: 'Forbidden' })
+    next()
+  })
+}
+
+// Middleware used for endpoints that must be executed by a superadmin only.
+export async function requireSuperAdmin(req, res, next) {
+  await requireAuth(req, res, async () => {
+    if (!req.userModel || req.userModel.role !== 'SUPERADMIN') return res.status(403).json({ error: 'Forbidden' })
     next()
   })
 }
