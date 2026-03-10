@@ -4,7 +4,7 @@ import Client from './client.js'
 import Setting from '../models/setting.js'
 import Machine from '../models/machine.js'
 import Interface from '../models/interface.js'
-import { broadcastMachine } from '../wsServer.js'
+import { broadcastMachine, broadcastHardwareEvent } from '../wsServer.js'
 
 /**
  * CoinMachine coordinator - integrates middleware, client state, and backend API
@@ -182,6 +182,67 @@ class CoinMachine extends EventEmitter {
       this.handleMachineFault(data)
     })
     this.subscriptions.push(machineFaultSub)
+
+    // Coin/bill rejection events
+    const coinRejectedSub = this.middleware.subscribe('coin-rejected', (data) => {
+      this.handleCoinRejected(data)
+    })
+    this.subscriptions.push(coinRejectedSub)
+
+    const billRejectedSub = this.middleware.subscribe('bill-rejected', (data) => {
+      this.handleBillRejected(data)
+    })
+    this.subscriptions.push(billRejectedSub)
+
+    // Hopper events
+    const hopperEmptySub = this.middleware.subscribe('hopper-empty', (data) => {
+      this.handleHopperEmpty(data)
+    })
+    this.subscriptions.push(hopperEmptySub)
+
+    const hopperFaultSub = this.middleware.subscribe('hopper-fault', (data) => {
+      this.handleHopperFault(data)
+    })
+    this.subscriptions.push(hopperFaultSub)
+  }
+
+  /**
+   * Handle coin rejected (bad coin, foreign, slug)
+   */
+  handleCoinRejected(data) {
+    const { peripheral, reason } = data
+    this.emit('coin-rejected', { peripheral, reason })
+    console.warn(`Coin rejected: ${reason || 'unknown reason'}`)
+    broadcastHardwareEvent('peripheral:rejected', { type: 'coin', reason: reason || 'rejected' })
+  }
+
+  /**
+   * Handle bill rejected (bad bill, unrecognised, fraud/fake, jammed)
+   */
+  handleBillRejected(data) {
+    const { peripheral, reason, fraud } = data
+    const eventType = fraud ? 'peripheral:fraud' : 'peripheral:rejected'
+    this.emit('bill-rejected', { peripheral, reason, fraud })
+    console.warn(`Bill ${fraud ? 'FRAUD' : 'rejected'}: ${reason || 'unknown reason'}`)
+    broadcastHardwareEvent(eventType, { type: 'bill', reason: reason || 'rejected', fraud: !!fraud })
+  }
+
+  /**
+   * Handle hopper empty — cannot dispense change
+   */
+  handleHopperEmpty(data) {
+    this.emit('hopper-empty', data)
+    console.error('Hopper empty — cannot dispense change!')
+    broadcastHardwareEvent('hopper:empty', { message: 'Hopper is empty, change cannot be dispensed' })
+  }
+
+  /**
+   * Handle hopper fault
+   */
+  handleHopperFault(data) {
+    this.emit('hopper-fault', data)
+    console.error('Hopper fault:', data)
+    broadcastHardwareEvent('hopper:fault', data)
   }
 
   /**
@@ -274,20 +335,6 @@ class CoinMachine extends EventEmitter {
     await this.client.resetCardInfo()
     this.emit('card-removed')
     console.log('Card removed')
-  }
-
-  /**
-   * Handle card read
-   */
-  async handleCardRead(data) {
-    
-    // Apply equivalence table mapping if configured
-    const mappedValue = this.applyBillEquivalence(value)
-    
-    this.client.addToBalance(mappedValue)
-    this.emit('bill-inserted', { value: mappedValue, balance: this.client.getState().balance })
-    
-    console.log(`Bill inserted: €${mappedValue.toFixed(2)}, Total: €${this.client.getState().credits.toFixed(2)}`)
   }
 
   /**

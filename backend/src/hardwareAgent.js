@@ -155,6 +155,40 @@ class HardwareAgent extends EventEmitter {
             type: peripheral.type,
             amount,
           })
+        } else if (cmd === 0x03) { // Fraud attempt (fake coin/bill detected)
+          console.warn(`[HardwareAgent] Fraud detected on ${peripheral.type} at ${peripheral.config.port}`)
+          this.sendToServer('peripheral:rejected', {
+            port: peripheral.config.port,
+            type: peripheral.type,
+            reason: 'fraud',
+            fraud: true,
+          })
+        } else if (cmd === 0x04) { // Stacker full
+          console.warn(`[HardwareAgent] Stacker full on ${peripheral.type} at ${peripheral.config.port}`)
+          this.sendToServer('peripheral:fault', {
+            port: peripheral.config.port,
+            type: peripheral.type,
+            reason: 'stacker_full',
+          })
+        } else if (cmd === 0x05) { // Jam detected
+          console.error(`[HardwareAgent] Jam detected on ${peripheral.type} at ${peripheral.config.port}`)
+          this.sendToServer('peripheral:fault', {
+            port: peripheral.config.port,
+            type: peripheral.type,
+            reason: 'jam',
+          })
+        } else if (cmd === 0x06) { // Coin/Bill inhibited (currency not enabled)
+          this.sendToServer('peripheral:rejected', {
+            port: peripheral.config.port,
+            type: peripheral.type,
+            reason: 'inhibited',
+          })
+        } else if (cmd === 0x08) { // Generic reject (unrecognised denomination)
+          this.sendToServer('peripheral:rejected', {
+            port: peripheral.config.port,
+            type: peripheral.type,
+            reason: 'unrecognised',
+          })
         }
       }
     })
@@ -219,10 +253,25 @@ class HardwareAgent extends EventEmitter {
         
         // ACK/NACK for dispense commands
         if (cmd === 0xA7) { // Dispense coins response
+          const success = data[0] === 0x00
           this.sendToServer('hopper:dispensed', {
             port: peripheral.config.port,
-            success: data[0] === 0x00,
+            success,
           })
+          if (!success) {
+            const reason = data[0] === 0x01 ? 'empty' : data[0] === 0x02 ? 'jam' : 'fault'
+            console.error(`[HardwareAgent] Hopper dispense failed (${reason}) on port ${peripheral.config.port}`)
+            this.sendToServer('hopper:fault', {
+              port: peripheral.config.port,
+              reason,
+            })
+          }
+        } else if (cmd === 0xA1) { // Hopper status / empty
+          const isEmpty = data[0] === 0x01
+          if (isEmpty) {
+            console.warn(`[HardwareAgent] Hopper empty on port ${peripheral.config.port}`)
+            this.sendToServer('hopper:empty', { port: peripheral.config.port })
+          }
         }
       }
     })

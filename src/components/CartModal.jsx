@@ -64,6 +64,45 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
         }
       }
 
+      // Handle rejected coin/bill
+      if (data.type === 'peripheral:rejected') {
+        const { type, reason } = data.payload || {}
+        const label = type === 'bill' ? 'Nota' : 'Moeda'
+        const reasonLabel = reason === 'inhibited' ? 'não aceite' : reason === 'unrecognised' ? 'não reconhecida' : 'rejeitada'
+        console.warn('[CartModal] Peripheral rejected:', type, reason)
+        toast({ title: `${label} ${reasonLabel}`, description: 'Por favor insira outro dinheiro.', variant: 'destructive' })
+      }
+
+      // Handle fake/counterfeit bill
+      if (data.type === 'peripheral:fraud') {
+        const { type } = data.payload || {}
+        const label = type === 'bill' ? 'nota' : 'moeda'
+        console.error('[CartModal] Fraud detected:', type)
+        toast({ title: `⚠️ ${label.charAt(0).toUpperCase() + label.slice(1)} suspeita de fraude`, description: 'A nota foi retida. Por favor contacte o operador.', variant: 'destructive' })
+      }
+
+      // Handle peripheral fault (jam, stacker full)
+      if (data.type === 'peripheral:fault') {
+        const { type, reason } = data.payload || {}
+        const label = type === 'bill' ? 'leitor de notas' : 'leitor de moedas'
+        const reasonLabel = reason === 'jam' ? 'encravamento' : reason === 'stacker_full' ? 'stacker cheio' : 'avaria'
+        console.error('[CartModal] Peripheral fault:', type, reason)
+        toast({ title: `Avaria no ${label}`, description: `${reasonLabel.charAt(0).toUpperCase() + reasonLabel.slice(1)} — contacte o operador.`, variant: 'destructive' })
+      }
+
+      // Handle hopper empty / change cannot be dispensed
+      if (data.type === 'hopper:empty') {
+        console.error('[CartModal] Hopper empty')
+        toast({ title: 'Sem troco disponível', description: 'A máquina não tem troco. Por favor insira o montante exacto.', variant: 'destructive' })
+      }
+
+      // Handle hopper fault
+      if (data.type === 'hopper:fault') {
+        const { reason } = data.payload || {}
+        console.error('[CartModal] Hopper fault:', reason)
+        toast({ title: 'Falha ao devolver troco', description: 'Por favor contacte o operador.', variant: 'destructive' })
+      }
+
       // Handle RFID card detection
       if (data.type === 'rfid:card_detected') {
         const { cardCode } = data.payload || {}

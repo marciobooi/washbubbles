@@ -3,7 +3,7 @@ import Machine from '../models/machine.js'
 import Sale from '../models/sale.js'
 import Card from '../models/card.js'
 import { requireKiosk } from '../middleware/auth.js'
-import { broadcastMachine } from '../wsServer.js'
+import { broadcastMachine, broadcastHardwareEvent } from '../wsServer.js'
 import { withTenant } from '../services/tenant.js'
 
 const router = express.Router()
@@ -134,6 +134,16 @@ router.post('/cash/pay', requireKiosk, async (req, res) => {
     await MachineT.findByIdAndUpdate(machine._id, { $inc: { cycle: 1 }, $set: { status: 'working', statusText: 'Ocupado' } })
     const updated = await MachineT.findById(machine._id)
     try { await broadcastMachine(updated) } catch (e) { console.error('[gateways] broadcastMachine error', e) }
+  }
+
+  // Trigger hopper to dispense change if any is due
+  if (change > 0) {
+    try {
+      broadcastHardwareEvent('hopper:dispense', { amount: change })
+      console.log(`[gateways] Dispatched hopper:dispense for €${change.toFixed(2)} change`)
+    } catch (e) {
+      console.error('[gateways] Failed to broadcast hopper:dispense:', e)
+    }
   }
 
   res.json({ success: true, sales, total, inserted: Number(inserted), change })
