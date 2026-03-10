@@ -227,18 +227,20 @@ export function initWebSocket(server) {
     }, 30000)
   }
 
-  // Example: notify every connected client when a machine changes every 10s (dev only)
-  setInterval(async () => {
-    try {
-      const machines = await Machine.find().sort({ createdAt: 1 })
-      const msg = JSON.stringify({ type: 'machine-status', payload: machines })
-      wss.clients.forEach((client) => {
-        if (client.readyState === client.OPEN) client.send(msg)
-      })
-    } catch (err) {
-      console.error('[ws] Could not fetch machines from DB (is DB running?)', err.message || err)
-    }
-  }, 10000)
+  // Dev-only fallback poller: push machine state every 10s so dev UIs without event triggers still refresh
+  if (process.env.NODE_ENV !== 'production') {
+    setInterval(async () => {
+      try {
+        const machines = await Machine.find().sort({ createdAt: 1 })
+        const msg = JSON.stringify({ type: 'machine-status', payload: machines })
+        wss.clients.forEach((client) => {
+          if (client.readyState === client.OPEN) client.send(msg)
+        })
+      } catch (err) {
+        console.error('[ws] Could not fetch machines from DB (is DB running?)', err.message || err)
+      }
+    }, 10000)
+  }
 
   console.log('[ws] websocket server initialized')
   return wss

@@ -177,6 +177,22 @@ class HardwareAgentServer extends EventEmitter {
       case 'machine:activation_failed':
         this.emit('machine:activation_failed', { agentId, ...payload })
         break
+      case 'peripheral:rejected':
+        this.emit('peripheral:rejected', { agentId, ...payload })
+        break
+      case 'peripheral:fraud':
+        // treat fraud as rejected with fraud flag so index.js can broadcast the right event
+        this.emit('peripheral:rejected', { agentId, fraud: true, ...payload })
+        break
+      case 'peripheral:fault':
+        this.emit('peripheral:fault', { agentId, ...payload })
+        break
+      case 'hopper:empty':
+        this.emit('hopper:empty', { agentId, ...payload })
+        break
+      case 'hopper:fault':
+        this.emit('hopper:fault', { agentId, ...payload })
+        break
       default:
         console.warn(`[HardwareAgentServer] Unknown message type: ${type}`)
     }

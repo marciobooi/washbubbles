@@ -82,24 +82,137 @@ class HardwareAgent extends EventEmitter {
 
   setupPeripheralHandler(peripheral) {
     const { type, serialPort } = peripheral
-    
-    // Generic line-based parser for most peripherals
-    const parser = serialPort.pipe(new ReadlineParser({ delimiter: '\r\n' }))
-    
-    parser.on('data', (data) => {
-      console.log(`[Agent] ${type} data:`, data)
-      
-      // Send to server
-      this.sendToServer(`peripheral:data`, {
-        type,
-        data: data.toString(),
-        timestamp: new Date().toISOString(),
+
+    if (type === 'coin_acceptor' || type === 'bill_acceptor') {
+      // ccTalk binary protocol — variable-length framed packets
+      peripheral._buf = Buffer.alloc(0)
+      serialPort.on('data', (chunk) => {
+        peripheral._buf = Buffer.concat([peripheral._buf, chunk])
+        while (peripheral._buf.length >= 5) {
+          const len = peripheral._buf[1]
+          const totalLen = len + 5
+          if (peripheral._buf.length < totalLen) break
+          const packet = peripheral._buf.slice(0, totalLen)
+          peripheral._buf = peripheral._buf.slice(totalLen)
+          // Verify checksum
+          let sum = 0
+          for (let i = 0; i < totalLen - 1; i++) sum += packet[i]
+          const expected = (256 - (sum & 0xff)) & 0xff
+          if (packet[totalLen - 1] !== expected) {
+            console.warn(`[Agent] ${type}: checksum mismatch, dropping byte`)
+            peripheral._buf = Buffer.concat([packet.slice(1), peripheral._buf])
+            continue
+          }
+          this._handleCurrencyPacket(type, packet[3], packet.slice(4, 4 + len))
+        }
       })
-    })
-    
+    } else if (type === 'hopper') {
+      // ccTalk binary protocol for hopper
+      peripheral._buf = Buffer.alloc(0)
+      serialPort.on('data', (chunk) => {
+        peripheral._buf = Buffer.concat([peripheral._buf, chunk])
+        while (peripheral._buf.length >= 5) {
+          const len = peripheral._buf[1]
+          const totalLen = len + 5
+          if (peripheral._buf.length < totalLen) break
+          const packet = peripheral._buf.slice(0, totalLen)
+          peripheral._buf = peripheral._buf.slice(totalLen)
+          let sum = 0
+          for (let i = 0; i < totalLen - 1; i++) sum += packet[i]
+          const expected = (256 - (sum & 0xff)) & 0xff
+          if (packet[totalLen - 1] !== expected) {
+            peripheral._buf = Buffer.concat([packet.slice(1), peripheral._buf])
+            continue
+          }
+          this._handleHopperPacket(packet[3], packet.slice(4, 4 + len))
+        }
+      })
+    } else if (type === 'rfid_reader') {
+      // Line-delimited card codes
+      const parser = serialPort.pipe(new ReadlineParser({ delimiter: '\r\n' }))
+      parser.on('data', (line) => {
+        const cardCode = line.trim()
+        if (cardCode) {
+          console.log(`[Agent] RFID card detected: ${cardCode}`)
+          this.sendToServer('rfid:card_detected', { type, cardCode })
+        }
+      })
+    } else if (type === 'interface') {
+      // KITSEC STX/ETX framed protocol (STX=0x02, ETX=0x03)
+      peripheral._buf = Buffer.alloc(0)
+      serialPort.on('data', (chunk) => {
+        peripheral._buf = Buffer.concat([peripheral._buf, chunk])
+        let stx
+        while ((stx = peripheral._buf.indexOf(0x02)) !== -1) {
+          const etx = peripheral._buf.indexOf(0x03, stx + 1)
+          if (etx === -1) break
+          const frame = peripheral._buf.slice(stx + 1, etx)
+          peripheral._buf = peripheral._buf.slice(etx + 1)
+          const cmd = frame[0]
+          const status = frame.length > 1 ? frame[1] : 0
+          console.log(`[Agent] Interface cmd=0x${cmd.toString(16)} status=0x${status.toString(16)}`)
+          this.sendToServer('interface:status', { cmd, status, raw: frame.toString('hex') })
+        }
+        // Drop bytes before the next potential STX
+        const nextStx = peripheral._buf.indexOf(0x02)
+        if (nextStx > 0) peripheral._buf = peripheral._buf.slice(nextStx)
+      })
+    } else {
+      // Generic line-based parser (printer, card_dispenser, etc.)
+      const parser = serialPort.pipe(new ReadlineParser({ delimiter: '\r\n' }))
+      parser.on('data', (line) => {
+        console.log(`[Agent] ${type} data:`, line)
+        this.sendToServer('peripheral:data', { type, data: line.toString(), timestamp: new Date().toISOString() })
+      })
+    }
+
     serialPort.on('error', (err) => {
       console.error(`[Agent] ${type} error:`, err.message)
+      this.sendToServer('peripheral:fault', { type, reason: 'serial_error', message: err.message })
     })
+  }
+
+  // ccTalk header 0x02 = Read Buffered Credit Or Error Codes response
+  // data[0] = event counter, data[1] = credit code, data[2] = error code
+  _handleCurrencyPacket(type, header, data) {
+    if (header === 0x02 && data.length >= 3) {
+      const creditCode = data[1]
+      const errorCode = data[2]
+      if (errorCode === 0 && creditCode > 0) {
+        const coinValues = { 1: 0.05, 2: 0.10, 3: 0.20, 4: 0.50, 5: 1.00, 6: 2.00 }
+        const billValues = { 1: 5, 2: 10, 3: 20, 4: 50 }
+        const valueMap = type === 'coin_acceptor' ? coinValues : billValues
+        const amount = valueMap[creditCode] || 0
+        if (amount > 0) {
+          console.log(`[Agent] ${type} credit: ${amount}`)
+          this.sendToServer('peripheral:credit', { type, amount })
+        }
+      } else if (errorCode !== 0) {
+        // 1=reject, 2=fraud/inhibited, 3=stacker_full, 4=jam, 5=calibration_error
+        const errorMap = { 1: 'rejected', 2: 'fraud', 3: 'stacker_full', 4: 'jam', 5: 'calibration_error' }
+        const reason = errorMap[errorCode] || `error_${errorCode}`
+        const isFraud = errorCode === 2
+        console.warn(`[Agent] ${type} ${reason}`)
+        this.sendToServer(isFraud ? 'peripheral:fraud' : 'peripheral:rejected', { type, reason })
+      }
+    }
+  }
+
+  _handleHopperPacket(header, data) {
+    // 0xA7 = Dispense Coins response
+    if (header === 0xA7) {
+      const success = data[0] === 0x00
+      this.sendToServer('hopper:dispensed', { success })
+      if (!success) {
+        const reason = data[0] === 0x01 ? 'empty' : data[0] === 0x02 ? 'jam' : 'fault'
+        if (reason === 'empty') this.sendToServer('hopper:empty', {})
+        else this.sendToServer('hopper:fault', { reason })
+      }
+    } else if (header === 0xA1) {
+      // Status response
+      if (data[0] === 1) this.sendToServer('hopper:empty', {})
+      else if (data[0] === 2) this.sendToServer('hopper:fault', { reason: 'status_fault' })
+    }
   }
 
   connectToServer() {
@@ -175,6 +288,12 @@ class HardwareAgent extends EventEmitter {
       case 'hopper:dispense':
         this.dispenseCoins(payload)
         break
+      case 'machine:activate':
+        this.activateMachine(payload)
+        break
+      case 'card_dispenser:dispense':
+        this.dispenseCard(payload)
+        break
       default:
         console.log(`[Agent] Unknown command: ${type}`)
     }
@@ -222,12 +341,89 @@ class HardwareAgent extends EventEmitter {
     const hopper = this.peripherals.get('hopper')
     if (!hopper) {
       console.error('[Agent] Hopper not connected')
+      this.sendToServer('hopper:fault', { reason: 'not_connected' })
       return
     }
-    
-    // ccTalk dispense command (simplified)
-    console.log(`[Agent] Dispensing ${payload.amount} coins`)
-    // Implementation depends on hopper protocol
+
+    const { amount } = payload
+    const address = hopper.config.address || 3
+    // Assume coin unit from config (default 5¢); compute how many coins to dispense
+    const coinValue = hopper.config.coinValue || 0.05
+    const coinsToDispense = Math.round(amount / coinValue)
+    if (coinsToDispense < 1) return
+
+    // ccTalk Dispense Coins: [dest, len, src, 0xA7, count, checksum]
+    const dest = address
+    const src = 0
+    const cmd = 0xA7
+    const dataBytes = [coinsToDispense]
+    let sum = dest + dataBytes.length + src + cmd
+    for (const b of dataBytes) sum += b
+    const checksum = (256 - (sum & 0xff)) & 0xff
+    const packet = Buffer.from([dest, dataBytes.length, src, cmd, ...dataBytes, checksum])
+
+    hopper.serialPort.write(packet, (err) => {
+      if (err) {
+        console.error('[Agent] Failed to dispense coins:', err.message)
+        this.sendToServer('hopper:fault', { reason: 'write_error', message: err.message })
+      } else {
+        console.log(`[Agent] Dispensing ${amount}€ (${coinsToDispense} × ${coinValue * 100}¢ coins)`)
+      }
+    })
+  }
+
+  activateMachine(payload) {
+    const iface = this.peripherals.get('interface')
+    if (!iface) {
+      console.error('[Agent] Interface not connected')
+      this.sendToServer('machine:activation_failed', { error: 'Interface not connected' })
+      return
+    }
+
+    const { port = 1, channel = 1, impulses = 1, tOn = 5, tOff = 5 } = payload
+    // KITSEC: STX 0x41 port channel impulses tOn tOff checksum ETX
+    const cmd = 0x41
+    const body = [port, channel, impulses, tOn, tOff]
+    let sum = cmd
+    for (const b of body) sum += b
+    const checksum = (256 - (sum & 0xff)) & 0xff
+    const packet = Buffer.from([0x02, cmd, ...body, checksum, 0x03])
+
+    iface.serialPort.write(packet, (err) => {
+      if (err) {
+        console.error('[Agent] Machine activation failed:', err.message)
+        this.sendToServer('machine:activation_failed', { error: err.message })
+      } else {
+        console.log(`[Agent] Machine activation sent: port=${port} ch=${channel}`)
+        this.sendToServer('machine:activation_sent', { port, channel })
+      }
+    })
+  }
+
+  dispenseCard(payload) {
+    const dispenser = this.peripherals.get('card_dispenser')
+    if (!dispenser) {
+      console.error('[Agent] Card dispenser not connected')
+      return
+    }
+
+    if (dispenser.config.protocol === 'pulse') {
+      // Pulse RTS line to trigger dispense
+      const pulseWidth = dispenser.config.pulseWidth || 500
+      dispenser.serialPort.set({ rts: true }, () => {
+        setTimeout(() => dispenser.serialPort.set({ rts: false }), pulseWidth)
+      })
+    } else {
+      // ccTalk dispense card: [dest, 0, 0, 0xC0, checksum]
+      const address = dispenser.config.address || 4
+      const cmd = 0xC0
+      const checksum = (256 - ((address + cmd) & 0xff)) & 0xff
+      const packet = Buffer.from([address, 0, 0, cmd, checksum])
+      dispenser.serialPort.write(packet, (err) => {
+        if (err) console.error('[Agent] Card dispense failed:', err.message)
+        else console.log('[Agent] Card dispense command sent')
+      })
+    }
   }
 
   sendToServer(type, payload) {
