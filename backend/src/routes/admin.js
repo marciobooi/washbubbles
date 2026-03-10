@@ -639,4 +639,147 @@ router.delete('/peripherals/:id', async (req, res) => {
   res.json({ success: true })
 })
 
+// =====================
+// Day Close / Cash Session
+// =====================
+
+// GET /admin/day-close — list previous closes (newest first, limit 90)
+router.get('/day-close', async (req, res) => {
+  const DayClose = (await import('../models/dayClose.js')).default
+  const DayCloseT = withTenant(DayClose, req)
+  const list = await DayCloseT.find().sort({ createdAt: -1 }).limit(90).lean()
+  res.json(list)
+})
+
+// GET /admin/day-close/summary — live sales totals + reconciliation data for the current open session
+router.get('/day-close/summary', async (req, res) => {
+  const DayClose = (await import('../models/dayClose.js')).default
+  const DayCloseT = withTenant(DayClose, req)
+  const SaleT = withTenant(Sale, req)
+
+  // The period starts from the last close (no time-of-day assumption)
+  const lastCloseArr = await DayCloseT.find().sort({ createdAt: -1 }).limit(1).lean()
+  const lastClose = lastCloseArr[0] || null
+  const periodFrom = lastClose ? lastClose.createdAt : new Date(0)
+  const openingFloat = lastClose ? Number(lastClose.floatLeft || 0) : 0
+
+  const sales = await SaleT.find({ createdAt: { $gt: periodFrom } }).lean()
+  let totalCash = 0
+  let totalCard = 0
+  for (const s of sales) {
+    const amt = Number(s.amount || 0)
+    if (s.method === 'cash') totalCash += amt
+    else totalCard += amt
+  }
+  const tc = Number(totalCash.toFixed(2))
+  const expectedCash = Number((openingFloat + tc).toFixed(2))
+
+  res.json({
+    periodFrom,
+    periodTo: new Date(),
+    openingFloat,
+    totalCash: tc,
+    totalCard: Number(totalCard.toFixed(2)),
+    totalSales: Number((tc + totalCard).toFixed(2)),
+    expectedCash,
+    salesCount: sales.length
+  })
+})
+
+// GET /admin/day-close/:id — single record
+router.get('/day-close/:id', async (req, res) => {
+  const DayClose = (await import('../models/dayClose.js')).default
+  const DayCloseT = withTenant(DayClose, req)
+  const dc = await DayCloseT.findById(req.params.id).lean()
+  if (!dc) return res.status(404).json({ error: 'Cash session record not found' })
+  res.json(dc)
+})
+
+// POST /admin/day-close — close / reconcile the current cash session
+router.post('/day-close', async (req, res) => {
+  const {
+    amountToBank,
+    floatLeft,
+    countedCash,
+    countedDenominations = [],
+    coinMechanismInventory = [],
+    hopperCoins = [],
+    notes
+  } = req.body
+
+  if (amountToBank == null || floatLeft == null) {
+    return res.status(400).json({ error: 'amountToBank and floatLeft are required' })
+  }
+
+  // Sanitise denomination arrays (recompute totals server-side)
+  function cleanDenoms(arr) {
+    return (arr || [])
+      .filter(d => d && Number(d.value) > 0 && Number(d.count) >= 0)
+      .map(d => ({
+        value: Number(d.value),
+        count: Number(d.count),
+        total: Number((Number(d.value) * Number(d.count)).toFixed(2))
+      }))
+  }
+
+  const countedDenomsClean      = cleanDenoms(countedDenominations)
+  const coinMechClean            = cleanDenoms(coinMechanismInventory)
+  const hopperCoinsClean         = cleanDenoms(hopperCoins)
+  const coinMechanismTotal       = Number(coinMechClean.reduce((s, d) => s + d.total, 0).toFixed(2))
+  const hopperTotal              = Number(hopperCoinsClean.reduce((s, d) => s + d.total, 0).toFixed(2))
+
+  // Fetch authoritative sales totals from DB
+  const DayClose = (await import('../models/dayClose.js')).default
+  const DayCloseT = withTenant(DayClose, req)
+  const SaleT = withTenant(Sale, req)
+
+  const lastCloseArr = await DayCloseT.find().sort({ createdAt: -1 }).limit(1).lean()
+  const lastClose = lastCloseArr[0] || null
+  const periodFrom = lastClose ? lastClose.createdAt : new Date(0)
+  const openingFloat = lastClose ? Number(lastClose.floatLeft || 0) : 0
+  const periodTo = new Date()
+
+  const sales = await SaleT.find({ createdAt: { $gt: periodFrom, $lte: periodTo } }).lean()
+  let totalCash = 0; let totalCard = 0
+  for (const s of sales) {
+    const amt = Number(s.amount || 0)
+    if (s.method === 'cash') totalCash += amt
+    else totalCard += amt
+  }
+  const tc = Number(totalCash.toFixed(2))
+  const tk = Number(totalCard.toFixed(2))
+  const expectedCash = Number((openingFloat + tc).toFixed(2))
+
+  // If countedCash wasn't provided, derive it from denomination sum
+  const actualCountedCash = countedCash != null
+    ? Number(Number(countedCash).toFixed(2))
+    : Number(countedDenomsClean.reduce((s, d) => s + d.total, 0).toFixed(2))
+
+  const discrepancy = Number((actualCountedCash - expectedCash).toFixed(2))
+
+  const dc = await DayCloseT.create({
+    openingFloat,
+    expectedCash,
+    countedCash: actualCountedCash,
+    discrepancy,
+    countedDenominations: countedDenomsClean,
+    amountToBank: Number(Number(amountToBank).toFixed(2)),
+    floatLeft: Number(Number(floatLeft).toFixed(2)),
+    coinMechanismInventory: coinMechClean,
+    coinMechanismTotal,
+    hopperCoins: hopperCoinsClean,
+    hopperTotal,
+    notes: String(notes || '').slice(0, 500),
+    totalCash: tc,
+    totalCard: tk,
+    totalSales: Number((tc + tk).toFixed(2)),
+    closedBy: req.user?._id,
+    closedByUsername: req.user?.username || '',
+    periodFrom,
+    periodTo
+  })
+
+  res.json(dc)
+})
+
 export default router

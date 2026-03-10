@@ -26,6 +26,7 @@ import AdminInterfaces from './pages/AdminInterfaces'
 import AdminPeripherals from './pages/AdminPeripherals'
 import AdminPrices from './pages/AdminPrices'
 import AdminCards from './pages/AdminCards'
+import AdminDayClose from './pages/AdminDayClose'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import RequireAdmin from './components/RequireAdmin'
@@ -351,6 +352,7 @@ function AppInner() {
             <Route path="prices" element={<AdminPrices />} />
             <Route path="cards" element={<AdminCards />} />
             <Route path="transactions" element={<AdminTransactions />} />
+            <Route path="day-close" element={<AdminDayClose />} />
             <Route path="operations" element={<AdminOperations />} />
             <Route path="settings" element={<AdminSettings />} />
             <Route path="profile" element={<AdminProfile />} />

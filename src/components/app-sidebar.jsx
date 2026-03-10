@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { useSidebar } from './ui/sidebar'
 import Fuse from 'fuse.js'
 import Highlight from './Highlight'
-import { Cpu, Users, CreditCard, Settings, Activity, PlugZap, Coins, Cable, Wallet } from 'lucide-react'
+import { Cpu, Users, CreditCard, Settings, Activity, PlugZap, Coins, Cable, Wallet, Banknote } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import {
   Sidebar,
@@ -28,6 +28,7 @@ const navItems = [
   { title: 'Cartões', url: '/admin/cards', Icon: Wallet },
   { title: 'Utilizadores', url: '/admin/users', Icon: Users },
   { title: 'Transacções', url: '/admin/transactions', Icon: CreditCard },
+  { title: 'Fecho de Dia', url: '/admin/day-close', Icon: Banknote },
   { title: 'Definições', url: '/admin/settings', Icon: Settings },
   { title: 'Tenants', url: '/admin/tenants', Icon: Users, superOnly: true },
 ]

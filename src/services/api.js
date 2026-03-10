@@ -287,6 +287,20 @@ export function createApi(config) {
     return request('/gateways/cash/pay', { method: 'POST', json: payload, expect: 'json', headers, skipAuth: true })
   }
 
+  // Day Close
+  function getDayCloseSummary() {
+    return request('/admin/day-close/summary', { method: 'GET', expect: 'json' });
+  }
+
+  function getDayCloses() {
+    return request('/admin/day-close', { method: 'GET', expect: 'json' });
+  }
+
+  function createDayClose(payload) {
+    // payload: { amountToBank, floatLeft, countedCash?, countedDenominations, coinMechanismInventory, hopperCoins, notes }
+    return request('/admin/day-close', { method: 'POST', json: payload, expect: 'json' });
+  }
+
   function deleteTransaction(id) {
     return request(`/admin/transactions/${id}`, { method: 'DELETE', expect: 'json' });
   }
@@ -502,6 +516,11 @@ export function createApi(config) {
     getMiddlewareClient,
     getMiddlewareMachines,
     getMiddlewareMachine,
+
+    // Day Close
+    getDayCloseSummary,
+    getDayCloses,
+    createDayClose,
   };
 }
 
@@ -569,6 +588,9 @@ export const {
   getMiddlewareClient,
   getMiddlewareMachines,
   getMiddlewareMachine,
+  getDayCloseSummary,
+  getDayCloses,
+  createDayClose,
 } = api;
 
 export default api;
