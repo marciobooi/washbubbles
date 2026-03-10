@@ -122,11 +122,11 @@ router.post('/recharge', requireKiosk, async (req, res) => {
     if (cardId) card = await Card.findById(cardId)
     else card = await Card.findOne({ code: cardCode })
     if (!card && cardCode) {
-      // create card implicitly when code provided
-      card = await Card.create({ code: cardCode, balance: 0 })
+      // create card implicitly when code provided (CardT.create() injects tenantId automatically)
+      card = await CardT.create({ code: cardCode, balance: 0 })
     }
     if (card) {
-      card.balance = Number((card.balance || 0) + rechargeAmount)
+      card.balance = Number(((card.balance || 0) + rechargeAmount).toFixed(2))
       await card.save()
     }
   }
@@ -153,7 +153,7 @@ router.post('/recharge', requireKiosk, async (req, res) => {
     }
   }
 
-  const sale = await Sale.create({ 
+  const sale = await SaleT.create({ 
     amount: rechargeAmount, 
     items, 
     method: method || 'card', 
@@ -310,6 +310,26 @@ router.post('/card/purchase', requireKiosk, async (req, res) => {
     console.error('Card purchase error:', e)
     res.status(500).json({ error: e.message || 'Card purchase failed' })
   }
+})
+
+// Get card balance + recent transaction history (kiosk)
+router.get('/cards/:code/history', requireKiosk, async (req, res) => {
+  const code = req.params.code
+  const Card = (await import('../models/card.js')).default
+  const CardT = withTenant(Card, req)
+  const card = await CardT.findOne({ code }).lean()
+  if (!card) return res.status(404).json({ error: 'Card not found' })
+
+  const SaleT = withTenant(Sale, req)
+  const sales = await SaleT.find({ cardCode: code }).sort({ createdAt: -1 }).limit(30).lean()
+  const transactions = sales.map((s) => ({
+    id: String(s._id),
+    ts: s.createdAt,
+    type: s.type || 'payment',
+    amount: s.type === 'payment' ? -Math.abs(s.amount) : Math.abs(s.amount)
+  }))
+
+  res.json({ card, transactions })
 })
 
 // Mark card as written after RFID write

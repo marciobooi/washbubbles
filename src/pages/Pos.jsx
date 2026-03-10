@@ -8,6 +8,7 @@ import { toast } from '@/components/ui/Toast'
 import Banner from '../components/Banner'
 import api from '@/services/api'
 import { useTranslation } from 'react-i18next'
+import { connect, subscribe } from '@/services/websocket'
 
 export default function Pos() {
   const { t } = useTranslation('pos')
@@ -24,11 +25,47 @@ export default function Pos() {
   const navigate = useNavigate()
   const [cardOpen, setCardOpen] = React.useState(false)
   const [buyCardOpen, setBuyCardOpen] = React.useState(false)
-  const [transactions, setTransactions] = React.useState([
-    { id: 't1', ts: new Date().toISOString(), type: 'recharged', amount: 10 },
-    { id: 't2', ts: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), type: 'spent_wash', amount: -3 },
-    { id: 't3', ts: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), type: 'spent_dry', amount: -4 },
-  ])
+
+  // Real card state — populated when the user taps their RFID card
+  const [currentCard, setCurrentCard] = React.useState(null) // { code, balance, name, ... }
+  const [transactions, setTransactions] = React.useState([])
+
+  // Load card balance + history from backend
+  async function loadCard(code) {
+    try {
+      const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
+      const kioskKey = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
+      const result = await api.request(`/pos/cards/${encodeURIComponent(code)}/history`, {
+        method: 'GET',
+        headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined,
+        skipAuth: true,
+        expect: 'json',
+      })
+      if (result && result.card) {
+        setCurrentCard(result.card)
+        setTransactions(Array.isArray(result.transactions) ? result.transactions : [])
+      }
+    } catch (e) {
+      console.error('[Pos] Failed to load card data', e)
+      toast({ title: 'Erro ao carregar cartão', variant: 'destructive' })
+    }
+  }
+
+  // Subscribe to WS events: RFID tap auto-loads card and opens modal
+  React.useEffect(() => {
+    connect()
+    const unsub = subscribe((message) => {
+      if (!message || typeof message !== 'object') return
+      if (message.type === 'rfid:card_detected') {
+        const code = message.payload?.cardCode
+        if (code) {
+          toast({ title: 'Cartão detetado', variant: 'success' })
+          loadCard(code).then(() => setCardOpen(true))
+        }
+      }
+    })
+    return unsub
+  }, [])
 
 
   function openCard() {
@@ -38,6 +75,8 @@ export default function Pos() {
 
   function closeCard() {
     setCardOpen(false)
+    setCurrentCard(null)
+    setTransactions([])
     if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('modal-close'))
   }
 
@@ -52,15 +91,17 @@ export default function Pos() {
   }
 
   async function handleRecharge(amount = 10) {
+    if (!currentCard?.code) {
+      toast({ title: 'Aproxime o seu cartão para recarregar', variant: 'warning' })
+      return
+    }
     try {
-      // Persist recharge via kiosk endpoint
+      // Persist recharge via kiosk endpoint, linked to the active card
       const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
       const kioskKey = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
-      // Use api.request directly (skip auth)
-      const resp = await api.request('/pos/recharge', { method: 'POST', json: { amount: Number(amount), items: [{ type: 'recharge', amount: Number(amount) }], method: 'card', inserted: Number(amount), change: 0 }, headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined, skipAuth: true, expect: 'json' })
-      const sale = resp && resp.sale ? resp.sale : null
-      const m = sale ? { id: sale._id || `t${Date.now()}`, ts: sale.createdAt || new Date().toISOString(), type: `Recarregado`, amount: Number(amount) } : { id: `t${Date.now()}`, ts: new Date().toISOString(), type: `Recarregado`, amount: Number(amount) }
-      setTransactions((s) => [m, ...s])
+      const resp = await api.request('/pos/recharge', { method: 'POST', json: { amount: Number(amount), items: [{ type: 'recharge', amount: Number(amount) }], method: 'card', inserted: Number(amount), change: 0, cardCode: currentCard.code }, headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined, skipAuth: true, expect: 'json' })
+      // Reload card data so balance updates immediately
+      await loadCard(currentCard.code)
       toast({ title: t('recharge.success', { amount: Number(amount).toFixed(2) }), variant: 'success' })
     } catch (e) {
       console.error('Failed to recharge', e)
@@ -77,10 +118,10 @@ export default function Pos() {
 <div className='flex-1 container mx-auto p-4'>
       <div className="relative min-h-[calc(100vh-35rem)] flex flex-col z-10">
         {/* Cards Grid */}
-        <div className="flex-grow flex items-center justify-center px-6 pb-32">
+        <div className="grow flex items-center justify-center px-6 pb-32">
           <div className="w-full max-w-7xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
             {cards.map((c) => (
-              <div key={c.id} className="aspect-[3/4] sm:aspect-square lg:aspect-[3/4] xl:aspect-square transition-all duration-300 hover:-translate-y-2">
+              <div key={c.id} className="aspect-3/4 sm:aspect-square lg:aspect-3/4 xl:aspect-square transition-all duration-300 hover:-translate-y-2">
                 <Card c={c} onClick={(id) => {
                   if (c.id === 'wash' || c.id === 'dry') {
                     navigate(`/pos/machines?type=${c.id}`)
@@ -98,7 +139,7 @@ export default function Pos() {
         </div>
         <BuyCardModal open={buyCardOpen} onClose={closeBuyCard} />
 
-        <CardModal open={cardOpen} onClose={closeCard} transactions={transactions} balance={transactions.reduce((s,t)=>s+t.amount,0)} onRecharge={(amt)=>handleRecharge(amt)} />
+        <CardModal open={cardOpen} onClose={closeCard} transactions={transactions} balance={currentCard?.balance ?? 0} onRecharge={(amt)=>handleRecharge(amt)} />
 
         
         <div className="fixed bottom-0 left-0 right-0 pointer-events-none z-0">

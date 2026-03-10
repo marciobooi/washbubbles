@@ -108,7 +108,8 @@ router.post('/cash/pay', requireKiosk, async (req, res) => {
   const MachineT = withTenant(Machine, req)
   for (const r of items.filter(i => (i.type && i.type.toLowerCase().includes('recarga')) || (i.id && String(i.id).startsWith('recharge')))) {
     const amount = Number(r.amount || r.price || 0)
-    const sale = await SaleT.create({ amount, items: r, method: 'card', batchId, inserted: amount, change: 0, type: 'recharge' })
+    // cash/pay handler — recharge method must be 'cash', not 'card'
+    const sale = await SaleT.create({ amount, items: r, method: 'cash', batchId, inserted: amount, change: 0, type: 'recharge' })
     sales.push(sale)
   }
 

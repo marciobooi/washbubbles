@@ -200,18 +200,6 @@ function AppInner() {
         return
       }
 
-      // Generic failure handling for gateways (only valid if `res` exists)
-      if (typeof res !== 'undefined' && !res.success) {
-        const status = res.error?.status || res.error?.response?.status
-        const bodyError = res.error?.body?.error || res.error?.message || res.error
-        if (status === 409) {
-          toast({ title: 'Máquina já em uso', description: String(bodyError), variant: 'destructive' })
-        } else {
-          toast({ title: 'Falha no pagamento', description: String(bodyError), variant: 'destructive' })
-        }
-        return
-      }
-
       // Card flow
       // If a cardCode is provided, use CardGateway to charge machines and post recharges server-side first
       const cardCode = opts.cardCode || null

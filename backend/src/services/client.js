@@ -92,10 +92,10 @@ class Client extends EventEmitter {
     try {
       const priceTotal = this.client.chargedArr.reduce((a, b) => a + b, 0)
       
-      // Update card balance in database
+      // Update card balance in database (balance is stored in euros, not cents)
       const card = await Card.findOne({ code: cardNumber })
       if (card) {
-        card.balance = (card.balance || 0) + Math.round(priceTotal * 100) // Convert to cents
+        card.balance = Number(((card.balance || 0) + priceTotal).toFixed(2))
         await card.save()
         
         console.log(`Auto-charge: Added €${priceTotal.toFixed(2)} to card ${cardNumber}`)
@@ -133,7 +133,7 @@ class Client extends EventEmitter {
       }
 
       this.client.cardNumber = cardNumber
-      this.client.name = card.ownerName || null
+      this.client.name = card.name || null
       this.client.balanceCard = card.balance || 0
       this.client.bonus = card.bonus || 0
       this.client.hasCard = true
