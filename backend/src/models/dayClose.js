@@ -30,13 +30,19 @@ const dayCloseSchema = new Schema({
   amountToBank: { type: Number, required: true }, // cash removed for bank deposit
   floatLeft:    { type: Number, required: true },  // cash left to start next session
 
-  // ── Coin mechanism (acceptor) inventory ──
-  // Physical count of coins sitting in the coin acceptor mechanism at close time
+  // ── Opening state (carried from previous close for reference) ──
+  openingMechanismCoins: [denominationSchema], // mechanism inventory at session start
+  openingHopperCoins:    [denominationSchema], // hopper state at session start
+  totalChangeDispensed:  { type: Number, default: 0 }, // total change given to customers during period
+
+  // ── Coin mechanism (acceptor) inventory at close ──
   coinMechanismInventory: [denominationSchema],
   coinMechanismTotal: { type: Number, default: 0 },
 
-  // ── Hopper restocking ──
-  // Coins loaded into the upper coin dispenser (hopper) for making change
+  // ── Hopper: actual state before restock + target for next session ──
+  hopperActualBefore:      [denominationSchema], // physical count of remaining coins before refilling
+  hopperActualBeforeTotal: { type: Number, default: 0 },
+  // Coins loaded / target state for the next session (becomes openingHopperCoins on next open)
   hopperCoins: [denominationSchema],
   hopperTotal: { type: Number, default: 0 },
 

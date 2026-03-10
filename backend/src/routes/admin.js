@@ -666,10 +666,12 @@ router.get('/day-close/summary', async (req, res) => {
   const sales = await SaleT.find({ createdAt: { $gt: periodFrom } }).lean()
   let totalCash = 0
   let totalCard = 0
+  let totalChangeDispensed = 0
   for (const s of sales) {
     const amt = Number(s.amount || 0)
     if (s.method === 'cash') totalCash += amt
     else totalCard += amt
+    totalChangeDispensed += Number(s.change || 0)
   }
   const tc = Number(totalCash.toFixed(2))
   const expectedCash = Number((openingFloat + tc).toFixed(2))
@@ -682,7 +684,12 @@ router.get('/day-close/summary', async (req, res) => {
     totalCard: Number(totalCard.toFixed(2)),
     totalSales: Number((tc + totalCard).toFixed(2)),
     expectedCash,
-    salesCount: sales.length
+    salesCount: sales.length,
+    totalChangeDispensed: Number(totalChangeDispensed.toFixed(2)),
+    openingMechanismCoins: lastClose?.coinMechanismInventory || [],
+    openingMechanismTotal: lastClose?.coinMechanismTotal || 0,
+    openingHopperCoins: lastClose?.hopperCoins || [],
+    openingHopperTotal: lastClose?.hopperTotal || 0
   })
 })
 
@@ -703,6 +710,7 @@ router.post('/day-close', async (req, res) => {
     countedCash,
     countedDenominations = [],
     coinMechanismInventory = [],
+    hopperActualBefore = [],
     hopperCoins = [],
     notes
   } = req.body
@@ -722,11 +730,13 @@ router.post('/day-close', async (req, res) => {
       }))
   }
 
-  const countedDenomsClean      = cleanDenoms(countedDenominations)
-  const coinMechClean            = cleanDenoms(coinMechanismInventory)
-  const hopperCoinsClean         = cleanDenoms(hopperCoins)
-  const coinMechanismTotal       = Number(coinMechClean.reduce((s, d) => s + d.total, 0).toFixed(2))
-  const hopperTotal              = Number(hopperCoinsClean.reduce((s, d) => s + d.total, 0).toFixed(2))
+  const countedDenomsClean       = cleanDenoms(countedDenominations)
+  const coinMechClean             = cleanDenoms(coinMechanismInventory)
+  const hopperActualClean         = cleanDenoms(hopperActualBefore)
+  const hopperCoinsClean          = cleanDenoms(hopperCoins)
+  const coinMechanismTotal        = Number(coinMechClean.reduce((s, d) => s + d.total, 0).toFixed(2))
+  const hopperActualBeforeTotal   = Number(hopperActualClean.reduce((s, d) => s + d.total, 0).toFixed(2))
+  const hopperTotal               = Number(hopperCoinsClean.reduce((s, d) => s + d.total, 0).toFixed(2))
 
   // Fetch authoritative sales totals from DB
   const DayClose = (await import('../models/dayClose.js')).default
@@ -740,15 +750,17 @@ router.post('/day-close', async (req, res) => {
   const periodTo = new Date()
 
   const sales = await SaleT.find({ createdAt: { $gt: periodFrom, $lte: periodTo } }).lean()
-  let totalCash = 0; let totalCard = 0
+  let totalCash = 0; let totalCard = 0; let totalChangeDisp = 0
   for (const s of sales) {
     const amt = Number(s.amount || 0)
     if (s.method === 'cash') totalCash += amt
     else totalCard += amt
+    totalChangeDisp += Number(s.change || 0)
   }
   const tc = Number(totalCash.toFixed(2))
   const tk = Number(totalCard.toFixed(2))
   const expectedCash = Number((openingFloat + tc).toFixed(2))
+  const totalChangeDispensed = Number(totalChangeDisp.toFixed(2))
 
   // If countedCash wasn't provided, derive it from denomination sum
   const actualCountedCash = countedCash != null
@@ -767,6 +779,11 @@ router.post('/day-close', async (req, res) => {
     floatLeft: Number(Number(floatLeft).toFixed(2)),
     coinMechanismInventory: coinMechClean,
     coinMechanismTotal,
+    openingMechanismCoins: lastClose?.coinMechanismInventory || [],
+    openingHopperCoins: lastClose?.hopperCoins || [],
+    totalChangeDispensed,
+    hopperActualBefore: hopperActualClean,
+    hopperActualBeforeTotal,
     hopperCoins: hopperCoinsClean,
     hopperTotal,
     notes: String(notes || '').slice(0, 500),
