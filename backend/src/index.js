@@ -12,6 +12,7 @@ import coinMachine from './services/coinMachine.js'
 import { resolveTenant } from './middleware/tenant.js'
 import gatewaysRoutes from './routes/gateways.js'
 import middlewareRoutes from './routes/middleware.js'
+import syncRoutes from './routes/sync.js'
 
 // Enforce presence of JWT secret in production-like environments
 if (!process.env.JWT_SECRET) {
@@ -40,6 +41,9 @@ app.use('/api/gateways', gatewaysRoutes)
 
 // Middleware (coin machine)
 app.use('/api/middleware', middlewareRoutes)
+
+// Sync routes (offline-first POS ↔ server)
+app.use('/api/sync', syncRoutes)
 
 app.get('/api/health', (req, res) => res.json({ ok: true }))
 

@@ -2,357 +2,278 @@
 
 ## Overview
 
-WashBubbles consists of a distributed architecture with three main components:
+WashBubbles uses an **offline-first distributed architecture** with two main tiers:
 
-1. **Remote Backend Server** - Centralized business logic, database, and API
-2. **Local Hardware Agent** - Runs on each POS machine, manages physical peripherals
-3. **Electron POS Client** - User interface running on POS machines
+1. **Electron POS Client** (Local) — The autonomous POS brain. Runs local SQLite DB, embedded hardware agent, POS business logic, and a background sync engine. Operates fully offline.
+2. **Cloud Server** (Remote) — Management hub for reporting, multi-site admin, price/config management. Receives synced data from POS clients.
 
 ## Architecture Diagram
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    REMOTE SERVER                             │
-│                                                              │
-│  ┌────────────────────────────────────────────────────┐     │
-│  │  Backend API (Node.js + Express)                   │     │
-│  │  - Business Logic                                  │     │
-│  │  - User Management                                 │     │
-│  │  - Machine Management                              │     │
-│  │  - Transactions & Sales                            │     │
-│  │  - Price Configuration                             │     │
-│  └────────────────────────────────────────────────────┘     │
-│           │                    │                             │
-│           ▼                    ▼                             │
-│  ┌─────────────────┐  ┌──────────────────────────┐          │
-│  │   MongoDB       │  │  WebSocket Servers       │          │
-│  │   Database      │  │  - /ws (clients)         │          │
-│  │                 │  │  - /hardware-agent       │          │
-│  └─────────────────┘  └──────────────────────────┘          │
-└─────────────────────────────────────┬───────────────────────┘
-                                      │
-                           WebSocket over Internet
-                                      │
-┌─────────────────────────────────────┴───────────────────────┐
-│                    LOCAL POS MACHINE                         │
-│                                                              │
-│  ┌────────────────────────────────────────────────────┐     │
-│  │  Hardware Agent (Node.js)                          │     │
-│  │  - Manages all serial port connections             │     │
-│  │  - Communicates with remote server                 │     │
-│  │  - Executes hardware commands                      │     │
-│  └────────────────────────────────────────────────────┘     │
-│           │                                                  │
-│           ▼                                                  │
-│  ┌────────────────────────────────────────────────────┐     │
-│  │  Physical Peripherals (Serial Ports)               │     │
-│  │  - COM1: Coin Acceptor (ccTalk/MDB)               │     │
-│  │  - COM2: Bill Acceptor (ccTalk/MDB)               │     │
-│  │  - COM3: Interface/Machines (INT 6 KITSEC)        │     │
-│  │  - COM4: Hopper (ccTalk)                           │     │
-│  │  - COM5: Card Dispenser (ccTalk/Pulse)            │     │
-│  │  - COM6: Printer (ESC/POS)                         │     │
-│  │  - COM7: RFID Reader                               │     │
-│  └────────────────────────────────────────────────────┘     │
-│                                                              │
-│  ┌────────────────────────────────────────────────────┐     │
-│  │  Electron POS Client                               │     │
-│  │  - User interface (React + Vite)                   │     │
-│  │  - Connects to remote backend API                  │     │
-│  │  - Displays machine status & prices                │     │
-│  │  - Handles customer interactions                   │     │
-│  └────────────────────────────────────────────────────┘     │
-└──────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                    ELECTRON POS CLIENT (LOCAL)                    │
+│                                                                   │
+│  ┌─────────────┐  ┌──────────────┐  ┌────────────────────────┐  │
+│  │ SQLite DB   │  │ POS Engine   │  │ Sync Engine            │  │
+│  │ (better-    │  │ - Payments   │  │ - Outbound queue       │  │
+│  │  sqlite3)   │  │ - Cards      │  │ - Inbound pull         │  │
+│  │             │  │ - Machine    │  │ - Conflict resolver    │  │
+│  │ • machines  │  │   activation │  │ - Connectivity monitor │  │
+│  │ • cards     │  │ - Sessions   │  │                        │  │
+│  │ • sales     │  │ - Receipts   │  └──────────┬─────────────┘  │
+│  │ • prices    │  │ - Change     │             │                 │
+│  │ • settings  │  │   dispensing │             │ HTTP (when      │
+│  │ • sync_queue│  └──────┬───────┘             │  online)        │
+│  └──────┬───────┘        │                      │                 │
+│         │    ┌───────────┴──────────────┐       │                 │
+│         │    │ Embedded Hardware Agent  │       │                 │
+│         │    │ - Serial port management │       │                 │
+│         │    │ - ccTalk (coins/bills)   │       │                 │
+│         │    │ - KITSEC (interfaces)    │       │                 │
+│         │    │ - ESC/POS (printer)      │       │                 │
+│         │    │ - RFID reader            │       │                 │
+│         │    └───────────┬──────────────┘       │                 │
+│         │                │                      │                 │
+│  ┌──────┴────────────────┴──────────────────────┴──────────────┐ │
+│  │              IPC Bridge (contextBridge)                      │ │
+│  └──────┬──────────────────────────────────────────────────────┘ │
+│         │                                                        │
+│  ┌──────┴──────────────────────────────────────────────────────┐ │
+│  │  Renderer Process (React + Vite UI)                         │ │
+│  │  - POS interface (machine selection, payment flow)          │ │
+│  │  - Online/Offline indicator + sync status                   │ │
+│  │  - All data via IPC from local DB                           │ │
+│  └─────────────────────────────────────────────────────────────┘ │
+│                                                                   │
+│  ┌─────────────────────────────────────────────────────────────┐ │
+│  │  Physical Peripherals (Serial Ports)                        │ │
+│  │  COM1: Coin Acceptor  │  COM5: Card Dispenser              │ │
+│  │  COM2: Bill Acceptor  │  COM6: Printer (ESC/POS)           │ │
+│  │  COM3: Interface      │  COM7: RFID Reader                 │ │
+│  │  COM4: Hopper         │                                     │ │
+│  └─────────────────────────────────────────────────────────────┘ │
+└──────────────────────────────┬───────────────────────────────────┘
+                               │ periodic sync (when online)
+                               ▼
+┌──────────────────────────────────────────────────────────────────┐
+│                    CLOUD SERVER (REMOTE)                          │
+│                                                                   │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │  Backend API (Node.js + Express)                           │  │
+│  │  - Admin dashboard & multi-site management                 │  │
+│  │  - Reporting & analytics (from synced data)                │  │
+│  │  - Price & config management (pushed to POS)               │  │
+│  │  - Sync API (/api/sync/push, /api/sync/pull)              │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│           │                                                      │
+│           ▼                                                      │
+│  ┌─────────────────┐  ┌─────────────────────────────────────┐  │
+│  │   MongoDB       │  │  WebSocket Server                    │  │
+│  │   Database      │  │  - Admin real-time updates           │  │
+│  └─────────────────┘  │  - Legacy hardware agent support     │  │
+│                        └─────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-## Communication Flow
+## Offline-First Data Flow
 
-### 1. Customer Inserts Coin
-
-```
-[Coin Acceptor] 
-    ↓ (serial)
-[Hardware Agent] → detects coin → sends via WebSocket
-    ↓
-[Remote Backend] → updates client balance → broadcasts to all clients
-    ↓
-[POS Client] → updates UI
-```
-
-### 2. Customer Selects Machine & Pays
+### 1. Customer Inserts Coin (No Internet Required)
 
 ```
-[POS Client] → user selects machine → POST /api/pos/sale
-    ↓
-[Remote Backend] → validates payment → sends activation command
-    ↓ (WebSocket)
-[Hardware Agent] → receives command → activates machine
-    ↓ (serial)
-[Interface/Machine] → starts washing/drying cycle
+[Coin Acceptor] → serial → [Embedded HW Agent] → local event
+    → [POS Engine] → updates session balance in SQLite
+    → [IPC] → [React UI] → updates display
+    → [Sync Queue] → pushes to server when online
 ```
 
-### 3. Machine Status Updates
+### 2. Customer Pays & Machine Activates (No Internet Required)
 
 ```
-[Interface/Machine] → sends status (door/occupied/fault)
-    ↓ (serial)
-[Hardware Agent] → parses status → sends to backend
-    ↓ (WebSocket)
-[Remote Backend] → updates database → broadcasts to clients
-    ↓
-[POS Client + Admin Dashboard] → updates machine status display
+[React UI] → user selects machine → IPC call
+    → [POS Engine] → reads price from local SQLite
+    → validates payment (cash or card from local DB)
+    → creates Sale in local SQLite
+    → sends activation command to HW Agent
+    → [HW Agent] → KITSEC pulse to Interface → machine starts
+    → [Sync Queue] → sale + machine status sync later
+```
+
+### 3. Card Scanned & Used (No Internet Required)
+
+```
+[RFID Reader] → serial → [HW Agent] → card code event
+    → [POS Engine] → looks up card in local SQLite
+    → [IPC] → [React UI] → shows card info + balance
+```
+
+### 4. Sync with Server (Background, When Online)
+
+```
+[Sync Engine] pings server every 30s → detects online
+    → PUSH: sales, card balance deltas, machine status
+    → PULL: prices, settings, machine config, cards
+    → [Local SQLite] updated with server data
 ```
 
 ## File Structure
 
-### Backend (Remote Server)
+### Electron POS Client (Local Machine)
 
 ```
-backend/
-├── src/
-│   ├── index.js                    # Main server entry point
-│   ├── db.js                       # MongoDB connection
-│   ├── wsServer.js                 # WebSocket server for clients
-│   ├── hardwareAgentServer.js      # WebSocket server for hardware agents
-│   ├── hardwareAgent.js            # Hardware agent class (runs on POS)
-│   ├── agentServer.js              # Hardware agent entry point (runs on POS)
-│   ├── models/                     # MongoDB schemas
-│   │   ├── machine.js
-│   │   ├── user.js
-│   │   ├── sale.js
-│   │   ├── peripheral.js
-│   │   ├── interface.js
-│   │   ├── price.js
-│   │   └── setting.js
-│   ├── routes/                     # API endpoints
-│   │   ├── auth.js                 # Authentication
-│   │   ├── admin.js                # Admin endpoints (requireAdmin)
-│   │   ├── pos.js                  # POS/Kiosk endpoints (requireKiosk/public)
-│   │   ├── gateways.js             # Payment gateway endpoints
-│   │   └── middleware.js           # Hardware control endpoints
-│   ├── middleware/
-│   │   └── auth.js                 # JWT + API key authentication
-│   └── services/
-│       ├── coinMachine.js          # Main coordinator (legacy local, now remote)
-│       ├── middleware.js           # Hardware abstraction layer
-│       └── client.js               # Client state management
-└── .env                            # Server configuration
+pos-client/
+├── electron/
+│   ├── main.cjs                    # Main process orchestrator
+│   ├── preload.cjs                 # Context bridge (IPC API)
+│   ├── database.cjs                # SQLite DB init, migrations, CRUD
+│   ├── hardware-agent.cjs          # Embedded hardware agent
+│   ├── pos-engine.cjs              # Local business logic
+│   ├── sync-engine.cjs             # Background cloud sync
+│   └── ipc-handlers.cjs            # IPC handler registrations
+├── config.json                     # Hardware peripheral config
+├── agent.js                        # Legacy standalone agent (deprecated)
+├── package.json
+└── data/                           # Auto-created at runtime
+    └── washbubbles.db              # SQLite database
 ```
 
-### Hardware Agent (Local POS)
-
-```
-backend/
-├── src/
-│   ├── hardwareAgent.js            # Hardware agent class
-│   └── agentServer.js              # Entry point for local execution
-└── .env.agent                      # Local agent configuration
-```
-
-### Frontend (POS Client)
+### Frontend (React)
 
 ```
 src/
 ├── services/
-│   ├── api.js                      # API client
-│   └── websocket.js                # WebSocket client
+│   ├── local-api.js                # Offline-first API (IPC when Electron)
+│   ├── api.js                      # Remote HTTP API (fallback/admin)
+│   └── websocket.js                # WebSocket client (admin dashboard)
 ├── pages/
 │   ├── Pos.jsx                     # POS interface
 │   └── Admin*.jsx                  # Admin dashboard pages
 └── components/
-    ├── MachineCard.jsx             # Machine display card
     └── ...
 ```
 
-## Setup Instructions
+### Backend (Cloud Server)
 
-### Remote Server Setup
-
-1. Install dependencies:
-```bash
-cd backend
-npm install
+```
+backend/
+├── src/
+│   ├── index.js                    # Server entry point
+│   ├── routes/
+│   │   ├── sync.js                 # NEW: Sync API endpoints
+│   │   ├── auth.js                 # Authentication
+│   │   ├── admin.js                # Admin endpoints
+│   │   ├── pos.js                  # POS/Kiosk endpoints
+│   │   ├── gateways.js             # Payment gateways
+│   │   └── middleware.js           # Hardware control
+│   ├── models/                     # MongoDB schemas
+│   └── services/                   # Business logic
+└── .env
 ```
 
-2. Configure `.env`:
-```bash
-MONGODB_URL=mongodb://localhost:27017/washstore
-JWT_SECRET=your-secret-key
-PORT=3000
-ENABLE_COIN_MACHINE=false  # Disable local hardware on server
-```
+## Sync Strategy
 
-3. Start server:
-```bash
-npm start
-```
+### Outbound (POS → Server)
 
-### Local POS Machine Setup
+| Data | Priority | Interval | Rule |
+|------|----------|----------|------|
+| Sales | 1 (highest) | 60s | Local always wins |
+| Card balance | 2 | 60s | Delta-based merge |
+| Machine status | 3 | 30s | POS wins for runtime |
 
-#### 1. Install Hardware Agent
+### Inbound (Server → POS)
 
-1. Copy the backend folder to POS machine
-2. Configure `backend/.env.agent`:
-```bash
-HARDWARE_SERVER_URL=ws://YOUR-SERVER-IP:3000/hardware-agent
-HARDWARE_AGENT_API_KEY=your-kiosk-api-key
-```
-
-3. Edit `backend/src/agentServer.js` to configure COM ports:
-```javascript
-peripherals: {
-  'COM1': { type: 'coin_acceptor', baudRate: 9600, address: 2 },
-  'COM2': { type: 'bill_acceptor', baudRate: 9600, address: 40 },
-  'COM3': { type: 'interface', baudRate: 9600, interfaceId: 'xxx' },
-  // ... etc
-}
-```
-
-4. Start hardware agent:
-```bash
-start-hardware-agent.bat
-```
-
-#### 2. Install Electron POS Client
-
-1. Configure `.env.production`:
-```bash
-VITE_API_BASE=http://YOUR-SERVER-IP:3000/api
-```
-
-2. Build Electron app:
-```bash
-npm run build
-```
-
-3. Start POS:
-```bash
-start-store-kiosk.bat http://YOUR-SERVER-IP:3000
-```
+| Data | Interval | Rule |
+|------|----------|------|
+| Prices | 10 min | Server always wins |
+| Settings | 10 min | Server always wins |
+| Machine config | 10 min | Server wins for config |
+| Cards | 5 min | Server provides authoritative balance |
+| Interfaces | 30 min | Server wins |
+| Peripherals | 30 min | Server wins |
 
 ## Authentication
 
 ### Admin (JWT Token)
 - Used by: Admin dashboard
 - Header: `Authorization: Bearer <token>`
-- Required for: Admin routes (`/api/admin/*`)
 
 ### Kiosk (API Key)
-- Used by: POS client, Hardware agent
+- Used by: POS client sync engine
 - Header: `Authorization: ApiKey <key>`
-- Required for: Kiosk routes (`/api/pos/*` with requireKiosk)
-
-### Public
-- Used by: Price lookups, machine status
-- No authentication required
-- Routes: `/api/pos/prices/lookup`, `/api/machine-status`
 
 ## Hardware Protocols
 
 ### ccTalk (Coin/Bill/Hopper)
-- Packet format: `[DEST][LEN][SRC][CMD][DATA...][CHECKSUM]`
+- Packet: `[DEST][LEN][SRC][CMD][DATA...][CHECKSUM]`
 - Baud rate: 9600
-- Checksum: `(256 - (sum % 256)) % 256`
 
 ### KITSEC (Interface/Machines)
-- Packet format: `STX(0x02) [CMD][DATA...][CHECKSUM] ETX(0x03)`
-- Baud rate: 9600
+- Packet: `STX(0x02) [CMD][DATA...][CHECKSUM] ETX(0x03)`
 - Commands: 0x41 (activate), 0x53 (status), 0x45 (error)
 
 ### ESC/POS (Printer)
-- Text-based protocol
-- Commands: ESC @ (init), ESC E (bold), GS V (cut), etc.
+- Standard ESC/POS text protocol
 - Baud rate: 9600
 
 ### RFID Reader
-- Line-based text protocol
-- Delimiter: `\r\n`
+- Line-based: `\r\n` delimited card codes
 - Baud rate: 9600
 
-## WebSocket Messages
+## Setup Instructions
 
-### Client → Backend (Admin/POS)
+### POS Machine Setup
+
+1. Install dependencies:
+```bash
+cd pos-client
+npm install
+```
+
+2. Rebuild native modules for Electron:
+```bash
+npx electron-rebuild -f -w better-sqlite3
+```
+
+3. Configure `config.json` with COM ports:
 ```json
 {
-  "type": "machine-status",
-  "payload": { /* machine data */ }
+  "peripherals": {
+    "coin_acceptor": { "enabled": true, "port": "COM1" },
+    "interface": { "enabled": true, "port": "COM3" }
+  }
 }
 ```
 
-### Hardware Agent → Backend
-```json
-{
-  "type": "peripheral:credit",
-  "payload": { "port": "COM1", "type": "coin_acceptor", "amount": 0.50 }
-}
-
-{
-  "type": "interface:status",
-  "payload": { "interfaceId": "xxx", "door": true, "occupied": false, "fault": false }
-}
-
-{
-  "type": "rfid:card_detected",
-  "payload": { "port": "COM7", "cardCode": "1234567890" }
-}
+4. Set environment variables (or edit `start-pos.bat`):
+```
+ELECTRON_API_BASE=http://YOUR-SERVER:3000/api
+ELECTRON_KIOSK_API_KEY=your-kiosk-key
+ELECTRON_TENANT_ID=your-tenant-id
 ```
 
-### Backend → Hardware Agent
-```json
-{
-  "type": "machine:activate",
-  "payload": { "interfaceId": "xxx", "port": 1, "channel": 2, "impulses": 5, "tOn": 5, "tOff": 1 }
-}
-
-{
-  "type": "hopper:dispense",
-  "payload": { "port": "COM4", "coins": [{ "denomination": 0.50, "quantity": 2 }] }
-}
-
-{
-  "type": "printer:print",
-  "payload": { "port": "COM6", "lines": [{ "text": "Receipt", "align": "center", "bold": true }] }
-}
+5. Start POS:
+```bash
+start-pos.bat
 ```
 
-## Troubleshooting
+On first launch, the sync engine downloads all data from the server. After that, the POS runs fully offline.
 
-### Hardware Agent Won't Connect
-1. Check `HARDWARE_SERVER_URL` in `.env.agent`
-2. Verify API key exists in database (KIOSK role)
-3. Check firewall allows WebSocket connection
-4. Verify server is running
+### Cloud Server Setup
 
-### Peripherals Not Responding
-1. Check COM port configuration in `agentServer.js`
-2. Verify COM ports in Windows Device Manager
-3. Check baud rate matches hardware
-4. Test with serial port monitor tool
+1. Install & configure:
+```bash
+cd backend
+npm install
+# Configure .env with MONGODB_URL, JWT_SECRET, PORT
+```
 
-### 401 Errors in POS
-1. Price lookups should use `/api/pos/prices/lookup` (public)
-2. Machine operations need kiosk API key
-3. Check `Authorization: ApiKey <key>` header is set
+2. Start server:
+```bash
+npm start
+```
 
-## Migration from Old System
+## Key Design Decisions
 
-### Before (Monolithic Local)
-- Everything ran on local POS machine
-- Serial ports connected directly
-- TCP controller at 192.168.2.201:16852
-- No remote management
-
-### After (Distributed Cloud)
-- Backend on remote server
-- Hardware agent bridges serial ports
-- WebSocket communication
-- Centralized management
-- Multiple POS locations supported
-
-## Security Considerations
-
-1. **API Keys**: Store kiosk API keys securely in `.env.agent`
-2. **WebSocket**: Use WSS (TLS) in production
-3. **Firewall**: Restrict WebSocket port to known POS IPs
-4. **Authentication**: Hardware agents must authenticate with valid KIOSK user
-5. **Command Validation**: Backend validates all hardware commands before forwarding
+1. **SQLite over IndexedDB** — Runs in main process, synchronous, ACID, survives crashes
+2. **Embedded hardware agent** — One process, no WebSocket hop for local hardware
+3. **Delta-based card sync** — Multiple POS machines can charge the same card
+4. **Sales are source of truth at POS** — The machine that took the money owns the record
