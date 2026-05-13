@@ -14,6 +14,9 @@ import fs from 'fs'
 import path from 'path'
 import multer from 'multer'
 import sharp from 'sharp'
+import Card from '../models/card.js'
+import SyncCommand from '../models/syncCommand.js'
+import DayClose from '../models/dayClose.js'
 import { broadcastMachines, broadcastMachine, listClients, disconnectClient } from '../wsServer.js'
 
 const router = express.Router()
@@ -248,6 +251,13 @@ router.put('/cards/:id', async (req, res) => {
   const c = await CardT.findByIdAndUpdate(req.params.id, { balance: balance == null ? undefined : Number(balance), metadata }, { new: true })
   if (!c) return res.status(404).json({ error: 'Card not found' })
   res.json(c)
+})
+
+// GET /admin/cards/:id/history — Full audit trail for a card
+router.get('/cards/:id/history', async (req, res) => {
+  const SaleT = withTenant(Sale, req)
+  const history = await SaleT.find({ cardId: req.params.id }).sort({ createdAt: -1 }).lean()
+  res.json(history)
 })
 
 router.post('/transactions', async (req, res) => {
@@ -797,6 +807,109 @@ router.post('/day-close', async (req, res) => {
   })
 
   res.json(dc)
+})
+
+// =====================
+// 📊 ANALYTICS & BUSINESS INTEL
+// =====================
+
+/**
+ * GET /admin/analytics/revenue
+ * Returns revenue data aggregated by day for the last 30 days
+ */
+router.get('/analytics/revenue', async (req, res) => {
+  const SaleT = withTenant(Sale, req)
+  const thirtyDaysAgo = new Date()
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
+  const stats = await Sale.aggregate([
+    { $match: { 
+        tenantId: new mongoose.Types.ObjectId(req.tenantId), 
+        createdAt: { $gte: thirtyDaysAgo } 
+    } },
+    { $group: {
+        _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+        total: { $sum: "$amount" },
+        count: { $sum: 1 },
+        cash: { $sum: { $cond: [{ $eq: ["$method", "cash"] }, "$amount", 0] } },
+        card: { $sum: { $cond: [{ $eq: ["$method", "card"] }, "$amount", 0] } }
+    } },
+    { $sort: { _id: 1 } }
+  ])
+  res.json(stats)
+})
+
+/**
+ * GET /admin/analytics/machines
+ * Returns usage stats per machine
+ */
+router.get('/analytics/machines', async (req, res) => {
+  const SaleT = withTenant(Sale, req)
+  const stats = await Sale.aggregate([
+    { $match: { tenantId: new mongoose.Types.ObjectId(req.tenantId), machineId: { $ne: null } } },
+    { $group: {
+        _id: "$machineId",
+        totalRevenue: { $sum: "$amount" },
+        usageCount: { $sum: 1 }
+    } },
+    { $lookup: {
+        from: 'machines',
+        localField: '_id',
+        foreignField: '_id',
+        as: 'machineInfo'
+    } },
+    { $unwind: "$machineInfo" },
+    { $sort: { totalRevenue: -1 } }
+  ])
+  res.json(stats)
+})
+
+// =====================
+// 🛰️ KIOSK FLEET & REMOTE OPS
+// =====================
+
+/**
+ * GET /admin/kiosks/health
+ * Returns status of all registered kiosks (online, last sync, errors)
+ */
+router.get('/kiosks/health', async (req, res) => {
+  const UserT = withTenant(User, req)
+  const kiosks = await UserT.find({ role: 'KIOSK' }).select('username apiKey lastSeen').lean()
+  const wsClients = listClients()
+
+  const health = kiosks.map(k => {
+    const ws = wsClients.find(c => c.username === k.username)
+    return {
+      id: k._id,
+      name: k.username,
+      online: !!ws,
+      lastSeen: k.lastSeen || null,
+      ip: ws ? ws.remote : null,
+      status: ws ? 'connected' : 'offline'
+    }
+  })
+  res.json(health)
+})
+
+/**
+ * POST /admin/kiosks/:id/command
+ * Sends a remote maintenance command to a kiosk
+ */
+router.post('/kiosks/:id/command', async (req, res) => {
+  const { type, payload } = req.body
+  if (!['reboot', 'update_config', 'upload_logs', 'screenshot', 'clear_queue'].includes(type)) {
+    return res.status(400).json({ error: 'Invalid command type' })
+  }
+
+  const SyncCommandT = withTenant(SyncCommand, req)
+  const cmd = await SyncCommandT.create({
+    kioskId: req.params.id,
+    type,
+    payload: payload || {},
+    status: 'pending'
+  })
+
+  res.json({ success: true, commandId: cmd._id })
 })
 
 export default router

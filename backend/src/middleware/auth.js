@@ -44,6 +44,9 @@ export async function requireAuth(req, res, next) {
   // Security: Crucial for withTenant() to work!
   req.tenantId = resolved.userModel.tenantId
   
+  // Update lastSeen asynchronously (don't block the request)
+  User.findByIdAndUpdate(resolved.userModel._id, { lastSeen: new Date() }).catch(() => {})
+
   next()
 }
 

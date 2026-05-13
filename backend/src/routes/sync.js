@@ -8,11 +8,11 @@ import { withTenant } from '../services/tenant.js'
 
 import Sale from '../models/sale.js'
 import Card from '../models/card.js'
-import Machine from '../models/machine.js'
 import Price from '../models/price.js'
 import Setting from '../models/setting.js'
 import Interface from '../models/interface.js'
 import Peripheral from '../models/peripheral.js'
+import SyncCommand from '../models/syncCommand.js'
 
 const router = express.Router()
 
@@ -134,6 +134,70 @@ router.post('/push/machine', async (req, res) => {
   } catch (err) {
     console.error('[Sync] Push machine error:', err)
     res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+// ─── Remote Commands: POS Pulls from Server ───
+
+/**
+ * GET /api/sync/commands
+ * POS pulls pending remote maintenance commands
+ */
+router.get('/commands', async (req, res) => {
+  try {
+    const SyncCommandT = withTenant(SyncCommand, req)
+    // Only fetch commands for the authenticated kiosk user
+    const commands = await SyncCommandT.find({ 
+      kioskId: req.user._id, 
+      status: 'pending' 
+    }).lean()
+    
+    // Mark as "executing" so they aren't pulled twice
+    if (commands.length > 0) {
+      const ids = commands.map(c => c._id)
+      await SyncCommand.updateMany({ _id: { $in: ids } }, { status: 'executing' })
+    }
+
+    res.json(commands.map(c => ({ id: c._id, type: c.type, payload: c.payload })))
+  } catch (err) {
+    console.error('[Sync] Pull commands error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+/**
+ * POST /api/sync/commands/:id/done
+ * POS reports command success
+ */
+router.post('/commands/:id/done', async (req, res) => {
+  try {
+    const SyncCommandT = withTenant(SyncCommand, req)
+    await SyncCommandT.findByIdAndUpdate(req.params.id, { 
+      status: 'done', 
+      executedAt: new Date() 
+    })
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+/**
+ * POST /api/sync/commands/:id/fail
+ * POS reports command failure
+ */
+router.post('/commands/:id/fail', async (req, res) => {
+  try {
+    const { error } = req.body
+    const SyncCommandT = withTenant(SyncCommand, req)
+    await SyncCommandT.findByIdAndUpdate(req.params.id, { 
+      status: 'failed', 
+      error,
+      executedAt: new Date() 
+    })
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
   }
 })
 
