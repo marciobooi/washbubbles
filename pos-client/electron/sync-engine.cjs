@@ -100,6 +100,9 @@ class SyncEngine extends EventEmitter {
       case 'reboot':
         setTimeout(() => app.relaunch() && app.exit(0), 5000)
         break
+      case 'sync_now':
+        await this.forceSync()
+        break
       default:
         throw new Error('Unknown command type: ' + cmd.type)
     }

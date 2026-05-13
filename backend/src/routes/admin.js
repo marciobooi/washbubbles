@@ -897,7 +897,7 @@ router.get('/kiosks/health', async (req, res) => {
  */
 router.post('/kiosks/:id/command', async (req, res) => {
   const { type, payload } = req.body
-  if (!['reboot', 'update_config', 'upload_logs', 'screenshot', 'clear_queue'].includes(type)) {
+  if (!['reboot', 'update_config', 'upload_logs', 'screenshot', 'clear_queue', 'sync_now'].includes(type)) {
     return res.status(400).json({ error: 'Invalid command type' })
   }
 
