@@ -479,8 +479,65 @@ router.post('/tenants/:id/users', requireSuperAdmin, async (req, res) => {
   const u = await User.findById(userId)
   if (!u) return res.status(404).json({ error: 'User not found' })
   const r = role || 'MEMBER'
-  const mt = await TenantUser.updateOne({ tenantId, userId }, { $setOnInsert: { tenantId, userId, role: r } }, { upsert: true })
   res.json({ success: true })
+})
+
+// =====================
+// 🪄 SETUP WIZARD (New Tenant + Admin + Kiosk)
+// =====================
+
+/**
+ * POST /admin/setup/tenant-complete
+ * Orchestrates the creation of a brand new environment in one go.
+ */
+router.post('/setup/tenant-complete', requireSuperAdmin, async (req, res) => {
+  const { tenant, admin, kiosk } = req.body
+
+  if (!tenant?.name || !tenant?.slug) return res.status(400).json({ error: 'Missing tenant info' })
+  if (!admin?.username || !admin?.password) return res.status(400).json({ error: 'Missing admin info' })
+  if (!kiosk?.username) return res.status(400).json({ error: 'Missing kiosk username' })
+
+  try {
+    // 1. Create Tenant
+    const existing = await Tenant.findOne({ slug: tenant.slug })
+    if (existing) return res.status(400).json({ error: 'Tenant slug already exists' })
+    const newTenant = await Tenant.create({ name: tenant.name, slug: tenant.slug })
+
+    // 2. Create Admin User
+    const adminHash = await bcrypt.hash(admin.password, 10)
+    const adminUser = await User.create({ 
+      username: admin.username, 
+      password: adminHash, 
+      role: 'ADMIN',
+      tenantId: newTenant._id 
+    })
+
+    // 3. Create Kiosk User (with API Key)
+    const kioskApiKey = crypto.randomBytes(24).toString('hex')
+    const kioskUser = await User.create({
+      username: kiosk.username,
+      password: await bcrypt.hash(crypto.randomBytes(16).toString('hex'), 10),
+      role: 'KIOSK',
+      apiKey: kioskApiKey,
+      tenantId: newTenant._id
+    })
+
+    // 4. Create Tenant Membership
+    const TenantUser = (await import('../models/tenantUser.js')).default
+    await TenantUser.create({ tenantId: newTenant._id, userId: adminUser._id, role: 'ADMIN' })
+    await TenantUser.create({ tenantId: newTenant._id, userId: kioskUser._id, role: 'KIOSK' })
+
+    res.json({
+      success: true,
+      tenant: newTenant,
+      admin: { id: adminUser._id, username: adminUser.username },
+      kiosk: { id: kioskUser._id, username: kioskUser.username, apiKey: kioskApiKey }
+    })
+
+  } catch (err) {
+    console.error('[Setup] Wizard failed:', err)
+    res.status(500).json({ error: 'Setup wizard failed: ' + err.message })
+  }
 })
 
 // Update interface

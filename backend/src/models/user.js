@@ -12,6 +12,7 @@ const userSchema = new Schema({
   apiKey: { type: String, default: null },
   resetPasswordToken: { type: String, default: null },
   resetPasswordExpires: { type: Date, default: null },
+  lastSeen: { type: Date, default: null },
   createdAt: { type: Date, default: Date.now }
 })
 
