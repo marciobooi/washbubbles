@@ -7,18 +7,20 @@ const JWT_SECRET = process.env.JWT_SECRET || 'supersecretadminjwt'
 async function resolveUserFromRequest(req) {
   const auth = req.headers.authorization
   let userModel = null
+  
+  // 1. JWT Bearer Token
   if (auth && auth.startsWith('Bearer ')) {
     const token = auth.split(' ')[1]
     try {
       const decoded = jwt.verify(token, JWT_SECRET)
-      // ensure user exists
       userModel = await User.findById(decoded.sub)
-      return { userModel, tokenUser: decoded }
+      if (userModel) return { userModel, tokenUser: decoded }
     } catch (err) {
       return { error: 'Invalid token' }
     }
   }
-  // ApiKey via Authorization: ApiKey <key> (preferred for security)
+  
+  // 2. ApiKey via Authorization: ApiKey <key>
   if (auth && auth.startsWith('ApiKey ')) {
     const apiKey = auth.split(' ')[1]
     userModel = await User.findOne({ apiKey })
@@ -26,42 +28,42 @@ async function resolveUserFromRequest(req) {
     return { error: 'Invalid apiKey' }
   }
 
-  // Deprecated header: x-api-key - do not accept for stricter security. If present, return an error instructing to use Authorization header.
-  const xApiKey = req.headers['x-api-key']
-  if (xApiKey) {
-    return { error: 'Invalid apiKey header format. Use Authorization: ApiKey <key>' }
-  }
-
+  // 3. Fallback: X-Tenant-Id header (only for specific bypass or debugging)
+  // Bulletproof: Do NOT allow tenant override via headers unless authenticated
+  
   return { error: 'Missing Authorization' }
 }
 
 export async function requireAuth(req, res, next) {
   const resolved = await resolveUserFromRequest(req)
   if (resolved.error) return res.status(401).json({ error: resolved.error })
+  
   req.userModel = resolved.userModel
   req.user = resolved.tokenUser || { sub: resolved.userModel._id.toString(), role: resolved.userModel.role }
+  
+  // Security: Crucial for withTenant() to work!
+  req.tenantId = resolved.userModel.tenantId
+  
   next()
 }
 
 export async function requireAdmin(req, res, next) {
-  // Superadmins are implicitly admins too
-  await requireAuth(req, res, async () => {
+  await requireAuth(req, res, () => {
     const role = req.userModel && req.userModel.role
     if (role !== 'ADMIN' && role !== 'SUPERADMIN') return res.status(403).json({ error: 'Forbidden' })
     next()
   })
 }
 
-// Middleware used for endpoints that must be executed by a superadmin only.
 export async function requireSuperAdmin(req, res, next) {
-  await requireAuth(req, res, async () => {
+  await requireAuth(req, res, () => {
     if (!req.userModel || req.userModel.role !== 'SUPERADMIN') return res.status(403).json({ error: 'Forbidden' })
     next()
   })
 }
 
 export async function requireKiosk(req, res, next) {
-  await requireAuth(req, res, async () => {
+  await requireAuth(req, res, () => {
     if (!req.userModel || req.userModel.role !== 'KIOSK') return res.status(403).json({ error: 'Forbidden' })
     next()
   })

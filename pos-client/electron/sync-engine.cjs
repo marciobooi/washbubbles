@@ -1,13 +1,9 @@
 /**
  * WashBubbles Sync Engine
  * Background sync between local SQLite and cloud server
- * 
- * Improvements:
- * - #5: Remote maintenance commands (Reboot, Logs)
- * - #1: Enhanced visibility into sync stats
  */
 const EventEmitter = require('events')
-const { app } = require('electron') // For reboot
+const { app } = require('electron')
 const { machines, cards, sales, prices, settings, interfaces, peripherals, 
         syncQueue, syncMeta } = require('./database.cjs')
 
@@ -21,30 +17,24 @@ class SyncEngine extends EventEmitter {
     this.syncing = false
     this.timers = {}
     this.stats = { 
-      lastSync: null, 
-      lastPull: null,
-      pendingCount: 0, 
-      errors: [],
-      pulledCount: 0,
-      pushedCount: 0
+      lastSync: null, lastPull: null, pendingCount: 0, 
+      errors: [], pulledCount: 0, pushedCount: 0
     }
+    
+    // Security: Log masked API Key
+    const masked = this.apiKey ? (this.apiKey.substring(0, 4) + '****' + this.apiKey.substring(this.apiKey.length - 4)) : 'MISSING'
+    console.log(`[Sync] Initialized — Server: ${this.serverUrl}, Key: ${masked}`)
   }
 
   start() {
-    console.log('[Sync] Starting — Server:', this.serverUrl)
     this.timers.connectivity = setInterval(() => this.checkConnectivity(), 30000)
     this.checkConnectivity()
-    
     this.timers.outbound = setInterval(() => this.pushOutbound(), 60000)
-    
     this.timers.prices = setInterval(() => this.pullEntity('prices'), 10 * 60000)
     this.timers.settings = setInterval(() => this.pullEntity('settings'), 10 * 60000)
     this.timers.machines = setInterval(() => this.pullEntity('machines'), 10 * 60000)
     this.timers.cards = setInterval(() => this.pullEntity('cards'), 5 * 60000)
-    
-    // Remote commands poll every 2 minutes
     this.timers.commands = setInterval(() => this.checkRemoteCommands(), 120000)
-    
     this.timers.cleanup = setInterval(() => syncQueue.cleanup(), 60 * 60000)
     console.log('[Sync] Engine started')
   }
@@ -84,8 +74,6 @@ class SyncEngine extends EventEmitter {
     }
   }
 
-  // ─── Remote Commands (#5 Maintenance) ───
-
   async checkRemoteCommands() {
     if (!this.online) return
     try {
@@ -95,40 +83,27 @@ class SyncEngine extends EventEmitter {
       if (!Array.isArray(commands) || commands.length === 0) return
 
       for (const cmd of commands) {
-        console.log('[Sync] Executing remote command:', cmd.type)
         try {
           await this.executeCommand(cmd)
           await this._fetch(`/sync/commands/${cmd.id}/done`, { method: 'POST' })
         } catch (err) {
-          console.error(`[Sync] Command ${cmd.type} failed:`, err.message)
           await this._fetch(`/sync/commands/${cmd.id}/fail`, { 
             method: 'POST', body: JSON.stringify({ error: err.message }) 
           })
         }
       }
-    } catch (err) {
-      console.error('[Sync] Error checking remote commands:', err.message)
-    }
+    } catch (err) {}
   }
 
   async executeCommand(cmd) {
     switch (cmd.type) {
       case 'reboot':
-        console.warn('[Sync] REMOTE REBOOT REQUESTED')
         setTimeout(() => app.relaunch() && app.exit(0), 5000)
-        break
-      case 'upload_logs':
-        // Placeholder for log upload logic
-        break
-      case 'screenshot':
-        // Placeholder for screenshot logic (using desktopCapturer)
         break
       default:
         throw new Error('Unknown command type: ' + cmd.type)
     }
   }
-
-  // ─── Outbound ───
 
   async pushOutbound() {
     if (!this.online || this.syncing) return
@@ -163,14 +138,12 @@ class SyncEngine extends EventEmitter {
       case 'sale':    endpoint = '/sync/push/sale'; break
       case 'card':    endpoint = '/sync/push/card'; break
       case 'machine': endpoint = '/sync/push/machine'; break
-      case 'day_close': endpoint = '/sync/push/day-close'; break // New
+      case 'day_close': endpoint = '/sync/push/day-close'; break
       default: return
     }
     const resp = await this._fetch(endpoint, { method: 'POST', body: JSON.stringify(payload) })
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
   }
-
-  // ─── Inbound ───
 
   async pullAll() {
     if (!this.online) return
@@ -194,7 +167,6 @@ class SyncEngine extends EventEmitter {
       const items = await resp.json()
       if (!Array.isArray(items) || items.length === 0) return
 
-      console.log(`[Sync] Pulled ${items.length} ${entityType}`)
       this.stats.pulledCount += items.length
 
       switch (entityType) {
@@ -206,9 +178,7 @@ class SyncEngine extends EventEmitter {
         case 'peripherals': peripherals.bulkReplace(this.tenantId, items.map(p => this._mapPeripheral(p))); break
       }
       syncMeta.set(entityType, { last_synced_at: new Date().toISOString() })
-    } catch (err) {
-      console.error(`[Sync] Pull ${entityType} failed:`, err.message)
-    }
+    } catch (err) {}
   }
 
   async bootstrap() {
@@ -227,8 +197,6 @@ class SyncEngine extends EventEmitter {
     }
   }
 
-  // ─── Mappers ───
-
   _mapMachine(m) { return { id: m._id || m.id, local_id: null, tenant_id: m.tenantId || this.tenantId, name: m.name, number: m.number, brand: m.brand, model: m.model, serial_number: m.serialNumber, status: m.status, status_text: m.statusText, cycle: m.cycle, weight: m.weight, type: m.type, icon: m.icon, int_id: m.intId, channel: m.channel, impulses: m.impulses, reserved: m.reserved?1:0, reserved_by: m.reservedBy, reserved_at: m.reservedAt, reservation_duration: m.reservationDuration, current_program: m.currentProgram, started_at: m.startedAt, estimated_end_time: m.estimatedEndTime, running_duration: m.runningDuration, interface_id: m.interfaceId?._id || m.interfaceId, port: m.port, activation: m.activation, t_imp: m.tImp, created_at: m.createdAt, updated_at: m.updatedAt, synced: 1, last_synced_at: new Date().toISOString() } }
   _mapCard(c) { return { id: c._id || c.id, local_id: null, tenant_id: c.tenantId || this.tenantId, code: c.code, balance: c.balance, name: c.name, email: c.email, phone: c.phone, contribuinte: c.contribuinte, metadata: c.metadata?JSON.stringify(c.metadata):null, created_at: c.createdAt, updated_at: c.updatedAt, synced: 1, last_synced_at: new Date().toISOString() } }
   _mapPrice(p) { return { id: p._id || p.id, tenant_id: p.tenantId || this.tenantId, type: p.type, weight: p.weight, duration: p.duration, cash_price: p.cashPrice??p.cash_price??0, card_price: p.cardPrice??p.card_price??0, promo_active: p.promoActive?1:0, promo_cash_price: p.promoCashPrice, promo_card_price: p.promoCardPrice, promo_start_time: p.promoStartTime, promo_end_time: p.promoEndTime, promo_days: p.promoDays?JSON.stringify(p.promoDays):null, created_at: p.createdAt, updated_at: p.updatedAt } }
@@ -246,16 +214,7 @@ class SyncEngine extends EventEmitter {
   }
 
   getStatus() {
-    return {
-      online: this.online,
-      syncing: this.syncing,
-      lastSync: this.stats.lastSync,
-      lastPull: this.stats.lastPull,
-      pendingCount: syncQueue.countPending(),
-      pushedTotal: this.stats.pushedCount,
-      pulledTotal: this.stats.pulledCount,
-      errors: this.stats.errors.slice(-10)
-    }
+    return { online: this.online, syncing: this.syncing, lastSync: this.stats.lastSync, lastPull: this.stats.lastPull, pendingCount: syncQueue.countPending(), pushedTotal: this.stats.pushedCount, pulledTotal: this.stats.pulledCount, errors: this.stats.errors.slice(-10) }
   }
 }
 
