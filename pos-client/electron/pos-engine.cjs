@@ -1,10 +1,17 @@
 /**
  * WashBubbles POS Engine
- * Local business logic coordinator — processes payments, activates machines,
- * handles cards, all 100% offline using local SQLite
+ * Local business logic — payments, cards, machine activation, all offline
+ *
+ * Fixes applied:
+ * - #3:  All money math uses roundMoney() to prevent floating-point drift
+ * - #4:  processSale wrapped in SQLite transaction for atomicity
+ * - #5:  topUpCard uses returned sale ID for sync queue
+ * - #6:  Card balance validated >= 0 before deduction
+ * - #15: removeCard auto-charge sends delta instead of absolute balance
  */
 const EventEmitter = require('events')
-const { machines, cards, sales, prices, settings, interfaces, syncQueue, session, generateId } = require('./database.cjs')
+const { machines, cards, sales, prices, settings, interfaces, syncQueue, session,
+        generateId, roundMoney, runTransaction, flushSave } = require('./database.cjs')
 
 class PosEngine extends EventEmitter {
   constructor(hardwareAgent, tenantId) {
@@ -12,29 +19,22 @@ class PosEngine extends EventEmitter {
     this.hw = hardwareAgent
     this.tenantId = tenantId
     this.sessionState = {
-      cashBalance: 0,
-      cardCode: null,
-      cardBalance: 0,
-      hasCard: false,
-      bonus: 0,
-      credits: 0
+      cashBalance: 0, cardCode: null, cardBalance: 0,
+      hasCard: false, bonus: 0, credits: 0
     }
     this.settings = {}
   }
 
-  /** Initialize POS engine — load settings, set up hardware event handlers */
   init() {
     this.loadSettings()
     this.setupHardwareListeners()
-    // Reset session
     session.reset()
     console.log('[POS] Engine initialized for tenant:', this.tenantId)
   }
 
-  /** Load settings from local DB */
   loadSettings() {
-    const keys = ['coinEqTable', 'billEqTable', 'rechargeCoinBonus', 'rechargeBillBonus', 'autoCharge',
-                  'loyaltyCard.cost', 'loyaltyCard.credit']
+    const keys = ['coinEqTable', 'billEqTable', 'rechargeCoinBonus', 'rechargeBillBonus',
+                  'autoCharge', 'loyaltyCard.cost', 'loyaltyCard.credit']
     this.settings = {}
     for (const key of keys) {
       const s = settings.get(this.tenantId, key)
@@ -45,40 +45,26 @@ class PosEngine extends EventEmitter {
     }
   }
 
-  /** Wire up hardware agent events to POS logic */
   setupHardwareListeners() {
     if (!this.hw) return
-
-    // Coin/bill credit
     this.hw.on('credit', (data) => this.handleCredit(data))
-
-    // RFID card detected
     this.hw.on('rfid:card_detected', (data) => this.handleCardDetected(data))
-
-    // Machine activation result
     this.hw.on('machine:activation_sent', (data) => this.emit('machine:activated', data))
     this.hw.on('machine:activation_failed', (data) => this.emit('machine:activation_failed', data))
-
-    // Hopper events
     this.hw.on('hopper:dispensed', (data) => this.emit('hopper:dispensed', data))
     this.hw.on('hopper:empty', (data) => this.emit('hopper:empty', data))
     this.hw.on('hopper:fault', (data) => this.emit('hopper:fault', data))
-
-    // Rejection/fraud events
     this.hw.on('rejected', (data) => this.emit('credit:rejected', data))
     this.hw.on('fraud', (data) => this.emit('credit:fraud', data))
-
-    // Interface status
-    this.hw.on('interface:status', (data) => this.handleInterfaceStatus(data))
+    this.hw.on('interface:status', (data) => this.emit('interface:status', data))
   }
 
-  // ─── Credit Handling (Coins/Bills) ───
+  // ─── Credit Handling ───
 
   handleCredit(data) {
     const { type, amount } = data
     let mappedAmount = amount
 
-    // Apply equivalence table
     const eqTable = type === 'coin_acceptor'
       ? (this.settings.coinEqTable || [])
       : (this.settings.billEqTable || [])
@@ -87,18 +73,17 @@ class PosEngine extends EventEmitter {
       if (mapping) mappedAmount = Number(mapping.value)
     }
 
-    // Calculate bonus
     let bonus = 0
     const bonusPercent = type === 'coin_acceptor'
       ? (this.settings.rechargeCoinBonus || 0)
       : (this.settings.rechargeBillBonus || 0)
     if (bonusPercent > 0) {
-      bonus = (mappedAmount * bonusPercent) / 100
+      bonus = roundMoney((mappedAmount * bonusPercent) / 100) // Fix #3
     }
 
-    // Update session balance
-    this.sessionState.cashBalance += mappedAmount
-    this.sessionState.bonus += bonus
+    // Fix #3: Round all money operations
+    this.sessionState.cashBalance = roundMoney(this.sessionState.cashBalance + mappedAmount)
+    this.sessionState.bonus = roundMoney(this.sessionState.bonus + bonus)
     this.updateCredits()
 
     console.log(`[POS] Credit: €${mappedAmount.toFixed(2)} (${type})${bonus > 0 ? ` + €${bonus.toFixed(2)} bonus` : ''}, Total: €${this.sessionState.credits.toFixed(2)}`)
@@ -111,13 +96,12 @@ class PosEngine extends EventEmitter {
   handleCardDetected(data) {
     const { cardCode } = data
     const card = cards.getByCode(this.tenantId, cardCode)
-
     if (card) {
       this.sessionState.cardCode = cardCode
       this.sessionState.cardBalance = card.balance || 0
       this.sessionState.hasCard = true
       this.updateCredits()
-      console.log(`[POS] Card loaded: ${cardCode}, Balance: €${card.balance.toFixed(2)}`)
+      console.log(`[POS] Card loaded: ${cardCode}, Balance: €${(card.balance || 0).toFixed(2)}`)
       this.emit('card:loaded', { card, session: this.getSession() })
     } else {
       console.warn(`[POS] Unknown card: ${cardCode}`)
@@ -126,18 +110,20 @@ class PosEngine extends EventEmitter {
   }
 
   removeCard() {
-    // Auto-charge logic: if card was present and autoCharge is on, save accumulated cash to card
+    // Fix #15: Auto-charge sends delta, not absolute
     if (this.sessionState.hasCard && this.settings.autoCharge && this.sessionState.cashBalance > 0) {
       const card = cards.getByCode(this.tenantId, this.sessionState.cardCode)
       if (card) {
-        const newBalance = Number(((card.balance || 0) + this.sessionState.cashBalance + this.sessionState.bonus).toFixed(2))
+        const chargeAmount = roundMoney(this.sessionState.cashBalance + this.sessionState.bonus)
+        const newBalance = roundMoney((card.balance || 0) + chargeAmount)
         cards.updateBalance(card.id, newBalance)
-        syncQueue.push('card', card.id, 'update', { id: card.id, code: card.code, balance: newBalance }, 2)
+        // Fix #15: Send delta instead of absolute balance
+        syncQueue.push('card', card.id, 'update',
+          { id: card.id, code: card.code, delta: chargeAmount }, 2)
         this.sessionState.cashBalance = 0
         this.sessionState.bonus = 0
       }
     }
-
     this.sessionState.cardCode = null
     this.sessionState.cardBalance = 0
     this.sessionState.hasCard = false
@@ -146,242 +132,214 @@ class PosEngine extends EventEmitter {
     this.emit('session:updated', this.getSession())
   }
 
-  getCard(code) {
-    return cards.getByCode(this.tenantId, code)
-  }
+  getCard(code) { return cards.getByCode(this.tenantId, code) }
 
   getCardHistory(code) {
     const card = cards.getByCode(this.tenantId, code)
     if (!card) return null
-    const txns = sales.getByCardCode(this.tenantId, code, 30)
-    return { card, transactions: txns }
+    return { card, transactions: sales.getByCardCode(this.tenantId, code, 30) }
   }
 
   topUpCard(code, amount) {
     const card = cards.getByCode(this.tenantId, code)
     if (!card) throw new Error('Card not found')
-    const newBalance = Number(((card.balance || 0) + Number(amount)).toFixed(2))
-    cards.updateBalance(card.id, newBalance)
+    const topUpAmount = roundMoney(Number(amount))
+    const newBalance = roundMoney((card.balance || 0) + topUpAmount)
 
-    // Create sale record
-    const saleData = {
+    // Fix #5: Use returned sale ID for sync queue
+    const saleResult = sales.create({
       tenant_id: this.tenantId,
-      amount: Number(amount),
-      items: JSON.stringify([{ type: 'recharge', amount }]),
+      amount: topUpAmount,
+      items: [{ type: 'recharge', amount: topUpAmount }],
       type: 'recharge',
       method: 'cash',
       card_id: card.id,
       card_code: code,
-      inserted: Number(amount),
-      change_amount: 0,
-      created_at: new Date().toISOString()
-    }
-    sales.create(saleData)
-    syncQueue.push('sale', saleData.local_id || card.id, 'create', saleData, 1)
-    syncQueue.push('card', card.id, 'update', { id: card.id, code, balance: newBalance }, 2)
+      inserted: topUpAmount,
+      change_amount: 0
+    })
 
-    // Update session if this card is loaded
+    cards.updateBalance(card.id, newBalance)
+    syncQueue.push('sale', saleResult.local_id, 'create',
+      { local_id: saleResult.local_id, type: 'recharge', amount: topUpAmount, card_code: code }, 1)
+    syncQueue.push('card', card.id, 'update',
+      { id: card.id, code, delta: topUpAmount }, 2) // Fix #15: delta
+
     if (this.sessionState.cardCode === code) {
       this.sessionState.cardBalance = newBalance
       this.updateCredits()
       this.emit('session:updated', this.getSession())
     }
-
     return { card: { ...card, balance: newBalance }, newBalance }
   }
 
   // ─── Machine Operations ───
 
-  getMachines() {
-    return machines.getAll(this.tenantId)
-  }
-
-  getMachine(id) {
-    return machines.getById(id)
-  }
+  getMachines() { return machines.getAll(this.tenantId) }
+  getMachine(id) { return machines.getById(id) }
 
   getPrice(type, weight) {
     const price = prices.lookup(this.tenantId, type, Number(weight))
     if (!price) return null
 
-    // Check promo pricing
     if (price.promo_active) {
       const now = new Date()
-      const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+      const dayNames = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday']
       const today = dayNames[now.getDay()]
       const promoDays = price.promo_days ? JSON.parse(price.promo_days) : []
-      const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+      const currentTime = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`
 
       if (promoDays.includes(today) &&
           (!price.promo_start_time || currentTime >= price.promo_start_time) &&
           (!price.promo_end_time || currentTime <= price.promo_end_time)) {
-        return {
-          ...price,
+        return { ...price,
           effective_cash_price: price.promo_cash_price ?? price.cash_price,
           effective_card_price: price.promo_card_price ?? price.card_price,
-          is_promo: true
-        }
+          is_promo: true }
       }
     }
-
     return { ...price, effective_cash_price: price.cash_price, effective_card_price: price.card_price, is_promo: false }
   }
 
-  getAllPrices() {
-    return prices.getAll(this.tenantId)
-  }
+  getAllPrices() { return prices.getAll(this.tenantId) }
 
-  /** Process a sale — deduct credits, create record, activate machine */
+  /**
+   * Process a sale — Fix #4: entire operation wrapped in transaction
+   * Fix #3: all money rounded. Fix #6: balance validated >= 0
+   */
   processSale(machineId, amount, method, cardCode, batchId, items) {
     const machine = machines.getById(machineId)
     if (!machine) throw new Error('Machine not found')
     if (machine.status === 'working') throw new Error('Machine already in use')
 
-    const price = Number(amount)
+    const price = roundMoney(Number(amount))
+    const saleId = generateId()
+    let cardSyncData = null
 
-    // Validate payment
-    if (method === 'card' && cardCode) {
-      const card = cards.getByCode(this.tenantId, cardCode)
-      if (!card) throw new Error('Card not found')
-      if ((card.balance || 0) < price) throw new Error('Insufficient card balance')
+    // Fix #4: Wrap entire operation in transaction — all or nothing
+    runTransaction(() => {
+      if (method === 'card' && cardCode) {
+        const card = cards.getByCode(this.tenantId, cardCode)
+        if (!card) throw new Error('Card not found')
+        // Fix #6: Validate balance >= 0 after deduction
+        const newBalance = roundMoney((card.balance || 0) - price)
+        if (newBalance < 0) throw new Error('Insufficient card balance')
+        cards.updateBalance(card.id, newBalance)
 
-      // Deduct from card
-      const newBalance = Number(((card.balance || 0) - price).toFixed(2))
-      cards.updateBalance(card.id, newBalance)
+        if (this.sessionState.cardCode === cardCode) {
+          this.sessionState.cardBalance = newBalance
+        }
+        cardSyncData = { id: card.id, code: cardCode, delta: -price }
+      } else {
+        // Fix #3: Round credit check
+        if (roundMoney(this.sessionState.credits) < price) throw new Error('Insufficient credits')
 
-      // Update session if this card is loaded
-      if (this.sessionState.cardCode === cardCode) {
-        this.sessionState.cardBalance = newBalance
+        if (this.sessionState.hasCard && this.sessionState.cardBalance >= price) {
+          this.sessionState.cardBalance = roundMoney(this.sessionState.cardBalance - price)
+          const card = cards.getByCode(this.tenantId, this.sessionState.cardCode)
+          if (card) {
+            cards.updateBalance(card.id, this.sessionState.cardBalance)
+            cardSyncData = { id: card.id, code: card.code, delta: -price }
+          }
+        } else if (this.sessionState.hasCard && this.sessionState.cardBalance > 0) {
+          const fromCard = this.sessionState.cardBalance
+          const remainder = roundMoney(price - fromCard)
+          if (this.sessionState.cardCode) {
+            const card = cards.getByCode(this.tenantId, this.sessionState.cardCode)
+            if (card) {
+              cards.updateBalance(card.id, 0)
+              cardSyncData = { id: card.id, code: card.code, delta: -fromCard }
+            }
+          }
+          this.sessionState.cardBalance = 0
+          this.sessionState.cashBalance = roundMoney(this.sessionState.cashBalance - remainder)
+        } else {
+          this.sessionState.cashBalance = roundMoney(this.sessionState.cashBalance - price)
+        }
+        // Fix #6: Validate no negative
+        if (this.sessionState.cashBalance < -0.01) throw new Error('Insufficient cash balance')
         this.updateCredits()
       }
 
-      // Queue card sync
-      syncQueue.push('card', card.id, 'update', { id: card.id, code: cardCode, balance: newBalance, delta: -price }, 2)
-    } else {
-      // Cash payment — deduct from session balance
-      if (this.sessionState.credits < price) throw new Error('Insufficient credits')
-      // Deduct from card first if loaded, then cash
-      if (this.sessionState.hasCard && this.sessionState.cardBalance >= price) {
-        this.sessionState.cardBalance -= price
-        const card = cards.getByCode(this.tenantId, this.sessionState.cardCode)
-        if (card) {
-          cards.updateBalance(card.id, this.sessionState.cardBalance)
-          syncQueue.push('card', card.id, 'update', { id: card.id, code: card.code, balance: this.sessionState.cardBalance, delta: -price }, 2)
-        }
-      } else if (this.sessionState.hasCard) {
-        const remainder = price - this.sessionState.cardBalance
-        if (this.sessionState.cardCode) {
-          const card = cards.getByCode(this.tenantId, this.sessionState.cardCode)
-          if (card) {
-            cards.updateBalance(card.id, 0)
-            syncQueue.push('card', card.id, 'update', { id: card.id, code: card.code, balance: 0, delta: -this.sessionState.cardBalance }, 2)
-          }
-        }
-        this.sessionState.cardBalance = 0
-        this.sessionState.cashBalance -= remainder
-      } else {
-        this.sessionState.cashBalance -= price
-      }
-      this.updateCredits()
-    }
+      // Create sale inside transaction
+      sales.create({
+        id: saleId, local_id: saleId, tenant_id: this.tenantId,
+        machine_id: machineId, amount: price,
+        items: items || [{ type: machine.type, weight: machine.weight, price }],
+        type: 'payment', method: method || (cardCode ? 'card' : 'cash'),
+        batch_id: batchId || null, card_code: cardCode || null,
+        inserted: method === 'cash' ? roundMoney(this.sessionState.cashBalance + price) : 0,
+        change_amount: 0
+      })
 
-    // Create sale record
-    const saleId = generateId()
-    const saleData = {
-      id: saleId,
-      local_id: saleId,
-      tenant_id: this.tenantId,
-      machine_id: machineId,
-      amount: price,
-      items: items || [{ type: machine.type, weight: machine.weight, price }],
-      type: 'payment',
-      method: method || (cardCode ? 'card' : 'cash'),
-      batch_id: batchId || null,
-      card_id: null,
-      card_code: cardCode || null,
-      inserted: method === 'cash' ? this.sessionState.cashBalance + price : 0,
-      change_amount: 0,
-      created_at: new Date().toISOString()
-    }
-    sales.create(saleData)
+      machines.updateStatus(machineId, 'working', 'Ocupado')
+      machines.incrementCycle(machineId)
+    })
 
-    // Queue sale for sync (highest priority)
-    syncQueue.push('sale', saleId, 'create', saleData, 1)
+    // Queue sync items (outside transaction — not critical if these fail)
+    syncQueue.push('sale', saleId, 'create',
+      { local_id: saleId, tenant_id: this.tenantId, machine_id: machineId, amount: price,
+        type: 'payment', method: method || (cardCode ? 'card' : 'cash'), card_code: cardCode || null }, 1)
+    if (cardSyncData) syncQueue.push('card', cardSyncData.id, 'update', cardSyncData, 2)
+    syncQueue.push('machine', machineId, 'update',
+      { id: machineId, status: 'working', cycle: (machine.cycle || 0) + 1 }, 3)
 
-    // Update machine status locally
-    machines.updateStatus(machineId, 'working', 'Ocupado')
-    machines.incrementCycle(machineId)
-
-    // Activate physical machine via hardware
+    // Activate hardware (outside transaction — hardware is separate concern)
     const iface = machine.interface_id ? interfaces.getById(machine.interface_id) : null
-    if (iface && this.hw) {
-      this.hw.activateMachine(machine, iface)
-    }
+    if (iface && this.hw) this.hw.activateMachine(machine, iface)
 
-    // Queue machine status sync
-    syncQueue.push('machine', machineId, 'update', { id: machineId, status: 'working', cycle: (machine.cycle || 0) + 1 }, 3)
+    flushSave() // Force immediate disk save after sale
 
-    this.emit('sale:completed', { sale: saleData, machine: machines.getById(machineId) })
+    const updatedMachine = machines.getById(machineId)
+    this.emit('sale:completed', { sale: { id: saleId, amount: price }, machine: updatedMachine })
     this.emit('session:updated', this.getSession())
-
-    return { success: true, saleId, machine: machines.getById(machineId) }
+    return { success: true, saleId, machine: updatedMachine }
   }
 
-  /** Admin start — activate machine without payment */
   adminStartMachine(machineId) {
     const machine = machines.getById(machineId)
     if (!machine) throw new Error('Machine not found')
-
-    machines.updateStatus(machineId, 'working', 'Admin Start')
-    machines.incrementCycle(machineId)
-
     const saleId = generateId()
-    sales.create({
-      id: saleId, local_id: saleId, tenant_id: this.tenantId,
-      machine_id: machineId, amount: 0, items: [{ type: 'admin_start' }],
-      type: 'admin_start', method: 'admin',
-      created_at: new Date().toISOString()
+
+    runTransaction(() => {
+      machines.updateStatus(machineId, 'working', 'Admin Start')
+      machines.incrementCycle(machineId)
+      sales.create({
+        id: saleId, local_id: saleId, tenant_id: this.tenantId,
+        machine_id: machineId, amount: 0, items: [{ type: 'admin_start' }],
+        type: 'admin_start', method: 'admin'
+      })
     })
-    syncQueue.push('sale', saleId, 'create', { id: saleId, type: 'admin_start', machine_id: machineId, amount: 0 }, 1)
+
+    syncQueue.push('sale', saleId, 'create', { local_id: saleId, type: 'admin_start', machine_id: machineId, amount: 0 }, 1)
+    syncQueue.push('machine', machineId, 'update', { id: machineId, status: 'working' }, 3)
 
     const iface = machine.interface_id ? interfaces.getById(machine.interface_id) : null
     if (iface && this.hw) this.hw.activateMachine(machine, iface)
 
-    syncQueue.push('machine', machineId, 'update', { id: machineId, status: 'working' }, 3)
+    flushSave()
     return { success: true }
   }
-
-  // ─── Change Dispensing ───
 
   dispenseChange(amount) {
     if (amount <= 0) return { success: true, amount: 0 }
     if (!this.hw) return { success: false, error: 'Hardware not available' }
-    const ok = this.hw.dispenseCoins(amount)
-    return { success: ok, amount }
+    return { success: this.hw.dispenseCoins(amount), amount }
   }
-
-  // ─── Receipt Printing ───
 
   printReceipt(content) {
     if (!this.hw) return false
     return this.hw.printReceipt(content)
   }
 
-  // ─── Interface Status Handling ───
-
-  handleInterfaceStatus(data) {
-    this.emit('interface:status', data)
-  }
-
-  // ─── Session Management ───
+  // ─── Session ───
 
   updateCredits() {
-    this.sessionState.credits = this.sessionState.cashBalance + this.sessionState.cardBalance + this.sessionState.bonus
+    this.sessionState.credits = roundMoney(
+      this.sessionState.cashBalance + this.sessionState.cardBalance + this.sessionState.bonus)
   }
 
-  getSession() {
-    return { ...this.sessionState }
-  }
+  getSession() { return { ...this.sessionState } }
 
   resetSession() {
     this.sessionState = { cashBalance: 0, cardCode: null, cardBalance: 0, hasCard: false, bonus: 0, credits: 0 }
@@ -389,21 +347,9 @@ class PosEngine extends EventEmitter {
     this.emit('session:updated', this.getSession())
   }
 
-  // ─── Transactions ───
-
-  getTransactions(limit = 100) {
-    return sales.getAll(this.tenantId, limit)
-  }
-
-  // ─── Settings ───
-
-  getSetting(key) {
-    return settings.get(this.tenantId, key)
-  }
-
-  getAllSettings() {
-    return settings.getAll(this.tenantId)
-  }
+  getTransactions(limit) { return sales.getAll(this.tenantId, limit) }
+  getSetting(key) { return settings.get(this.tenantId, key) }
+  getAllSettings() { return settings.getAll(this.tenantId) }
 }
 
 module.exports = { PosEngine }
