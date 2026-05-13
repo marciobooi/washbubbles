@@ -9,6 +9,10 @@ import { withTenant } from '../services/tenant.js'
 import Sale from '../models/sale.js'
 import Card from '../models/card.js'
 import Machine from '../models/machine.js'
+import Price from '../models/price.js'
+import Setting from '../models/setting.js'
+import Interface from '../models/interface.js'
+import Peripheral from '../models/peripheral.js'
 
 const router = express.Router()
 
@@ -135,36 +139,24 @@ router.post('/push/machine', async (req, res) => {
 
 // ─── Pull: Server → POS ───
 
-/**
- * GET /api/sync/pull/cards?since=<ISO timestamp>
- * Returns cards updated since the given timestamp
- */
-router.get('/pull/cards', async (req, res) => {
+/** Generic helper for pull endpoints */
+async function handlePull(req, res, Model, label) {
   try {
     const since = req.query.since ? new Date(req.query.since) : new Date(0)
-    const CardT = withTenant(Card, req)
-    const items = await CardT.find({ updatedAt: { $gte: since } }).lean()
+    const ModelT = withTenant(Model, req)
+    const items = await ModelT.find({ updatedAt: { $gte: since } }).lean()
     res.json(items)
   } catch (err) {
-    console.error('[Sync] Pull cards error:', err)
+    console.error(`[Sync] Pull ${label} error:`, err)
     res.status(500).json({ error: err.message })
   }
-})
+}
 
-/**
- * GET /api/sync/pull/machines?since=<ISO timestamp>
- * Returns machine configs updated since the given timestamp
- */
-router.get('/pull/machines', async (req, res) => {
-  try {
-    const since = req.query.since ? new Date(req.query.since) : new Date(0)
-    const MachineT = withTenant(Machine, req)
-    const items = await MachineT.find({ updatedAt: { $gte: since } }).lean()
-    res.json(items)
-  } catch (err) {
-    console.error('[Sync] Pull machines error:', err)
-    res.status(500).json({ error: err.message })
-  }
-})
+router.get('/pull/cards', (req, res) => handlePull(req, res, Card, 'cards'))
+router.get('/pull/machines', (req, res) => handlePull(req, res, Machine, 'machines'))
+router.get('/pull/prices', (req, res) => handlePull(req, res, Price, 'prices'))
+router.get('/pull/settings', (req, res) => handlePull(req, res, Setting, 'settings'))
+router.get('/pull/interfaces', (req, res) => handlePull(req, res, Interface, 'interfaces'))
+router.get('/pull/peripherals', (req, res) => handlePull(req, res, Peripheral, 'peripherals'))
 
 export default router

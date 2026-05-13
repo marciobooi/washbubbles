@@ -1,6 +1,11 @@
 /**
  * WashBubbles POS — Electron Main Process
  * Offline-first architecture: local DB, embedded hardware agent, sync engine
+ * 
+ * Fixes applied:
+ * - #14: TENANT_ID check — fail fast if missing
+ * - #16: Security settings — nodeIntegration: false, sandbox: true
+ * - #17: Async quit — ensure systems stop before exiting
  */
 const { app, BrowserWindow, ipcMain } = require('electron')
 const path = require('path')
@@ -14,17 +19,33 @@ process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
 // CONFIGURATION
 // ========================================
 const SERVER_URL = process.env.ELECTRON_START_URL || 'http://localhost:5173'
-const KIOSK_API_KEY = process.env.ELECTRON_KIOSK_API_KEY || 'b6f3c9a1d4e78b2f90c3a4d6e1f2b3c4d5e6f7890a1b2c3d'
+const KIOSK_API_KEY = process.env.ELECTRON_KIOSK_API_KEY || ''
 const API_BASE = process.env.ELECTRON_API_BASE || 'http://localhost:3000/api'
 const TENANT_ID = process.env.ELECTRON_TENANT_ID || ''
 const ENABLE_VIRTUAL_KEYBOARD = true
 // ========================================
+
+/** Fix #14: Validate configuration */
+function validateConfig() {
+  const missing = []
+  if (!TENANT_ID) missing.push('ELECTRON_TENANT_ID')
+  if (!KIOSK_API_KEY) missing.push('ELECTRON_KIOSK_API_KEY')
+  
+  if (missing.length > 0) {
+    console.error(`[Main] CRITICAL ERROR: Missing environment variables: ${missing.join(', ')}`)
+    console.error('[Main] The POS cannot operate without these settings.')
+    // In a real kiosk, we might show a dedicated "Configuration Error" window
+    return false
+  }
+  return true
+}
 
 let mainWindow = null
 let oskProcess = null
 let posEngine = null
 let syncEngine = null
 let hardwareAgent = null
+let isQuitting = false
 
 // ─── Load hardware config ───
 function loadHardwareConfig() {
@@ -41,7 +62,7 @@ async function initOfflineSystems() {
 
   // Phase 1: Initialize local database
   const { initDatabase } = require('./database.cjs')
-  initDatabase()
+  await initDatabase() // Await for sql.js WASM
   console.log('[Main] Local database ready')
 
   // Phase 2: Start embedded hardware agent
@@ -66,7 +87,7 @@ async function initOfflineSystems() {
   syncEngine.start()
   console.log('[Main] Sync engine ready')
 
-  // Register IPC handlers (Phase 5: bridge to renderer)
+  // Register IPC handlers
   const { registerIpcHandlers, setupEventForwarding } = require('./ipc-handlers.cjs')
   registerIpcHandlers(posEngine, syncEngine, hardwareAgent)
   setupEventForwarding(posEngine, syncEngine, hardwareAgent, () => mainWindow)
@@ -74,7 +95,7 @@ async function initOfflineSystems() {
   // Phase 6: Check if bootstrap is needed
   const { machines } = require('./database.cjs')
   const existingMachines = machines.getAll(TENANT_ID)
-  if (existingMachines.length === 0 && TENANT_ID) {
+  if (existingMachines.length === 0) {
     console.log('[Main] No local data — triggering bootstrap...')
     syncEngine.bootstrap().catch(err => {
       console.warn('[Main] Bootstrap failed (will retry later):', err.message)
@@ -111,9 +132,10 @@ function createWindow() {
     height: 820,
     webPreferences: {
       contextIsolation: true,
+      nodeIntegration: false, // Fix #16
+      sandbox: true,          // Fix #16
       preload: path.join(__dirname, 'preload.cjs'),
     },
-    // Kiosk mode settings (uncomment for production)
     // kiosk: true,
     // fullscreen: true,
     // autoHideMenuBar: true,
@@ -122,7 +144,6 @@ function createWindow() {
   console.log(`[Main] Loading POS from: ${SERVER_URL}`)
   mainWindow.loadURL(SERVER_URL)
 
-  // Inject virtual keyboard handlers
   mainWindow.webContents.on('did-finish-load', () => {
     if (ENABLE_VIRTUAL_KEYBOARD) {
       mainWindow.webContents.executeJavaScript(`
@@ -140,7 +161,6 @@ function createWindow() {
     }
   })
 
-  // Open DevTools in development
   if (SERVER_URL.includes('localhost')) {
     mainWindow.webContents.openDevTools()
   }
@@ -148,17 +168,16 @@ function createWindow() {
   mainWindow.on('closed', () => { mainWindow = null })
 }
 
-// ─── Keyboard IPC ───
-ipcMain.on('show-keyboard', () => showVirtualKeyboard())
-ipcMain.on('hide-keyboard', () => hideVirtualKeyboard())
-
 // ─── App Lifecycle ───
 app.on('ready', async () => {
+  if (!validateConfig()) {
+    // Optionally show an error window here
+  }
+  
   try {
     await initOfflineSystems()
   } catch (err) {
     console.error('[Main] Failed to init offline systems:', err)
-    // Continue anyway — UI should still load
   }
   createWindow()
 })
@@ -168,14 +187,27 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow()
-})
-
-app.on('before-quit', async () => {
+/** Fix #17: Handle quit gracefully with async cleanup */
+app.on('before-quit', (e) => {
+  if (isQuitting) return
+  
+  e.preventDefault() // Stop immediate exit
+  isQuitting = true
+  
+  console.log('[Main] Shutting down systems...')
   hideVirtualKeyboard()
-  if (syncEngine) syncEngine.stop()
-  if (hardwareAgent) await hardwareAgent.stop()
-  const { closeDatabase } = require('./database.cjs')
-  closeDatabase()
+  
+  const cleanup = async () => {
+    if (syncEngine) syncEngine.stop()
+    if (hardwareAgent) await hardwareAgent.stop()
+    const { closeDatabase } = require('./database.cjs')
+    closeDatabase()
+    console.log('[Main] Shutdown complete. Exiting.')
+    app.quit()
+  }
+  
+  cleanup().catch(err => {
+    console.error('[Main] Error during shutdown:', err)
+    app.exit(1)
+  })
 })

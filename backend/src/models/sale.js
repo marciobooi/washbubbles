@@ -20,6 +20,7 @@ const saleSchema = new Schema({
   // Amount the user inserted (for cash payments) and change given back
   inserted: { type: Number, default: 0 },
   change: { type: Number, default: 0 },
+  metadata: { type: Schema.Types.Mixed },
   createdAt: { type: Date, default: Date.now }
 })
 
