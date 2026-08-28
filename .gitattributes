@@ -1,0 +1,19 @@
+# Normalize line endings to LF for all text files, regardless of what a
+# contributor's editor/OS writes to the working tree. Git's diff/status
+# machinery treats CRLF and LF as equivalent once this is in place, so this
+# alone fixes "every file shows modified" without needing to rewrite the
+# working tree.
+* text=auto eol=lf
+
+# Windows launcher scripts are conventionally CRLF (Notepad/cmd.exe are
+# still common on the machines that run these) — keep them as-is.
+*.bat text eol=crlf
+
+# Binary assets — do not touch.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary

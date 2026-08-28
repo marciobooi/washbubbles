@@ -417,9 +417,7 @@ No configuration changes needed unless new features require it.
 
 ## Support
 
-- [ARCHITECTURE.md](../ARCHITECTURE.md) - System architecture overview
-- [HARDWARE_AGENT_SETUP.md](../HARDWARE_AGENT_SETUP.md) - Detailed setup guide
-- [MIGRATION_GUIDE.md](../MIGRATION_GUIDE.md) - Migrate from old system
+- [ARCHITECTURE.md](../../ARCHITECTURE.md) - System architecture overview
 
 ## License
 

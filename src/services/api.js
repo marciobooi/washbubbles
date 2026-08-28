@@ -521,6 +521,12 @@ export function createApi(config) {
     getDayCloseSummary,
     getDayCloses,
     createDayClose,
+
+    // Tenants
+    getTenants,
+    createTenant,
+    updateTenant,
+    assignTenantUser,
   };
 }
 

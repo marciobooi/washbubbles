@@ -53,10 +53,22 @@ initWebSocket(server)
 // Initialize Hardware Agent WebSocket server
 hardwareAgentServer.init(server)
 
+// Broadcast a hardware event to the tenant that owns the agent it came from.
+// Hardware agents identify themselves by agentId, not tenantId, so we resolve
+// the tenant via hardwareAgentServer's connection registry.
+function broadcastAgentEvent(data, type) {
+  const tenantId = hardwareAgentServer.getAgentTenantId(data.agentId)
+  if (!tenantId) {
+    console.warn(`[Backend] Could not resolve tenant for agent ${data.agentId}; dropping ${type} broadcast`)
+    return
+  }
+  broadcastHardwareEvent(tenantId, type, data)
+}
+
 // Listen for hardware events and integrate with coinMachine
 hardwareAgentServer.on('peripheral:credit', (data) => {
   console.log('[Backend] Peripheral credit event:', data)
-  broadcastHardwareEvent('peripheral:credit', data)
+  broadcastAgentEvent(data, 'peripheral:credit')
   // Route directly into coinMachine handlers — coinMachine.emit() would fire on the coinMachine
   // EventEmitter, but the internal subscriptions are on coinMachine.middleware, so we call
   // the handler methods directly to ensure balance tracking, bonuses, etc. are applied.
@@ -68,7 +80,7 @@ hardwareAgentServer.on('peripheral:credit', (data) => {
 })
 
 hardwareAgentServer.on('peripheral:rejected', (data) => {
-  broadcastHardwareEvent(data.fraud ? 'peripheral:fraud' : 'peripheral:rejected', data)
+  broadcastAgentEvent(data, data.fraud ? 'peripheral:fraud' : 'peripheral:rejected')
   // Inject into coinMachine middleware event bus so rejection handlers apply
   if (data.type === 'coin_acceptor') {
     coinMachine.middleware.emit('coin-rejected', { reason: data.reason })
@@ -79,24 +91,24 @@ hardwareAgentServer.on('peripheral:rejected', (data) => {
 
 hardwareAgentServer.on('peripheral:fault', (data) => {
   console.log('[Backend] Peripheral fault:', data)
-  broadcastHardwareEvent('peripheral:fault', data)
+  broadcastAgentEvent(data, 'peripheral:fault')
 })
 
 hardwareAgentServer.on('interface:status', (data) => {
   console.log('[Backend] Interface status event:', data)
-  broadcastHardwareEvent('interface:status', data)
+  broadcastAgentEvent(data, 'interface:status')
   // Inject into coinMachine middleware so machine-status-update handlers run
   coinMachine.middleware.emit('machine-status-update', data)
 })
 
 hardwareAgentServer.on('interface:error', (data) => {
   console.log('[Backend] Interface error:', data)
-  broadcastHardwareEvent('interface:error', data)
+  broadcastAgentEvent(data, 'interface:error')
 })
 
 hardwareAgentServer.on('rfid:card_detected', (data) => {
   console.log('[Backend] RFID card detected:', data)
-  broadcastHardwareEvent('rfid:card_detected', data)
+  broadcastAgentEvent(data, 'rfid:card_detected')
   // Call handleCardRead directly — event name on coinMachine's own emitter differs
   coinMachine.handleCardRead({ cardNumber: data.cardCode })
 })
@@ -104,33 +116,33 @@ hardwareAgentServer.on('rfid:card_detected', (data) => {
 hardwareAgentServer.on('hopper:dispensed', (data) => {
   if (!data.success) {
     console.warn('[Backend] Hopper dispense failed:', data)
-    broadcastHardwareEvent('hopper:fault', { reason: 'dispense_failed' })
+    broadcastAgentEvent(data, 'hopper:fault')
   }
 })
 
 hardwareAgentServer.on('hopper:empty', (data) => {
   console.warn('[Backend] Hopper empty')
-  broadcastHardwareEvent('hopper:empty', data)
+  broadcastAgentEvent(data, 'hopper:empty')
   coinMachine.middleware.emit('hopper-empty', data)
 })
 
 hardwareAgentServer.on('hopper:fault', (data) => {
   console.error('[Backend] Hopper fault:', data)
-  broadcastHardwareEvent('hopper:fault', data)
+  broadcastAgentEvent(data, 'hopper:fault')
   coinMachine.middleware.emit('hopper-fault', data)
 })
 
 hardwareAgentServer.on('machine:activation_sent', (data) => {
-  broadcastHardwareEvent('machine:activation_sent', data)
+  broadcastAgentEvent(data, 'machine:activation_sent')
 })
 
 hardwareAgentServer.on('machine:activation_failed', (data) => {
   console.error('[Backend] Machine activation failed:', data)
-  broadcastHardwareEvent('machine:activation_failed', data)
+  broadcastAgentEvent(data, 'machine:activation_failed')
 })
 
 hardwareAgentServer.on('card_dispenser:dispensed', (data) => {
-  broadcastHardwareEvent('card_dispenser:dispensed', data)
+  broadcastAgentEvent(data, 'card_dispenser:dispensed')
 })
 
 const port = process.env.PORT || 3000

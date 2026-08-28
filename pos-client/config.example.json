@@ -1,6 +1,6 @@
 {
-  "serverUrl": "ws://192.168.1.100:3000/hardware-agent",
-  "apiKey": "b6f3c9a1d4e78b2f90c3a4d6e1f2b3c4d5e6f7890a1b2c3d",
+  "serverUrl": "ws://YOUR-SERVER-IP:3000/hardware-agent",
+  "apiKey": "REPLACE_WITH_YOUR_KIOSK_API_KEY",
   "peripherals": {
     "coin_acceptor": { "enabled": false, "port": "COM1" },
     "bill_acceptor": { "enabled": false, "port": "COM2" },

@@ -9,24 +9,17 @@ import api from '@/services/api'
 const CardGateway = {
   async checkBalance(cardCode) {
     if (!cardCode) throw new Error('Missing cardCode')
-    try {
-      const c = await api.request(`/pos/cards/${encodeURIComponent(cardCode)}`, { method: 'GET', skipAuth: true, expect: 'json' })
-      return { balance: Number(c.balance || 0) }
-    } catch (e) {
-      // If backend unreachable, simulate a small default balance
-      return { balance: 0 }
-    }
+    const c = await api.request(`/pos/cards/${encodeURIComponent(cardCode)}`, { method: 'GET', skipAuth: true, expect: 'json' })
+    return { balance: Number(c.balance || 0) }
   },
 
   async topup(cardCode, amount, opts = {}) {
-    // Perform server-side recharge if available, else simulate
     try {
       const json = { amount, items: [{ type: 'recharge', amount }], method: 'card', inserted: amount, change: 0, cardCode, batchId: opts.batchId }
       const res = await api.request('/pos/recharge', { method: 'POST', json, skipAuth: true, expect: 'json', headers: opts.kioskKey ? { Authorization: `ApiKey ${opts.kioskKey}` } : undefined })
       return { success: true, sale: res.sale, card: res.card }
     } catch (e) {
-      // Simulate success
-      return { success: true, sale: { amount, items: [{ type: 'recharge', amount }], method: 'card' } }
+      return { success: false, error: e }
     }
   },
 
@@ -34,8 +27,7 @@ const CardGateway = {
     // opts: { cardCode, batchId }
     const total = items.reduce((s, i) => s + (i.price || i.amount || 0), 0)
     if (!opts.cardCode) {
-      // If no cardCode provided, treat as failure in real configuration — but since we're simulating, succeed
-      return { success: true, method: 'card', total }
+      return { success: false, method: 'card', total, error: 'Missing cardCode' }
     }
 
     try {

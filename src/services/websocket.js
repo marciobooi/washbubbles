@@ -6,7 +6,15 @@
 let socket = null
 const listeners = new Set()
 
-export function connect(url = import.meta.env.VITE_HW_BRIDGE_URL || 'ws://localhost:3000/ws') {
+// Same-origin ws(s)://<host>/ws — not localhost:3000 — so a missing
+// VITE_HW_BRIDGE_URL at build time doesn't send production kiosks to their
+// own browser's localhost.
+function defaultWsUrl() {
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${proto}//${window.location.host}/ws`
+}
+
+export function connect(url = import.meta.env.VITE_HW_BRIDGE_URL || defaultWsUrl()) {
   if (socket && socket.readyState === WebSocket.OPEN) return socket
 
   // Attach auth token or kiosk api key as query params when available

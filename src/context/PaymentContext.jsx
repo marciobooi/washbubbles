@@ -49,8 +49,8 @@ export function PaymentProvider({ children }) {
         return { success: true, method: 'card', total, discounted: true }
       }
 
-      // Fallback: simulate card success
-      return { success: true, method: 'card', total: items.reduce((s,i)=>s+(i.price||i.amount||0),0) }
+      // No cardCode and no fidelity — nothing was actually charged, so this must not report success
+      return { success: false, method: 'card', error: 'No card provided' }
     }
 
     return { success: false, error: 'Unsupported payment method' }

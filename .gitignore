@@ -13,3 +13,7 @@ yarn-error.log*
 # Keep project-specific folders/files
 washbubbles-repo/
 washstore-repo/
+
+# Per-deployment hardware/kiosk secrets — copy the .example template and fill in real values
+backend/config.json
+pos-client/config.json

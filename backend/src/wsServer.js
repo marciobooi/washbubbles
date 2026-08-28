@@ -28,6 +28,53 @@ export async function broadcastMachine(machine) {
   })
 }
 
+/** Broadcast the full machine list to every connected tenant (re-queried per tenant) */
+export async function broadcastMachines() {
+  if (!_wss) return
+  const tenantIds = new Set()
+  _wss.clients.forEach((client) => {
+    if (client.tenantId) tenantIds.add(client.tenantId)
+  })
+
+  for (const tenantId of tenantIds) {
+    const machines = await Machine.find({ tenantId }).sort({ number: 1 })
+    const msg = JSON.stringify({ type: 'machine-status', payload: machines })
+    _wss.clients.forEach((client) => {
+      if (client.readyState === client.OPEN && client.tenantId === tenantId) {
+        client.send(msg)
+      }
+    })
+  }
+}
+
+/** List connected WebSocket clients for admin diagnostics */
+export function listClients() {
+  if (!_wss) return []
+  const clients = []
+  _wss.clients.forEach((client) => {
+    clients.push({
+      id: client._id,
+      tenantId: client.tenantId || null,
+      alive: client.isAlive,
+      readyState: client.readyState,
+    })
+  })
+  return clients
+}
+
+/** Forcibly disconnect a client by id. Returns true if a matching client was found. */
+export function disconnectClient(id) {
+  if (!_wss) return false
+  let found = false
+  _wss.clients.forEach((client) => {
+    if (String(client._id) === String(id)) {
+      found = true
+      client.close(1000, 'Disconnected by admin')
+    }
+  })
+  return found
+}
+
 /** Broadcast hardware events to a specific tenant only */
 export function broadcastHardwareEvent(tenantId, type, payload) {
   if (!_wss || !tenantId) return

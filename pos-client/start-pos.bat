@@ -9,7 +9,7 @@ REM  CONFIGURATION - Edit these values!
 REM ========================================
 set SERVER_URL=http://localhost:5173
 set API_BASE=http://localhost:3000/api
-set KIOSK_API_KEY=b6f3c9a1d4e78b2f90c3a4d6e1f2b3c4d5e6f7890a1b2c3d
+set KIOSK_API_KEY=REPLACE_WITH_YOUR_KIOSK_API_KEY
 set TENANT_ID=
 
 REM ========================================

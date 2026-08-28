@@ -15,8 +15,8 @@ WashBubbles uses an **offline-first distributed architecture** with two main tie
 │                                                                   │
 │  ┌─────────────┐  ┌──────────────┐  ┌────────────────────────┐  │
 │  │ SQLite DB   │  │ POS Engine   │  │ Sync Engine            │  │
-│  │ (better-    │  │ - Payments   │  │ - Outbound queue       │  │
-│  │  sqlite3)   │  │ - Cards      │  │ - Inbound pull         │  │
+│  │ (sql.js —   │  │ - Payments   │  │ - Outbound queue       │  │
+│  │  WASM)      │  │ - Cards      │  │ - Inbound pull         │  │
 │  │             │  │ - Machine    │  │ - Conflict resolver    │  │
 │  │ • machines  │  │   activation │  │ - Connectivity monitor │  │
 │  │ • cards     │  │ - Sessions   │  │                        │  │
@@ -228,12 +228,7 @@ cd pos-client
 npm install
 ```
 
-2. Rebuild native modules for Electron:
-```bash
-npx electron-rebuild -f -w better-sqlite3
-```
-
-3. Configure `config.json` with COM ports:
+2. Configure `config.json` with COM ports:
 ```json
 {
   "peripherals": {
@@ -243,14 +238,14 @@ npx electron-rebuild -f -w better-sqlite3
 }
 ```
 
-4. Set environment variables (or edit `start-pos.bat`):
+3. Set environment variables (or edit `start-pos.bat`):
 ```
 ELECTRON_API_BASE=http://YOUR-SERVER:3000/api
 ELECTRON_KIOSK_API_KEY=your-kiosk-key
 ELECTRON_TENANT_ID=your-tenant-id
 ```
 
-5. Start POS:
+4. Start POS:
 ```bash
 start-pos.bat
 ```

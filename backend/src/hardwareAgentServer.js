@@ -252,6 +252,14 @@ class HardwareAgentServer extends EventEmitter {
     const agent = this.agents.get(agentId)
     return agent && agent.socket && agent.socket.readyState === agent.socket.OPEN
   }
+
+  // Resolve which tenant a given agent belongs to, for tenant-scoped broadcasts
+  getAgentTenantId(agentId) {
+    const agent = this.agents.get(agentId)
+    return agent && agent.userModel && agent.userModel.tenantId
+      ? agent.userModel.tenantId.toString()
+      : null
+  }
 }
 
 // Singleton instance

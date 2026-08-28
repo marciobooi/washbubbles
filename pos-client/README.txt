@@ -24,8 +24,8 @@ REQUIREMENTS:
 
 3. RUN start-pos.bat
    - Double-click to start
-   - Hardware agent will connect to server
-   - Browser will open the POS interface
+   - Everything runs inside one Electron window: local database, hardware
+     agent, background sync engine, and the POS interface itself
 
 ================================================================================
                           CONFIGURATION
@@ -53,7 +53,7 @@ config.json settings:
 
 start-pos.bat    - Main startup script (edit SERVER_URL and KIOSK_API_KEY)
 config.json      - Hardware configuration (edit COM ports)
-agent.js         - Hardware agent (don't modify)
+electron/        - Electron app: local DB, embedded hardware agent, sync engine, UI shell
 package.json     - Dependencies (don't modify)
 
 ================================================================================

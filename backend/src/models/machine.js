@@ -42,7 +42,10 @@ const machineSchema = new Schema({
   createdAt: { type: Date, default: Date.now }
 })
 
-// Machine numbers should be unique per tenant when provided
-machineSchema.index({ tenantId: 1, number: 1 }, { unique: true, sparse: true })
+// Machine numbers should be unique per tenant when provided.
+// Plain `sparse` doesn't help on a compound index: since tenantId is always
+// present, Mongo still indexes (and collides on) documents missing `number`.
+// A partial index actually excludes them.
+machineSchema.index({ tenantId: 1, number: 1 }, { unique: true, partialFilterExpression: { number: { $exists: true } } })
 
 export default mongoose.model('Machine', machineSchema)

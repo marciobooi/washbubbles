@@ -2,7 +2,10 @@ import { useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { connect, disconnect, subscribe, send } from '../services/websocket'
 
-const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:3000') + '/api/pos/machine'
+// Falls back to a same-origin relative path (not localhost:3000) so a missing
+// VITE_API_URL at build time doesn't send production kiosks to their own
+// browser's localhost.
+const API_URL = (import.meta.env.VITE_API_URL || '') + '/api/pos/machine'
 
 async function fetchMachine() {
   try {

@@ -6,7 +6,6 @@
   "type": "module",
   "scripts": {
     "start": "electron .",
-    "start:agent-only": "node agent.js config.json",
     "electron": "electron ."
   },
   "dependencies": {

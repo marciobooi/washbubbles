@@ -2,7 +2,8 @@ import jwt from 'jsonwebtoken'
 import User from '../models/user.js'
 import mongoose from 'mongoose'
 
-const JWT_SECRET = process.env.JWT_SECRET || 'supersecretadminjwt'
+// index.js exits at startup if JWT_SECRET is unset — no hardcoded fallback here on purpose
+const JWT_SECRET = process.env.JWT_SECRET
 
 async function resolveUserFromRequest(req) {
   const auth = req.headers.authorization

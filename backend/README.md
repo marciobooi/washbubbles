@@ -58,6 +58,6 @@ Notes
  - To seed the admin user + sample machines, run `npm run seed`.
 - To connect the frontend, set `VITE_API_URL=http://localhost:3000` and `VITE_HW_BRIDGE_URL=ws://localhost:3000/ws` in the front-end `.env`.
 
-Docker
+Deployment
 
- - The `deployment/docker-compose.yml` has a basic example to run MongoDB, the backend and nginx as a reverse proxy; modify ports and bind-mounts as needed.
+ - No Docker/deployment config is checked into this repo yet. For a production host (e.g. Hetzner), run MongoDB, this backend (`npm start`, with a real `JWT_SECRET`/`MONGODB_URL`/`PORT` in the environment), and a reverse proxy (nginx or similar) terminating TLS in front of it.

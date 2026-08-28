@@ -22,6 +22,20 @@ async function main() {
     await users.createIndex({ tenantId: 1, apiKey: 1 }, { unique: true, partialFilterExpression: { apiKey: { $type: 'string' } } })
   } catch (e) { console.error('Failed to fix users indexes', e); }
 
+  // Fix machines index: ensure tenantId+number unique only when number exists
+  try {
+    const machines = db.collection('machines')
+    const idxs = await machines.indexes()
+    for (const idx of idxs) {
+      if (idx.key && idx.key.tenantId === 1 && idx.key.number === 1) {
+        console.log('Dropping machines index:', idx.name)
+        try { await machines.dropIndex(idx.name) } catch (e) { console.warn('dropIndex failed', e.message) }
+      }
+    }
+    console.log('Creating partial unique index on machines(tenantId, number)')
+    await machines.createIndex({ tenantId: 1, number: 1 }, { unique: true, partialFilterExpression: { number: { $exists: true } } })
+  } catch (e) { console.error('Failed to fix machines indexes', e); }
+
   // Fix settings index: ensure tenant-scoped unique key
   try {
     const settings = db.collection('settings')

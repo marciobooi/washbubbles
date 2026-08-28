@@ -7,7 +7,7 @@
     "dev": "nodemon --watch src --exec node src/index.js",
     "start": "node src/index.js",
     "seed": "node scripts/seed.cjs",
-    "test": "mocha --exit --recursive --reporter spec --timeout 10000"
+    "test": "mocha --exit --recursive --reporter spec --timeout 10000 test/**/*.test.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -27,7 +27,6 @@
   "devDependencies": {
     "chai": "^4.3.8",
     "mocha": "^10.2.0",
-    "mongodb-memory-server": "^8.11.0",
     "nodemon": "^2.0.22",
     "supertest": "^7.1.4"
   }
