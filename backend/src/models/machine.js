@@ -48,4 +48,20 @@ const machineSchema = new Schema({
 // A partial index actually excludes them.
 machineSchema.index({ tenantId: 1, number: 1 }, { unique: true, partialFilterExpression: { number: { $exists: true } } })
 
+// `coinMachine.js` resolves a machine by intId on every hardware status packet —
+// several per second across a site. Without this it is a collection scan each time.
+machineSchema.index(
+  { tenantId: 1, intId: 1 },
+  { partialFilterExpression: { intId: { $type: 'number' } } }
+)
+
+// Same for the {interfaceId, port} lookup on each status packet. Unique as well:
+// `admin.js` only checks port collisions in application code with a findOne, so
+// two admins saving at once could both assign the same physical port — after
+// which one customer's payment starts the other's machine.
+machineSchema.index(
+  { tenantId: 1, interfaceId: 1, port: 1 },
+  { unique: true, partialFilterExpression: { interfaceId: { $type: 'objectId' }, port: { $type: 'number' } } }
+)
+
 export default mongoose.model('Machine', machineSchema)

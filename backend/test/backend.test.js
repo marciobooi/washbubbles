@@ -253,6 +253,65 @@ describe('WashBubbles backend', function () {
     })
   })
 
+  // The whole point of the atomic helpers in services/cardBalance.js: two kiosks
+  // in the same tenant hitting one card concurrently used to both read the old
+  // balance, and the second save() overwrote the first.
+  describe('Concurrent card access', () => {
+    it('lets only one of two simultaneous spends succeed on an underfunded card', async () => {
+      const Card = (await import('../src/models/card.js')).default
+      const card = await Card.create({ tenantId: tenant._id, code: 'RACE-CARD', balance: 10 })
+
+      // Two €8 spends against a €10 balance. Exactly one may win.
+      const spend = () => request(app)
+        .post('/api/pos/cards/RACE-CARD/spend')
+        .set('Authorization', `Bearer ${kioskToken}`)
+        .send({ amount: 8, items: [] })
+
+      const [a, b] = await Promise.all([spend(), spend()])
+      const statuses = [a.status, b.status].sort()
+      expect(statuses).to.deep.equal([200, 400])
+
+      const after = await Card.findById(card._id)
+      expect(after.balance).to.equal(2)
+    })
+
+    it('applies concurrent credits without losing one', async () => {
+      const Card = (await import('../src/models/card.js')).default
+      const card = await Card.create({ tenantId: tenant._id, code: 'CREDIT-RACE', balance: 0 })
+
+      // Five distinct €10 recharges at once. A read-modify-write would lose some.
+      const pushes = [1, 2, 3, 4, 5].map((n) => request(app)
+        .post('/api/sync/push/card')
+        .set('Authorization', `Bearer ${kioskToken}`)
+        .send({ code: 'CREDIT-RACE', delta: 10, localId: `race-op-${n}` }))
+
+      const results = await Promise.all(pushes)
+      expect(results.every((r) => r.status === 200)).to.equal(true)
+
+      const after = await Card.findById(card._id)
+      expect(after.balance).to.equal(50)
+      expect(after.appliedDeltas).to.have.length(5)
+    })
+
+    it('applies a concurrently-retried delta exactly once', async () => {
+      const Card = (await import('../src/models/card.js')).default
+      const card = await Card.create({ tenantId: tenant._id, code: 'RETRY-RACE', balance: 0 })
+
+      // The SAME operation pushed three times simultaneously — what a kiosk does
+      // when a request times out and it retries while the original is in flight.
+      const push = () => request(app)
+        .post('/api/sync/push/card')
+        .set('Authorization', `Bearer ${kioskToken}`)
+        .send({ code: 'RETRY-RACE', delta: 25, localId: 'same-op-id' })
+
+      await Promise.all([push(), push(), push()])
+
+      const after = await Card.findById(card._id)
+      expect(after.balance).to.equal(25)
+      expect(after.appliedDeltas).to.have.length(1)
+    })
+  })
+
   describe('Tenant isolation', () => {
     it('will not let one tenant\'s admin modify another tenant\'s user', async () => {
       const Tenant = (await import('../src/models/tenant.js')).default

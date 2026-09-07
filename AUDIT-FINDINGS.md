@@ -231,7 +231,7 @@ and the physical thing never happens. All silent.
   `coinMachine.js:212,222` destructure `{reason, fraud}` → `fraud` is always undefined, so
   `peripheral:fraud` never fires from the serial path. `middleware.js:524` emits `hopper-event` with
   no listener.
-- [ ] **Missing hot-path indexes.** `machine.intId` and `{interfaceId, port}` (collection scan on
+- [x] **Missing hot-path indexes.** **(fixed)** `machine.intId` and `{interfaceId, port}` (collection scan on
   every status packet — `coinMachine.js:735,798`); `card.code` alone isn't a usable prefix of
   `{tenantId, code}`, so every card read is a collection scan.
 - [~] **Listener/interval leaks on a long-running kiosk.** **(kiosk autosave interval fixed; `local-api.js` still leaks)** `src/services/local-api.js:114-147`
@@ -353,6 +353,55 @@ Bugs that were not in the original sweep — they surfaced while repairing the i
 
 ---
 
+## Round 2 — data model, concurrency & frontend money flow
+
+Run inline after the deep-dive agents hit the session limit twice. All fixed.
+
+### Concurrency (the big one)
+
+- [x] **Every card balance change was a lost-update race.** Six read-modify-write sites
+  (`pos.js` ×3, `gateways.js` ×2, `sync.js` ×1) all did
+  `card = await findOne(); card.balance = …; await card.save()`. Two kiosks in one tenant
+  touching the same card both read the old balance and the second `save()` overwrote the
+  first: a €20 card paying two concurrent €5 washes was charged **once** and got **two**
+  washes. Added `services/cardBalance.js` — `creditCard` / `debitCard` / `applyCardDelta` —
+  which push the arithmetic and the sufficiency check into a single guarded `$inc`.
+- [x] **The sync idempotency check was itself racy.** `/sync/push/card` read
+  `appliedDeltas`, checked `.includes(opId)`, then wrote. Two concurrent retries of the
+  *same* push both passed the check and both applied the delta — precisely the double
+  credit the key exists to prevent. Dedupe, overdraft guard and balance change are now one
+  `findOneAndUpdate` with `appliedDeltas: {$ne: opId}` and `$push … $slice`.
+- [x] **Two admins could assign the same interface port.** `admin.js` only checked for a
+  collision in application code with a `findOne`. Now enforced by a unique partial index on
+  `{tenantId, interfaceId, port}` — otherwise one customer's payment starts another's machine.
+- [x] **Missing indexes on genuinely hot paths.** `/sync/push/sale` dedupes on
+  `metadata.localId` on *every* push from *every* kiosk with no index — a full collection
+  scan per sale. Same for `machine.intId` and `{interfaceId, port}`, both hit several times
+  a second by hardware status packets, and `sale.cardCode` for card history.
+
+### Frontend money flow
+
+- [x] **Retrying a failed checkout re-credited every recharge.** `App.jsx:handlePay` posts
+  recharges first, then machine payments; a 409 on a busy machine aborts the rest but leaves
+  the recharges applied — and the cart is not cleared. `batchId` was
+  `batch-${Date.now()}-${random}`, so the customer tapping "pay" again produced a brand-new
+  batch and credited the card again, every time. `batchId` is now derived from the cart's own
+  stable item ids, each request carries a `localId`, and `/pos/sale` + `/pos/recharge` dedupe
+  on `metadata.localId` and return the original result.
+- [x] **A hopper jam was a silent short-change.** `PaymentContext` discarded the
+  `changeDispensed` / `changeError` fields the backend now returns, so the UI showed
+  "Pagamento efetuado" whether or not the coins came out. It now shows a destructive toast
+  naming the amount owed and telling the customer the sale is on record.
+- [x] **`change` was sent from the client** on the `/pos/recharge` and `/pos/sale` calls in
+  `App.jsx`. The server ignores it now, but sending it at all was the wrong shape — removed.
+
+**Note on what I did NOT find:** the manual pay buttons (`checkCardAndPay`,
+`topupCardAndRetry`) do have `disabled={checkingCard}` in-flight guards. The main cart flow is
+hardware-driven ("Aguardando pagamento…") with no tappable pay button, so there is no
+double-submit hole there — the retry path above was the real duplicate-charge route.
+
+---
+
 ## Deploy notes (do these on the Hetzner box)
 
 1. **Drop the old user email index once**, or the new `partialFilterExpression` will not be created
@@ -368,6 +417,12 @@ Bugs that were not in the original sweep — they surfaced while repairing the i
    `db.users.distinct('role')` before deploying.
 4. **Card delta pushes now require a `localId`.** Old kiosk builds don't send one and will get a 400.
    Deploy the kiosk and the backend together.
+5. **New indexes build on first boot.** The unique one on `{tenantId, interfaceId, port}` will
+   FAIL to build if duplicates already exist. Check before deploying:
+   ```
+   db.machines.aggregate([{$match:{interfaceId:{$ne:null},port:{$ne:null}}},{$group:{_id:{t:'$tenantId',i:'$interfaceId',p:'$port'},n:{$sum:1}}},{$match:{n:{$gt:1}}}])
+   ```
+   Anything returned is two machines wired to one physical port — fix the data first.
 
 ---
 

@@ -27,4 +27,15 @@ const saleSchema = new Schema({
 // common query patterns: per-tenant date queries
 saleSchema.index({ tenantId: 1, createdAt: -1 })
 
+// `/sync/push/sale` dedupes on metadata.localId on EVERY push from EVERY kiosk.
+// With no index that is a full collection scan per sale — on a year of sales it
+// is the slowest thing the server does. Partial, because only synced sales have it.
+saleSchema.index(
+  { tenantId: 1, 'metadata.localId': 1 },
+  { partialFilterExpression: { 'metadata.localId': { $type: 'string' } } }
+)
+
+// Card transaction history (`/pos/cards/:code/history`) was a collection scan.
+saleSchema.index({ tenantId: 1, cardCode: 1, createdAt: -1 })
+
 export default mongoose.model('Sale', saleSchema)

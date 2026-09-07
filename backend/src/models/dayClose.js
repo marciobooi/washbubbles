@@ -70,4 +70,10 @@ const dayCloseSchema = new Schema({
 
 dayCloseSchema.index({ tenantId: 1, createdAt: -1 })
 
+// `/sync/push/day-close` dedupes retried kiosk Z-reports on this.
+dayCloseSchema.index(
+  { tenantId: 1, 'metadata.localId': 1 },
+  { partialFilterExpression: { 'metadata.localId': { $type: 'string' } } }
+)
+
 export default mongoose.model('DayClose', dayCloseSchema)

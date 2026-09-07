@@ -36,6 +36,24 @@ import { TenantProvider } from './context/TenantContext'
 import { useAuth } from './context/AuthContext'
 import AdminTenants from './pages/AdminTenants'
 
+/**
+ * A checkout id that is stable for a given cart, so a retried payment attempt is
+ * recognisable as a replay rather than a new purchase.
+ *
+ * Cart item ids are already unique and stable for the life of the cart (see
+ * CartContext), so hashing them identifies "this exact cart" without a clock or
+ * a random suffix. Changing the cart — adding, removing, or editing a line —
+ * legitimately produces a new id and therefore a genuinely new transaction.
+ */
+function checkoutBatchId(items) {
+  const key = items.map((i) => `${i.id}:${i.price ?? i.amount ?? 0}`).sort().join('|')
+  let hash = 0
+  for (let i = 0; i < key.length; i++) {
+    hash = ((hash << 5) - hash + key.charCodeAt(i)) | 0
+  }
+  return `batch-${Math.abs(hash).toString(36)}`
+}
+
 export default function App() {
   return (
     <BrandingProvider>
@@ -176,8 +194,13 @@ function AppInner() {
       const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
       const kioskKey = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
 
-      // generate a batch id to group these related sales
-      const batchId = `batch-${Date.now()}-${Math.random().toString(36).slice(2,8)}`
+      // Batch id groups these related sales. It is derived from the cart's own
+      // stable per-item ids rather than the clock, so a retry after a partial
+      // failure (a 409 on one busy machine) reuses the SAME batch. Combined with
+      // the per-item `localId` below, the server recognises the replay and does
+      // not credit the recharges a second time — which is what happened every
+      // time a customer tapped "pay" again after an error.
+      const batchId = checkoutBatchId(items)
 
       if (method === 'cash') {
         // Validate cash via CashGateway (server-side gateway will persist sales atomically)
@@ -189,8 +212,18 @@ function AppInner() {
           return
         }
 
-        // Success: server already created sales and updated machines
-        toast({ title: `Pagamento efetuado (Dinheiro)`, variant: 'success' })
+        // Success: server already created sales and updated machines.
+        // The sale is recorded either way, but if the hopper could not pay the
+        // change out we must say so rather than let the customer walk away short.
+        if (res.change > 0 && res.changeDispensed === false) {
+          toast({
+            title: 'Troco não entregue',
+            description: `Faltam ${Number(res.change).toFixed(2)}€ de troco. Peça ao balcão — a venda ficou registada.`,
+            variant: 'destructive',
+          })
+        } else {
+          toast({ title: `Pagamento efetuado (Dinheiro)`, variant: 'success' })
+        }
         // Show machine notification for machines purchased (if any)
         try {
           const machineNames = items.filter(i => !(i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge')))).map(i => i.name).filter(Boolean)
@@ -208,7 +241,7 @@ function AppInner() {
       // first persist recharges (if any) — recharges are always card-based
       try {
         for (const it of items.filter(i => (i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge'))))) {
-          const json = { amount: Number(it.amount), items: it, method: 'card', inserted: Number(it.amount), change: 0, batchId, cardCode }
+          const json = { amount: Number(it.amount), items: it, method: 'card', inserted: Number(it.amount), batchId, cardCode, localId: `${batchId}:${it.id}` }
           await api.request('/pos/recharge', { method: 'POST', json, headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined, skipAuth: true, expect: 'json' })
         }
 
@@ -243,7 +276,7 @@ function AppInner() {
         // Fallback: no cardCode provided — persist machine sales as card payments using cart recharges
         for (const it of machineItems) {
           const machineId = it._id || it.id
-          const payload = { machineId, amount: Number(it.price || it.amount || 0), items: [it], method: 'card', inserted: Number(it.price || it.amount || 0), change: 0, batchId }
+          const payload = { machineId, amount: Number(it.price || it.amount || 0), items: [it], method: 'card', inserted: Number(it.price || it.amount || 0), batchId, localId: `${batchId}:${it.id}` }
           await api.request('/pos/sale', { method: 'POST', json: payload, headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined, skipAuth: true, expect: 'json' })
         }
 

@@ -7,9 +7,25 @@ import { requireKiosk } from '../middleware/auth.js'
 import { broadcastMachines, broadcastMachine } from '../wsServer.js'
 import { withTenant } from '../services/tenant.js'
 import { roundMoney, parseAmount } from '../utils/money.js'
+import { creditCard, debitCard } from '../services/cardBalance.js'
 import coinMachine from '../services/coinMachine.js'
 
 const router = express.Router()
+
+/**
+ * Look for an already-recorded sale with this client-supplied operation id.
+ *
+ * The kiosk's checkout can partially fail — recharges are posted first, then the
+ * machine payments, and a 409 on a busy machine aborts the rest. The customer
+ * then taps "pay" again. Without a stable idempotency key each retry re-posts
+ * the recharges, crediting the card again every time.
+ *
+ * @returns the existing Sale, or null when this is a first attempt.
+ */
+async function findByLocalId(SaleT, localId) {
+  if (!localId) return null
+  return SaleT.findOne({ 'metadata.localId': String(localId) })
+}
 
 // POS routes are public (can be configured to use token if required)
 const getMachineStatus = async (req, res) => {
@@ -57,8 +73,15 @@ router.get('/machines', requireKiosk, async (req, res) => {
 })
 
 router.post('/sale', requireKiosk, async (req, res) => {
-  const { machineId, amount, items, method, inserted, type, cardCode, cardId, batchId } = req.body
+  const { machineId, amount, items, method, inserted, type, cardCode, cardId, batchId, localId } = req.body
   if (!machineId || !items) return res.status(400).json({ error: 'Missing parameters' })
+
+  // Replay of a retried checkout — do not charge the card a second time.
+  const existingSale = await findByLocalId(withTenant(Sale, req), localId)
+  if (existingSale) {
+    const m = await withTenant(Machine, req).findById(existingSale.machineId)
+    return res.json({ sale: existingSale, machine: m, card: null, status: 'duplicate' })
+  }
 
   const parsedSale = parseAmount(amount)
   if (!parsedSale.ok) return res.status(400).json({ error: parsedSale.error })
@@ -77,17 +100,21 @@ router.post('/sale', requireKiosk, async (req, res) => {
     return res.status(409).json({ error: 'Machine already in use' })
   }
 
-  // If card specified and method is card, deduct from card balance
+  // If card specified and method is card, deduct from card balance.
+  // Atomic: the sufficiency check and the debit are one update, so two kiosks
+  // hitting the same card cannot both read the old balance and each get a wash.
   let card = null
   if ((cardId || cardCode) && method === 'card') {
     const Card = (await import('../models/card.js')).default
     const CardT = withTenant(Card, req)
-    card = cardId ? await CardT.findById(cardId) : await CardT.findOne({ code: cardCode })
-    if (!card) return res.status(404).json({ error: 'Card not found' })
-    if (roundMoney(card.balance || 0) < saleAmount) return res.status(400).json({ error: 'Insufficient balance' })
-    card.balance = roundMoney((card.balance || 0) - saleAmount)
-    if (!card.tenantId && req.tenantId) card.tenantId = req.tenantId
-    await card.save()
+    const filter = cardId ? { _id: cardId } : { code: cardCode }
+    card = await debitCard(CardT, filter, saleAmount)
+    if (!card) {
+      // Null means missing OR underfunded — look it up to say which.
+      const exists = await CardT.findOne(filter)
+      if (!exists) return res.status(404).json({ error: 'Card not found' })
+      return res.status(400).json({ error: 'Insufficient balance', balance: exists.balance })
+    }
   }
 
   // Compute inserted/change defaults and create sale. `change` is always derived,
@@ -97,7 +124,7 @@ router.post('/sale', requireKiosk, async (req, res) => {
   const insertedNum = parsedInserted.ok ? parsedInserted.value : 0
   const changeNum = roundMoney(Math.max(0, insertedNum - saleAmount))
   const SaleT = withTenant(Sale, req)
-  const sale = await SaleT.create({ machineId, amount: saleAmount, items, method, batchId, inserted: insertedNum, change: changeNum, type: type || 'payment', cardId: card ? card._id : undefined, cardCode: card ? card.code : (cardCode || undefined) })
+  const sale = await SaleT.create({ machineId, amount: saleAmount, items, method, batchId, inserted: insertedNum, change: changeNum, type: type || 'payment', cardId: card ? card._id : undefined, cardCode: card ? card.code : (cardCode || undefined), metadata: localId ? { localId: String(localId) } : undefined })
 
   // Update machine: increment cycle and mark as occupied after successful payment
   await MachineT.findByIdAndUpdate(machineId, { $inc: { cycle: 1 }, $set: { status: 'working', statusText: 'Ocupado' } })
@@ -112,7 +139,7 @@ router.post('/sale', requireKiosk, async (req, res) => {
 // Card recharge / top-up (kiosk) — stored as a transaction without a machine reference
 // Card recharge / top-up (kiosk) — stored as a transaction and optionally attached to a loyalty card
 router.post('/recharge', requireKiosk, async (req, res) => {
-  const { amount, items, method, inserted, cardCode, cardId, batchId } = req.body
+  const { amount, items, method, inserted, cardCode, cardId, batchId, localId } = req.body
 
   // Recharges are always card-based in this system
   if (method && String(method) !== 'card') return res.status(400).json({ error: 'Recharges must be performed with method "card"' })
@@ -138,18 +165,25 @@ router.post('/recharge', requireKiosk, async (req, res) => {
   const CardT = withTenant(Card, req)
   const SaleT = withTenant(Sale, req)
 
+  // Replay of a retried checkout — return the original result, credit nothing.
+  const alreadyDone = await findByLocalId(SaleT, localId)
+  if (alreadyDone) {
+    const existingCard = alreadyDone.cardId ? await CardT.findById(alreadyDone.cardId) : null
+    return res.json({ sale: alreadyDone, card: existingCard, change: alreadyDone.change, changeDispensed: true, status: 'duplicate' })
+  }
+
   // If card specified, update its balance
   let card = null
   if (cardId || cardCode) {
-    if (cardId) card = await CardT.findById(cardId)
-    else card = await CardT.findOne({ code: cardCode })
+    const filter = cardId ? { _id: cardId } : { code: cardCode }
+    card = await CardT.findOne(filter)
     if (!card && cardCode) {
       // create card implicitly when code provided (CardT.create() injects tenantId automatically)
       card = await CardT.create({ code: cardCode, balance: 0 })
     }
     if (card) {
-      card.balance = roundMoney((card.balance || 0) + rechargeAmount)
-      await card.save()
+      // Atomic credit — a concurrent recharge on the same card must not be lost.
+      card = await creditCard(CardT, { _id: card._id }, rechargeAmount)
     }
   }
 
@@ -165,7 +199,8 @@ router.post('/recharge', requireKiosk, async (req, res) => {
     change: changeAmount,
     type: 'recharge',
     cardId: card ? card._id : undefined,
-    cardCode: card ? card.code : (cardCode || undefined)
+    cardCode: card ? card.code : (cardCode || undefined),
+    metadata: localId ? { localId: String(localId) } : undefined
   })
 
   // Dispense change if needed
@@ -505,7 +540,7 @@ router.post('/cards/:code/spend', requireKiosk, async (req, res) => {
 
   const Card = (await import('../models/card.js')).default
   const CardT = withTenant(Card, req)
-  const card = await CardT.findOne({ code })
+  let card = await CardT.findOne({ code })
   if (!card) return res.status(404).json({ error: 'Card not found' })
 
   // Check the machine is free *before* debiting — otherwise a 409 leaves the
@@ -517,10 +552,9 @@ router.post('/cards/:code/spend', requireKiosk, async (req, res) => {
     if (m.status === 'working') return res.status(409).json({ error: 'Machine already in use' })
   }
 
-  if (roundMoney(card.balance || 0) < price) return res.status(400).json({ error: 'Insufficient balance' })
-
-  card.balance = roundMoney((card.balance || 0) - price)
-  await card.save()
+  const debited = await debitCard(CardT, { _id: card._id }, price)
+  if (!debited) return res.status(400).json({ error: 'Insufficient balance', balance: card.balance })
+  card = debited
 
   const SaleT = withTenant(Sale, req)
   const sale = await SaleT.create({ machineId, amount: price, items, method: 'card', batchId, type: 'payment', cardId: card._id, cardCode: card.code })

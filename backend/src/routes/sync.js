@@ -114,7 +114,7 @@ router.post('/push/card', async (req, res) => {
       // Delta push (preferred for multi-POS). The kiosk retries these after a
       // timeout or a power cut, so it MUST be idempotent: without the dedupe key
       // a retry turns a €20 recharge into €40, and debits double the same way.
-      const delta = Number(data.delta)
+      const delta = roundMoney(Number(data.delta))
       if (!Number.isFinite(delta)) {
         return res.status(400).json({ success: false, error: 'delta must be a number' })
       }
@@ -126,31 +126,54 @@ router.post('/push/card', async (req, res) => {
       if (!opId) {
         return res.status(400).json({ success: false, error: 'delta pushes require a localId for idempotency' })
       }
-      if ((card.appliedDeltas || []).includes(opId)) {
-        return res.json({ success: true, id: card._id, balance: card.balance, status: 'duplicate' })
+
+      // Dedupe, sufficiency check and the balance change are ONE update.
+      // Doing them as read-then-write let two concurrent retries of the same
+      // push both pass the `includes(opId)` check and both apply the delta —
+      // exactly the double-credit the idempotency key exists to prevent.
+      const guard = { _id: card._id, appliedDeltas: { $ne: opId } }
+      if (delta < 0) guard.balance = { $gte: -delta - 0.005 }
+
+      const updated = await CardT.findOneAndUpdate(
+        guard,
+        {
+          $inc: { balance: delta },
+          $set: { updatedAt: new Date() },
+          // $slice keeps the dedupe log bounded without a read-modify-write.
+          $push: { appliedDeltas: { $each: [opId], $slice: -MAX_APPLIED_DELTAS } }
+        },
+        { new: true }
+      )
+
+      if (!updated) {
+        // The guard failed. Re-read to say which clause rejected it.
+        const current = await CardT.findById(card._id)
+        if (!current) return res.status(404).json({ success: false, error: 'Card not found' })
+        if ((current.appliedDeltas || []).includes(opId)) {
+          return res.json({ success: true, id: current._id, balance: current.balance, status: 'duplicate' })
+        }
+        return res.status(409).json({ success: false, error: 'Delta would drive the balance negative', balance: current.balance })
       }
 
-      const next = roundMoney((card.balance || 0) + delta)
-      if (next < 0) {
-        return res.status(409).json({ success: false, error: 'Delta would drive the balance negative', balance: card.balance })
-      }
-      card.balance = next
-      card.appliedDeltas = [...(card.appliedDeltas || []), opId].slice(-MAX_APPLIED_DELTAS)
-    } else if (data.balance !== undefined) {
-      // Absolute value fallback (single POS scenario)
+      return res.json({ success: true, id: updated._id, balance: roundMoney(updated.balance) })
+    }
+
+    if (data.balance !== undefined) {
+      // Absolute value fallback (single POS scenario). Last-writer-wins by
+      // definition — only safe on a single-kiosk site.
       const balance = Number(data.balance)
       if (!Number.isFinite(balance) || balance < 0) {
         return res.status(400).json({ success: false, error: 'balance must be a non-negative number' })
       }
-      card.balance = roundMoney(balance)
-    } else {
-      return res.status(400).json({ success: false, error: 'Provide either delta or balance' })
+      const updated = await CardT.findByIdAndUpdate(
+        card._id,
+        { $set: { balance: roundMoney(balance), updatedAt: new Date() } },
+        { new: true }
+      )
+      return res.json({ success: true, id: updated._id, balance: updated.balance })
     }
 
-    card.updatedAt = new Date()
-    await card.save()
-
-    res.json({ success: true, id: card._id, balance: card.balance })
+    return res.status(400).json({ success: false, error: 'Provide either delta or balance' })
   } catch (err) {
     console.error('[Sync] Push card error:', err)
     res.status(500).json({ success: false, error: err.message })

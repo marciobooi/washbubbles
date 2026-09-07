@@ -8,6 +8,7 @@ import { requireKiosk } from '../middleware/auth.js'
 import { broadcastMachine } from '../wsServer.js'
 import { withTenant } from '../services/tenant.js'
 import { roundMoney, parseAmount } from '../utils/money.js'
+import { creditCard, applyCardDelta } from '../services/cardBalance.js'
 import coinMachine from '../services/coinMachine.js'
 
 const router = express.Router()
@@ -105,8 +106,8 @@ router.post('/cards/:code/topup', requireKiosk, async (req, res) => {
   if (!card) {
     card = await CardT.create({ code, balance: 0 })
   }
-  card.balance = roundMoney((card.balance || 0) + topUp)
-  await card.save()
+  // Atomic: a concurrent top-up on the same card must not overwrite this one.
+  card = await creditCard(CardT, { _id: card._id }, topUp)
 
   const sale = await SaleT.create({ amount: topUp, items: [{ type: 'recharge', amount: topUp }], method: 'card', batchId, inserted: topUp, change: 0, type: 'recharge', cardId: card._id, cardCode: card.code })
 
@@ -123,7 +124,7 @@ router.post('/card/pay', requireKiosk, async (req, res) => {
   const MachineT = withTenant(Machine, req)
 
   // Fetch card
-  const card = await CardT.findOne({ code: cardCode })
+  let card = await CardT.findOne({ code: cardCode })
   if (!card) return res.status(404).json({ error: 'Card not found' })
 
   // ── Validate the whole cart before a cent moves ──
@@ -147,8 +148,14 @@ router.post('/card/pay', requireKiosk, async (req, res) => {
   }
 
   // ── Apply ──
-  card.balance = roundMoney(available - resolved.total)
-  await card.save()
+  // One atomic $inc for the whole batch (recharges credited, machines debited),
+  // guarded so a concurrent spend elsewhere cannot push the balance negative.
+  const net = roundMoney(rechargeTotal - resolved.total)
+  const updatedCard = await applyCardDelta(CardT, { _id: card._id }, net)
+  if (!updatedCard) {
+    return res.status(409).json({ error: 'Card balance changed concurrently; please retry', balance: card.balance })
+  }
+  card = updatedCard
 
   const sales = []
   for (const line of rechargeLines) {

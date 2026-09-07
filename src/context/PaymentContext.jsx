@@ -25,7 +25,13 @@ export function PaymentProvider({ children }) {
       try {
         const payload = { items, inserted: opts.inserted, batchId: opts.batchId }
         const resp = await api.gatewayCashPay(payload, { apiKey: kioskKeyFinal })
-        return { success: true, method: 'cash', total: resp.total, inserted: resp.inserted, change: resp.change, sales: resp.sales }
+        // `changeDispensed` / `changeError` tell us whether the hopper actually
+        // paid out. Dropping them here is how a jam became a silent short-change.
+        return {
+          success: true, method: 'cash', total: resp.total, inserted: resp.inserted,
+          change: resp.change, sales: resp.sales,
+          changeDispensed: resp.changeDispensed, changeError: resp.changeError,
+        }
       } catch (e) {
         return { success: false, error: e }
       }
