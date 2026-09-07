@@ -1,101 +1,117 @@
-# GitHub Copilot Agent – MCP Server Instructions
+# AI Coding Agent Instructions — WashBubbles
 
-## Purpose
-Always use the project's MCP server as the primary execution layer for tasks involving:
-- command execution  
-- file system operations  
-- data retrieval  
-- workflows exposed as MCP tools  
-- automation tasks  
-- environment queries  
-- project‑specific utilities  
+This file is the source of truth for any AI coding assistant (GitHub Copilot,
+Claude, or otherwise) working in this repository. Prefer what's written here
+over generic training-data assumptions about "how a project like this
+usually works" — several things here are specific to this codebase and easy
+to get wrong by guessing.
 
-The MCP server should be preferred over Copilot’s built‑in reasoning or internal tools whenever possible.
+## What this project is
 
----
+A laundromat/vending POS system with three deployable pieces:
 
-## Core Behavior Rules
+- **`backend/`** — Node/Express + MongoDB API, deployed to a cloud server
+  (Hetzner). Multi-tenant. Also hosts a WebSocket hardware-agent endpoint.
+- **`src/`** — React/Vite web app, serves both the customer-facing kiosk UI
+  (`/`) and the admin dashboard (`/admin`). Same build, different routes.
+- **`pos-client/`** — the real kiosk: an Electron app that runs fully
+  offline-first (local SQLite via `sql.js`, an embedded hardware agent, a
+  background sync engine). This is the current, primary kiosk architecture —
+  see `ARCHITECTURE.md`.
+- **`virtual-serial-server/`** — a ccTalk hardware emulator for testing
+  coin/bill acceptors and hoppers without real devices (see below).
 
-### 1. MCP Server First
-For every user request:
-1. Check whether an MCP tool matches the user's intent.
-2. If a matching tool exists → **use it**.
-3. If no tool matches → respond normally.
+`backend/src/hardwareAgent.js` + `backend/src/agentServer.js` are an older,
+secondary "standalone agent" architecture (agent connects to the cloud
+backend directly instead of running embedded in Electron). Both
+implementations now speak the same protocol; the embedded one in
+`pos-client/` is what actually ships.
 
-Examples where tools **must** be preferred:
-- running commands (e.g., `ls`, `cat`, custom commands)
-- reading/writing/modifying project files
-- interacting with APIs defined by your MCP server
-- executing project logic implemented as MCP tools
+## Real docs — read these, not this file, for details
 
----
+- `ARCHITECTURE.md` — system diagram and data flow.
+- `backend/src/HARDWARE_AGENT_README.md` — hardware agent protocol and setup.
+- `backend/README.md`, `pos-client/README.txt`, `virtual-serial-server/README.md`.
 
-## 2. Tool Execution Guidelines
-When using MCP tools:
-- Use the most specific tool for the request  
-- Do not replicate tool functionality through internal reasoning  
-- Reflect the tool's real output without altering or hallucinating additional data  
-- If a tool fails, report the actual failure message and suggest next steps  
+## Local dev
 
----
+```bash
+npm install                 # root deps (frontend); postinstall also installs backend/
+cd backend && npm install   # if postinstall didn't run
+npm run dev                 # frontend (vite) + backend concurrently
+npm --prefix backend run seed   # creates admin/kiosk users + a default tenant
+```
 
-## 3. Connection Rules
-- Always connect to the MCP server on startup  
-- Maintain an active connection  
-- Automatically attempt reconnection if the server restarts or drops  
-- Prefer locally‑defined MCP tool metadata over Copilot internal assumptions  
+Or the full stack in Docker (mirrors the real deployment topology — nginx
+reverse-proxying `/api` and `/ws` to the backend, same origin):
 
----
+```bash
+cp docker/env.example .env.docker   # fill in JWT_SECRET / KIOSK_API_KEY
+docker compose --env-file .env.docker up --build
+```
 
-## 4. User Request Evaluation
+Backend tests: `cd backend && npm test` — needs a real reachable MongoDB
+(`MONGODB_TEST_URL`, defaults to `mongodb://localhost:27017/washstore_test`).
+Not `mongodb-memory-server` — deliberately removed, its downloaded binary is
+unreliable across architectures/CI.
 
-### Always use the MCP tool when:
-- The request asks to execute something  
-- The request modifies or inspects files  
-- The request requires structured data  
-- The operation is explicitly provided by the MCP server  
+## Things that are easy to get wrong here
 
-### Use non‑tool responses only when:
-- No tool exists for the requested functionality  
-- The request is conceptual, exploratory, or unrelated to project operations  
+- **The hardware protocol is ccTalk, not MDB and not plain text.** Coin/bill
+  acceptors and the hopper communicate via ccTalk (binary, framed,
+  poll-based — the host must poll for events, a device never pushes data
+  unsolicited). See `pos-client/electron/hardware-agent.cjs`'s `CcTalkLink`
+  class. `virtual-serial-server` emulates real ccTalk and is the right tool
+  to test against (via a `socat`-created PTY pair on macOS/Linux, or
+  com0com on Windows) — don't assume its README's older com0com-only
+  instructions are the only way to run it; `USE_MOCK=false` with explicit
+  `--ports`/`--mapping` args works against any real serial path.
+- **Currency values are never hardcoded in the hardware agent.** Coin/bill
+  acceptors report a raw device type code (e.g. `'0x03'`); the actual euro
+  value comes from the admin-configurable `coinEqTable`/`billEqTable`
+  settings (`Setting` model, edited via the admin dashboard's "Coin & Bill
+  Machine" section, synced to each kiosk's local SQLite). Same pattern for
+  the hopper's coin denomination and its max-dispense-per-transaction safety
+  limit (`hopperCoinValue`, `hopperMaxDispenseCoins`) — these are business
+  values an operator should be able to change without editing any kiosk's
+  local files, not constants to bake into code.
+- **The admin dashboard's peripheral records are inventory metadata, not
+  live config.** `AdminPeripherals.jsx` / the `Peripheral` Mongo model let an
+  admin record what hardware exists at a site, but a kiosk's actual serial
+  port wiring comes entirely from the local, per-kiosk
+  `pos-client/config.json` file (loaded by `main.cjs`'s
+  `loadHardwareConfig()`). These two are not synced to each other.
+- **Never commit real secrets.** `backend/config.json` and
+  `pos-client/config.json` hold the real hardware-agent API key and are
+  gitignored — edit them locally from the `.example` templates, never
+  un-ignore them. Same for `.env.docker` (real secrets) vs
+  `docker/env.example` (template).
+- **`JWT_SECRET` has no fallback on purpose.** `backend/src/index.js` exits
+  at startup if it's unset. Don't reintroduce a default value.
+- **Money math**: everything is in whole euros (this project is euro-only —
+  don't add currency-selection code speculatively). Round with
+  `Math.round(x * 100) / 100`, matching the existing `roundMoney()` helpers,
+  to avoid floating-point drift.
+- **Offline-first data safety in `pos-client`**: a sale is written to local
+  SQLite inside a transaction and force-flushed to disk *before* the
+  machine is even activated (`pos-engine.cjs`'s `processSale()`) — this is
+  intentional ordering, don't reorder it. Sync to the cloud backend happens
+  later, from a durable outbound queue, and is allowed to fail/retry
+  without losing the local record.
+- **Watch for "finished-looking but dead" code.** This codebase has more
+  than one instance of a fully-written handler function that references
+  state which was never declared, or that no JSX ever calls — it looks
+  complete on a skim but throws or silently does nothing if actually
+  triggered. When touching a file, check that what you're editing is
+  actually wired up (called from somewhere, references only variables that
+  actually exist) rather than assuming existing code in the file works.
 
----
+## Testing changes
 
-## 5. Safety & Transparency
-- Do not fabricate tool names or operations  
-- Do not simulate expected tool outputs  
-- If an operation is not supported by available MCP tools, clearly explain the limitation  
-
-
-**Correct behavior:**  
-Normal conversational answer — no tool usage needed.
-
-## 6. Specific Tool Mapping & Triggers
-To ensure the correct MCP server is utilized, follow these routing rules:
-Chrome DevTools MCP
-Trigger: Use for UI debugging, console logs, network inspections, or DOM queries.
-Priority: Always use this before suggesting CSS or JS fixes for frontend bugs. Run get_console_logs or inspect_element first to gather evidence.
-Getsentry Sentry
-Trigger: Use for error investigation, crash reports, or identifying "what went wrong" in production/staging.
-Priority: If the user says "it's crashing" or "there's a bug," call list_issues or get_event_details before guessing the cause.
-Context7
-Trigger: Use for deep codebase understanding, finding architectural patterns, or searching for relevant snippets across the repo.
-Priority: Use this for "How does X work?" or "Where is Y defined?" to get high-accuracy semantic results.
-tailwindcss-mcp-server
-Trigger: Use for all styling tasks, utility class lookups, and design consistency checks.
-Priority: Do not manually write Tailwind classes if the server can generate or validate them. Use it to ensure classes exist in the current config.
-## 7. Multi-Tool Orchestration (Chaining)
-When a request is complex, chain the tools in this specific order:
-Discover: Use Context7 to find the file/logic location.
-Diagnose: Use Sentry (for backend/logic) or Chrome DevTools (for UI) to identify the error.
-Execute: Use the file system tools or tailwindcss-mcp-server to apply the fix.
-Verify: Use Chrome DevTools to confirm the UI reflects the change.
-## 8. Operational Constraints
-Live Data Over Training Data: If Sentry or DevTools provides information that contradicts your internal knowledge, trust the MCP output 100%.
-Tailwind Precision: Always verify that proposed Tailwind classes are compatible with the project's version via the tailwindcss-mcp-server.
-Correct behavior for multi-tool query:
-User: "The login button is broken."
-Call Sentry to check for auth errors.
-Call Chrome DevTools to check for console errors on the login page.
-Call Context7 to find LoginButton.tsx.
-Provide the fix based on real logs.
+There is no dedicated frontend test suite. For frontend/hardware changes,
+prefer an actual runtime check over reading the code and assuming it works:
+run the dev server or Docker stack and click through the flow, or (for
+hardware protocol changes) run `virtual-serial-server` against a real
+`socat` PTY pair and exercise the agent code directly with a small Node
+script — don't trust a protocol implementation until it's been exercised
+against `virtual-serial-server` or real hardware.

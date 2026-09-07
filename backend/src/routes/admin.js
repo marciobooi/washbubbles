@@ -478,8 +478,15 @@ router.post('/tenants/:id/users', requireSuperAdmin, async (req, res) => {
   if (!userId) return res.status(400).json({ error: 'Missing userId' })
   const u = await User.findById(userId)
   if (!u) return res.status(404).json({ error: 'User not found' })
+  const tenant = await Tenant.findById(tenantId)
+  if (!tenant) return res.status(404).json({ error: 'Tenant not found' })
   const r = role || 'MEMBER'
-  res.json({ success: true })
+  const membership = await TenantUser.findOneAndUpdate(
+    { tenantId, userId },
+    { $set: { role: r } },
+    { upsert: true, new: true }
+  )
+  res.json({ success: true, membership })
 })
 
 // =====================
@@ -857,8 +864,8 @@ router.post('/day-close', async (req, res) => {
     totalCash: tc,
     totalCard: tk,
     totalSales: Number((tc + tk).toFixed(2)),
-    closedBy: req.user?._id,
-    closedByUsername: req.user?.username || '',
+    closedBy: req.userModel?._id,
+    closedByUsername: req.userModel?.username || '',
     periodFrom,
     periodTo
   })

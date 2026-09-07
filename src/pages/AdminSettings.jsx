@@ -117,74 +117,6 @@ export default function AdminSettings(){
     }
   }
 
-  async function saveCoinMachineSettings(e) {
-    e.preventDefault()
-    try {
-      await api.setSetting({ key: 'coinEqTable', value: coinEqTable })
-      await api.setSetting({ key: 'billEqTable', value: billEqTable })
-      await api.setSetting({ key: 'rechargeCoinBonus', value: rechargeCoinBonus })
-      await api.setSetting({ key: 'rechargeBillBonus', value: rechargeBillBonus })
-      await api.setSetting({ key: 'autoCharge', value: autoCharge })
-      toast({ title: 'Coin/Bill settings updated', variant: 'success' })
-      load()
-      loadCoinMachineSettings()
-    } catch (e) {
-      console.error(e)
-      toast({ title: 'Failed to update settings', variant: 'destructive' })
-    }
-  }
-
-  function addCoinMapping() {
-    setCoinEqTable([...coinEqTable, { key: '', value: 0 }])
-  }
-
-  function updateCoinMapping(index, field, val) {
-    const updated = [...coinEqTable]
-    updated[index][field] = field === 'value' ? Number(val) : val
-    setCoinEqTable(updated)
-  }
-
-  function removeCoinMapping(index) {
-    setCoinEqTable(coinEqTable.filter((_, i) => i !== index))
-  }
-
-  function addBillMapping() {
-    setBillEqTable([...billEqTable, { key: '', value: 0 }])
-  }
-
-  function updateBillMapping(index, field, val) {
-    const updated = [...billEqTable]
-    updated[index][field] = field === 'value' ? Number(val) : val
-    setBillEqTable(updated)
-  }
-
-  function removeBillMapping(index) {
-    setBillEqTable(billEqTable.filter((_, i) => i !== index))
-  }
-
-  function loadDefaultCoinMappings() {
-    const defaults = [
-      { key: '0x01', value: 0.05 },
-      { key: '0x02', value: 0.10 },
-      { key: '0x03', value: 0.20 },
-      { key: '0x04', value: 0.50 },
-      { key: '0x05', value: 1.00 },
-      { key: '0x06', value: 2.00 }
-    ]
-    setCoinEqTable(defaults)
-    toast({ title: 'Default coin mappings loaded', variant: 'success' })
-  }
-
-  function loadDefaultBillMappings() {
-    const defaults = [
-      { key: '0x10', value: 5 },
-      { key: '0x11', value: 10 },
-      { key: '0x12', value: 20 }
-    ]
-    setBillEqTable(defaults)
-    toast({ title: 'Default bill mappings loaded', variant: 'success' })
-  }
-
   return (
     <div className="p-4 space-y-4">
       <h2 className="text-2xl font-bold">Settings</h2>
@@ -200,38 +132,38 @@ export default function AdminSettings(){
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="companyName">Company Name</Label>
-                <Input 
+                <Input
                   id="companyName"
-                  placeholder="Your Company Name" 
-                  value={companyName} 
-                  onChange={(e) => setCompanyName(e.target.value)} 
+                  placeholder="Your Company Name"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="logoUrl">Logo URL</Label>
-                <Input 
+                <Input
                   id="logoUrl"
-                  placeholder="/logo.png or https://..." 
-                  value={logoUrl} 
-                  onChange={(e) => setLogoUrl(e.target.value)} 
+                  placeholder="/logo.png or https://..."
+                  value={logoUrl}
+                  onChange={(e) => setLogoUrl(e.target.value)}
                 />
                 <div className="flex items-center gap-2 mt-2">
-                  <input 
-                    type="file" 
-                    accept="image/*" 
+                  <input
+                    type="file"
+                    accept="image/*"
                     className="text-sm"
-                    onChange={(e) => uploadLogo(e.target.files && e.target.files[0])} 
+                    onChange={(e) => uploadLogo(e.target.files && e.target.files[0])}
                   />
-                  <Button 
-                    type="button" 
-                    variant="outline" 
+                  <Button
+                    type="button"
+                    variant="outline"
                     size="sm"
-                    onClick={() => { 
-                      setLogoUrl(''); 
-                      toast({ title: 'Logo cleared', variant: 'success' }); 
-                      try { window.dispatchEvent(new CustomEvent('branding:update', { detail: { logo: null } })) } catch (e) {} 
-                    }} 
+                    onClick={() => {
+                      setLogoUrl('');
+                      toast({ title: 'Logo cleared', variant: 'success' });
+                      try { window.dispatchEvent(new CustomEvent('branding:update', { detail: { logo: null } })) } catch (e) {}
+                    }}
                     disabled={uploading}
                   >
                     Clear
@@ -243,17 +175,17 @@ export default function AdminSettings(){
               <div className="space-y-2">
                 <Label htmlFor="primaryColor">Primary Color</Label>
                 <div className="flex gap-2 items-center">
-                  <input 
-                    type="color" 
-                    className="w-12 h-10 p-1 border rounded cursor-pointer" 
-                    value={primaryColor || '#2563eb'} 
-                    onChange={(e) => setPrimaryColor(e.target.value)} 
+                  <input
+                    type="color"
+                    className="w-12 h-10 p-1 border rounded cursor-pointer"
+                    value={primaryColor || '#2563eb'}
+                    onChange={(e) => setPrimaryColor(e.target.value)}
                   />
-                  <Input 
+                  <Input
                     id="primaryColor"
-                    placeholder="#2563eb" 
-                    value={primaryColor} 
-                    onChange={(e) => setPrimaryColor(e.target.value)} 
+                    placeholder="#2563eb"
+                    value={primaryColor}
+                    onChange={(e) => setPrimaryColor(e.target.value)}
                   />
                 </div>
               </div>
@@ -261,17 +193,17 @@ export default function AdminSettings(){
               <div className="space-y-2">
                 <Label htmlFor="accentColor">Accent Color</Label>
                 <div className="flex gap-2 items-center">
-                  <input 
-                    type="color" 
-                    className="w-12 h-10 p-1 border rounded cursor-pointer" 
-                    value={accentColor || '#f97316'} 
-                    onChange={(e) => setAccentColor(e.target.value)} 
+                  <input
+                    type="color"
+                    className="w-12 h-10 p-1 border rounded cursor-pointer"
+                    value={accentColor || '#f97316'}
+                    onChange={(e) => setAccentColor(e.target.value)}
                   />
-                  <Input 
+                  <Input
                     id="accentColor"
-                    placeholder="#f97316" 
-                    value={accentColor} 
-                    onChange={(e) => setAccentColor(e.target.value)} 
+                    placeholder="#f97316"
+                    value={accentColor}
+                    onChange={(e) => setAccentColor(e.target.value)}
                   />
                 </div>
               </div>
@@ -291,15 +223,15 @@ export default function AdminSettings(){
                   <div className="flex gap-4">
                     <div>
                       <p className="text-xs text-muted-foreground mb-1">Primary</p>
-                      <div 
-                        className="h-10 w-24 rounded border" 
+                      <div
+                        className="h-10 w-24 rounded border"
                         style={{ background: primaryColor || '#2563eb' }}
                       />
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground mb-1">Accent</p>
-                      <div 
-                        className="h-10 w-24 rounded border" 
+                      <div
+                        className="h-10 w-24 rounded border"
                         style={{ background: accentColor || '#f97316' }}
                       />
                     </div>
@@ -310,12 +242,12 @@ export default function AdminSettings(){
 
             <div className="flex gap-2">
               <Button type="submit">Save Branding</Button>
-              <Button 
-                type="button" 
+              <Button
+                type="button"
                 variant="outline"
-                onClick={() => { 
-                  loadBranding(); 
-                  toast({ title: 'Reverted', variant: 'success' }) 
+                onClick={() => {
+                  loadBranding();
+                  toast({ title: 'Reverted', variant: 'success' })
                 }}
               >
                 Revert
@@ -333,16 +265,16 @@ export default function AdminSettings(){
         </CardHeader>
         <CardContent className="space-y-4">
           <form onSubmit={save} className="flex gap-2">
-            <Input 
-              placeholder="Setting key" 
-              value={key} 
-              onChange={(e) => setKey(e.target.value)} 
+            <Input
+              placeholder="Setting key"
+              value={key}
+              onChange={(e) => setKey(e.target.value)}
               className="w-64"
             />
-            <Input 
-              placeholder="Value (JSON supported)" 
-              value={value} 
-              onChange={(e) => setValue(e.target.value)} 
+            <Input
+              placeholder="Value (JSON supported)"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
               className="flex-1"
             />
             <Button type="submit">Add</Button>
@@ -361,8 +293,8 @@ export default function AdminSettings(){
                         {JSON.stringify(s.value)}
                       </div>
                     </div>
-                    <Button 
-                      variant="destructive" 
+                    <Button
+                      variant="destructive"
                       size="sm"
                       onClick={() => remove(s.key)}
                     >

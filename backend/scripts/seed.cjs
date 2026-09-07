@@ -78,6 +78,8 @@ async function main() {
   await Setting.updateOne({ tenantId: defaultTenant._id, key: 'rechargeCoinBonus' }, { $setOnInsert: { tenantId: defaultTenant._id, key: 'rechargeCoinBonus', value: 0 } }, { upsert: true })
   await Setting.updateOne({ tenantId: defaultTenant._id, key: 'rechargeBillBonus' }, { $setOnInsert: { tenantId: defaultTenant._id, key: 'rechargeBillBonus', value: 0 } }, { upsert: true })
   await Setting.updateOne({ tenantId: defaultTenant._id, key: 'autoCharge' }, { $setOnInsert: { tenantId: defaultTenant._id, key: 'autoCharge', value: false } }, { upsert: true })
+  await Setting.updateOne({ tenantId: defaultTenant._id, key: 'hopperCoinValue' }, { $setOnInsert: { tenantId: defaultTenant._id, key: 'hopperCoinValue', value: 1 } }, { upsert: true })
+  await Setting.updateOne({ tenantId: defaultTenant._id, key: 'hopperMaxDispenseCoins' }, { $setOnInsert: { tenantId: defaultTenant._id, key: 'hopperMaxDispenseCoins', value: 50 } }, { upsert: true })
 
   console.log('Seed complete - admin user: admin (password: ' + adminPassword + ')')
   console.log('Seed complete - kiosk user: kiosk (password: ' + kioskPassword + ')')

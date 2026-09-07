@@ -26,7 +26,7 @@ class PosEngine extends EventEmitter {
   }
 
   loadSettings() {
-    const keys = ['coinEqTable', 'billEqTable', 'rechargeCoinBonus', 'rechargeBillBonus', 'autoCharge', 'loyaltyCard.cost', 'loyaltyCard.credit']
+    const keys = ['coinEqTable', 'billEqTable', 'rechargeCoinBonus', 'rechargeBillBonus', 'autoCharge', 'loyaltyCard.cost', 'loyaltyCard.credit', 'hopperCoinValue', 'hopperMaxDispenseCoins']
     this.settings = {}
     for (const key of keys) {
       const s = settings.get(this.tenantId, key)
@@ -217,7 +217,16 @@ class PosEngine extends EventEmitter {
     flushSave(); return { success: true }
   }
 
-  dispenseChange(amount) { if (amount <= 0) return { success: true, amount: 0 }; if (!this.hw) return { success: false, error: 'Hardware not available' }; return { success: this.hw.dispenseCoins(amount), amount } }
+  async dispenseChange(amount) {
+    if (amount <= 0) return { success: true, amount: 0 }
+    if (!this.hw) return { success: false, error: 'Hardware not available' }
+    const opts = {
+      coinValue: this.settings.hopperCoinValue != null ? Number(this.settings.hopperCoinValue) : undefined,
+      maxCoins: this.settings.hopperMaxDispenseCoins != null ? Number(this.settings.hopperMaxDispenseCoins) : undefined,
+    }
+    const success = await this.hw.dispenseCoins(amount, opts)
+    return { success, amount }
+  }
   printReceipt(content) { if (!this.hw) return false; return this.hw.printReceipt(content) }
   updateCredits() { this.sessionState.credits = roundMoney(this.sessionState.cashBalance + this.sessionState.cardBalance + this.sessionState.bonus) }
   getSession() { return { ...this.sessionState } }

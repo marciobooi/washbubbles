@@ -15,7 +15,7 @@ export default function AdminPeripherals() {
 
   const peripheralTypes = [
     { type: 'bill_acceptor', name: 'Leitor de Notas', protocols: ['cctalk', 'MDB'], image: '/geral/bill_acceptor.jpg' },
-    { type: 'card_dispenser', name: 'Disp. de Cartões', protocols: ['rs232', 'pulse'], image: '/geral/card_dispenser.jpg' },
+    { type: 'card_dispenser', name: 'Disp. de Cartões', protocols: ['cctalk', 'pulse'], image: '/geral/card_dispenser.jpg' },
     { type: 'coin_acceptor', name: 'Leitor de Moedas', protocols: ['cctalk', 'MDB'], image: '/geral/coin_acceptor.jpg' },
     { type: 'hopper', name: 'Hopper', protocols: ['cctalk', 'MDB'], image: '/geral/mini_hopper.jpg' },
     { type: 'printer', name: 'Impressora', protocols: ['rs232'], image: '/geral/printer.jpg' },

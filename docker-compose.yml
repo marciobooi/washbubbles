@@ -1,0 +1,38 @@
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - washbubbles_mongo_data:/data/db
+    ports:
+      - "27018:27017"
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      MONGODB_URL: mongodb://mongo:27017/washstore
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.docker}
+      PORT: 3000
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin1234}
+      KIOSK_PASSWORD: ${KIOSK_PASSWORD:-kiosk1234}
+      KIOSK_API_KEY: ${KIOSK_API_KEY:?set KIOSK_API_KEY in .env.docker}
+    depends_on:
+      - mongo
+    ports:
+      - "3010:3000"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+      args:
+        VITE_KIOSK_API_KEY: ${KIOSK_API_KEY:?set KIOSK_API_KEY in .env.docker}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8081:80"
+
+volumes:
+  washbubbles_mongo_data:

@@ -43,6 +43,8 @@ export default function AdminPrices() {
   const [rechargeCoinBonus, setRechargeCoinBonus] = useState(0)
   const [rechargeBillBonus, setRechargeBillBonus] = useState(0)
   const [autoCharge, setAutoCharge] = useState(false)
+  const [hopperCoinValue, setHopperCoinValue] = useState(1)
+  const [hopperMaxDispenseCoins, setHopperMaxDispenseCoins] = useState(50)
 
   async function load() {
     setLoading(true)
@@ -81,15 +83,19 @@ export default function AdminPrices() {
       const billEq = await api.getSetting('billEqTable').catch(() => null)
       const coinBonus = await api.getSetting('rechargeCoinBonus').catch(() => null)
       const billBonus = await api.getSetting('rechargeBillBonus').catch(() => null)
-      const autoChargeVal = await api.getSetting('autoChargeardPurchaseSettings(); loadC').catch(() => null)
-      
+      const autoChargeVal = await api.getSetting('autoCharge').catch(() => null)
+      const hopperVal = await api.getSetting('hopperCoinValue').catch(() => null)
+      const hopperMax = await api.getSetting('hopperMaxDispenseCoins').catch(() => null)
+
       setCoinEqTable(coinEq && Array.isArray(coinEq.value) ? coinEq.value : [])
       setBillEqTable(billEq && Array.isArray(billEq.value) ? billEq.value : [])
       setRechargeCoinBonus(coinBonus && coinBonus.value !== undefined ? Number(coinBonus.value) : 0)
       setRechargeBillBonus(billBonus && billBonus.value !== undefined ? Number(billBonus.value) : 0)
       setAutoCharge(autoChargeVal && autoChargeVal.value ? Boolean(autoChargeVal.value) : false)
-    } catch (e) { 
-      console.warn('loadCoinMachineSettings failed', e) 
+      setHopperCoinValue(hopperVal && hopperVal.value != null ? Number(hopperVal.value) : 1)
+      setHopperMaxDispenseCoins(hopperMax && hopperMax.value != null ? Number(hopperMax.value) : 50)
+    } catch (e) {
+      console.warn('loadCoinMachineSettings failed', e)
     }
   }
 
@@ -202,12 +208,18 @@ export default function AdminPrices() {
   // Coin/Bill save
   async function saveCoinMachineSettings(e) {
     e.preventDefault()
+    if (hopperMaxDispenseCoins > 200) {
+      toast({ title: 'Max dispense coins looks too high (>200) — double-check before saving', variant: 'destructive' })
+      return
+    }
     try {
       await api.setSetting({ key: 'coinEqTable', value: coinEqTable })
       await api.setSetting({ key: 'billEqTable', value: billEqTable })
       await api.setSetting({ key: 'rechargeCoinBonus', value: rechargeCoinBonus })
       await api.setSetting({ key: 'rechargeBillBonus', value: rechargeBillBonus })
       await api.setSetting({ key: 'autoCharge', value: autoCharge })
+      await api.setSetting({ key: 'hopperCoinValue', value: hopperCoinValue })
+      await api.setSetting({ key: 'hopperMaxDispenseCoins', value: hopperMaxDispenseCoins })
       toast({ title: 'Coin/Bill settings saved', variant: 'success' })
       loadCoinMachineSettings()
     } catch (e) {
@@ -657,6 +669,22 @@ export default function AdminPrices() {
                 <p className="text-xs text-muted-foreground ml-6">
                   Guardar automaticamente o saldo em dinheiro no cartão quando este é removido
                 </p>
+              </div>
+            </div>
+
+            <div className="border-t pt-4">
+              <Label className="mb-2 block">Hopper (dispensador de troco)</Label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="hopperCoinValue">Valor da moeda no hopper (€)</Label>
+                  <Input id="hopperCoinValue" type="number" step="0.01" min="0.01" value={hopperCoinValue} onChange={(e) => setHopperCoinValue(Number(e.target.value))} />
+                  <p className="text-xs text-muted-foreground">A maioria dos hoppers guarda uma única denominação de moeda.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="hopperMaxDispenseCoins">Máximo de moedas por dispensa</Label>
+                  <Input id="hopperMaxDispenseCoins" type="number" step="1" min="1" value={hopperMaxDispenseCoins} onChange={(e) => setHopperMaxDispenseCoins(Number(e.target.value))} />
+                  <p className="text-xs text-muted-foreground">Limite de segurança — um pedido acima disto é recusado em vez de arriscar esvaziar o hopper por um erro de cálculo.</p>
+                </div>
               </div>
             </div>
 
