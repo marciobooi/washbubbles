@@ -462,6 +462,58 @@ New `backend/src/services/ccTalk.js` and `kitsec.js`, both covered by tests.
 
 ---
 
+## Round 4 — the loyalty card system
+
+Checked end to end after you flagged it. **It did not work at all.** Four separate
+breaks, each of which alone would stop a card from ever being usable.
+
+- [x] **`middleware` was `undefined` at every call site in `pos.js`.** All four did
+  `const { middleware } = await import('../index.js')` — and `index.js` exports
+  nothing. So:
+  - `if (dispenser && middleware)` was always false → **no card was ever dispensed**,
+    while the customer was charged in full and shown *"Card dispensed. Please insert
+    card into reader to activate."*
+  - `/card/write` hit `if (!rfidReader || !middleware)` → **503 every time**, so a
+    purchased card could never be activated
+  - `/card/read` never worked
+  - change on a card purchase was never paid out
+- [x] **The kiosk UI never wrote the card.** `BuyCardModal` called
+  `/pos/card/mark-written/:code`, which only flips a database boolean — the endpoint
+  that actually writes the id and balance onto the plastic (`/pos/card/write/:code`)
+  was never called. And its `catch` moved to "Cartão ativado!" *even on failure*.
+  The customer walked away with blank plastic and a database row.
+- [x] **Money could be taken with no card.** The dispense now happens **before** the
+  sale is recorded: a jammed or empty dispenser returns 503 and nothing is charged.
+- [x] **A blank card was spendable.** Cards now carry a `status`
+  (`pending_write` → `active`), and a card that was paid for but never written at
+  the reader is refused for payment until it is.
+
+### How the flow works now
+
+1. Customer fills in their details and pays → price checked, amount validated.
+2. **Blank card is dispensed first.** If the dispenser fails: 503, no charge, no sale.
+3. Card row created as `pending_write`, sale recorded, change paid (and reported if
+   the hopper could not).
+4. Customer inserts the blank card → `/pos/card/write/:code` writes **the card code
+   (their id) plus balance and details** onto it, verifies the reader's ACK, and
+   only then flips the card to `active`.
+5. A write failure keeps the card `pending_write` and tells the customer to retry —
+   their payment is already on record, so they do not lose the card they bought.
+
+### One design decision worth knowing
+
+**The database is the source of truth for balance, not the card.** When a customer
+taps their card we read the *code* off it and look the balance up server-side
+(`client.setClientInfoByCard`). The balance written onto the card is a convenience
+copy — for display and any future offline use — and is never trusted for spending.
+
+That is deliberate: a balance the card itself asserts is a balance a customer can
+forge with a €30 reader/writer. If you ever want true offline card spending, the
+card data has to be cryptographically signed, which is a bigger piece of work — say
+the word and I will scope it.
+
+---
+
 ## Deploy notes (do these on the Hetzner box)
 
 1. **Drop the old user email index once**, or the new `partialFilterExpression` will not be created
@@ -484,7 +536,11 @@ New `backend/src/services/ccTalk.js` and `kitsec.js`, both covered by tests.
 6. **Set an admin PIN.** `hw:adminStartMachine` (start a machine free of charge) now
    requires the `adminPin` setting. It is unset by default and the action fails closed
    until you set one.
-7. **New indexes build on first boot.** The unique one on `{tenantId, interfaceId, port}` will
+7. **Check the card dispenser and RFID reader are configured** as peripherals with
+   the right `address` (port path) and `deviceAddress` (ccTalk bus address). Selling
+   a card now fails closed with a 503 if no dispenser is configured, rather than
+   charging for a card that never appears.
+8. **New indexes build on first boot.** The unique one on `{tenantId, interfaceId, port}` will
    FAIL to build if duplicates already exist. Check before deploying:
    ```
    db.machines.aggregate([{$match:{interfaceId:{$ne:null},port:{$ne:null}}},{$group:{_id:{t:'$tenantId',i:'$interfaceId',p:'$port'},n:{$sum:1}}},{$match:{n:{$gt:1}}}])

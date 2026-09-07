@@ -43,6 +43,9 @@ export default function BuyCardModal({ open, onClose }) {
   
   // Purchase result
   const [purchasedCard, setPurchasedCard] = useState(null)
+  // Set when writing the card at the reader fails. The customer has already paid,
+  // so the step must stay open for a retry rather than reporting success.
+  const [writeError, setWriteError] = useState(null)
 
   // Load card purchase settings
   useEffect(() => {
@@ -90,6 +93,7 @@ export default function BuyCardModal({ open, onClose }) {
     setInsertedAmount(0)
     setChangeAmount(0)
     setPurchasedCard(null)
+    setWriteError(null)
     setLoading(false)
   }
 
@@ -200,16 +204,21 @@ export default function BuyCardModal({ open, onClose }) {
         : null
       const kioskKey = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
 
-      // Mark card as written
-      await api.request(`/pos/card/mark-written/${purchasedCard.code}`, {
+      // Actually WRITE the card: this puts the customer's id and balance onto
+      // the blank card sitting in the reader, and only marks it active once the
+      // reader confirms. The old code called `/card/mark-written`, which just
+      // flips a database boolean — the physical card was never written at all
+      // and the customer walked away with blank plastic.
+      await api.request(`/pos/card/write/${purchasedCard.code}`, {
         method: 'POST',
         headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined,
         skipAuth: true,
         expect: 'json'
       })
 
+      setWriteError(null)
       setStep(STEPS.COMPLETE)
-      
+
       toast({ 
         title: 'Cartão ativado!', 
         description: `Saldo: €${initialCredit.toFixed(2)}`,
@@ -221,13 +230,19 @@ export default function BuyCardModal({ open, onClose }) {
         handleClose()
       }, 5000)
     } catch (e) {
-      console.error('Failed to mark card as written:', e)
-      // Still move to complete step even if marking fails
-      setStep(STEPS.COMPLETE)
-      
-      setTimeout(() => {
-        handleClose()
-      }, 5000)
+      console.error('Failed to write the card:', e)
+      // Do NOT claim success. The card is still blank and unusable, and the
+      // customer has paid for it — keep them on this step so they can retry at
+      // the reader, and tell them the truth.
+      setWriteError(
+        e?.body?.message || e?.message ||
+        'Não foi possível gravar o cartão. Verifique que está bem inserido e tente novamente.'
+      )
+      toast({
+        title: 'Falha ao gravar o cartão',
+        description: 'O cartão ainda não está activo. Tente novamente ou contacte o balcão.',
+        variant: 'destructive',
+      })
     } finally {
       setLoading(false)
     }
@@ -474,6 +489,15 @@ export default function BuyCardModal({ open, onClose }) {
                 Por favor insira o cartão no leitor para ativar
               </p>
             </div>
+
+            {writeError && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
+                <p className="text-sm text-red-700 font-semibold">{writeError}</p>
+                <p className="text-xs text-red-600 mt-1">
+                  O cartão ainda não está activo. O seu pagamento está registado.
+                </p>
+              </div>
+            )}
 
             {purchasedCard && (
               <div className="bg-muted p-4 rounded-lg space-y-2">
