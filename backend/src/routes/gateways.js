@@ -127,6 +127,10 @@ router.post('/card/pay', requireKiosk, async (req, res) => {
   // Fetch card
   let card = await CardT.findOne({ code: cardCode })
   if (!card) return res.status(404).json({ error: 'Card not found' })
+  if (card.status === 'pending_write') {
+    return res.status(409).json({ error: 'Card is not activated yet — insert it in the reader first', status: card.status })
+  }
+  if (card.status === 'blocked') return res.status(409).json({ error: 'Card is blocked' })
 
   // ── Validate the whole cart before a cent moves ──
   // The previous version credited recharges and debited machines inside the same

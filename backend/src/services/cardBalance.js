@@ -26,6 +26,13 @@ import { roundMoney } from '../utils/money.js'
 const EPSILON = 0.005
 
 /**
+ * A card that has been paid for but not yet written at the reader is blank: it
+ * carries no id and no balance, so it must not be spendable. Blocked cards are
+ * excluded for the obvious reason.
+ */
+export const SPENDABLE = { status: { $nin: ['pending_write', 'blocked'] } }
+
+/**
  * Add to a card's balance atomically.
  * @returns the updated card, or null if it no longer exists.
  */
@@ -48,7 +55,7 @@ export async function debitCard(Model, filter, amount) {
   const delta = roundMoney(amount)
   if (!(delta > 0)) throw new Error('debitCard requires a positive amount')
   return Model.findOneAndUpdate(
-    { ...filter, balance: { $gte: delta - EPSILON } },
+    { ...filter, ...SPENDABLE, balance: { $gte: delta - EPSILON } },
     { $inc: { balance: -delta }, $set: { updatedAt: new Date() } },
     { new: true }
   )
@@ -65,4 +72,4 @@ export async function applyCardDelta(Model, filter, delta) {
   return debitCard(Model, filter, -d)
 }
 
-export default { creditCard, debitCard, applyCardDelta }
+export default { creditCard, debitCard, applyCardDelta, SPENDABLE }

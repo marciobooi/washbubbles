@@ -9,6 +9,13 @@ import * as websocket from '@/services/websocket'
 export default function CartModal({ open, onClose, onPay = () => {}, onClear = () => {} }) {
   const { cart, removeFromCart, clearCart } = useCart()
   const [showCash, setShowCash] = React.useState(false)
+  // Staff-only manual payment, for when the coin acceptor or card reader is down.
+  // Gated behind the operator's admin PIN so a customer cannot self-serve a wash.
+  const [showPinPrompt, setShowPinPrompt] = React.useState(false)
+  const [pin, setPin] = React.useState('')
+  const [pinError, setPinError] = React.useState(null)
+  const [checkingPin, setCheckingPin] = React.useState(false)
+  const [manualUnlocked, setManualUnlocked] = React.useState(false)
   const [cardError, setCardError] = React.useState(null)
 
   // Card-pay flow (loyalty card)
@@ -209,6 +216,44 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
     }
   }
 
+  /**
+   * Unlock manual payment after checking the admin PIN with the server.
+   *
+   * The PIN is verified server-side and never fetched to the client — this
+   * terminal is unattended and public, so a client-side comparison would be
+   * decorative.
+   */
+  async function verifyPinAndUnlock() {
+    setCheckingPin(true)
+    setPinError(null)
+    try {
+      const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
+      const kioskKey = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
+      await api.verifyAdminPin(pin, { apiKey: kioskKey })
+      setManualUnlocked(true)
+      setShowPinPrompt(false)
+      setPin('')
+    } catch (e) {
+      if (e?.status === 409) {
+        setPinError('Nenhum PIN de administrador configurado para este local.')
+      } else if (e?.status === 429) {
+        setPinError('Demasiadas tentativas. Aguarde alguns minutos.')
+      } else {
+        setPinError('PIN inválido')
+      }
+      setPin('')
+    } finally {
+      setCheckingPin(false)
+    }
+  }
+
+  function closeManual() {
+    setManualUnlocked(false)
+    setShowPinPrompt(false)
+    setPin('')
+    setPinError(null)
+  }
+
   function openCashModal() {
     setCardError(null)
     setShowCash(true)
@@ -321,6 +366,15 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
               >
                 Cancelar
               </button>
+
+              {/* Staff fallback for when the hardware is down. Deliberately
+                  understated so customers do not reach for it by default. */}
+              <button
+                onClick={() => { setPinError(null); setShowPinPrompt(true) }}
+                className="mx-auto mt-2 text-xs text-neutral-400 hover:text-neutral-600 underline underline-offset-4"
+              >
+                Pagamento manual (staff)
+              </button>
             </div>
           </>
         )}
@@ -361,7 +415,55 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
 
     </Modal>
     {/* cash insert modal */}
-    <CashModal open={showCash} total={total} onClose={() => setShowCash(false)} onConfirm={handleCashConfirm} />
+    {/* Admin PIN gate */}
+    {showPinPrompt && (
+      <Modal open={showPinPrompt} onClose={() => { setShowPinPrompt(false); setPin(''); setPinError(null) }} title="Pagamento manual">
+        <div className="space-y-4">
+          <p className="text-sm text-neutral-600">
+            Introduza o PIN de administrador para desbloquear o pagamento manual.
+            Utilize apenas quando o aceitador de moedas ou o leitor de cartões estiver avariado.
+          </p>
+          <input
+            type="password"
+            inputMode="numeric"
+            autoComplete="off"
+            value={pin}
+            onChange={(e) => setPin(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && pin && !checkingPin) verifyPinAndUnlock() }}
+            placeholder="PIN"
+            className="w-full px-4 py-3 rounded-lg border border-neutral-300 text-center text-2xl tracking-widest"
+          />
+          {pinError && <div className="text-sm text-red-600 font-semibold">{pinError}</div>}
+          <div className="flex gap-2">
+            <button onClick={() => { setShowPinPrompt(false); setPin(''); setPinError(null) }} className="flex-1 py-2 rounded-lg border">Cancelar</button>
+            <button
+              onClick={verifyPinAndUnlock}
+              disabled={checkingPin || !pin}
+              className={`flex-1 py-2 rounded-lg ${checkingPin || !pin ? 'bg-neutral-100 text-neutral-500' : 'bg-teal-600 text-white'}`}
+            >
+              {checkingPin ? 'A verificar…' : 'Desbloquear'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+    )}
+
+    {/* Unlocked: choose a manual payment method */}
+    {manualUnlocked && !showCash && !showCardPrompt && (
+      <Modal open={manualUnlocked} onClose={closeManual} title="Pagamento manual">
+        <div className="space-y-4">
+          <div className="text-sm text-neutral-600">Total a cobrar</div>
+          <div className="text-3xl font-bold text-teal-600">{total.toFixed(2)}€</div>
+          <div className="grid grid-cols-2 gap-3">
+            <button onClick={openCashModal} className="py-4 rounded-lg bg-teal-600 text-white font-semibold">Dinheiro</button>
+            <button onClick={handleCardPay} className="py-4 rounded-lg bg-neutral-800 text-white font-semibold">Cartão</button>
+          </div>
+          <button onClick={closeManual} className="w-full py-2 rounded-lg border">Cancelar</button>
+        </div>
+      </Modal>
+    )}
+
+    <CashModal open={showCash} total={total} onClose={() => { setShowCash(false); closeManual() }} onConfirm={handleCashConfirm} />
     </>
   )
 }

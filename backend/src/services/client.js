@@ -182,22 +182,43 @@ class Client extends EventEmitter {
       throw new Error('Insufficient credits')
     }
 
-    // Deduct from card balance first, then cash balance. Rounded at every step:
-    // raw float math left balances like 4.999999999, which then failed an exact
-    // "insufficient credits" check on a payment the customer could afford.
-    if (this.client.balanceCard >= amount) {
-      this.client.balanceCard = roundMoney(this.client.balanceCard - amount)
-    } else {
-      const remainingAfterCard = roundMoney(amount - this.client.balanceCard)
-      this.client.balanceCard = 0
-      this.client.balance = roundMoney(this.client.balance - remainingAfterCard)
-    }
+    // Coins and card balance are ONE pot: a customer with €3 on the card who
+    // feeds in €2 can buy a €5 wash. `credits` is the sum of both, and a purchase
+    // draws on whatever it needs.
+    //
+    // Session cash is spent FIRST, card balance second. The end state is the same
+    // either way, but taking the cash first means fewer writes to the card — and
+    // every card write is a chance to fail, and an offline sync delta to reconcile
+    // later. Cash already sitting in the machine needs no such round trip.
+    const fromCash = Math.min(roundMoney(this.client.balance), amount)
+    const fromCard = roundMoney(amount - fromCash)
+
+    this.client.balance = roundMoney(this.client.balance - fromCash)
+    this.client.balanceCard = roundMoney(this.client.balanceCard - fromCard)
+
     // Never let float drift leave a fractional negative behind.
     if (this.client.balance < 0 && this.client.balance > -0.005) this.client.balance = 0
+    if (this.client.balanceCard < 0 && this.client.balanceCard > -0.005) this.client.balanceCard = 0
 
     this.updateCredits()
     this.notifySubscribers()
-    this.emit('credits-deducted', { amount, remaining: this.client.credits })
+    this.emit('credits-deducted', { amount, fromCash, fromCard, remaining: this.client.credits })
+
+    // The caller needs the split to know whether the card must be persisted.
+    return { amount, fromCash, fromCard }
+  }
+
+  /** Restore a snapshot taken before a failed payment. */
+  restoreBalances(snapshot) {
+    this.client.balance = snapshot.balance
+    this.client.balanceCard = snapshot.balanceCard
+    this.updateCredits()
+    this.notifySubscribers()
+  }
+
+  /** Snapshot the spendable balances so a failed payment can be undone. */
+  snapshotBalances() {
+    return { balance: this.client.balance, balanceCard: this.client.balanceCard }
   }
 
   /**
@@ -212,24 +233,29 @@ class Client extends EventEmitter {
   /**
    * Save card balance back to database
    */
+  /**
+   * Write the in-memory card balance back to the database.
+   *
+   * Throws on failure. It used to swallow the error and return, so a failed write
+   * was indistinguishable from a successful one — the customer's card kept its old
+   * balance while the session behaved as though they had paid.
+   */
   async saveCardBalance() {
     if (!this.client.hasCard || !this.client.cardNumber) {
-      return
+      return null
     }
 
-    try {
-      await Card.findOneAndUpdate(
-        { code: this.client.cardNumber },
-        { 
-          balance: this.client.balanceCard,
-          bonus: this.client.bonus
-        }
-      )
-      
-      this.emit('card-saved')
-    } catch (err) {
-      console.error('Failed to save card balance:', err)
+    const card = await Card.findOneAndUpdate(
+      { code: this.client.cardNumber },
+      { $set: { balance: roundMoney(this.client.balanceCard), bonus: roundMoney(this.client.bonus), updatedAt: new Date() } },
+      { new: true }
+    )
+    if (!card) {
+      throw new Error(`Card ${this.client.cardNumber} no longer exists — balance not saved`)
     }
+
+    this.emit('card-saved', { code: card.code, balance: card.balance })
+    return card
   }
 
   /**

@@ -19,4 +19,19 @@ export const cardLookupLimiter = rateLimit({
   message: { error: 'Too many card lookups, please slow down.' },
 })
 
-export default { cardLookupLimiter }
+/**
+ * Admin PIN verification limiter.
+ *
+ * The PIN gates free-of-charge and manual-payment actions on an unattended public
+ * terminal, so it must not be brute-forcible. A short numeric PIN falls in
+ * minutes at unlimited rate.
+ */
+export const adminPinLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many PIN attempts, please try again later.' },
+})
+
+export default { cardLookupLimiter, adminPinLimiter }

@@ -464,49 +464,91 @@ class CoinMachine extends EventEmitter {
   /**
    * Process payment for a machine
    */
+  /**
+   * Take payment for a machine from the customer's combined credits.
+   *
+   * Coins and card balance are one pot: €3 on the card plus €2 in coins buys a €5
+   * wash. `paymentType` restricts which sources may be used when the operator
+   * wants to force one; 'auto' (the default) spends cash first, then the card.
+   *
+   * The old version computed a `useCard` flag that `deductCredits` then ignored —
+   * it always drained the card regardless — and only saved the card when that
+   * wrong flag happened to be true. On a cash-mode payment the card was debited in
+   * memory and never written, so the customer's balance never actually dropped.
+   */
   async processPayment(machineId, amount, paymentType = 'auto') {
-    try {
-      const clientState = this.client.getState()
+    const price = roundMoney(amount)
+    if (!(price > 0)) throw new Error('Invalid payment amount')
 
-      // Determine payment source
-      let useCard = false
-      if (paymentType === 'card') {
-        useCard = true
-      } else if (paymentType === 'cash') {
-        useCard = false
-      } else {
-        // Auto: prefer card if available
-        useCard = clientState.hasCard && clientState.balanceCard >= amount
-      }
+    const state = this.client.getState()
 
-      // Check if sufficient funds
-      if (clientState.credits < amount) {
-        throw new Error('Insufficient credits')
-      }
+    // Work out what this payment type is allowed to draw on.
+    let spendable
+    if (paymentType === 'card') {
+      if (!state.hasCard) throw new Error('No card presented')
+      spendable = roundMoney(state.balanceCard)
+    } else if (paymentType === 'cash') {
+      spendable = roundMoney(state.balance)
+    } else {
+      spendable = roundMoney(state.credits) // cash + card together
+    }
 
-      // Deduct credits
-      this.client.deductCredits(amount)
-
-      // Save card balance if card was used
-      if (useCard && clientState.hasCard) {
-        await this.client.saveCardBalance()
-      }
-
-      this.emit('payment-processed', {
-        machineId,
-        amount,
-        paymentType: useCard ? 'card' : 'cash',
-        remainingBalance: this.client.getState().credits
-      })
-
-      return {
-        success: true,
-        paymentType: useCard ? 'card' : 'cash',
-        remainingBalance: this.client.getState().credits
-      }
-    } catch (err) {
-      console.error('Payment processing failed:', err)
+    if (spendable + 0.005 < price) {
+      const err = new Error('Insufficient credits')
+      err.code = 'INSUFFICIENT_CREDITS'
+      err.available = spendable
+      err.required = price
       throw err
+    }
+
+    // Snapshot so a failed card write can be undone rather than leaving the
+    // customer debited in memory for a payment that never landed.
+    const snapshot = this.client.snapshotBalances()
+
+    let split
+    if (paymentType === 'card') {
+      // Forced card: move the whole amount off the card.
+      this.client.client.balanceCard = roundMoney(state.balanceCard - price)
+      this.client.updateCredits()
+      split = { amount: price, fromCash: 0, fromCard: price }
+    } else if (paymentType === 'cash') {
+      // Forced cash: never touch the card.
+      this.client.client.balance = roundMoney(state.balance - price)
+      this.client.updateCredits()
+      split = { amount: price, fromCash: price, fromCard: 0 }
+    } else {
+      split = this.client.deductCredits(price)
+    }
+
+    // Persist the card whenever any of it came off the card — on EVERY path.
+    if (split.fromCard > 0) {
+      try {
+        await this.client.saveCardBalance()
+      } catch (err) {
+        this.client.restoreBalances(snapshot)
+        console.error('[CoinMachine] Card write failed; payment rolled back:', err.message)
+        const wrapped = new Error('Could not update the card balance — payment cancelled')
+        wrapped.code = 'CARD_WRITE_FAILED'
+        wrapped.cause = err
+        throw wrapped
+      }
+    }
+
+    const source = split.fromCard > 0 && split.fromCash > 0 ? 'mixed'
+      : split.fromCard > 0 ? 'card' : 'cash'
+
+    this.emit('payment-processed', {
+      machineId, amount: price, paymentType: source,
+      fromCash: split.fromCash, fromCard: split.fromCard,
+      remainingBalance: this.client.getState().credits
+    })
+
+    return {
+      success: true,
+      paymentType: source,
+      fromCash: split.fromCash,
+      fromCard: split.fromCard,
+      remainingBalance: this.client.getState().credits
     }
   }
 

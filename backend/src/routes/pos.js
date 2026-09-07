@@ -7,8 +7,9 @@ import { requireKiosk } from '../middleware/auth.js'
 import { broadcastMachines, broadcastMachine } from '../wsServer.js'
 import { withTenant } from '../services/tenant.js'
 import { roundMoney, parseAmount } from '../utils/money.js'
-import { creditCard, debitCard } from '../services/cardBalance.js'
-import { cardLookupLimiter } from '../middleware/rateLimits.js'
+import { creditCard, debitCard, SPENDABLE } from '../services/cardBalance.js'
+import { cardLookupLimiter, adminPinLimiter } from '../middleware/rateLimits.js'
+import crypto from 'crypto'
 import coinMachine from '../services/coinMachine.js'
 
 const router = express.Router()
@@ -111,9 +112,13 @@ router.post('/sale', requireKiosk, async (req, res) => {
     const filter = cardId ? { _id: cardId } : { code: cardCode }
     card = await debitCard(CardT, filter, saleAmount)
     if (!card) {
-      // Null means missing OR underfunded — look it up to say which.
+      // Null means missing, not yet activated, or underfunded — say which.
       const exists = await CardT.findOne(filter)
       if (!exists) return res.status(404).json({ error: 'Card not found' })
+      if (exists.status === 'pending_write') {
+        return res.status(409).json({ error: 'Card is not activated yet — insert it in the reader first', status: exists.status })
+      }
+      if (exists.status === 'blocked') return res.status(409).json({ error: 'Card is blocked' })
       return res.status(400).json({ error: 'Insufficient balance', balance: exists.balance })
     }
   }
@@ -135,6 +140,38 @@ router.post('/sale', requireKiosk, async (req, res) => {
   try { await broadcastMachine(updated) } catch (e) { console.error('[pos] broadcastMachine error', e) }
 
   res.json({ sale, machine: updated, card })
+})
+
+/**
+ * POST /pos/admin/verify-pin
+ *
+ * Confirms the operator's admin PIN so the kiosk can unlock staff-only actions
+ * (manual payment when the coin acceptor or card reader is down).
+ *
+ * The PIN is verified server-side and never sent to the client: shipping it to a
+ * renderer on a public terminal would make the gate decorative. Compared in
+ * constant time and rate limited, since a short numeric PIN is otherwise
+ * brute-forcible in minutes.
+ */
+router.post('/admin/verify-pin', adminPinLimiter, requireKiosk, async (req, res) => {
+  const { pin } = req.body
+  if (typeof pin !== 'string' || !pin) return res.status(400).json({ error: 'Missing pin' })
+
+  const SettingT = withTenant(Setting, req)
+  const row = await SettingT.findOne({ key: 'adminPin' })
+  const expected = row ? String(row.value ?? '') : ''
+
+  // Fail closed: with no PIN configured, staff actions stay locked.
+  if (!expected) {
+    return res.status(409).json({ error: 'No admin PIN is configured for this site', configured: false })
+  }
+
+  const a = Buffer.from(expected)
+  const b = Buffer.from(pin)
+  const ok = a.length === b.length && crypto.timingSafeEqual(a, b)
+  if (!ok) return res.status(401).json({ error: 'Invalid PIN' })
+
+  res.json({ ok: true })
 })
 
 // Card recharge / top-up (kiosk) — stored as a transaction without a machine reference
@@ -238,86 +275,101 @@ router.post('/recharge', requireKiosk, async (req, res) => {
 })
 
 // Card purchase endpoint - handles new card purchases with customer data
+/**
+ * POST /pos/card/purchase — sell a new loyalty card.
+ *
+ * The physical lifecycle is: customer pays → dispenser ejects a BLANK card →
+ * customer inserts it in the reader → we write their id and balance onto it
+ * (`/pos/card/write/:code`) → the card is active.
+ *
+ * Ordering matters. The card is dispensed BEFORE the sale is recorded, because
+ * a dispenser that is jammed or empty must not result in a charge. Previously
+ * this route resolved `middleware` from `../index.js`, which exports nothing —
+ * so `middleware` was always undefined, `if (dispenser && middleware)` was always
+ * false, and NO CARD WAS EVER DISPENSED while the customer was charged in full
+ * and told "Card dispensed. Please insert card into reader to activate."
+ */
 router.post('/card/purchase', requireKiosk, async (req, res) => {
-  const { inserted, customerName, customerEmail, customerPhone, customerContribuinte, batchId } = req.body
-  
-  if (!inserted || Number(inserted) <= 0) {
-    return res.status(400).json({ error: 'Missing payment amount' })
-  }
+  const { inserted, customerName, customerEmail, customerPhone, customerContribuinte, batchId, localId } = req.body
+
+  const parsedInserted = parseAmount(inserted)
+  if (!parsedInserted.ok) return res.status(400).json({ error: parsedInserted.error })
+  const insertedAmount = parsedInserted.value
 
   try {
-    // Get card purchase settings from loyaltyCard config
-    const SettingT = withTenant(Setting, req)
-    const purchasePrice = await SettingT.findOne({ key: 'loyaltyCard.cost' })
-    const initialCredit = await SettingT.findOne({ key: 'loyaltyCard.credit' })
-    
-    const price = purchasePrice?.value ? Number(purchasePrice.value) : 0
-    const credit = initialCredit?.value ? Number(initialCredit.value) : 0
-    
-    if (price <= 0) {
-      return res.status(400).json({ error: 'Card purchase price not configured' })
-    }
-
-    const insertedAmount = Number(inserted)
-    
-    if (insertedAmount < price) {
-      return res.status(400).json({ error: `Insufficient payment. Card costs €${price.toFixed(2)}` })
-    }
-
-    // Calculate change
-    const changeAmount = insertedAmount - price
-
-    // Generate unique card code (10 digits)
     const Card = (await import('../models/card.js')).default
     const CardPurchase = (await import('../models/cardPurchase.js')).default
+    const Peripheral = (await import('../models/peripheral.js')).default
     const CardT = withTenant(Card, req)
     const CardPurchaseT = withTenant(CardPurchase, req)
-    
-    let cardCode = ''
-    let cardExists = true
-    
-    // Generate unique card code
-    while (cardExists) {
-      cardCode = Math.floor(1000000000 + Math.random() * 9000000000).toString()
-      cardExists = await CardT.findOne({ code: cardCode })
-    }
+    const PeripheralT = withTenant(Peripheral, req)
+    const SettingT = withTenant(Setting, req)
+    const SaleT = withTenant(Sale, req)
 
-    // Step 1: Dispense card from dispenser
-    let cardDispensed = false
-    try {
-      const { middleware } = await import('../index.js')
-      const Peripheral = (await import('../models/peripheral.js')).default
-      const PeripheralT = withTenant(Peripheral, req)
-      const dispenser = await PeripheralT.findOne({ type: 'card_dispenser', enabled: true })
-      
-      if (dispenser && middleware) {
-        await middleware.dispenseCard(dispenser._id)
-        cardDispensed = true
-        console.log(`Card dispensed for code: ${cardCode}`)
-      } else {
-        console.warn('No card dispenser available')
+    // Replay of a retried purchase — never sell a second card for one payment.
+    if (localId) {
+      const existing = await SaleT.findOne({ 'metadata.localId': String(localId) })
+      if (existing) {
+        const existingCard = await CardT.findOne({ code: existing.cardCode })
+        return res.json({
+          success: true, status: 'duplicate', card: existingCard, sale: existing,
+          change: existing.change, changeDispensed: true,
+          message: 'Insira o cartão no leitor para o activar.',
+        })
       }
-    } catch (e) {
-      console.error('Failed to dispense card:', e.message)
-      return res.status(500).json({ error: 'Failed to dispense card' })
     }
 
-    // Step 2: Create card in database with customer data
+    // ── Price ──
+    const purchasePrice = await SettingT.findOne({ key: 'loyaltyCard.cost' })
+    const initialCredit = await SettingT.findOne({ key: 'loyaltyCard.credit' })
+    const price = roundMoney(purchasePrice?.value ?? 0)
+    const credit = roundMoney(initialCredit?.value ?? 0)
+
+    if (!(price > 0)) {
+      return res.status(409).json({ error: 'Card purchase price not configured' })
+    }
+    if (insertedAmount + 0.005 < price) {
+      return res.status(400).json({ error: `Insufficient payment. Card costs €${price.toFixed(2)}`, price })
+    }
+    const changeAmount = roundMoney(insertedAmount - price)
+
+    // ── Unique card code. This is the customer's id and is what gets written
+    //    onto the physical card. Random rather than sequential so one code does
+    //    not reveal another. ──
+    let cardCode = ''
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const candidate = String(crypto.randomInt(1000000000, 10000000000))
+      if (!(await CardT.findOne({ code: candidate }))) { cardCode = candidate; break }
+    }
+    if (!cardCode) return res.status(500).json({ error: 'Could not allocate a card code' })
+
+    // ── Dispense the blank card FIRST. No card, no charge. ──
+    const dispenser = await PeripheralT.findOne({ type: 'card_dispenser', enabled: true })
+    if (!dispenser) {
+      return res.status(503).json({ error: 'No card dispenser configured — cannot sell a card' })
+    }
+    try {
+      await coinMachine.dispenseNewCard(dispenser._id, credit)
+    } catch (err) {
+      console.error('[pos] Card dispense failed; customer NOT charged:', err.message)
+      return res.status(503).json({
+        error: 'The card dispenser did not release a card. You have not been charged.',
+        detail: err.message,
+      })
+    }
+
+    // ── A card is physically out. From here the customer owns it. ──
     const card = await CardT.create({
       code: cardCode,
       balance: credit,
+      // Blank until written at the reader — must not be spendable yet.
+      status: 'pending_write',
       name: customerName || '',
       email: customerEmail || '',
       phone: customerPhone || '',
-      contribuinte: customerContribuinte || ''
+      contribuinte: customerContribuinte || '',
     })
 
-    // Step 3: Wait for user to insert card into reader to write data
-    // This will be handled by frontend flow - card data is already in DB
-    // RFID reader will verify card code matches when user inserts
-
-    // Create sale record
-    const SaleT = withTenant(Sale, req)
     const sale = await SaleT.create({
       amount: price,
       items: [{ type: 'card_purchase', amount: price, cardCode }],
@@ -325,13 +377,15 @@ router.post('/card/purchase', requireKiosk, async (req, res) => {
       batchId,
       inserted: insertedAmount,
       change: changeAmount,
-      type: 'card_purchase'
+      type: 'card_purchase',
+      cardId: card._id,
+      cardCode,
+      metadata: localId ? { localId: String(localId) } : undefined,
     })
 
-    // Track card purchase
     const cardPurchase = await CardPurchaseT.create({
       cardId: card._id,
-      cardCode: cardCode,
+      cardCode,
       purchasePrice: price,
       initialCredit: credit,
       paymentMethod: 'cash',
@@ -343,26 +397,26 @@ router.post('/card/purchase', requireKiosk, async (req, res) => {
       customerContribuinte: customerContribuinte || '',
       saleId: sale._id,
       batchId,
-      dispenserUsed: cardDispensed,
-      cardWritten: false // Will be updated when card is written
+      dispenserUsed: true,
+      cardWritten: false,
     })
 
-    // Dispense change if needed
+    // ── Change ──
     let changeDispensed = false
+    let changeError = null
     if (changeAmount > 0) {
       try {
-        const { middleware } = await import('../index.js')
-        const Peripheral = (await import('../models/peripheral.js')).default
-        const PeripheralT = withTenant(Peripheral, req)
         const hopper = await PeripheralT.findOne({ type: 'hopper', enabled: true })
-        
-        if (hopper && middleware) {
-          await middleware.dispenseChange(hopper._id, changeAmount)
-          changeDispensed = true
-          console.log(`Change dispensed: €${changeAmount.toFixed(2)}`)
-        }
+        if (!hopper) throw new Error('No hopper configured')
+        const result = await coinMachine.dispenseChange(hopper._id, changeAmount)
+        changeDispensed = result?.success !== false
+        if (!changeDispensed) changeError = result?.error || 'Hopper reported a fault'
       } catch (e) {
-        console.error('Failed to dispense change:', e.message)
+        changeError = e.message
+        console.error('[pos] Failed to dispense change on card purchase:', e.message)
+      }
+      if (!changeDispensed) {
+        console.error(`[pos] Change of €${changeAmount.toFixed(2)} owed on card sale ${sale._id}: ${changeError}`)
       }
     }
 
@@ -373,7 +427,9 @@ router.post('/card/purchase', requireKiosk, async (req, res) => {
       sale,
       change: changeAmount,
       changeDispensed,
-      message: 'Card dispensed. Please insert card into reader to activate.'
+      changeError,
+      nextStep: 'write',
+      message: 'Insira o cartão no leitor para o activar.',
     })
   } catch (e) {
     console.error('Card purchase error:', e)
@@ -426,72 +482,77 @@ router.post('/card/mark-written/:code', requireKiosk, async (req, res) => {
   }
 })
 
-// Write card data to RFID card
+/**
+ * POST /pos/card/write/:code — personalise a blank card at the reader.
+ *
+ * This is the second half of a card purchase: the dispenser ejects a BLANK card,
+ * the customer inserts it here, and we write their id (the card code) and balance
+ * onto it. Only then does the card become spendable.
+ *
+ * Previously this resolved `middleware` from `../index.js`, which exports nothing,
+ * so the guard `if (!rfidReader || !middleware)` returned 503 every single time —
+ * a purchased card could never be activated and stayed blank forever.
+ */
 router.post('/card/write/:code', requireKiosk, async (req, res) => {
   const code = req.params.code
-  
+
   try {
     const Card = (await import('../models/card.js')).default
-    const CardT = withTenant(Card, req)
-    const card = await CardT.findOne({ code })
-    
-    if (!card) {
-      return res.status(404).json({ error: 'Card not found' })
-    }
-
-    // Get RFID reader and write data
-    const { middleware } = await import('../index.js')
     const Peripheral = (await import('../models/peripheral.js')).default
+    const CardT = withTenant(Card, req)
     const PeripheralT = withTenant(Peripheral, req)
-    const rfidReader = await PeripheralT.findOne({ type: 'rfid_reader', enabled: true })
-    
-    if (!rfidReader || !middleware) {
-      return res.status(503).json({ error: 'RFID reader not available' })
-    }
 
-    // Write card data
-    const result = await middleware.writeCardData(rfidReader._id, {
-      code: card.code,
+    const card = await CardT.findOne({ code })
+    if (!card) return res.status(404).json({ error: 'Card not found' })
+    if (card.status === 'blocked') return res.status(409).json({ error: 'Card is blocked' })
+
+    const rfidReader = await PeripheralT.findOne({ type: 'rfid_reader', enabled: true })
+    if (!rfidReader) return res.status(503).json({ error: 'No RFID reader configured' })
+
+    // writeCardData throws if it cannot verify the write — it no longer reports
+    // success for a card it never touched.
+    await coinMachine.middleware.writeCardData(rfidReader._id, {
+      code: card.code,          // the customer's id, as carried on the card
       balance: card.balance,
       name: card.name,
       email: card.email,
       phone: card.phone,
-      contribuinte: card.contribuinte
+      contribuinte: card.contribuinte,
     })
 
-    if (result.success) {
-      // Mark purchase as written
-      const CardPurchase = (await import('../models/cardPurchase.js')).default
-      const CardPurchaseT = withTenant(CardPurchase, req)
-      await CardPurchaseT.findOneAndUpdate(
-        { cardCode: code },
-        { cardWritten: true }
-      )
-      
-      res.json({ success: true, message: 'Card data written successfully' })
-    } else {
-      throw new Error('Failed to write card data')
-    }
+    // Written and verified — the card is now usable.
+    card.status = 'active'
+    await card.save()
+
+    const CardPurchase = (await import('../models/cardPurchase.js')).default
+    await withTenant(CardPurchase, req).findOneAndUpdate({ cardCode: code }, { cardWritten: true })
+
+    res.json({ success: true, card, message: 'Cartão activado.' })
   } catch (e) {
     console.error('Card write error:', e)
-    res.status(500).json({ error: e.message || 'Failed to write card' })
+    // The card stays `pending_write` so the customer can retry at the reader
+    // rather than losing the card they just paid for.
+    res.status(502).json({
+      error: e.message || 'Failed to write the card',
+      retryable: true,
+      message: 'Não foi possível gravar o cartão. Tente novamente ou contacte o balcão.',
+    })
   }
 })
 
 // Read card data from RFID reader
 router.get('/card/read', requireKiosk, async (req, res) => {
   try {
-    const { middleware } = await import('../index.js')
     const Peripheral = (await import('../models/peripheral.js')).default
     const PeripheralT = withTenant(Peripheral, req)
     const rfidReader = await PeripheralT.findOne({ type: 'rfid_reader', enabled: true })
     
-    if (!rfidReader || !middleware) {
+    if (!rfidReader) {
       return res.status(503).json({ error: 'RFID reader not available' })
     }
 
     // Read card data
-    const result = await middleware.readCardData(rfidReader._id)
+    const result = await coinMachine.middleware.readCardData(rfidReader._id)
 
     if (result.success) {
       res.json({ success: true, cardData: result.cardData })
@@ -552,6 +613,11 @@ router.post('/cards/:code/spend', requireKiosk, async (req, res) => {
     if (!m) return res.status(404).json({ error: 'Machine not found' })
     if (m.status === 'working') return res.status(409).json({ error: 'Machine already in use' })
   }
+
+  if (card.status === 'pending_write') {
+    return res.status(409).json({ error: 'Card is not activated yet — insert it in the reader first', status: card.status })
+  }
+  if (card.status === 'blocked') return res.status(409).json({ error: 'Card is blocked' })
 
   const debited = await debitCard(CardT, { _id: card._id }, price)
   if (!debited) return res.status(400).json({ error: 'Insufficient balance', balance: card.balance })

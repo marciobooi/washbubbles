@@ -259,6 +259,14 @@ export function createApi(config) {
     return request(`/gateways/cards/${encodeURIComponent(code)}`, { method: 'GET', expect: 'json', headers, skipAuth: true })
   }
 
+  // Verify the operator's admin PIN. The PIN itself is never returned — the
+  // server compares it and answers ok / 401, so it cannot leak to a renderer
+  // running on a public terminal.
+  function verifyAdminPin(pin, opts) {
+    const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
+    return request('/pos/admin/verify-pin', { method: 'POST', json: { pin }, headers, skipAuth: true, expect: 'json' })
+  }
+
   function gatewayTopupCard(code, payload, opts) {
     const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
     return request(`/gateways/cards/${encodeURIComponent(code)}/topup`, { method: 'POST', json: payload, expect: 'json', headers, skipAuth: true })
@@ -446,6 +454,7 @@ export function createApi(config) {
     // Gateways
     gatewayGetCard,
     gatewayTopupCard,
+    verifyAdminPin,
     gatewayCardPay,
     gatewayCashPay,
 
@@ -503,7 +512,6 @@ export const api = createApi({
 export const {
   request,
   login,
-  register,
   getMachines,
   getMachine,
   createMachine,
@@ -522,6 +530,7 @@ export const {
   deleteSetting,
   gatewayGetCard,
   gatewayTopupCard,
+  verifyAdminPin,
   gatewayCardPay,
   gatewayCashPay,
   getInterfaces,

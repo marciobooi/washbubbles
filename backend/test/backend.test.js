@@ -312,6 +312,101 @@ describe('WashBubbles backend', function () {
     })
   })
 
+  // The physical lifecycle: pay -> dispenser ejects a BLANK card -> customer
+  // inserts it in the reader -> we write their id + balance onto it -> usable.
+  describe('Loyalty card lifecycle', () => {
+    it('refuses to sell a card when no dispenser is configured, and does not charge', async () => {
+      const Setting = (await import('../src/models/setting.js')).default
+      const Sale = (await import('../src/models/sale.js')).default
+      await Setting.create({ tenantId: tenant._id, key: 'loyaltyCard.cost', value: 5 })
+      await Setting.create({ tenantId: tenant._id, key: 'loyaltyCard.credit', value: 2 })
+
+      const before = await Sale.countDocuments({ tenantId: tenant._id, type: 'card_purchase' })
+      const res = await request(app)
+        .post('/api/pos/card/purchase')
+        .set('Authorization', `Bearer ${kioskToken}`)
+        .send({ inserted: 10 })
+
+      // No dispenser in the test environment, so this must fail closed.
+      expect(res.status).to.equal(503)
+      const after = await Sale.countDocuments({ tenantId: tenant._id, type: 'card_purchase' })
+      expect(after, 'no sale may be recorded when no card comes out').to.equal(before)
+    })
+
+    it('rejects an underpayment for a card', async () => {
+      const res = await request(app)
+        .post('/api/pos/card/purchase')
+        .set('Authorization', `Bearer ${kioskToken}`)
+        .send({ inserted: 1 })
+      expect(res.status).to.equal(400)
+      expect(res.body.error).to.match(/Insufficient payment/)
+    })
+
+    it('will not let a blank (unwritten) card be spent', async () => {
+      const Card = (await import('../src/models/card.js')).default
+      const Machine = (await import('../src/models/machine.js')).default
+      await Card.create({
+        tenantId: tenant._id, code: 'BLANK-CARD', balance: 50, status: 'pending_write',
+      })
+      const machine = await Machine.create({ tenantId: tenant._id, name: 'Blank Card Machine', type: 'wash' })
+
+      const spend = await request(app)
+        .post('/api/pos/cards/BLANK-CARD/spend')
+        .set('Authorization', `Bearer ${kioskToken}`)
+        .send({ amount: 5, items: [] })
+      expect(spend.status).to.equal(409)
+      expect(spend.body.error).to.match(/not activated/)
+
+      const sale = await request(app)
+        .post('/api/pos/sale')
+        .set('Authorization', `Bearer ${kioskToken}`)
+        .send({ machineId: machine._id.toString(), amount: 5, items: [{}], method: 'card', cardCode: 'BLANK-CARD' })
+      expect(sale.status).to.equal(409)
+
+      // Balance untouched on both attempts.
+      const after = await Card.findOne({ code: 'BLANK-CARD' })
+      expect(after.balance).to.equal(50)
+    })
+
+    it('lets an activated card be spent normally', async () => {
+      const Card = (await import('../src/models/card.js')).default
+      await Card.create({ tenantId: tenant._id, code: 'ACTIVE-CARD', balance: 20, status: 'active' })
+
+      const res = await request(app)
+        .post('/api/pos/cards/ACTIVE-CARD/spend')
+        .set('Authorization', `Bearer ${kioskToken}`)
+        .send({ amount: 5, items: [] })
+      expect(res.status).to.equal(200)
+
+      const after = await Card.findOne({ code: 'ACTIVE-CARD' })
+      expect(after.balance).to.equal(15)
+    })
+  })
+
+  describe('Admin PIN', () => {
+    it('refuses when no PIN is configured', async () => {
+      const res = await request(app)
+        .post('/api/pos/admin/verify-pin')
+        .set('Authorization', `Bearer ${kioskToken}`)
+        .send({ pin: '1234' })
+      expect(res.status).to.equal(409)
+      expect(res.body.configured).to.equal(false)
+    })
+
+    it('accepts the right PIN and rejects a wrong one', async () => {
+      const Setting = (await import('../src/models/setting.js')).default
+      await Setting.create({ tenantId: tenant._id, key: 'adminPin', value: '4821' })
+
+      const good = await request(app).post('/api/pos/admin/verify-pin')
+        .set('Authorization', `Bearer ${kioskToken}`).send({ pin: '4821' })
+      expect(good.status).to.equal(200)
+
+      const bad = await request(app).post('/api/pos/admin/verify-pin')
+        .set('Authorization', `Bearer ${kioskToken}`).send({ pin: '0000' })
+      expect(bad.status).to.equal(401)
+    })
+  })
+
   describe('Tenant isolation', () => {
     it('will not let one tenant\'s admin modify another tenant\'s user', async () => {
       const Tenant = (await import('../src/models/tenant.js')).default

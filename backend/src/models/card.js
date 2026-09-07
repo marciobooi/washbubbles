@@ -17,6 +17,22 @@ const cardSchema = new Schema({
   appliedDeltas: { type: [String], default: [] },
 
 
+  /**
+   * Lifecycle state of the physical card.
+   *
+   * A card is dispensed blank and only becomes usable once the customer inserts
+   * it into the reader and we write the code and balance onto it. Until then it
+   * is `pending_write`: the row exists so the purchase is recorded and the
+   * customer can resume, but the card must not be spendable — otherwise a card
+   * that was paid for and never personalised would still draw down a balance
+   * that no physical card carries.
+   */
+  status: {
+    type: String,
+    enum: ['pending_write', 'active', 'blocked'],
+    default: 'active', // existing cards predate this field and are already in use
+  },
+
   // Optional user data (collected during card purchase)
   name: { type: String, default: '' },
   email: { type: String, default: '' },
