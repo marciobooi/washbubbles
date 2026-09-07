@@ -514,6 +514,86 @@ the word and I will scope it.
 
 ---
 
+## Round 5 — card identity was reading the wrong bytes entirely
+
+You asked the right question ("what if a different chip is tapped?") and it led
+to a real bug: **the day-to-day tap flow and the purchase-write flow were two
+completely disconnected code paths.**
+
+- `writeCardData` wrote our own generated `code` into the card's data blocks
+  (blocks 1, 2, 4, 5, … — skipping sector trailers).
+- But the "customer tapped their card" listener (`handleRFIDData`) just took
+  whatever raw bytes arrived on the serial port and used THAT directly as the
+  card number — it never read the blocks back. For a request/response PC/SC
+  reader (which is what the existing 0xFF 0xB0 / 0xFF 0xD6 commands in this file
+  are written for), nothing arrives on the wire until you ask for it, so this
+  path would essentially never resolve a legitimately purchased card correctly
+  on a normal tap.
+- On top of that, MIFARE Classic requires **authenticating to a sector before
+  any read or write** — the existing read/write code skipped this step entirely,
+  so on real MIFARE hardware every read/write would simply have been refused.
+
+### What changed
+
+- [x] **One function reads a card's identity, used everywhere.** `readCardIdentity`
+  authenticates each sector with the MIFARE factory default key, reads the
+  blocks, and parses our JSON — used by the explicit `/pos/card/read` route,
+  write verification, AND a new active tap-detection poll. There is exactly one
+  answer to "what is on this card," never two.
+- [x] **Tap detection is now a real poll loop**, not a passive listener. A PC/SC
+  reader only speaks when asked, so `startRfidPolling` actively polls for a UID
+  (`0xFF 0xCA` Get Data) every 500ms; on a new UID it authenticates and reads.
+  The old passive `port.on('data')` dispatch to RFID is removed — it was also
+  the reason a write's own ACK bytes could get reinterpreted as a "card tapped"
+  event mid-write (the same request/response leak class flagged elsewhere).
+- [x] **Authentication is now required** before every block read and write, using
+  the MIFARE Classic factory default key (`FFFFFFFFFFFF`) — the only key any
+  unformatted stock card carries. This directly answers your question:
+- [x] **Your three scenarios, explicitly:**
+  1. *Card already has our id* → authenticates, reads it, resolves normally.
+  2. *Blank card, ours to write* → the purchase flow generates a random id
+     (`crypto.randomInt`, already had a DB-uniqueness retry loop) and writes it —
+     unchanged from Round 4, now with authentication actually performed.
+  3. *A different chip* (foreign card, a "magic"/UID-clone card, a blank card
+     formatted with a non-default key, or a tag that isn't MIFARE Classic at
+     all) → authentication fails, or the blocks don't decode as our JSON.
+     Either way it throws, is reported under a `UID:<hex>` placeholder id that
+     can never collide with one of our own codes, falls through the **existing**
+     "card not found" rejection (`client.setClientInfoByCard` → not found →
+     `card-invalid`), and **cannot consume or add credits.** Nothing is
+     auto-registered from a tap — registration only ever happens through the
+     paid purchase-and-write flow.
+- [x] **Write is verified by reading the card back**, not just trusting each
+  block's ACK — a per-block ACK doesn't prove the full JSON round-trips.
+- [x] Confirms the design principle from Round 4: **the database remains the
+  source of truth for balance.** The card's factory UID is used only to detect
+  that *some* card is present; it is never trusted as an identity, since cheap
+  clone hardware can present any UID it likes. Our own written code — behind a
+  key an attacker doesn't have — is what makes a card "ours."
+
+### Confidence level — read this before relying on it
+
+Unlike the ccTalk work, **this has not been exercised against a real reader.**
+There is no PC/SC-capable device in this environment to test against. What's
+covered:
+
+- 8 new unit tests against a fake PC/SC device covering UID read, authentication
+  success/failure, identity read/parse/reject, sector-trailer avoidance, and
+  write-verification catching a lying write.
+- The command bytes (Get UID, Load Key, General Authenticate, Read/Update
+  Binary) are the standard PC/SC Part 3 pseudo-APDU family used by most USB CCID
+  contactless readers (ACR122U, PN532-based modules) — the same family the
+  read/write commands already in this file belong to.
+
+What is **not** confirmed: whether your specific reader model implements this
+exact command set, and whether it appends a status word after Read Binary data
+the way the code assumes (handled defensively — see the comment above
+`hasStatusWord` in `readRFIDSectors`, but not verified). Get the reader's
+datasheet before going live and check these against it — the same category of
+confirmation as the hopper `coinValue`/`deviceAddress` settings.
+
+---
+
 ## Deploy notes (do these on the Hetzner box)
 
 1. **Drop the old user email index once**, or the new `partialFilterExpression` will not be created
@@ -540,7 +620,11 @@ the word and I will scope it.
    the right `address` (port path) and `deviceAddress` (ccTalk bus address). Selling
    a card now fails closed with a 503 if no dispenser is configured, rather than
    charging for a card that never appears.
-8. **New indexes build on first boot.** The unique one on `{tenantId, interfaceId, port}` will
+8. **Confirm the RFID reader's exact command set against its datasheet before
+   going live** — see the confidence note in Round 5. This is the one piece of
+   hardware work in this project that has not been exercised against a real or
+   simulated device, unlike the ccTalk stack (verified over a real PTY).
+9. **New indexes build on first boot.** The unique one on `{tenantId, interfaceId, port}` will
    FAIL to build if duplicates already exist. Check before deploying:
    ```
    db.machines.aggregate([{$match:{interfaceId:{$ne:null},port:{$ne:null}}},{$group:{_id:{t:'$tenantId',i:'$interfaceId',p:'$port'},n:{$sum:1}}},{$match:{n:{$gt:1}}}])

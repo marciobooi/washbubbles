@@ -49,6 +49,29 @@ const HOPPER_LOW_STOCK_COINS = 20
 const RECONNECT_BASE_MS = 2000
 const RECONNECT_MAX_MS = 60000
 const CREDIT_POLL_INTERVAL_MS = 300
+const RFID_POLL_INTERVAL_MS = 500
+
+/**
+ * MIFARE Classic factory default key A. Every unformatted card ships with this
+ * key on every sector, and it stays in effect until something else changes it.
+ * Cards this system dispenses are unformatted stock, so this is the only key
+ * ever used here.
+ *
+ * NOTE ON CONFIDENCE: the ccTalk work in this file was exercised over a real
+ * PTY against a simulated device. This RFID section has not been — there is no
+ * physical PC/SC reader in this environment to test against. The command bytes
+ * below (Get UID, Load Key, General Authenticate, Read/Update Binary) are the
+ * standard PC/SC Part 3 pseudo-APDU family that the reader/writer commands
+ * already in this file (0xFF 0xB0 / 0xFF 0xD6) belong to, and are supported by
+ * the large majority of USB CCID contactless readers (ACR122U, PN532-based
+ * modules, etc.) — but they are NOT verified against whatever reader model this
+ * project ends up buying. Confirm against its datasheet before relying on this
+ * in production, the same way the coin-value and hopper-address settings need
+ * confirming per device.
+ */
+const MIFARE_DEFAULT_KEY = Buffer.from('FFFFFFFFFFFF', 'hex')
+const MIFARE_KEY_SLOT = 0x00
+const MIFARE_KEY_TYPE_A = 0x60
 /** ccTalk error codes that indicate a manipulation attempt rather than a bad coin. */
 const FRAUD_CODES = new Set([2, 3, 4, 5, 6, 15, 16, 17])
 
@@ -235,6 +258,10 @@ class Middleware extends EventEmitter {
         if (peripheral.type === 'coin_acceptor' || peripheral.type === 'bill_acceptor') {
           this.startCreditPolling(connection)
         }
+      } else if (peripheral.type === 'rfid_reader' && (peripheral.protocol === 'usb' || peripheral.protocol === 'rs232')) {
+        // A PC/SC-style reader only speaks when asked, so detecting a tap means
+        // actively polling for a UID rather than waiting on the port's data event.
+        this.startRfidPolling(connection)
       }
     } catch (err) {
       throw new Error(`Serial connection failed: ${err.message}`)
@@ -530,9 +557,13 @@ class Middleware extends EventEmitter {
       case 'card_dispenser':
         this.handleCardData(peripheral, data)
         break
-      case 'rfid_reader':
-        this.handleRFIDData(peripheral, data)
-        break
+      // rfid_reader is deliberately absent: an authenticated PC/SC exchange
+      // only ever speaks when it's polled, so every byte it sends is the reply
+      // to a `requestOnPort` call already waiting for it (see `startRfidPolling`
+      // / `readCardIdentity`). Dispatching it here as well — which the old
+      // `handleRFIDData` did — meant a write's own ACK, or a read's own block
+      // data, got reinterpreted as a spontaneous "card tapped" event on every
+      // single command.
       case 'hopper':
         this.handleHopperData(peripheral, data)
         break
@@ -615,12 +646,132 @@ class Middleware extends EventEmitter {
   }
 
   /**
-   * Handle RFID reader data
+   * Read the card's factory UID via the standard PC/SC "Get Data" command.
+   *
+   * The UID is used ONLY to detect that a (possibly different) card is now
+   * present — it is never trusted as an identity. MIFARE UIDs are burned in by
+   * the manufacturer, but cheap "magic"/CUID clone cards can present ANY UID
+   * they like, so authorizing spend based on a raw UID would let someone clone
+   * another customer's card. The card's actual identity is the code WE write
+   * into its data blocks (see `readCardIdentity`), which requires knowing the
+   * MIFARE key to overwrite — a UID clone alone cannot forge that.
+   *
+   * @returns hex UID string, or null if no card is present / the reader can't
+   *          see one.
    */
-  handleRFIDData(peripheral, data) {
-    const cardNumber = data.toString('utf-8').trim()
-    this.emit('card-read', { peripheral, cardNumber })
-    console.log(`Card read: ${cardNumber} from ${peripheral.name}`)
+  async getCardUid(connection) {
+    if (!connection.port) return null
+    try {
+      const resp = await this.requestOnPort(connection, Buffer.from([0xFF, 0xCA, 0x00, 0x00, 0x00]), 300)
+      if (!resp || !isPcscSuccess(resp) || resp.length <= 2) return null
+      return resp.slice(0, -2).toString('hex')
+    } catch (err) {
+      return null
+    }
+  }
+
+  /**
+   * Authenticate to the sector containing `blockNumber` with the default key.
+   *
+   * MIFARE Classic gates every block behind a per-sector authentication; there
+   * is no reading or writing without it. Skipping this step (which the earlier
+   * version of this file did) means every read/write command was being sent to
+   * a card that would simply refuse it — the write "succeeded" only because
+   * nothing checked the status word.
+   *
+   * Failing here is the SAFE outcome for a card that isn't ours: a foreign card
+   * formatted with a non-default key, or a chip that doesn't speak MIFARE
+   * Classic at all, throws instead of silently reading zeros or writing into
+   * whatever happened to be there.
+   */
+  async authenticateBlock(connection, blockNumber) {
+    const loadKey = await this.requestOnPort(
+      connection,
+      Buffer.from([0xFF, 0x82, 0x00, MIFARE_KEY_SLOT, MIFARE_DEFAULT_KEY.length, ...MIFARE_DEFAULT_KEY]),
+      300
+    )
+    if (!isPcscSuccess(loadKey)) throw new Error('Failed to load the authentication key')
+
+    // General Authenticate: FF 86 00 00 05 <version=01> <blockMSB> <blockLSB> <keyType> <keySlot>
+    const auth = await this.requestOnPort(
+      connection,
+      Buffer.from([0xFF, 0x86, 0x00, 0x00, 0x05, 0x01, 0x00, blockNumber, MIFARE_KEY_TYPE_A, MIFARE_KEY_SLOT]),
+      300
+    )
+    if (!isPcscSuccess(auth)) {
+      throw new Error(`Authentication failed for block ${blockNumber} — not one of our cards, or a different key`)
+    }
+  }
+
+  /**
+   * Read this card's identity as WE wrote it (see `writeCardData`), the single
+   * source of truth used everywhere a card needs to be recognised: the explicit
+   * read API, write verification, AND day-to-day tap detection.
+   *
+   * Never guesses. A card that fails authentication, or whose data blocks don't
+   * decode to the JSON shape we write, throws — callers treat that as "not a
+   * recognised card," never as a partial match.
+   */
+  async readCardIdentity(connection, maxBlocks = 10) {
+    const dataString = await this.readRFIDSectors(connection, maxBlocks)
+    let identity
+    try {
+      identity = JSON.parse(dataString)
+    } catch (err) {
+      throw new Error('Card data does not decode as a WashBubbles card')
+    }
+    if (!identity || typeof identity.code !== 'string' || !identity.code) {
+      throw new Error('Card data has no usable code')
+    }
+    return identity
+  }
+
+  /**
+   * Poll an RFID reader for card presence and surface taps as `card-read`.
+   *
+   * Replaces the old passive `port.on('data')` handler, which treated whatever
+   * raw bytes happened to arrive as the card number — including the reply bytes
+   * to our own read/write commands, since that listener never distinguished a
+   * command's reply from an unsolicited event. A PC/SC reader only speaks when
+   * spoken to, so detecting a tap means actively polling for a UID; everything
+   * below goes through `requestOnPort`'s queue like any other command, so a
+   * poll and a purchase-flow write can never be interpreted as each other.
+   */
+  startRfidPolling(connection) {
+    const peripheral = connection.peripheral
+    let lastUid = null
+
+    const timer = setInterval(async () => {
+      if (!this.connections.has(peripheral._id.toString())) {
+        clearInterval(timer)
+        return
+      }
+
+      const uid = await this.getCardUid(connection)
+      if (uid === lastUid) return // no change: same card still present, or still absent
+
+      lastUid = uid
+      if (!uid) return // card was removed; nothing to report
+
+      // A new card just landed. Try to read what WE wrote to it.
+      try {
+        const identity = await this.readCardIdentity(connection)
+        this.emit('card-read', { peripheral, cardNumber: identity.code })
+        console.log(`Card read: ${identity.code} from ${peripheral.name}`)
+      } catch (err) {
+        // Not one of our cards — a blank card, a foreign chip, or a clone with
+        // no way to pass authentication. Report it under a UID-prefixed id that
+        // can never collide with one of our own generated codes, so it flows
+        // through the existing "card not found" rejection with no other change
+        // needed: `client.setClientInfoByCard` looks it up, finds nothing, and
+        // the caller is told the card is invalid. Nothing is auto-registered.
+        console.warn(`[HW] Unrecognised card on ${peripheral.name} (uid ${uid}): ${err.message}`)
+        this.emit('card-read', { peripheral, cardNumber: `UID:${uid}` })
+      }
+    }, RFID_POLL_INTERVAL_MS)
+
+    if (timer.unref) timer.unref()
+    connection.pollTimer = timer
   }
 
   /**
@@ -657,8 +808,23 @@ class Middleware extends EventEmitter {
 
     const written = await this.writeRFIDSectors(connection, dataString)
 
+    // Read it back. Each individual block write was ACK'd, but that only means
+    // the reader accepted the command — it does not prove the full concatenated
+    // JSON round-trips (a padding or block-count mismatch could still leave the
+    // card unreadable). This is the last line of defence before the customer is
+    // told their card is ready.
+    let confirmed
+    try {
+      confirmed = await this.readCardIdentity(connection)
+    } catch (err) {
+      throw new Error(`Card was written but does not read back correctly: ${err.message}`)
+    }
+    if (confirmed.code !== cardData.code) {
+      throw new Error(`Card was written but reads back as a different code (wrote ${cardData.code}, read ${confirmed.code})`)
+    }
+
     this.emit('card-written', { peripheral, cardData, blocks: written })
-    console.log(`Card data written successfully: ${cardData.code} (${written} block(s))`)
+    console.log(`Card data written and verified: ${cardData.code} (${written} block(s))`)
 
     return { success: true, cardCode: cardData.code, blocksWritten: written }
   }
@@ -692,6 +858,11 @@ class Middleware extends EventEmitter {
         blocks[i]
       ])
 
+      // Authenticate to this block's sector before touching it — MIFARE
+      // Classic refuses every read and write until this succeeds, and the
+      // earlier version of this file never did it at all.
+      await this.authenticateBlock(connection, blockNumber)
+
       // One call writes and waits for that command's own reply. The ACK was
       // previously discarded entirely, so a NAK counted as success.
       const resp = await this.requestOnPort(connection, writeCommand, 500)
@@ -719,19 +890,12 @@ class Middleware extends EventEmitter {
     console.log(`Reading card data from ${peripheral.name}...`)
     
     try {
-      let cardDataString = ''
-      
-      // Read multiple blocks and concatenate
-      if (peripheral.protocol === 'usb' || peripheral.protocol === 'rs232') {
-        cardDataString = await this.readRFIDSectors(connection)
-      }
-
-      // Parse JSON data
-      const cardData = JSON.parse(cardDataString)
-      
+      // `readCardIdentity` is the same function the tap-detection poll uses —
+      // one path for "what is on this card," so this route and a live tap can
+      // never disagree about how to interpret the same bytes.
+      const cardData = await this.readCardIdentity(connection)
       this.emit('card-data-read', { peripheral, cardData })
       console.log(`Card data read successfully: ${cardData.code}`)
-      
       return { success: true, cardData }
     } catch (err) {
       console.error('Failed to read card data:', err)
@@ -753,11 +917,22 @@ class Middleware extends EventEmitter {
     // Read the same data blocks writeRFIDSectors uses — skipping sector
     // trailers, which are keys and access bits, not card data.
     for (const blockNumber of dataBlockNumbers(maxBlocks)) {
+      await this.authenticateBlock(connection, blockNumber)
       const readCommand = Buffer.from([0xFF, 0xB0, 0x00, blockNumber, MIFARE_BLOCK_SIZE])
-      const blockData = await this.requestOnPort(connection, readCommand, 500)
-      if (blockData && blockData.length >= MIFARE_BLOCK_SIZE) {
-        blocks.push(blockData.slice(0, MIFARE_BLOCK_SIZE))
+      const resp = await this.requestOnPort(connection, readCommand, 500)
+      if (!resp || resp.length < MIFARE_BLOCK_SIZE) {
+        throw new Error(`No data back for block ${blockNumber} after a successful authentication`)
       }
+      // A PC/SC READ BINARY reply is conventionally the data followed by a
+      // 2-byte status word, but not every reader/driver appends one over a
+      // plain byte-stream transport — this has not been confirmed against a
+      // real device. Strip a trailing status word only when the length implies
+      // one is actually present; otherwise take the block as-is.
+      const hasStatusWord = resp.length === MIFARE_BLOCK_SIZE + 2
+      if (hasStatusWord && !isPcscSuccess(resp)) {
+        throw new Error(`RFID reader rejected the read of block ${blockNumber}`)
+      }
+      blocks.push(resp.slice(0, MIFARE_BLOCK_SIZE))
     }
 
     // Concatenate all blocks and convert to string
@@ -1535,4 +1710,7 @@ class Middleware extends EventEmitter {
 // Create singleton instance
 const middleware = new Middleware()
 
+// Exported for tests that need an isolated instance (pure protocol logic, no
+// DB or real hardware involved) rather than the shared singleton.
+export { Middleware }
 export default middleware
