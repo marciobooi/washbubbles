@@ -20,11 +20,11 @@ export function BrandingProvider({ children }) {
         const primaryColor = primary && primary.value ? String(primary.value) : null
         const accentColor = accent && accent.value ? String(accent.value) : null
         setBranding({ companyName, logo: logoUrl, primaryColor, accentColor })
-        if (primaryColor) try { document.documentElement.style.setProperty('--branding-primary', primaryColor) } catch (e) {}
-        if (accentColor) try { document.documentElement.style.setProperty('--branding-accent', accentColor) } catch (e) {}
-        if (companyName) try { document.title = companyName } catch (e) {}
+        if (primaryColor) try { document.documentElement.style.setProperty('--branding-primary', primaryColor) } catch { /* a CSS custom property that will not apply is cosmetic */ }
+        if (accentColor) try { document.documentElement.style.setProperty('--branding-accent', accentColor) } catch { /* a CSS custom property that will not apply is cosmetic */ }
+        if (companyName) try { document.title = companyName } catch { /* document.title is cosmetic; a sandboxed frame can refuse it */ }
         // Notify others about loaded branding
-        try { window.dispatchEvent(new CustomEvent('branding:update', { detail: { company: companyName, logo: logoUrl, primaryColor, accentColor } })) } catch (e) {}
+        try { window.dispatchEvent(new CustomEvent('branding:update', { detail: { company: companyName, logo: logoUrl, primaryColor, accentColor } })) } catch { /* document.title is cosmetic; a sandboxed frame can refuse it */ }
       } catch (e) {
         console.debug('branding load failed', e)
       }
@@ -35,9 +35,9 @@ export function BrandingProvider({ children }) {
     const onBrand = (e) => {
       const d = e && e.detail ? e.detail : {}
       setBranding((b) => ({ ...b, ...d }))
-      if (d.primaryColor) try { document.documentElement.style.setProperty('--branding-primary', d.primaryColor) } catch (e) {}
-      if (d.accentColor) try { document.documentElement.style.setProperty('--branding-accent', d.accentColor) } catch (e) {}
-      if (d.company) try { document.title = d.company } catch (e) {}
+      if (d.primaryColor) try { document.documentElement.style.setProperty('--branding-primary', d.primaryColor) } catch { /* a CSS custom property that will not apply is cosmetic */ }
+      if (d.accentColor) try { document.documentElement.style.setProperty('--branding-accent', d.accentColor) } catch { /* a CSS custom property that will not apply is cosmetic */ }
+      if (d.company) try { document.title = d.company } catch { /* document.title is cosmetic; a sandboxed frame can refuse it */ }
     }
     window.addEventListener('branding:update', onBrand)
     return () => window.removeEventListener('branding:update', onBrand)
@@ -50,7 +50,7 @@ export function BrandingProvider({ children }) {
     if (key === 'branding.logo') detail.logo = value
     if (key === 'branding.primaryColor') detail.primaryColor = value
     if (key === 'branding.accentColor') detail.accentColor = value
-    try { window.dispatchEvent(new CustomEvent('branding:update', { detail })) } catch (e) {}
+    try { window.dispatchEvent(new CustomEvent('branding:update', { detail })) } catch { /* a listener that throws must not break the caller */ }
   }
 
   return (

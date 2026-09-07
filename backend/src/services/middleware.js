@@ -2,6 +2,89 @@ import EventEmitter from 'events'
 import { SerialPort } from 'serialport'
 import Peripheral from '../models/peripheral.js'
 import Interface from '../models/interface.js'
+import { CcTalkLink, CC_ADDR, CC_HEADER, ROUTE } from './ccTalk.js'
+import { readKitsecFrame, parseStatusByte, kitsecFrame, KITSEC_CMD } from './kitsec.js'
+import { roundMoney } from '../utils/money.js'
+
+/** MIFARE Classic block size, in bytes. */
+const MIFARE_BLOCK_SIZE = 16
+
+/**
+ * Data block numbers on a MIFARE Classic card, skipping sector trailers.
+ *
+ * Every 4th block (3, 7, 11, 15, …) is the sector trailer holding the access
+ * keys and permission bits. The old code wrote to consecutive blocks starting at
+ * 4, so as soon as the JSON payload exceeded 48 bytes — which it does the moment
+ * a name or email is set — it overwrote block 7 with text. That destroys the
+ * keys and the card becomes **permanently unreadable**.
+ *
+ * Block 0 is the read-only manufacturer block, so usable data starts at 1.
+ */
+function dataBlockNumbers(count, maxBlock = 63) {
+  const blocks = []
+  for (let b = 1; b <= maxBlock && blocks.length < count; b++) {
+    if ((b + 1) % 4 === 0) continue // 3, 7, 11, … are sector trailers
+    blocks.push(b)
+  }
+  return blocks
+}
+
+/**
+ * Does this look like a serial device path on any platform we run on?
+ *
+ * Windows uses COM1..COMn (COM10+ needs the \\.\ prefix), Linux /dev/ttyUSB0,
+ * /dev/ttyS0, /dev/ttyACM0, and macOS /dev/tty.usbserial-* or /dev/cu.*.
+ */
+function isSerialPath(address) {
+  if (!address || typeof address !== 'string') return false
+  const a = address.trim()
+  return /^(\\\\\.\\)?COM\d+$/i.test(a) || a.startsWith('/dev/')
+}
+
+/** Safety ceiling on a single payout, unless the peripheral overrides it. */
+const MAX_COINS_PER_DISPENSE = 50
+const HOPPER_DISPENSE_TIMEOUT_MS = 30000
+const HOPPER_POLL_INTERVAL_MS = 200
+const HOPPER_LOW_STOCK_COINS = 20
+const RECONNECT_BASE_MS = 2000
+const RECONNECT_MAX_MS = 60000
+const CREDIT_POLL_INTERVAL_MS = 300
+/** ccTalk error codes that indicate a manipulation attempt rather than a bad coin. */
+const FRAUD_CODES = new Set([2, 3, 4, 5, 6, 15, 16, 17])
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+/**
+ * Work out which hopper pays what, largest coin first.
+ *
+ * `unpayable` is the remainder that no configured hopper can make — e.g. €0.03
+ * when the smallest hopper holds 5c coins. Reporting it is what stops the
+ * customer being silently short-changed.
+ */
+function planPayout(amount, hoppers) {
+  let remaining = roundMoney(amount)
+  const steps = []
+
+  for (const h of hoppers) {
+    if (remaining < h.coinValue) continue
+    const stock = Number(h.connection.peripheral.hopperConfig?.currentCount)
+    const available = Number.isFinite(stock) && stock > 0 ? stock : Infinity
+    const wanted = Math.floor(roundMoney(remaining) / h.coinValue + 1e-9)
+    const count = Math.min(wanted, available)
+    if (count <= 0) continue
+    steps.push({ connection: h.connection, coinValue: h.coinValue, count })
+    remaining = roundMoney(remaining - count * h.coinValue)
+    if (remaining <= 0) break
+  }
+
+  return { steps, unpayable: Math.max(0, remaining) }
+}
+
+/** PC/SC-style readers answer with a two-byte status word; 0x9000 means OK. */
+function isPcscSuccess(resp) {
+  if (!resp || resp.length < 2) return false
+  return resp[resp.length - 2] === 0x90 && resp[resp.length - 1] === 0x00
+}
 
 /**
  * Middleware service for communicating with peripherals via serial/other protocols
@@ -14,6 +97,10 @@ class Middleware extends EventEmitter {
     this.connections = new Map() // peripheral._id -> connection instance
     this.interfaces = new Map()  // interface._id -> connection instance
     this.subscriptions = []
+    this.reconnectTimers = new Map() // peripheral._id -> pending retry timer
+    // Operator-configured maps of raw device credit codes to euro values.
+    this.coinEqTable = null
+    this.billEqTable = null
   }
 
   /**
@@ -21,6 +108,10 @@ class Middleware extends EventEmitter {
    */
   async initialize() {
     try {
+      // Must load before any acceptor starts polling — an unmapped code is
+      // refused, so polling without the tables would reject real money.
+      await this.loadEquivalenceTables()
+
       const peripherals = await Peripheral.find({ enabled: true })
       
       for (const peripheral of peripherals) {
@@ -113,6 +204,14 @@ class Middleware extends EventEmitter {
       port.on('close', () => {
         console.log(`Serial port closed: ${peripheral.name}`)
         this.updatePeripheralStatus(peripheral._id, 'offline')
+        // Remove the entry, otherwise `connect()` short-circuits on "already
+        // connected" forever and a USB replug needs a full process restart —
+        // meanwhile `send()` keeps writing into a dead port.
+        const key = peripheral._id.toString()
+        const existing = this.connections.get(key)
+        if (existing && existing.link) existing.link.destroy('port closed')
+        this.connections.delete(key)
+        this.scheduleReconnect(peripheral)
       })
 
       await new Promise((resolve, reject) => {
@@ -122,9 +221,108 @@ class Middleware extends EventEmitter {
         })
       })
 
-      this.connections.set(peripheral._id.toString(), { port, peripheral })
+      const connection = { port, peripheral }
+      this.connections.set(peripheral._id.toString(), connection)
+
+      // ccTalk devices are poll-driven and framed: attach the link and start
+      // polling rather than reacting to raw `data` chunks.
+      if (peripheral.protocol === 'cctalk') {
+        const fallback = peripheral.type === 'bill_acceptor' ? CC_ADDR.BILL
+          : peripheral.type === 'hopper' ? CC_ADDR.HOPPER
+          : peripheral.type === 'card_dispenser' ? CC_ADDR.CARD_DISPENSER
+          : CC_ADDR.COIN
+        connection.link = this.getCcTalkLink(connection, fallback)
+        if (peripheral.type === 'coin_acceptor' || peripheral.type === 'bill_acceptor') {
+          this.startCreditPolling(connection)
+        }
+      }
     } catch (err) {
       throw new Error(`Serial connection failed: ${err.message}`)
+    }
+  }
+
+  /**
+   * Poll a ccTalk acceptor for buffered credit events.
+   *
+   * ccTalk is master-driven: the device does not push credits, the host asks for
+   * them. The reply is an event counter plus a ring buffer of recent events, and
+   * only the events between the last counter and the new one are new money. That
+   * counter comparison is what makes a dropped or repeated poll safe — without it
+   * a re-read of the same buffer credits the same coin twice.
+   */
+  startCreditPolling(connection) {
+    const peripheral = connection.peripheral
+    const isBill = peripheral.type === 'bill_acceptor'
+    const header = isBill ? CC_HEADER.READ_BUFFERED_BILL : CC_HEADER.READ_BUFFERED_CREDIT
+
+    let lastCounter = null
+    const timer = setInterval(async () => {
+      if (!this.connections.has(peripheral._id.toString())) {
+        clearInterval(timer)
+        return
+      }
+      try {
+        const reply = await connection.link.request(header, [])
+        if (!reply || reply.data.length < 1) return
+
+        const counter = reply.data[0]
+        if (lastCounter === null) { lastCounter = counter; return } // first poll: adopt, don't replay
+        if (counter === lastCounter) return
+
+        // Events are newest-first, paired as [credit code, error code].
+        const newEvents = Math.min((counter - lastCounter + 256) % 256, Math.floor((reply.data.length - 1) / 2))
+        for (let i = newEvents - 1; i >= 0; i--) {
+          const code = reply.data[1 + i * 2]
+          const errorCode = reply.data[2 + i * 2]
+          if (code > 0) {
+            if (isBill) {
+              // Route the note to the stacker before crediting: an unrouted note
+              // sits in escrow and can be pulled back out after the credit.
+              try {
+                await connection.link.request(CC_HEADER.ROUTE_BILL, [ROUTE.STACK])
+              } catch (err) {
+                console.error(`[HW] Failed to stack bill on ${peripheral.name}: ${err.message} — not crediting`)
+                continue
+              }
+            }
+            this.handleCcTalkCredit(peripheral, { code, isBill })
+          } else if (errorCode) {
+            const fraud = FRAUD_CODES.has(errorCode)
+            this.emit(isBill ? 'bill-rejected' : 'coin-rejected', {
+              peripheral, reason: `error ${errorCode}`, fraud,
+            })
+          }
+        }
+        lastCounter = counter
+      } catch (err) {
+        // A timeout here is normal if the device is briefly busy; only log.
+        if (!/timeout/i.test(err.message)) {
+          console.error(`[HW] Credit poll failed on ${peripheral.name}:`, err.message)
+        }
+      }
+    }, CREDIT_POLL_INTERVAL_MS)
+
+    if (timer.unref) timer.unref()
+    connection.pollTimer = timer
+  }
+
+  /** Load the operator's coin/bill code → euro-value maps from settings. */
+  async loadEquivalenceTables() {
+    try {
+      const Setting = (await import('../models/setting.js')).default
+      const rows = await Setting.find({ key: { $in: ['coinEqTable', 'billEqTable'] } }).lean()
+      const toMap = (val) => {
+        const map = {}
+        if (Array.isArray(val)) for (const e of val) map[String(e.key)] = Number(e.value)
+        else if (val && typeof val === 'object') Object.assign(map, val)
+        return map
+      }
+      for (const row of rows) {
+        if (row.key === 'coinEqTable') this.coinEqTable = toMap(row.value)
+        if (row.key === 'billEqTable') this.billEqTable = toMap(row.value)
+      }
+    } catch (err) {
+      console.error('[HW] Failed to load coin/bill equivalence tables:', err.message)
     }
   }
 
@@ -132,31 +330,84 @@ class Middleware extends EventEmitter {
    * Connect to pulse-based peripheral (card dispenser)
    */
   async connectPulse(peripheral) {
-    // Pulse connections typically use GPIO or similar
-    // This is a placeholder - actual implementation depends on hardware interface
-    console.log(`Pulse connection for ${peripheral.name} - implementation pending`)
-    this.connections.set(peripheral._id.toString(), { type: 'pulse', peripheral })
-    await this.updatePeripheralStatus(peripheral._id, 'ok')
+    // GPIO/pulse output is not implemented. Registering it as `ok` made a pulse
+    // card dispenser look healthy on the dashboard while `dispenseCard` returned
+    // {success:true} without a card ever leaving the stack — the customer was
+    // charged and got nothing. Report the truth instead.
+    return this.registerUnimplemented(peripheral, 'pulse')
   }
 
   /**
    * Connect to USB peripheral
    */
   async connectUSB(peripheral) {
-    // USB connection implementation
-    console.log(`USB connection for ${peripheral.name} - implementation pending`)
-    this.connections.set(peripheral._id.toString(), { type: 'usb', peripheral })
-    await this.updatePeripheralStatus(peripheral._id, 'ok')
+    return this.registerUnimplemented(peripheral, 'usb')
   }
 
   /**
    * Connect to ethernet peripheral
    */
   async connectEthernet(peripheral) {
-    // Ethernet connection implementation
-    console.log(`Ethernet connection for ${peripheral.name} - implementation pending`)
-    this.connections.set(peripheral._id.toString(), { type: 'ethernet', peripheral })
-    await this.updatePeripheralStatus(peripheral._id, 'ok')
+    return this.registerUnimplemented(peripheral, 'ethernet')
+  }
+
+  /**
+   * Register a peripheral whose transport this build cannot drive.
+   *
+   * It is stored so the dashboard can list it, but flagged `unsupported` so any
+   * attempt to use it throws rather than silently succeeding, and its status
+   * shows `fault` rather than `ok`.
+   */
+  async registerUnimplemented(peripheral, transport) {
+    console.warn(`[HW] ${transport} transport is not implemented — ${peripheral.name} will report a fault`)
+    this.connections.set(peripheral._id.toString(), {
+      type: transport,
+      peripheral,
+      unsupported: `The ${transport} transport is not implemented in this build`,
+    })
+    await this.updatePeripheralStatus(peripheral._id, 'fault')
+  }
+
+  /**
+   * Retry a dropped peripheral with backoff.
+   *
+   * Without this a peripheral that unplugs (or whose USB adapter resets) stays
+   * dead until someone restarts the server — on an unattended kiosk that is the
+   * rest of the day's takings.
+   */
+  scheduleReconnect(peripheral, attempt = 1) {
+    const key = peripheral._id.toString()
+    if (this.reconnectTimers.has(key)) return
+
+    const delay = Math.min(RECONNECT_BASE_MS * 2 ** (attempt - 1), RECONNECT_MAX_MS)
+    const timer = setTimeout(async () => {
+      this.reconnectTimers.delete(key)
+      if (this.connections.has(key)) return // came back another way
+
+      try {
+        const fresh = await Peripheral.findById(peripheral._id)
+        if (!fresh || !fresh.enabled) return // deliberately turned off
+        await this.connect(fresh)
+        if (this.connections.has(key)) {
+          console.log(`[HW] Reconnected ${fresh.name} after ${attempt} attempt(s)`)
+          this.emit('peripheral-reconnected', { peripheral: fresh })
+          return
+        }
+      } catch (err) {
+        console.warn(`[HW] Reconnect attempt ${attempt} for ${peripheral.name} failed:`, err.message)
+      }
+      this.scheduleReconnect(peripheral, attempt + 1)
+    }, delay)
+
+    if (timer.unref) timer.unref()
+    this.reconnectTimers.set(key, timer)
+  }
+
+  /** Throw if this peripheral cannot actually be driven. */
+  assertUsable(connection) {
+    if (connection && connection.unsupported) {
+      throw new Error(`${connection.peripheral.name}: ${connection.unsupported}`)
+    }
   }
 
   /**
@@ -172,7 +423,11 @@ class Middleware extends EventEmitter {
 
       // Open serial connection if address is a COM port
       let serialPort = null
-      if (iface.address && typeof iface.address === 'string' && iface.address.startsWith('COM')) {
+      // `startsWith('COM')` meant no port was ever opened on Linux or macOS
+      // (/dev/ttyUSB0, /dev/tty.usbserial-*), yet the interface was still
+      // registered `connected: true` and every activation became a silent no-op.
+      // The production server is Linux, so this mattered immediately.
+      if (isSerialPath(iface.address)) {
         try {
           serialPort = new SerialPort({
             path: iface.address,
@@ -182,30 +437,22 @@ class Middleware extends EventEmitter {
             stopBits: 1
           })
 
-          // Buffer for incoming data (Interface uses STX/ETX framing)
+          // Buffer for incoming data. Framing is driven by the length byte and
+          // verified by checksum — scanning for the first 0x03 treated ordinary
+          // payload values (port 3, or status 0x03 = a normally running machine)
+          // as end-of-frame, truncating the frame and desynchronising the stream.
           let buffer = Buffer.alloc(0)
 
           serialPort.on('data', (data) => {
             buffer = Buffer.concat([buffer, data])
-            
-            // Look for complete packets (STX...ETX)
-            while (buffer.length > 0) {
-              const stxIndex = buffer.indexOf(0x02) // STX
-              if (stxIndex === -1) {
-                buffer = Buffer.alloc(0)
-                break
-              }
-
-              const etxIndex = buffer.indexOf(0x03, stxIndex) // ETX
-              if (etxIndex === -1) break // Wait for more data
-
-              // Extract packet
-              const packet = buffer.slice(stxIndex, etxIndex + 2) // Include STX and checksum after ETX
-              buffer = buffer.slice(etxIndex + 2)
-
-              // Parse and handle packet
-              this.handleInterfaceData(iface, packet)
+            for (;;) {
+              const { frame, rest, resync } = readKitsecFrame(buffer)
+              buffer = rest
+              if (resync) continue
+              if (!frame) break
+              this.handleInterfaceFrame(iface, frame)
             }
+            if (buffer.length > 512) buffer = buffer.slice(-64)
           })
 
           serialPort.on('error', (err) => {
@@ -237,51 +484,32 @@ class Middleware extends EventEmitter {
    * Handle incoming data from Interface hardware
    * Status updates include: door closed/open, occupied, fault, machine running, etc.
    */
-  handleInterfaceData(iface, packet) {
+  /**
+   * Handle one decoded interface frame.
+   *
+   * Takes an already-validated frame (length-delimited, checksum-checked) rather
+   * than a raw byte slice, so a corrupted byte can no longer be reported as a
+   * fault on the wrong port.
+   */
+  handleInterfaceFrame(iface, frame) {
     try {
-      // Packet format: [STX][CMD][PORT][STATUS_DATA...][ETX][CHK]
-      if (packet.length < 5) return // Too short
+      const { cmd, port, payload } = frame
 
-      const cmd = packet[1]
-      const port = packet[2]
-      
-      // Status update command (0x53 = 'S')
-      if (cmd === 0x53) {
-        const statusByte = packet[3]
-        
-        // Parse status bits
-        const status = {
-          port: port,
-          doorClosed: !!(statusByte & 0x01),    // Bit 0: Door closed
-          occupied: !!(statusByte & 0x02),       // Bit 1: Machine occupied/running
-          fault: !!(statusByte & 0x04),          // Bit 2: Fault detected
-          reserved: !!(statusByte & 0x08),       // Bit 3: Machine reserved
-          heatingUp: !!(statusByte & 0x10),      // Bit 4: Heating up (dryers)
-          doorLocked: !!(statusByte & 0x20)      // Bit 5: Door locked
-        }
-
-        console.log(`Interface ${iface.name} Port ${port} status:`, status)
-        
-        // Emit status event for coinMachine to handle
-        this.emit('machine-status-update', {
-          interfaceId: iface._id,
-          port: port,
-          status: status
-        })
+      if (cmd === KITSEC_CMD.STATUS) {
+        if (payload.length < 1) return
+        const status = { port, ...parseStatusByte(payload[0]) }
+        this.emit('machine-status-update', { interfaceId: iface._id, port, status })
+        return
       }
-      // Fault/Error command (0x45 = 'E')
-      else if (cmd === 0x45) {
-        const errorCode = packet[3]
+
+      if (cmd === KITSEC_CMD.ERROR) {
+        if (payload.length < 1) return
+        const errorCode = payload[0]
         console.log(`Interface ${iface.name} Port ${port} error: ${errorCode}`)
-        
-        this.emit('machine-fault', {
-          interfaceId: iface._id,
-          port: port,
-          errorCode: errorCode
-        })
+        this.emit('machine-fault', { interfaceId: iface._id, port, errorCode })
       }
     } catch (err) {
-      console.error(`Error parsing Interface data:`, err)
+      console.error('Error handling Interface frame:', err)
     }
   }
 
@@ -289,7 +517,9 @@ class Middleware extends EventEmitter {
    * Handle incoming data from peripheral
    */
   handleData(peripheral, data) {
-    // Parse data based on peripheral type
+    // ccTalk devices are framed and go through CcTalkLink, which is attached at
+    // connect time and consumes the port's data events itself. Anything reaching
+    // here for those types is a device configured with a non-ccTalk protocol.
     switch (peripheral.type) {
       case 'coin_acceptor':
         this.handleCoinData(peripheral, data)
@@ -316,18 +546,47 @@ class Middleware extends EventEmitter {
    * Handle coin acceptor data
    */
   handleCoinData(peripheral, data) {
-    // Parse coin signals - this depends on the specific protocol (ccTalk/MDB)
-    // Example: data might be a byte indicating coin value
+    // Non-ccTalk (pulse/MDB) devices only: a single credit code per event.
     const coinValue = this.parseCoinValue(data)
-    
+
     if (coinValue > 0) {
       this.emit('coin-inserted', { peripheral, value: coinValue })
       console.log(`Coin accepted: €${coinValue.toFixed(2)} from ${peripheral.name}`)
     } else if (data[0] !== 0) {
-      // Coin was detected but not accepted
-      this.emit('coin-rejected', { peripheral, signal: data[0] })
-      console.log(`Coin rejected: signal 0x${data[0].toString(16).toUpperCase()} from ${peripheral.name}`)
+      // Coin was detected but not accepted. `reason`, not `signal`: coinMachine
+      // destructures {reason, fraud}, so the old `signal` key meant the handler
+      // always saw undefined and fraud alerts never fired.
+      const reason = `code 0x${data[0].toString(16).toUpperCase()}`
+      this.emit('coin-rejected', { peripheral, reason, signal: data[0] })
+      console.log(`Coin rejected: ${reason} from ${peripheral.name}`)
     }
+  }
+
+  /**
+   * Handle one framed ccTalk credit event from a coin or bill acceptor.
+   *
+   * This is where accepted money now arrives. Reading `data[0]` off a raw serial
+   * chunk (what the old code did) credited ONE coin when two arrived in the same
+   * chunk, and read a mid-frame byte as a credit code when a reply straddled two
+   * chunks — 0x03 as €0.05, or in parseBillValue as €20.00 of free credit.
+   */
+  handleCcTalkCredit(peripheral, { code, isBill }) {
+    const table = isBill ? this.billEqTable : this.coinEqTable
+    const value = table ? Number(table[String(code)]) : NaN
+
+    if (!Number.isFinite(value) || value <= 0) {
+      // An unmapped code is NOT money. Crediting a guess is how phantom notes
+      // got accepted; refuse and make it visible so the operator maps it.
+      console.warn(`[HW] ${peripheral.name}: unmapped ${isBill ? 'bill' : 'coin'} code ${code} — no credit given`)
+      this.emit(isBill ? 'bill-rejected' : 'coin-rejected', {
+        peripheral, reason: `unmapped code ${code}`, fraud: false,
+      })
+      return
+    }
+
+    const rounded = roundMoney(value)
+    this.emit(isBill ? 'bill-inserted' : 'coin-inserted', { peripheral, value: rounded })
+    console.log(`${isBill ? 'Bill' : 'Coin'} accepted: €${rounded.toFixed(2)} from ${peripheral.name}`)
   }
 
   /**
@@ -340,9 +599,10 @@ class Middleware extends EventEmitter {
       this.emit('bill-inserted', { peripheral, value: billValue })
       console.log(`Bill accepted: €${billValue.toFixed(2)} from ${peripheral.name}`)
     } else if (data[0] !== 0) {
-      // Bill was detected but not accepted
-      this.emit('bill-rejected', { peripheral, signal: data[0] })
-      console.log(`Bill rejected: signal 0x${data[0].toString(16).toUpperCase()} from ${peripheral.name}`)
+      // `reason`/`fraud` are the keys coinMachine actually destructures.
+      const reason = `code 0x${data[0].toString(16).toUpperCase()}`
+      this.emit('bill-rejected', { peripheral, reason, fraud: false, signal: data[0] })
+      console.log(`Bill rejected: ${reason} from ${peripheral.name}`)
     }
   }
 
@@ -376,74 +636,72 @@ class Middleware extends EventEmitter {
 
     const peripheral = connection.peripheral
     console.log(`Writing card data to ${peripheral.name}...`)
-    
-    try {
-      // Card data format: code, balance, name, email, phone, contribuinte
-      const dataString = JSON.stringify({
-        code: cardData.code || '',
-        balance: cardData.balance || 0,
-        name: cardData.name || '',
-        email: cardData.email || '',
-        phone: cardData.phone || '',
-        contribuinte: cardData.contribuinte || ''
-      })
 
-      // For MIFARE/NFC cards, write to sectors
-      // This is a simplified example - actual implementation depends on card type
-      if (peripheral.protocol === 'usb' || peripheral.protocol === 'rs232') {
-        await this.writeRFIDSectors(connection, dataString)
-      }
-
-      this.emit('card-written', { peripheral, cardData })
-      console.log(`Card data written successfully: ${cardData.code}`)
-      
-      return { success: true, cardCode: cardData.code }
-    } catch (err) {
-      console.error('Failed to write card data:', err)
-      throw err
+    // A write we cannot actually perform must fail loudly. This used to emit
+    // `card-written` and return `{success:true}` even when there was no port and
+    // nothing had been sent — so a €20 top-up was booked as written to a card
+    // that held nothing.
+    if (!connection.port) {
+      throw new Error(`RFID reader ${peripheral.name} has no open port — cannot write card`)
     }
+
+    // Card data format: code, balance, name, email, phone, contribuinte
+    const dataString = JSON.stringify({
+      code: cardData.code || '',
+      balance: cardData.balance || 0,
+      name: cardData.name || '',
+      email: cardData.email || '',
+      phone: cardData.phone || '',
+      contribuinte: cardData.contribuinte || ''
+    })
+
+    const written = await this.writeRFIDSectors(connection, dataString)
+
+    this.emit('card-written', { peripheral, cardData, blocks: written })
+    console.log(`Card data written successfully: ${cardData.code} (${written} block(s))`)
+
+    return { success: true, cardCode: cardData.code, blocksWritten: written }
   }
 
   /**
    * Write data to RFID card sectors (for MIFARE cards)
    */
   async writeRFIDSectors(connection, dataString) {
-    if (!connection.port) {
-      console.warn('No serial port connection for RFID writer')
-      return
-    }
+    if (!connection.port) throw new Error('No serial port connection for RFID writer')
 
     // Split data into 16-byte blocks (MIFARE Classic block size)
     const dataBuffer = Buffer.from(dataString, 'utf-8')
-    const blockSize = 16
     const blocks = []
-    
-    for (let i = 0; i < dataBuffer.length; i += blockSize) {
-      const block = dataBuffer.slice(i, i + blockSize)
-      // Pad block to 16 bytes if needed
-      const paddedBlock = Buffer.concat([block, Buffer.alloc(blockSize - block.length)])
-      blocks.push(paddedBlock)
+    for (let i = 0; i < dataBuffer.length; i += MIFARE_BLOCK_SIZE) {
+      const block = dataBuffer.slice(i, i + MIFARE_BLOCK_SIZE)
+      blocks.push(Buffer.concat([block, Buffer.alloc(MIFARE_BLOCK_SIZE - block.length)]))
     }
 
-    // Write each block to card
-    // Command format depends on reader model - this is a generic example
+    const targets = dataBlockNumbers(blocks.length)
+    if (targets.length < blocks.length) {
+      throw new Error(
+        `Card data is ${dataBuffer.length} bytes and needs ${blocks.length} blocks, ` +
+        `but only ${targets.length} usable data blocks are available`
+      )
+    }
+
     for (let i = 0; i < blocks.length; i++) {
-      const blockNumber = 4 + i // Start from block 4 (sector 1)
+      const blockNumber = targets[i]
       const writeCommand = Buffer.concat([
-        Buffer.from([0xFF, 0xD6, 0x00, blockNumber, 0x10]), // Write block command
+        Buffer.from([0xFF, 0xD6, 0x00, blockNumber, MIFARE_BLOCK_SIZE]), // Write block
         blocks[i]
       ])
 
-      await new Promise((resolve, reject) => {
-        connection.port.write(writeCommand, (err) => {
-          if (err) reject(err)
-          else resolve()
-        })
-      })
-
-      // Wait for ACK
-      await this.waitForResponse(connection.port, 500)
+      // One call writes and waits for that command's own reply. The ACK was
+      // previously discarded entirely, so a NAK counted as success.
+      const resp = await this.requestOnPort(connection, writeCommand, 500)
+      if (!isPcscSuccess(resp)) {
+        throw new Error(`RFID reader rejected the write to block ${blockNumber}` +
+          (resp ? ` (SW=${resp.slice(-2).toString('hex')})` : ' (no response)'))
+      }
     }
+
+    return blocks.length
   }
 
   /**
@@ -492,21 +750,13 @@ class Middleware extends EventEmitter {
     const blocks = []
     
     // Read blocks from card
-    for (let i = 0; i < maxBlocks; i++) {
-      const blockNumber = 4 + i // Start from block 4
-      const readCommand = Buffer.from([0xFF, 0xB0, 0x00, blockNumber, 0x10])
-
-      await new Promise((resolve, reject) => {
-        connection.port.write(readCommand, (err) => {
-          if (err) reject(err)
-          else resolve()
-        })
-      })
-
-      // Wait for block data
-      const blockData = await this.waitForResponse(connection.port, 500)
-      if (blockData && blockData.length >= 16) {
-        blocks.push(blockData.slice(0, 16))
+    // Read the same data blocks writeRFIDSectors uses — skipping sector
+    // trailers, which are keys and access bits, not card data.
+    for (const blockNumber of dataBlockNumbers(maxBlocks)) {
+      const readCommand = Buffer.from([0xFF, 0xB0, 0x00, blockNumber, MIFARE_BLOCK_SIZE])
+      const blockData = await this.requestOnPort(connection, readCommand, 500)
+      if (blockData && blockData.length >= MIFARE_BLOCK_SIZE) {
+        blocks.push(blockData.slice(0, MIFARE_BLOCK_SIZE))
       }
     }
 
@@ -628,18 +878,22 @@ class Middleware extends EventEmitter {
     const peripheral = connection.peripheral
     console.log(`Dispensing card from ${peripheral.name}...`)
     
-    // Send command based on protocol
+    // A dispenser we cannot drive must throw, not quietly succeed: `pos.js`
+    // books a CardPurchase with `dispenserUsed: true` off the back of this, so
+    // reporting success meant the customer paid for a card they never received.
+    this.assertUsable(connection)
+
     if (peripheral.protocol === 'cctalk') {
       await this.sendCardDispenserCCTalkCommand(connection)
     } else if (peripheral.protocol === 'pulse') {
       await this.sendCardDispenserPulseCommand(connection)
     } else {
-      // Generic trigger
-      if (connection.port) {
-        await this.send(peripheralId, Buffer.from([0xFF])) // Trigger signal
+      if (!connection.port) {
+        throw new Error(`Card dispenser ${peripheral.name} has no open port`)
       }
+      await this.send(peripheralId, Buffer.from([0xFF])) // Trigger signal
     }
-    
+
     this.emit('card-dispensed', { peripheral: connection.peripheral })
     return { success: true }
   }
@@ -663,23 +917,26 @@ class Middleware extends EventEmitter {
     
     console.log(`Card dispenser command:`, packet.map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '))
     
-    const buffer = Buffer.from(packet)
-    await new Promise((resolve, reject) => {
-      connection.port.write(buffer, (err) => {
-        if (err) reject(err)
-        else resolve()
-      })
-    })
-    
-    await this.waitForResponse(connection.port, 1000)
+    const reply = await this.requestOnPort(connection, Buffer.from(packet), 1000)
+    // The reply used to be discarded, so a silent or refusing dispenser still
+    // reported a card as delivered. A ccTalk ACK is a zero-data reply.
+    if (!reply) throw new Error('Card dispenser did not respond to the dispense command')
+    if (reply.length >= 4 && reply[1] !== 0x00) {
+      throw new Error(`Card dispenser refused the dispense command (reply header 0x${reply[3].toString(16)})`)
+    }
   }
 
   /**
    * Send pulse command to card dispenser
    */
   async sendCardDispenserPulseCommand(connection) {
-    if (!connection.port) return
-    
+    // Guard first: the pulse transport is a stub, and returning quietly here is
+    // what let dispenseCard report a card as delivered.
+    this.assertUsable(connection)
+    if (!connection.port) {
+      throw new Error(`Card dispenser ${connection.peripheral.name} has no open port`)
+    }
+
     // Simple pulse: HIGH for 200ms, then LOW
     const highSignal = Buffer.from([0xFF])
     const lowSignal = Buffer.from([0x00])
@@ -692,26 +949,63 @@ class Middleware extends EventEmitter {
   /**
    * Generic response wait helper
    */
-  async waitForResponse(port, timeout = 500) {
-    return new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        port.removeListener('data', handler)
-        resolve(null)
-      }, timeout)
-      
-      const handler = (data) => {
+  /**
+   * Write a command to a peripheral's port and wait for THAT command's reply.
+   *
+   * Replaces the old `waitForResponse`, which registered a bare `once('data')`
+   * per caller against a shared port. Two concurrent callers each got their own
+   * listener, so a single inbound chunk resolved both promises — command A's ACK
+   * was read as command B's reply. In `readRFIDSectors` a late block-N reply
+   * satisfied the wait for block N−1, shifting the balance data by one block.
+   *
+   * Every command on a port now goes through a single queue, so exactly one
+   * request is in flight at a time and a reply can only belong to it.
+   */
+  requestOnPort(connection, command, timeout = 500) {
+    if (!connection || !connection.port) {
+      return Promise.reject(new Error('Peripheral has no open port'))
+    }
+
+    // One queue per connection, created lazily.
+    if (!connection.queue) connection.queue = Promise.resolve()
+
+    const run = () => new Promise((resolve, reject) => {
+      const port = connection.port
+      let settled = false
+
+      const cleanup = () => {
         clearTimeout(timer)
-        port.removeListener('data', handler)
+        port.removeListener('data', onData)
+      }
+      const onData = (data) => {
+        if (settled) return
+        settled = true
+        cleanup()
         resolve(data)
       }
-      
-      if (port) {
-        port.once('data', handler)
-      } else {
-        clearTimeout(timer)
+      const timer = setTimeout(() => {
+        if (settled) return
+        settled = true
+        cleanup()
+        // Resolve null rather than throw: callers decide whether a silent device
+        // is fatal. They MUST check — a null here used to be treated as success.
         resolve(null)
-      }
+      }, timeout)
+
+      port.on('data', onData)
+      port.write(command, (err) => {
+        if (err && !settled) {
+          settled = true
+          cleanup()
+          reject(err)
+        }
+      })
     })
+
+    // Chain onto the queue so commands never overlap on the same port.
+    const result = connection.queue.then(run, run)
+    connection.queue = result.then(() => {}, () => {})
+    return result
   }
 
   /**
@@ -745,112 +1039,159 @@ class Middleware extends EventEmitter {
    * Dispense change via hopper
    * Calculates optimal coin breakdown and sends ccTalk commands to hopper
    */
+  /**
+   * Pay out `amount` in coins.
+   *
+   * A ccTalk hopper holds ONE denomination and its dispense command carries only
+   * a coin count, so multi-denomination change needs one hopper per coin. All of
+   * the tenant's enabled hoppers are used together, largest coin first.
+   *
+   * `peripheralId` selects a starting hopper for compatibility with existing
+   * callers; every other enabled hopper is used as well when needed.
+   *
+   * Never throws for a hardware failure — it returns what was actually paid, so
+   * the caller can tell the customer the truth. The old version reported
+   * `{success:true}` on a jam and left the shortfall invisible.
+   */
   async dispenseChange(peripheralId, amount) {
-    const connection = this.connections.get(peripheralId.toString())
-    
-    if (!connection || connection.peripheral.type !== 'hopper') {
-      throw new Error('Hopper not available')
+    const target = roundMoney(amount)
+    if (!(target > 0)) return { success: true, dispensed: 0, remaining: 0, breakdown: [] }
+
+    const hoppers = this.getHoppersFor(peripheralId)
+    if (hoppers.length === 0) {
+      return { success: false, error: 'No hopper connected', dispensed: 0, remaining: target, breakdown: [] }
     }
 
+    const plan = planPayout(target, hoppers)
+    const breakdown = []
+    let dispensed = 0
+
+    for (const step of plan.steps) {
+      try {
+        const paid = await this.dispenseFromHopper(step.connection, step.count)
+        const value = roundMoney(paid * step.coinValue)
+        dispensed = roundMoney(dispensed + value)
+        breakdown.push({ denomination: step.coinValue, requested: step.count, dispensed: paid, value })
+
+        if (paid < step.count) {
+          console.error(`[HW] Hopper ${step.connection.peripheral.name} paid ${paid}/${step.count} coins`)
+          break // stop: it is empty or jammed, do not keep trying
+        }
+      } catch (err) {
+        console.error(`[HW] Hopper ${step.connection.peripheral.name} failed:`, err.message)
+        breakdown.push({ denomination: step.coinValue, requested: step.count, dispensed: 0, error: err.message })
+        break
+      }
+    }
+
+    const remaining = roundMoney(target - dispensed)
+    const success = remaining <= 0 && plan.unpayable <= 0
+
+    if (success) {
+      this.emit('change-dispensed', { amount: dispensed, breakdown })
+    } else {
+      // Surfacing this is the whole point — the customer is owed money.
+      this.emit('change-shortfall', { requested: target, dispensed, remaining, breakdown })
+      console.error(`[HW] Change shortfall: asked €${target.toFixed(2)}, paid €${dispensed.toFixed(2)}`)
+    }
+
+    return {
+      success,
+      dispensed,
+      remaining: Math.max(0, remaining),
+      breakdown,
+      error: success ? undefined : (plan.unpayable > 0
+        ? `Cannot make €${target.toFixed(2)} from the available coins`
+        : 'Hopper did not dispense the full amount'),
+    }
+  }
+
+  /** Enabled, connected hoppers with a configured coin value, largest coin first. */
+  getHoppersFor(preferredId) {
+    const hoppers = []
+    for (const [id, conn] of this.connections) {
+      if (!conn.peripheral || conn.peripheral.type !== 'hopper') continue
+      if (conn.peripheral.enabled === false) continue
+      const coinValue = Number(conn.peripheral.hopperConfig?.coinValue)
+      if (!(coinValue > 0)) {
+        console.warn(`[HW] Hopper ${conn.peripheral.name} has no coinValue configured — skipping`)
+        continue
+      }
+      hoppers.push({ id, connection: conn, coinValue, preferred: id === String(preferredId) })
+    }
+    return hoppers.sort((a, b) => b.coinValue - a.coinValue)
+  }
+
+  /**
+   * Dispense `count` coins from one hopper and confirm how many actually fell.
+   *
+   * Enables the hopper, issues the dispense, then polls status until it reports
+   * idle and reads back the paid count. The old code fired the command, ignored
+   * a null timeout reply, and reported success regardless.
+   */
+  async dispenseFromHopper(connection, count) {
     const peripheral = connection.peripheral
-    
-    // Get available coin denominations from hopper config
-    const availableCoins = peripheral.hopperConfig?.coinDenominations || [2.00, 1.00, 0.50, 0.20, 0.10, 0.05]
-    
-    // Calculate coin breakdown
-    const breakdown = this.calculateCoinBreakdown(amount, availableCoins)
-    
-    console.log(`Dispensing €${amount.toFixed(2)} change:`, breakdown)
-    
-    // Send ccTalk commands to hopper for each coin denomination
-    for (const item of breakdown) {
-      await this.sendHopperDispenseCommand(connection, item.denomination, item.count)
+    const link = this.getCcTalkLink(connection, CC_ADDR.HOPPER)
+
+    const ceiling = Number(peripheral.hopperConfig?.maxDispenseCoins) || MAX_COINS_PER_DISPENSE
+    if (count > ceiling) {
+      throw new Error(`Refusing to dispense ${count} coins — above the ${ceiling}-coin safety ceiling`)
     }
-    
-    this.emit('change-dispensed', { peripheral, amount, breakdown })
-    
-    return { success: true, breakdown }
+
+    await link.request(CC_HEADER.ENABLE_HOPPER, [0xA5])
+    await link.request(CC_HEADER.DISPENSE_HOPPER, [count & 0xFF])
+
+    // Poll until the hopper stops paying out. A hopper reports the number of
+    // coins remaining to pay; zero means it finished.
+    const deadline = Date.now() + HOPPER_DISPENSE_TIMEOUT_MS
+    let remainingToPay = count
+    while (Date.now() < deadline) {
+      await sleep(HOPPER_POLL_INTERVAL_MS)
+      const status = await link.request(CC_HEADER.HOPPER_STATUS, [])
+      // Reply data: [eventCounter, remaining, paid, unpaid] on the common devices.
+      if (status.data.length >= 2) {
+        remainingToPay = status.data[1]
+        if (remainingToPay === 0) {
+          const paid = status.data.length >= 3 ? status.data[2] : count
+          await this.decrementHopperStock(peripheral, paid)
+          return Math.min(paid, count)
+        }
+      }
+    }
+
+    // Timed out mid-payout: report what the device last said it still owed,
+    // rather than assuming the whole request succeeded.
+    const paid = Math.max(0, count - remainingToPay)
+    await this.decrementHopperStock(peripheral, paid)
+    throw new Error(`Hopper timed out after paying ${paid}/${count} coins`)
   }
 
-  /**
-   * Send ccTalk command to hopper to dispense specific coins
-   */
-  async sendHopperDispenseCommand(connection, denomination, count) {
-    if (!connection.port) {
-      console.warn('No serial port connection for hopper')
-      return
-    }
-
-    // ccTalk command to dispense coins
-    // Format: [Destination, Length, Source, Command, Data..., Checksum]
-    const address = parseInt(connection.peripheral.address) || 3
-    const command = 167 // Dispense coins command (0xA7)
-    
-    // Build ccTalk packet
-    const destination = address
-    const source = 1 // Host address
-    const dataBytes = [count & 0xFF] // Number of coins to dispense
-    const length = dataBytes.length + 2 // Command + data
-    
-    const packet = [destination, length, source, command, ...dataBytes]
-    
-    // Calculate checksum (sum of all bytes modulo 256, then 256 - result)
-    const sum = packet.reduce((acc, byte) => acc + byte, 0)
-    const checksum = (256 - (sum % 256)) & 0xFF
-    packet.push(checksum)
-    
-    console.log(`Hopper dispense command (${count}x €${denomination.toFixed(2)}):`, 
-                packet.map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '))
-    
-    // Write to serial port
+  /** Keep the stock count honest so the dashboard can warn before it runs dry. */
+  async decrementHopperStock(peripheral, coins) {
+    if (!coins) return
     try {
-      const buffer = Buffer.from(packet)
-      await new Promise((resolve, reject) => {
-        connection.port.write(buffer, (err) => {
-          if (err) reject(err)
-          else resolve()
-        })
-      })
-      
-      // Wait for response (optional - hopper should ACK)
-      await this.waitForHopperResponse(connection, 500) // 500ms timeout
-      
+      await Peripheral.updateOne(
+        { _id: peripheral._id },
+        { $inc: { 'hopperConfig.currentCount': -coins } }
+      )
+      const left = (peripheral.hopperConfig?.currentCount || 0) - coins
+      if (left <= HOPPER_LOW_STOCK_COINS) {
+        this.emit('hopper-low', { peripheral, remaining: Math.max(0, left) })
+      }
     } catch (err) {
-      console.error('Failed to send hopper command:', err)
-      throw err
+      console.error('[HW] Failed to update hopper stock:', err.message)
     }
   }
 
-  /**
-   * Wait for hopper response (ACK or error)
-   */
-  async waitForHopperResponse(connection, timeout = 500) {
-    return new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        connection.port.removeListener('data', handler)
-        resolve(null) // Timeout - proceed anyway
-      }, timeout)
-      
-      const handler = (data) => {
-        clearTimeout(timer)
-        connection.port.removeListener('data', handler)
-        console.log('Hopper response:', data.toString('hex'))
-        resolve(data)
-      }
-      
-      if (connection.port) {
-        connection.port.once('data', handler)
-      } else {
-        clearTimeout(timer)
-        resolve(null)
-      }
-    })
+  /** Lazily create (and cache) the framed ccTalk link for a connection. */
+  getCcTalkLink(connection, fallbackAddress) {
+    if (connection.link) return connection.link
+    if (!connection.port) throw new Error(`${connection.peripheral.name} has no open port`)
+    const address = Number(connection.peripheral.deviceAddress) || fallbackAddress
+    connection.link = new CcTalkLink(connection.port, address)
+    return connection.link
   }
 
-  /**
-   * Print receipt
-   * Supports ESC/POS thermal printers
-   */
   async print(peripheralId, content) {
     const connection = this.connections.get(peripheralId.toString())
     
@@ -890,14 +1231,22 @@ class Middleware extends EventEmitter {
     commands.push(Buffer.from([0x1B, 0x64, 0x03])) // ESC d 3 - Feed 3 lines
     commands.push(Buffer.from([0x1D, 0x56, 0x00])) // GS V 0 - Cut paper
     
-    // Send all commands
-    if (connection.port) {
-      for (const cmd of commands) {
-        await this.send(peripheralId, cmd)
-        await new Promise(resolve => setTimeout(resolve, 10)) // Small delay between commands
-      }
+    // The whole write loop used to be wrapped in `if (connection.port)`, with
+    // `receipt-printed` and {success:true} emitted regardless — so a printer that
+    // was unplugged, unsupported, or out of paper reported a printed receipt.
+    this.assertUsable(connection)
+    if (!connection.port) {
+      throw new Error(`Printer ${connection.peripheral.name} has no open port`)
     }
-    
+
+    for (const cmd of commands) {
+      await this.send(peripheralId, cmd)
+      await new Promise(resolve => setTimeout(resolve, 10)) // Small delay between commands
+    }
+    await new Promise((resolve, reject) => {
+      connection.port.drain((err) => (err ? reject(err) : resolve()))
+    })
+
     this.emit('receipt-printed', { peripheral: connection.peripheral })
     return { success: true }
   }
@@ -917,24 +1266,47 @@ class Middleware extends EventEmitter {
    * Disconnect from peripheral
    */
   async disconnect(peripheralId) {
-    const connection = this.connections.get(peripheralId.toString())
-    
-    if (connection && connection.port) {
-      await new Promise((resolve) => {
-        connection.port.close(() => resolve())
-      })
+    const key = peripheralId.toString()
+    const connection = this.connections.get(key)
+
+    // Stop the retry loop first, or it races the shutdown and reopens the port.
+    const retry = this.reconnectTimers.get(key)
+    if (retry) { clearTimeout(retry); this.reconnectTimers.delete(key) }
+
+    if (connection) {
+      if (connection.pollTimer) clearInterval(connection.pollTimer)
+      if (connection.link) connection.link.destroy('peripheral disconnected')
+      if (connection.port && connection.port.isOpen) {
+        await new Promise((resolve) => connection.port.close(() => resolve()))
+      }
     }
 
-    this.connections.delete(peripheralId.toString())
+    this.connections.delete(key)
   }
 
   /**
    * Disconnect all peripherals
    */
   async disconnectAll() {
-    for (const [id] of this.connections) {
+    for (const id of [...this.connections.keys()]) {
       await this.disconnect(id)
     }
+
+    // Interfaces were never iterated here, so their serial ports stayed open
+    // across a shutdown and the next start hit a busy port.
+    for (const [id, conn] of [...this.interfaces.entries()]) {
+      try {
+        if (conn.serialPort && conn.serialPort.isOpen) {
+          await new Promise((resolve) => conn.serialPort.close(() => resolve()))
+        }
+      } catch (err) {
+        console.error(`[HW] Error closing interface ${id}:`, err.message)
+      }
+      this.interfaces.delete(id)
+    }
+
+    for (const timer of this.reconnectTimers.values()) clearTimeout(timer)
+    this.reconnectTimers.clear()
   }
 
   /**
@@ -1005,14 +1377,28 @@ class Middleware extends EventEmitter {
       activation: activation || 'high'
     }
 
-    // Send pulse command to the interface
     // Format: [STX][ADDR][PORT][IMPULSES][T_ON_H][T_ON_L][T_OFF_H][T_OFF_L][LEVEL][ETX][CHK]
     const buffer = this.buildInterfaceCommand(command)
-    
-    // Emit activation event for logging/monitoring
+
+    // ACTUALLY WRITE IT. The old version built this buffer, logged
+    // "Activation pulse sent", and returned — without ever touching the serial
+    // port. `coinMachine` then marked the machine `working` and saved: the
+    // customer paid, credits were deducted, the UI showed a running machine, and
+    // the washer never started.
+    const conn = this.interfaces.get(iface._id.toString())
+    if (!conn || !conn.serialPort || !conn.serialPort.isOpen) {
+      throw new Error(`Interface ${iface.name} is not connected — cannot activate machine ${machine.name || machine._id}`)
+    }
+
+    await new Promise((resolve, reject) => {
+      conn.serialPort.write(buffer, (err) => (err ? reject(err) : resolve()))
+    })
+    await new Promise((resolve, reject) => {
+      conn.serialPort.drain((err) => (err ? reject(err) : resolve()))
+    })
+
     this.emit('interface-activation', { machine: machine._id, interface: iface._id, command })
-    
-    console.log(`Activation pulse sent to Interface addr=${address}, port=${port}`)
+    console.log(`Activation pulse written to Interface addr=${address}, port=${port} (${buffer.length} bytes)`)
     return buffer
   }
 
@@ -1026,24 +1412,42 @@ class Middleware extends EventEmitter {
     
     const STX = 0x02
     const ETX = 0x03
-    
-    // Split timing into high/low bytes (little-endian)
-    const tOnHigh = (cmd.tOn >> 8) & 0xFF
-    const tOnLow = cmd.tOn & 0xFF
-    const tOffHigh = (cmd.tOff >> 8) & 0xFF
-    const tOffLow = cmd.tOff & 0xFF
-    
+
+    // Every field must be coerced to a number. `cmd.address` arrives as the
+    // interface's address which may be a string, and `Buffer.from` turns a
+    // non-numeric string into 0 — silently addressing device 0. Undefined
+    // tOn/tOff became 0 the same way, producing a zero-length pulse that no
+    // machine responds to.
+    const toByte = (v, fallback = 0) => {
+      const n = Number(v)
+      return Number.isFinite(n) ? (n & 0xFF) : fallback
+    }
+    const toU16 = (v, fallback) => {
+      const n = Number(v)
+      return Number.isFinite(n) && n >= 0 ? Math.min(n, 0xFFFF) : fallback
+    }
+
+    const tOn = toU16(cmd.tOn, 100)
+    const tOff = toU16(cmd.tOff, 100)
+
+    // Little-endian, as the comment always claimed: low byte first. The code
+    // wrote the high byte first, so a 250ms pulse went out as 64000ms.
+    const tOnLow = tOn & 0xFF
+    const tOnHigh = (tOn >> 8) & 0xFF
+    const tOffLow = tOff & 0xFF
+    const tOffHigh = (tOff >> 8) & 0xFF
+
     const level = cmd.activation === 'high' ? 0x01 : 0x00
-    
+
     const buffer = Buffer.from([
       STX,
-      cmd.address,
-      cmd.port,
-      cmd.impulses,
-      tOnHigh,
+      toByte(cmd.address),
+      toByte(cmd.port),
+      toByte(cmd.impulses, 1) || 1,
       tOnLow,
-      tOffHigh,
+      tOnHigh,
       tOffLow,
+      tOffHigh,
       level,
       ETX
     ])
@@ -1062,7 +1466,16 @@ class Middleware extends EventEmitter {
    * Send package to connected clients/low-level device
    * Wraps payload with framing for low-level: { cl: length, c: payload }
    */
-  send(pkg) {
+  /**
+   * Wrap a package in the legacy JSON frame and emit it to websocket clients.
+   *
+   * Renamed from `send`: it was the SECOND method of that name in this class, so
+   * it silently replaced the serial `send(peripheralId, command)` above. Every
+   * caller expecting to write bytes to a port — `dispenseCard`'s generic branch
+   * and every `print()` — hit this instead and wrote nothing to any device,
+   * while still reporting success.
+   */
+  sendPackage(pkg) {
     // Calculate frame length (same logic as old middleware)
     const dataStr = JSON.stringify(pkg)
     const dataLength = dataStr.length

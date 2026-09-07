@@ -16,7 +16,7 @@ export default function LanguageSwitcher() {
 
   function setLang(code) {
     i18n.changeLanguage(code)
-    try { localStorage.setItem('i18nextLng', code) } catch (e) {}
+    try { localStorage.setItem('i18nextLng', code) } catch { /* localStorage throws in private mode; the preference is optional */ }
     setOpen(false)
   }
 

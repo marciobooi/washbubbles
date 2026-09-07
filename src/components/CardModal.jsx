@@ -19,13 +19,13 @@ function getTxIcon(type) {
   return '/card/card.png'
 }
 
-export default function CardModal({ open, onClose, transactions = [], balance = 0, onRecharge = () => {} }) {
+// `onRecharge` used to be accepted here and never called — Pos.jsx passed a real
+// handler that could therefore never fire. The cart-based flow superseded it.
+export default function CardModal({ open, onClose, transactions = [], balance = 0 }) {
   const { addToCart } = useCart()
   const { t } = useTranslation('pos')
   const [selectedAmount, setSelectedAmount] = useState(10)
   const [addedToCart, setAddedToCart] = useState(false)
-  const [insertedMoney, setInsertedMoney] = useState(0)
-  const [showChange, setShowChange] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -40,9 +40,9 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
   React.useEffect(() => {
     if (!open) return
     const prev = document.body.style.overflow
-    try { document.body.style.overflow = 'hidden' } catch (e) {}
+    try { document.body.style.overflow = 'hidden' } catch { /* scroll-lock is cosmetic */ }
     return () => {
-      try { document.body.style.overflow = prev } catch (e) {}
+      try { document.body.style.overflow = prev } catch { /* scroll-lock is cosmetic */ }
     }
   }, [open])
 
@@ -76,18 +76,10 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
     setSelectedAmount(amount)
   }
 
-  const handleInsertMoney = (amount) => {
-    setInsertedMoney(amount)
-    const change = amount - selectedAmount
-    if (change > 0) {
-      setShowChange(true)
-      setTimeout(() => setShowChange(false), 5000)
-    }
-  }
-
-  const calculateChange = () => {
-    return Math.max(0, insertedMoney - selectedAmount)
-  }
+  // The manual "insert money / show change" widget was removed: nothing ever
+  // called handleInsertMoney, so insertedMoney and showChange never changed and
+  // the Troco block below could not render. Change is dispensed and reported by
+  // the server (see the changeDispensed flag on the payment response).
 
   if (!open) return null
 
@@ -190,14 +182,6 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
                   ))}
                 </div>
 
-                {/* Change Display */}
-                {showChange && calculateChange() > 0 && (
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-center animate-fade-in">
-                    <p className="text-sm text-yellow-800 font-semibold">
-                      Troco: <span className="text-lg">{calculateChange().toFixed(2)}€</span>
-                    </p>
-                  </div>
-                )}
                 
                 {/* Add to Cart Button */}
                 <button 

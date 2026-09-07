@@ -18,6 +18,21 @@ const loginLimiter = rateLimit({
   message: { error: 'Too many login attempts, please try again later.' },
 })
 
+/**
+ * Password-reset limiter.
+ *
+ * `/forgot-password` was unlimited: a mail bomb against any known address, and a
+ * user-enumeration oracle if responses ever differ. `/reset-password` was also
+ * unlimited against a 64-hex token — brute-forcible given enough attempts.
+ */
+const passwordResetLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many password reset attempts, please try again later.' },
+})
+
 router.post('/login', loginLimiter, async (req, res) => {
   // Using Mongoose User model. Accepts username/password OR apiKey.
   const { username, password, apiKey } = req.body
@@ -78,7 +93,7 @@ router.post('/change-password', requireAuth, async (req, res) => {
 
 // Request a password reset link by email. Always respond 200 to avoid
 // revealing whether an address is registered.
-router.post('/forgot-password', async (req, res) => {
+router.post('/forgot-password', passwordResetLimiter, async (req, res) => {
   const { email } = req.body
   if (!email) return res.status(400).json({ error: 'Missing email' })
   const user = await User.findOne({ email })
@@ -109,7 +124,7 @@ router.post('/forgot-password', async (req, res) => {
 })
 
 // Resetting the password using the token
-router.post('/reset-password', async (req, res) => {
+router.post('/reset-password', passwordResetLimiter, async (req, res) => {
   const { token, newPassword } = req.body
   if (!token || !newPassword) return res.status(400).json({ error: 'Missing fields' })
   if (typeof newPassword !== 'string' || newPassword.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters' })

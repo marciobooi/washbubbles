@@ -5,6 +5,10 @@ import Setting from '../models/setting.js'
 import Machine from '../models/machine.js'
 import Interface from '../models/interface.js'
 import { broadcastMachine, broadcastHardwareEvent } from '../wsServer.js'
+import { roundMoney } from '../utils/money.js'
+
+/** Consecutive idle readings required before a running machine is freed. */
+const IDLE_READINGS_TO_FREE = 3
 
 /**
  * CoinMachine coordinator - integrates middleware, client state, and backend API
@@ -20,6 +24,60 @@ class CoinMachine extends EventEmitter {
     this.running = false
     this.subscriptions = []
     this.machines = new Map() // Track machine states
+    /**
+     * Consecutive "idle" status readings per machine.
+     *
+     * Hardware status is noisy and arrives several times a second; one dropped
+     * bit must not end a paid cycle. See handleMachineStatusUpdate.
+     */
+    this.idleReadings = new Map()
+    /**
+     * The tenant whose hardware this process drives.
+     *
+     * The coin machine is a singleton wired to the serial ports physically
+     * attached to THIS server, which belong to exactly one site. Every query
+     * here used to be unscoped: `Setting.findOne({key})` returned whichever
+     * tenant's row Mongo happened to hand back, so one operator's bonus rate was
+     * applied to another's coins, and `Machine.findOne({intId})` could start a
+     * different tenant's machine on someone else's payment.
+     */
+    this.tenantId = options.tenantId || null
+  }
+
+  /** Scope a filter to this machine's tenant. Fails closed if none is resolved. */
+  scoped(filter = {}) {
+    return { ...filter, tenantId: this.tenantId }
+  }
+
+  /**
+   * Work out which tenant this hardware belongs to.
+   *
+   * Explicit env config wins; otherwise a single-tenant install resolves
+   * unambiguously. With several tenants and no config we refuse to start the
+   * hardware rather than guess whose money it is.
+   */
+  async resolveTenant() {
+    if (this.tenantId) return this.tenantId
+
+    const configured = process.env.COIN_MACHINE_TENANT_ID
+    if (configured) {
+      this.tenantId = configured
+      return this.tenantId
+    }
+
+    const Tenant = (await import('../models/tenant.js')).default
+    const tenants = await Tenant.find().limit(2).lean()
+    if (tenants.length === 1) {
+      this.tenantId = tenants[0]._id
+      console.log(`[CoinMachine] Bound to sole tenant ${tenants[0].name}`)
+      return this.tenantId
+    }
+
+    throw new Error(
+      tenants.length === 0
+        ? 'No tenant exists — cannot start the coin machine'
+        : 'Multiple tenants exist: set COIN_MACHINE_TENANT_ID to the site this server drives'
+    )
   }
 
   /**
@@ -33,7 +91,10 @@ class CoinMachine extends EventEmitter {
 
     try {
       console.log('Starting CoinMachine...')
-      
+
+      // Must come first — everything below is scoped to this tenant.
+      await this.resolveTenant()
+
       // Load settings
       await this.loadSettings()
       
@@ -84,11 +145,11 @@ class CoinMachine extends EventEmitter {
    */
   async loadSettings() {
     try {
-      const coinEqSetting = await Setting.findOne({ key: 'coinEqTable' })
-      const billEqSetting = await Setting.findOne({ key: 'billEqTable' })
-      const rechargeCoinBonus = await Setting.findOne({ key: 'rechargeCoinBonus' })
-      const rechargeBillBonus = await Setting.findOne({ key: 'rechargeBillBonus' })
-      const autoCharge = await Setting.findOne({ key: 'autoCharge' })
+      const coinEqSetting = await Setting.findOne(this.scoped({ key: 'coinEqTable' }))
+      const billEqSetting = await Setting.findOne(this.scoped({ key: 'billEqTable' }))
+      const rechargeCoinBonus = await Setting.findOne(this.scoped({ key: 'rechargeCoinBonus' }))
+      const rechargeBillBonus = await Setting.findOne(this.scoped({ key: 'rechargeBillBonus' }))
+      const autoCharge = await Setting.findOne(this.scoped({ key: 'autoCharge' }))
       
       this.settings = {
         coinEqTable: coinEqSetting?.value || [],
@@ -162,6 +223,14 @@ class CoinMachine extends EventEmitter {
     })
     this.subscriptions.push(machineReservedSub)
 
+    // `middleware.js` has always emitted `machine-res-canceled`, but nothing
+    // listened — so a cancelled reservation left the machine `reserved` forever,
+    // unbookable by anyone, while `activateMachine` would still start it.
+    const machineResCanceledSub = this.middleware.subscribe('machine-res-canceled', (data) => {
+      this.handleMachineReservationCanceled(data)
+    })
+    this.subscriptions.push(machineResCanceledSub)
+
     const machineIssueSub = this.middleware.subscribe('machine-issue', (data) => {
       this.handleMachineIssue(data)
     })
@@ -213,7 +282,10 @@ class CoinMachine extends EventEmitter {
     const { peripheral, reason } = data
     this.emit('coin-rejected', { peripheral, reason })
     console.warn(`Coin rejected: ${reason || 'unknown reason'}`)
-    broadcastHardwareEvent('peripheral:rejected', { type: 'coin', reason: reason || 'rejected' })
+    // Signature is (tenantId, type, payload). Called with two args the tenant
+    // became the event name and the payload the type, so these alerts — fraud
+    // included — reached nobody.
+    broadcastHardwareEvent(this.tenantId, 'peripheral:rejected', { type: 'coin', reason: reason || 'rejected' })
   }
 
   /**
@@ -224,7 +296,7 @@ class CoinMachine extends EventEmitter {
     const eventType = fraud ? 'peripheral:fraud' : 'peripheral:rejected'
     this.emit('bill-rejected', { peripheral, reason, fraud })
     console.warn(`Bill ${fraud ? 'FRAUD' : 'rejected'}: ${reason || 'unknown reason'}`)
-    broadcastHardwareEvent(eventType, { type: 'bill', reason: reason || 'rejected', fraud: !!fraud })
+    broadcastHardwareEvent(this.tenantId, eventType, { type: 'bill', reason: reason || 'rejected', fraud: !!fraud })
   }
 
   /**
@@ -233,7 +305,7 @@ class CoinMachine extends EventEmitter {
   handleHopperEmpty(data) {
     this.emit('hopper-empty', data)
     console.error('Hopper empty — cannot dispense change!')
-    broadcastHardwareEvent('hopper:empty', { message: 'Hopper is empty, change cannot be dispensed' })
+    broadcastHardwareEvent(this.tenantId, 'hopper:empty', { message: 'Hopper is empty, change cannot be dispensed' })
   }
 
   /**
@@ -242,7 +314,7 @@ class CoinMachine extends EventEmitter {
   handleHopperFault(data) {
     this.emit('hopper-fault', data)
     console.error('Hopper fault:', data)
-    broadcastHardwareEvent('hopper:fault', data)
+    broadcastHardwareEvent(this.tenantId, 'hopper:fault', data)
   }
 
   /**
@@ -257,17 +329,20 @@ class CoinMachine extends EventEmitter {
     // Calculate bonus
     let bonusValue = 0
     if (this.settings.rechargeCoinBonus > 0) {
-      bonusValue = (mappedValue * this.settings.rechargeCoinBonus) / 100
+      bonusValue = roundMoney((mappedValue * this.settings.rechargeCoinBonus) / 100)
       this.client.client.bonusArr.push(bonusValue)
-      this.client.client.bonus += bonusValue
+      this.client.client.bonus = roundMoney(this.client.client.bonus + bonusValue)
     }
 
-    // Auto-charge logic
+    // Auto-charge bookkeeping. `moneyArr` is a record of what went in; the coin
+    // is NOT also queued as a card credit here. It used to be pushed into
+    // `chargedArr` *and* added to the spendable balance below, so €5 in became €5
+    // to spend now plus €5 on the card at removal. The unspent remainder is what
+    // transfers to the card — see `client.sendChargeRequest`.
     if (this.settings.autoCharge && this.client.client.hasCard) {
       this.client.client.moneyArr.push(mappedValue)
-      this.client.client.chargedArr.push(mappedValue + bonusValue)
     }
-    
+
     this.client.addToBalance(mappedValue)
     this.emit('coin-inserted', { 
       value: mappedValue, 
@@ -290,15 +365,15 @@ class CoinMachine extends EventEmitter {
     // Calculate bonus
     let bonusValue = 0
     if (this.settings.rechargeBillBonus > 0) {
-      bonusValue = (mappedValue * this.settings.rechargeBillBonus) / 100
+      bonusValue = roundMoney((mappedValue * this.settings.rechargeBillBonus) / 100)
       this.client.client.bonusArr.push(bonusValue)
-      this.client.client.bonus += bonusValue
+      this.client.client.bonus = roundMoney(this.client.client.bonus + bonusValue)
     }
 
-    // Auto-charge logic
+    // See handleCoinInserted: the note is not queued as a card credit here, only
+    // recorded. The unspent remainder transfers on card removal.
     if (this.settings.autoCharge && this.client.client.hasCard) {
       this.client.client.moneyArr.push(mappedValue)
-      this.client.client.chargedArr.push(mappedValue + bonusValue)
     }
     
     this.client.addToBalance(mappedValue)
@@ -500,7 +575,7 @@ class CoinMachine extends EventEmitter {
         
         // Find machine by intId (from old code) or MongoDB _id
         if (act.id) {
-          machine = await Machine.findOne({ intId: act.id }).populate('interfaceId')
+          machine = await Machine.findOne(this.scoped({ intId: act.id })).populate('interfaceId')
         } else if (act.machineId) {
           machine = await Machine.findById(act.machineId).populate('interfaceId')
         }
@@ -578,7 +653,7 @@ class CoinMachine extends EventEmitter {
     console.log(`Machine started: id=${id}, channel=${chn}`)
     
     try {
-      const machine = await Machine.findOne({ intId: id })
+      const machine = await Machine.findOne(this.scoped({ intId: id }))
       if (machine) {
         machine.status = 'working'
         machine.reserved = false
@@ -599,12 +674,46 @@ class CoinMachine extends EventEmitter {
   /**
    * Handle machine-reserved event
    */
+  /**
+   * Clear a reservation the hardware reports as cancelled.
+   *
+   * Only frees the machine if it is still merely `reserved` — a machine that has
+   * since been paid for and started must not be released out from under the
+   * customer by a late cancellation event.
+   */
+  async handleMachineReservationCanceled(data) {
+    const ids = Array.isArray(data) ? data : [data]
+    for (const entry of ids) {
+      const id = entry && typeof entry === 'object' ? (entry.id ?? entry.intId) : entry
+      if (id == null) continue
+      try {
+        const machine = await Machine.findOneAndUpdate(
+          this.scoped({ intId: Number(id), status: 'reserved' }),
+          {
+            $set: {
+              status: 'free', statusText: 'Available',
+              reserved: false, reservedBy: null, reservedAt: null, reservationDuration: 0,
+            },
+          },
+          { new: true }
+        )
+        if (!machine) continue
+        this.machines.set(machine.intId || String(machine._id), machine.toObject())
+        await broadcastMachine(machine)
+        this.emit('machine-reservation-canceled', { machine: machine.toObject() })
+        console.log(`Reservation cleared on machine ${machine.name}`)
+      } catch (err) {
+        console.error('Error clearing cancelled reservation:', err)
+      }
+    }
+  }
+
   async handleMachineReserved(data) {
     const { id, duration } = data
     console.log(`Machine reserved: id=${id}, duration=${duration}`)
     
     try {
-      const machine = await Machine.findOne({ intId: id })
+      const machine = await Machine.findOne(this.scoped({ intId: id }))
       if (machine) {
         machine.status = 'reserved'
         machine.reserved = true
@@ -631,7 +740,7 @@ class CoinMachine extends EventEmitter {
     console.log(`Machine issue: id=${id}, issue=${issue}`)
     
     try {
-      const machine = await Machine.findOne({ intId: id })
+      const machine = await Machine.findOne(this.scoped({ intId: id }))
       if (machine) {
         machine.status = 'fault'
         machine.statusText = issue || 'Unknown fault'
@@ -660,7 +769,7 @@ class CoinMachine extends EventEmitter {
     try {
       if (Array.isArray(data.machines)) {
         for (const machineData of data.machines) {
-          const machine = await Machine.findOne({ intId: machineData.id })
+          const machine = await Machine.findOne(this.scoped({ intId: machineData.id }))
           if (machine && machineData.status) {
             // Map low-level status to our status enum
             const statusMap = {
@@ -732,10 +841,10 @@ class CoinMachine extends EventEmitter {
     
     try {
       // Find machine by interface and port
-      const machine = await Machine.findOne({
+      const machine = await Machine.findOne(this.scoped({
         interfaceId: interfaceId,
         port: port
-      })
+      }))
 
       if (!machine) {
         console.warn(`No machine found for Interface ${interfaceId} Port ${port}`)
@@ -758,13 +867,33 @@ class CoinMachine extends EventEmitter {
         statusText = 'Door open'
         // Don't change status, just update text
       } else if (status.doorClosed && machineStatus === 'working') {
-        // Machine finished - door closed and not occupied
-        machineStatus = 'free'
-        statusText = 'Available'
-        machine.currentProgram = null
-        machine.reserved = false
-        machine.reservedBy = null
-        machine.startedAt = null
+        // Machine finished — door closed and not occupied.
+        //
+        // Require the idle reading to persist before freeing a paid machine. A
+        // single dropped `occupied` bit (one noisy status packet, and these
+        // arrive several times a second) used to free a machine mid-cycle,
+        // clearing the customer's program and reservation and handing their
+        // wash to whoever walked up next.
+        const key = String(machine._id)
+        const seen = (this.idleReadings.get(key) || 0) + 1
+        this.idleReadings.set(key, seen)
+
+        if (seen < IDLE_READINGS_TO_FREE) {
+          // Not confident yet — leave it running and wait for confirmation.
+          statusText = 'Running'
+          machineStatus = 'working'
+        } else {
+          this.idleReadings.delete(key)
+          machineStatus = 'free'
+          statusText = 'Available'
+          machine.currentProgram = null
+          machine.reserved = false
+          machine.reservedBy = null
+          machine.startedAt = null
+        }
+      } else if (status.occupied) {
+        // Still running — any earlier idle reading was a blip.
+        this.idleReadings.delete(String(machine._id))
       }
 
       // Update machine
@@ -795,10 +924,10 @@ class CoinMachine extends EventEmitter {
     
     try {
       // Find machine by interface and port
-      const machine = await Machine.findOne({
+      const machine = await Machine.findOne(this.scoped({
         interfaceId: interfaceId,
         port: port
-      })
+      }))
 
       if (!machine) {
         console.warn(`No machine found for Interface ${interfaceId} Port ${port}`)

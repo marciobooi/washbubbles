@@ -58,14 +58,7 @@ export default function AdminUsers(){
     setModalOpen(true)
   }
 
-  function resetForm() {
-    setEditing(null)
-    setUsername('')
-    setRole('USER')
-    setPassword('')
-    setConfirmPassword('')
-    setModalOpen(false)
-  }
+
 
   async function save(e) {
     e?.preventDefault()

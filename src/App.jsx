@@ -112,9 +112,9 @@ function AppInner() {
       const companyName = nameResp && nameResp.value ? String(nameResp.value) : null
       setBranding({ companyName, logo: logoResp && logoResp.value ? String(logoResp.value) : null })
       if (companyName) {
-        try { document.title = companyName } catch (e) {}
+        try { document.title = companyName } catch { /* document.title is cosmetic; a sandboxed frame can refuse it */ }
       }
-      try { window.dispatchEvent(new CustomEvent('branding:update', { detail: { company: companyName, logo: logoResp && logoResp.value ? String(logoResp.value) : null }})) } catch (e) {}
+      try { window.dispatchEvent(new CustomEvent('branding:update', { detail: { company: companyName, logo: logoResp && logoResp.value ? String(logoResp.value) : null }})) } catch { /* document.title is cosmetic; a sandboxed frame can refuse it */ }
     } catch (e) {
       console.debug('Failed to load branding', e)
     }
@@ -125,7 +125,7 @@ function AppInner() {
     const onBrandEvent = (e) => {
       const d = e && e.detail ? e.detail : {}
       setBranding({ companyName: d.company || null, logo: d.logo || null })
-      if (d.company) try { document.title = d.company } catch (e) {}
+      if (d.company) try { document.title = d.company } catch { /* document.title is cosmetic; a sandboxed frame can refuse it */ }
     }
     window.addEventListener('branding:update', onBrandEvent)
 
@@ -228,7 +228,7 @@ function AppInner() {
         try {
           const machineNames = items.filter(i => !(i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge')))).map(i => i.name).filter(Boolean)
           if (machineNames.length) showMachineNotice(machineNames)
-        } catch (e) {}
+        } catch { /* the notice is cosmetic; the payment already succeeded */ }
         clearCart()
         setCartOpen(false)
         return
@@ -265,7 +265,7 @@ function AppInner() {
           try {
             const machineNames = machineItems.map(i => i.name).filter(Boolean)
             if (machineNames.length) showMachineNotice(machineNames)
-          } catch (e) {}
+          } catch { /* the notice is cosmetic; the payment already succeeded */ }
 
           toast({ title: `Pagamento efetuado (Cartão)`, variant: 'success' })
           clearCart()
@@ -284,7 +284,7 @@ function AppInner() {
         try {
           const machineNames = machineItems.map(i => i.name).filter(Boolean)
           if (machineNames.length) showMachineNotice(machineNames)
-        } catch (e) {}
+        } catch { /* the notice is cosmetic; the payment already succeeded */ }
 
         toast({ title: `Pagamento efetuado (Cartão)`, variant: 'success' })
         clearCart()

@@ -1,6 +1,5 @@
 import React from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
-import { usePayment } from '../context/PaymentContext'
 import MachineCard from '../components/MachineCard'
 import { toast } from '@/components/ui/Toast'
 import Wave from '../components/ui/wave'
@@ -83,7 +82,6 @@ export default function Machines() {
   }, [type])
 
   const { addToCart, clearCart, openCart } = useCart()
-  const { processPayment } = usePayment()
 
   async function openForAdd(m) {
     // Fetch fresh price data before adding to cart
@@ -115,38 +113,11 @@ export default function Machines() {
     }
   }
 
-  function handleAddToCart(m) {
-    openForAdd(m)
-  }
-
-  async function pay(m, opts = { useFidelity: false, method: 'card', inserted: null }) {
-    try {
-      const res = await processPayment([m], opts)
-      if (res.success) {
-        // Persist transaction to backend via kiosk endpoint only when needed
-        try {
-          const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
-          const kioskKey = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
-          const inserted = opts.inserted != null ? Number(opts.inserted) : Number(m.price || 0)
-          const change = Math.max(0, (inserted || 0) - (m.price || 0))
-
-          // If cardCode provided, CardGateway has already performed the spend calls; skip creating /pos/sale here
-          if (!opts.cardCode) {
-            await api.request('/pos/sale', { method: 'POST', json: { machineId: m._id || m.id, amount: Number(m.price || 0), items: [m], method: opts.method || 'card', inserted, change }, headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined, skipAuth: true, expect: 'json' })
-          }
-        } catch (e) {
-          console.warn('Failed to persist sale to backend', e)
-        }
-
-        closeModal()
-        const translateMethod = (m) => m === 'card' ? 'Cartão' : (m === 'cash' ? 'Dinheiro' : m)
-        toast({ title: `Pagamento efetuado (${translateMethod(res.method)})`, variant: 'success' })
-        try { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('machine-notice', { detail: { names: [m.name] } })) } catch (e) {}
-      }
-    } catch (e) {
-      toast({ title: 'Erro no pagamento', variant: 'destructive' })
-    }
-  }
+  // NOTE: the old `pay()` and `handleAddToCart()` lived here and were never
+  // called by anything. `pay()` also called an undeclared `closeModal()` (an
+  // instant ReferenceError had it ever run) and duplicated the checkout in
+  // App.jsx — including totalling prices client-side, which the server now
+  // ignores. Checkout has one home: `App.jsx:handlePay`.
 
   const { t } = useTranslation('pos')
 

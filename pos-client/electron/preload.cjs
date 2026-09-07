@@ -27,7 +27,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getHardwareStatus: () => ipcRenderer.invoke('hw:getStatus'),
   dispenseChange: (amount) => ipcRenderer.invoke('hw:dispenseChange', amount),
   printReceipt: (content) => ipcRenderer.invoke('hw:printReceipt', content),
-  adminStartMachine: (id) => ipcRenderer.invoke('hw:adminStartMachine', id),
+  // Requires the operator's admin PIN — this starts a machine without payment.
+  adminStartMachine: (id, adminPin) => ipcRenderer.invoke('hw:adminStartMachine', id, adminPin),
 
   // Virtual Keyboard
   showKeyboard: () => ipcRenderer.send('show-keyboard'),

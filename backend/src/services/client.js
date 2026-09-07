@@ -1,5 +1,6 @@
 import EventEmitter from 'events'
 import Card from '../models/card.js'
+import { roundMoney } from '../utils/money.js'
 
 /**
  * Client state manager - handles user/card balance, credits, and bonus points
@@ -60,19 +61,26 @@ class Client extends EventEmitter {
    */
   async resetCardInfo() {
     const cardNumber = this.client.cardNumber
-    
+
+    // Persist whatever is left on the card BEFORE wiping the in-memory copy.
+    // `deductCredits` always drains balanceCard first, but the save was skipped
+    // on cash-mode payments — so this method zeroed a spent-down balance that had
+    // never been written back, and the card kept its original DB value. That is
+    // unlimited free washes: pay by "cash", card balance never actually drops.
+    await this.saveCardBalance()
+
     this.client.name = null
     this.client.addr = null
     this.client.cardNumber = null
     this.client.nif = null
     this.client.balanceCard = 0
-    this.client.bonus = 0
     this.client.admin = false
     this.client.hasCard = false
-    
+
     // Send charge request before clearing arrays
     await this.sendChargeRequest(cardNumber)
-    
+
+    this.client.bonus = 0
     this.updateCredits()
     this.notifySubscribers()
     this.emit('card-removed')
@@ -82,7 +90,17 @@ class Client extends EventEmitter {
    * Send charge request for accumulated charges (auto-charge)
    */
   async sendChargeRequest(cardNumber) {
-    if (!cardNumber || !this.client.chargedArr || this.client.chargedArr.length === 0) {
+    // Transfer only what the customer did NOT spend.
+    //
+    // Previously every coin was pushed into `chargedArr` at insertion time AND
+    // made immediately spendable by `addToBalance`. Insert €5 → €5 to spend now
+    // *and* €5 added to the card on removal. The house lost the difference on
+    // every single insertion. Cash goes to the session; the leftover follows the
+    // customer onto their card — the same rule the kiosk already applies in
+    // `pos-engine.removeCard`.
+    const unspent = roundMoney((this.client.balance || 0) + (this.client.bonus || 0))
+
+    if (!cardNumber || unspent <= 0) {
       this.client.bonusArr = []
       this.client.chargedArr = []
       this.client.moneyArr = []
@@ -90,16 +108,21 @@ class Client extends EventEmitter {
     }
 
     try {
-      const priceTotal = this.client.chargedArr.reduce((a, b) => a + b, 0)
-      
-      // Update card balance in database (balance is stored in euros, not cents)
-      const card = await Card.findOne({ code: cardNumber })
+      // Atomic: a concurrent operation on this card must not be overwritten.
+      const card = await Card.findOneAndUpdate(
+        { code: cardNumber },
+        { $inc: { balance: unspent }, $set: { updatedAt: new Date() } },
+        { new: true }
+      )
       if (card) {
-        card.balance = Number(((card.balance || 0) + priceTotal).toFixed(2))
-        await card.save()
-        
-        console.log(`Auto-charge: Added €${priceTotal.toFixed(2)} to card ${cardNumber}`)
-        this.emit('auto-charge', { cardNumber, amount: priceTotal })
+        // The cash has moved onto the card, so it is no longer session cash.
+        this.client.balance = 0
+        this.client.bonus = 0
+        this.updateCredits()
+        console.log(`Auto-charge: Added €${unspent.toFixed(2)} to card ${cardNumber}`)
+        this.emit('auto-charge', { cardNumber, amount: unspent, balance: card.balance })
+      } else {
+        console.error(`Auto-charge failed: card ${cardNumber} not found — €${unspent.toFixed(2)} still in session`)
       }
     } catch (err) {
       console.error('Failed to send charge request:', err)
@@ -114,7 +137,7 @@ class Client extends EventEmitter {
    * Add cash to balance
    */
   addToBalance(value) {
-    this.client.balance += value
+    this.client.balance = roundMoney(this.client.balance + Number(value))
     this.updateCredits()
     this.notifySubscribers()
     this.emit('balance-updated', { balance: this.client.balance, credits: this.client.credits })
@@ -153,19 +176,24 @@ class Client extends EventEmitter {
   /**
    * Deduct credits for a purchase
    */
-  deductCredits(amount) {
-    if (this.client.credits < amount) {
+  deductCredits(rawAmount) {
+    const amount = roundMoney(rawAmount)
+    if (roundMoney(this.client.credits) + 0.005 < amount) {
       throw new Error('Insufficient credits')
     }
 
-    // Deduct from card balance first, then cash balance
+    // Deduct from card balance first, then cash balance. Rounded at every step:
+    // raw float math left balances like 4.999999999, which then failed an exact
+    // "insufficient credits" check on a payment the customer could afford.
     if (this.client.balanceCard >= amount) {
-      this.client.balanceCard -= amount
+      this.client.balanceCard = roundMoney(this.client.balanceCard - amount)
     } else {
-      const remainingAfterCard = amount - this.client.balanceCard
+      const remainingAfterCard = roundMoney(amount - this.client.balanceCard)
       this.client.balanceCard = 0
-      this.client.balance -= remainingAfterCard
+      this.client.balance = roundMoney(this.client.balance - remainingAfterCard)
     }
+    // Never let float drift leave a fractional negative behind.
+    if (this.client.balance < 0 && this.client.balance > -0.005) this.client.balance = 0
 
     this.updateCredits()
     this.notifySubscribers()
@@ -176,7 +204,7 @@ class Client extends EventEmitter {
    * Add bonus points
    */
   addBonus(points) {
-    this.client.bonus += points
+    this.client.bonus = roundMoney(this.client.bonus + Number(points))
     this.notifySubscribers()
     this.emit('bonus-added', { bonus: this.client.bonus })
   }
@@ -208,7 +236,7 @@ class Client extends EventEmitter {
    * Calculate total credits available
    */
   updateCredits() {
-    this.client.credits = this.client.balance + this.client.balanceCard
+    this.client.credits = roundMoney(this.client.balance + this.client.balanceCard)
   }
 
   /**

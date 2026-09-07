@@ -229,9 +229,6 @@ export function createApi(config) {
     return request('/admin/users', { method: 'GET', expect: 'json' });
   }
 
-  function getUser(id) {
-    return request(`/admin/users/${id}`, { method: 'GET', expect: 'json' });
-  }
 
   function createUser(payload) {
     return request('/admin/users', { method: 'POST', json: payload, expect: 'json' });
@@ -245,18 +242,12 @@ export function createApi(config) {
     return request(`/admin/users/${id}`, { method: 'DELETE', expect: 'json' });
   }
 
-  function rotateUserKey(id) {
-    return request(`/admin/users/${id}/rotate`, { method: 'POST', expect: 'json' });
-  }
 
   // Transactions
   function getTransactions() {
     return request('/admin/transactions', { method: 'GET', expect: 'json' });
   }
 
-  function getTransaction(id) {
-    return request(`/admin/transactions/${id}`, { method: 'GET', expect: 'json' });
-  }
 
   function createTransaction(payload) {
     return request('/admin/transactions', { method: 'POST', json: payload, expect: 'json' });
@@ -297,9 +288,6 @@ export function createApi(config) {
     return request('/admin/day-close', { method: 'POST', json: payload, expect: 'json' });
   }
 
-  function deleteTransaction(id) {
-    return request(`/admin/transactions/${id}`, { method: 'DELETE', expect: 'json' });
-  }
 
   // Settings
   function getSettings() {
@@ -335,9 +323,6 @@ export function createApi(config) {
     return request('/admin/interfaces', { method: 'GET', expect: 'json' });
   }
 
-  function getInterface(id) {
-    return request(`/admin/interfaces/${id}`, { method: 'GET', expect: 'json' });
-  }
 
   function createInterface(payload) {
     return request('/admin/interfaces', { method: 'POST', json: payload, expect: 'json' });
@@ -390,9 +375,6 @@ export function createApi(config) {
     return request('/admin/peripherals', { method: 'GET', expect: 'json' });
   }
 
-  function getPeripheral(id) {
-    return request(`/admin/peripherals/${id}`, { method: 'GET', expect: 'json' });
-  }
 
   function createPeripheral(payload) {
     return request('/admin/peripherals', { method: 'POST', json: payload, expect: 'json' });
@@ -402,26 +384,14 @@ export function createApi(config) {
     return request(`/admin/peripherals/${id}`, { method: 'PUT', json: payload, expect: 'json' });
   }
 
-  function deletePeripheral(id) {
-    return request(`/admin/peripherals/${id}`, { method: 'DELETE', expect: 'json' });
-  }
 
   // Middleware / CoinMachine
   function activateMachine(machineData) {
     return request('/middleware/activate-machine', { method: 'POST', json: machineData, expect: 'json' });
   }
 
-  function getMiddlewareClient() {
-    return request('/middleware/client', { method: 'GET', expect: 'json' });
-  }
 
-  function getMiddlewareMachines() {
-    return request('/middleware/machines', { method: 'GET', expect: 'json' });
-  }
 
-  function getMiddlewareMachine(id) {
-    return request(`/middleware/machines/${id}`, { method: 'GET', expect: 'json' });
-  }
 
   // Tenant management (admin)
   function getTenants() {
@@ -458,17 +428,13 @@ export function createApi(config) {
 
     // Users
     getUsers,
-    getUser,
     createUser,
     updateUser,
     deleteUser,
-    rotateUserKey,
 
     // Transactions
     getTransactions,
-    getTransaction,
     createTransaction,
-    deleteTransaction,
 
     // Settings
     getSettings,
@@ -485,7 +451,6 @@ export function createApi(config) {
 
     // Interfaces
     getInterfaces,
-    getInterface,
     createInterface,
     updateInterface,
     deleteInterface,
@@ -502,16 +467,11 @@ export function createApi(config) {
 
     // Peripherals
     getPeripherals,
-    getPeripheral,
     createPeripheral,
     updatePeripheral,
-    deletePeripheral,
 
     // Middleware
     activateMachine,
-    getMiddlewareClient,
-    getMiddlewareMachines,
-    getMiddlewareMachine,
 
     // Day Close
     getDayCloseSummary,
@@ -550,15 +510,11 @@ export const {
   updateMachine,
   deleteMachine,
   getUsers,
-  getUser,
   createUser,
   updateUser,
   deleteUser,
-  rotateUserKey,
   getTransactions,
-  getTransaction,
   createTransaction,
-  deleteTransaction,
   getSettings,
   getSetting,
   getPublicSetting,
@@ -569,7 +525,6 @@ export const {
   gatewayCardPay,
   gatewayCashPay,
   getInterfaces,
-  getInterface,
   createInterface,
   updateInterface,
   deleteInterface,
@@ -582,14 +537,9 @@ export const {
   updatePrice,
   deletePrice,
   getPeripherals,
-  getPeripheral,
   createPeripheral,
   updatePeripheral,
-  deletePeripheral,
   activateMachine,
-  getMiddlewareClient,
-  getMiddlewareMachines,
-  getMiddlewareMachine,
   getDayCloseSummary,
   getDayCloses,
   createDayClose,

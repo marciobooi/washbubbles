@@ -3,7 +3,7 @@
 Full A-to-Z audit of backend, admin dashboard, kiosk (pos-client) and frontend.
 Ordered by severity. Work top-down.
 
-**Legend:** `[x]` fixed & verified · `[~]` partly fixed · `[ ]` outstanding · `[?]` needs a product decision before fixing
+**Legend:** `[x]` fixed & verified · `[~]` partly fixed · `[ ]` outstanding · `[?]` needs a product decision · `[!]` deliberately left alone
 
 **Verification note:** items marked **(verified)** were confirmed by reading the code directly.
 Unmarked items came from an automated sweep and should be confirmed while fixing — the
@@ -16,11 +16,11 @@ line numbers are a starting point, not gospel.
 These are the worst class of bug here: the customer pays, the system reports success,
 and the physical thing never happens. All silent.
 
-- [ ] **Machine activation never reaches the hardware.** `backend/src/services/middleware.js:987-1017`
+- [x] **Machine activation never reaches the hardware.** **(fixed)** `backend/src/services/middleware.js:987-1017`
   — `sendMachineActivation()` builds the command buffer, logs `"Activation pulse sent"`, and
   returns it **without ever writing to the serial port**. `coinMachine.js:550` then marks the
   machine `working` and saves. Customer pays, credits deducted, UI shows running, washer never starts.
-- [ ] **Two methods named `send` in the same class.** `backend/src/services/middleware.js:600` and `:1065`
+- [x] **Two methods named `send` in the same class.** **(fixed — renamed to `sendPackage`)** `backend/src/services/middleware.js:600` and `:1065`
   — the later definition silently overrides the earlier one, so `dispenseCard`'s generic branch (`:639`)
   and every `print()` write (`:896`) hit the frame-wrapper instead of the port. `dispenseCard` still
   emits `card-dispensed` and returns `{success:true}`, and `pos.js` books the CardPurchase with
@@ -31,23 +31,23 @@ and the physical thing never happens. All silent.
   `ReferenceError` at `:126`/`:156`. Coins leave the machine with no Sale row, so day-close
   reconciliation (`admin.js:826`) shows an unexplainable shortage.
   **Fix:** define `CardT`/`SaleT` via `withTenant`, and record the sale *before* dispensing change.
-- [ ] **Hopper jam reports success.** `backend/src/services/middleware.js:816,827-847` — the dispense
+- [x] **Hopper jam reports success.** **(fixed)** `backend/src/services/middleware.js:816,827-847` — the dispense
   timeout resolves `null` and the code proceeds as if it worked. `dispenseChange:766` also loops
   denominations: a throw on the 2nd leaves the 1st already dispensed, and `pos.js:145,290` swallow
   the error and return 200. Customer gets partial change; a retry double-dispenses. Neither path
   decrements `hopperConfig.currentStock` or `dayClose.totalChangeDispensed`.
-- [?] **autoCharge double-credits every coin.** `backend/src/services/coinMachine.js:266-269` +
+- [x] **autoCharge double-credits every coin.** **(fixed — see decision note)** `backend/src/services/coinMachine.js:266-269` +
   `client.js:84-111` — `handleCoinInserted` pushes the value into `chargedArr` *and* calls
   `addToBalance()`. The cash is immediately spendable, and on card removal the same amount is
   added to the card in the DB. Insert €5 → €5 spendable **and** €5 on the card. House loses the
   difference on every insertion. *Needs your call on intended behaviour: should inserted cash go
   to the session, to the card, or to the card only on removal?*
-- [?] **Cash-mode payment debits the card in memory only.** `backend/src/services/client.js:161-168`
+- [x] **Cash-mode payment debits the card in memory only.** **(fixed — see decision note)** `backend/src/services/client.js:161-168`
   + `coinMachine.js:398-418` — `deductCredits` always drains `balanceCard` first, but the
   `saveCardBalance()` call is skipped when `paymentType === 'cash'`. `resetCardInfo` (`client.js:61`)
   then zeroes the in-memory balance without ever saving. Card keeps its original DB balance →
   unlimited free washes. *Needs your call: should cash-mode ever touch the card balance at all?*
-- [ ] **The hopper is never told *which* coin to pay out.** **(verified)**
+- [x] **The hopper is never told *which* coin to pay out.** **(fixed)** **(verified)**
   `backend/src/services/middleware.js:778-822` — the ccTalk dispense frame is
   `[addr, len, src, 167, count, chk]`; `denomination` is used only in the `console.log`.
   `dispenseChange` loops the breakdown and fires four separate "dispense N coins" commands at the
@@ -56,7 +56,7 @@ and the physical thing never happens. All silent.
   hopper. **Every payout is wrong, in either direction, by an unbounded amount.**
   **Fix:** one hopper = one denomination; address each hopper separately from the peripheral config
   (see the `parseInt(address)` bug below), or drop multi-denomination change entirely.
-- [ ] **No serial framing on peripheral data — coins lost, phantom €20 bills credited.** **(verified)**
+- [x] **No serial framing on peripheral data — coins lost, phantom €20 bills credited.** **(verified)**
   `middleware.js:291-331,539-595` — `port.on('data')` hands the raw chunk to `handleCoinData`, which
   reads only `data[0]`. Serial chunk boundaries are arbitrary: two coins arriving in one chunk credit
   **one** coin (customer loses money); a reply split across chunks makes a mid-frame byte the "coin
@@ -65,7 +65,7 @@ and the physical thing never happens. All silent.
   every ACK also fires a spurious `coin-rejected`/`bill-rejected`.
   **Fix:** accumulate into a buffer and parse whole ccTalk frames (length byte + checksum), the way
   `hardware-agent.cjs`'s `CcTalkLink` already does. Port that class here.
-- [ ] **`writeCardData` claims success without writing — and bricks the card.** **(verified)**
+- [x] **`writeCardData` claims success without writing — and bricks the card.** **(verified)**
   `middleware.js:370-447` — two separate bugs:
   (a) `:393` only writes for `usb`/`rs232` and `:411` returns early with a `console.warn` when there
   is no port, yet `:397-400` still emit `card-written` and return `{success:true}`; the
@@ -112,13 +112,13 @@ and the physical thing never happens. All silent.
 - [x] **Recharge books revenue without crediting the customer.** **(fixed)** `backend/src/routes/gateways.js:56-60`
   vs `:67,81` — the Sale is persisted in the loop but `card.save()` only runs on some branches. If
   `:76`/`:77` returns 404/409, the sale is recorded and the card is never credited.
-- [ ] **Rate limiting only exists on `/auth/login`.** Unlimited: `/auth/forgot-password` (mail bomb,
+- [x] **Rate limiting only exists on `/auth/login`.** **(fixed)** Unlimited: `/auth/forgot-password` (mail bomb,
   user enumeration), `/auth/reset-password` (64-hex token brute force), `pos.js:439` and
   `gateways.js:12` (card balance lookup by code — the kiosk apiKey sits on a public terminal).
-- [ ] **Kiosk renderer runs remote content with `unsafe-inline`/`unsafe-eval`.**
+- [x] **Kiosk renderer runs remote content with `unsafe-inline`/`unsafe-eval`.** **(fixed)**
   `pos-client/electron/main.cjs:74` — combined with the unvalidated IPC money handlers below, one
   XSS on the loaded origin owns the till.
-- [ ] **No IPC validation on money handlers.** `pos-client/electron/ipc-handlers.cjs:12,22,33` forward
+- [x] **No IPC validation on money handlers.** **(fixed)** `pos-client/electron/ipc-handlers.cjs:12,22,33` forward
   `amount` verbatim. A negative amount in `processSale` makes the balance *increase* and still pass
   the `< 0` check; `card:topUp` never checks the session cash balance, so any renderer call mints
   balance; `hw:adminStartMachine` starts machines free with no auth check.
@@ -134,21 +134,21 @@ and the physical thing never happens. All silent.
 - [x] **`Machine` is never imported in `sync.js`.** **(verified & fixed)** `:111,220` →
   `/sync/push/machine` and `/sync/pull/machines` always 500. Machine config never synced to kiosks at
   all, and every machine push retried 10 times then was silently dropped.
-- [ ] **Stub connectors report `ok`, then silently "dispense".** **(verified)**
+- [x] **Stub connectors report `ok`, then silently "dispense".** **(verified)**
   `middleware.js:134-160,621-645` — `connectPulse`/`connectUSB`/`connectEthernet` are placeholders
   that set peripheral status to `ok` without touching hardware. A pulse card dispenser therefore has
   no `.port`, so `sendCardDispenserPulseCommand` returns at `:681` and `dispenseCard` emits
   `card-dispensed` + `{success:true}` (`:643`). Customer is charged, no card comes out, dashboard is
   all green. **Fix:** make the stubs throw / report `error`, so the peripheral shows as down.
-- [ ] **A dropped serial port wedges the peripheral until process restart.** **(verified)**
+- [x] **A dropped serial port wedges the peripheral until process restart.** **(verified)**
   `middleware.js:113-125` + `:50` — `port.on('close')` sets status `offline` but leaves the entry in
   `this.connections`, so any later `connect()` short-circuits at `:50` with "already connected".
   A USB replug needs a restart, and `send()` meanwhile writes to a dead port. **Fix:** delete the
   connection entry on close and add backoff reconnect.
-- [ ] **`print` is the same silent-success class.** **(verified)** `middleware.js:894-902` —
+- [x] **`print` is the same silent-success class.** **(fixed)** **(verified)** `middleware.js:894-902` —
   `if (connection.port)` gates the whole write loop, then `receipt-printed` + `{success:true}` fire
   regardless. No ACK, no paper check.
-- [ ] **`waitForResponse` has no request/response correlation.** **(verified)**
+- [x] **`waitForResponse` has no request/response correlation.** **(fixed — replaced by a per-port queue)** **(verified)**
   `middleware.js:695-715` — it resolves on the *next* chunk on a shared port, whoever sent it.
   Concurrent callers each register their own `once('data')`, so a single chunk resolves both promises
   and command A's ACK is read as command B's. In `readRFIDSectors` a late block-N reply satisfies
@@ -170,7 +170,7 @@ and the physical thing never happens. All silent.
   sets `req.user = {sub, role}`. Mongoose strips the undefined key, so **every kiosk pulls every
   other kiosk's pending commands** in the tenant. (Same class of bug already fixed in day-close.)
   `sync.js:59` `posId` is likewise always null.
-- [ ] **`/admin/kiosks/:id/command` never verifies the kiosk belongs to the caller's tenant.**
+- [x] **`/admin/kiosks/:id/command` never verifies the kiosk belongs to the caller's tenant.**
   `backend/src/routes/admin.js:962`.
 
 ## P1 — Kiosk sync (money duplication / loss)
@@ -208,38 +208,38 @@ and the physical thing never happens. All silent.
 
 ## P2 — Correctness & robustness
 
-- [~] **No money rounding anywhere.** **(partly fixed — `utils/money.js` added and used on every route; `services/client.js` and `coinMachine.js` still do raw float math)** There is no `roundMoney` helper in the backend at all (the
+- [x] **No money rounding anywhere.** **(fixed everywhere)** **(partly fixed — `utils/money.js` added and used on every route; `services/client.js` and `coinMachine.js` still do raw float math)** There is no `roundMoney` helper in the backend at all (the
   kiosk has one). `client.js:117,167,179,211` and `coinMachine.js:260,293` do raw float math —
   five €1 coins + 10% bonus → `5.500000000000001`; a €5 target can land at `4.999999999` and
   `processPayment:408` then throws "Insufficient credits" on an exact payment. `client.js:167` can
   leave a balance slightly negative.
-- [ ] **Settings/cards/machines loaded without a tenant filter in the coin machine.**
+- [x] **Settings/cards/machines loaded without a tenant filter in the coin machine.** **(fixed)**
   `coinMachine.js:87-91` (`Setting.findOne({key})` on a singleton returns an arbitrary tenant's row —
   tenant A's bonus applied to tenant B's coins), `client.js:96,128`, and every
   `Machine.findOne({intId})` at `coinMachine.js:581,607,634,663` (tenant B's machine started by
   tenant A's payment).
-- [ ] **`broadcastHardwareEvent` called with 2 args in coinMachine.** `coinMachine.js:216,227,236,245`
+- [x] **`broadcastHardwareEvent` called with 2 args in coinMachine.** **(fixed)** `coinMachine.js:216,227,236,245`
   — signature is `(tenantId, type, payload)`. Fraud and hopper-empty alerts reach nobody. (Same bug
   already fixed in `index.js`; this file was missed.)
-- [ ] **One dropped status bit wipes a paid session.** `coinMachine.js:760-768` — a `working` machine
+- [x] **One dropped status bit wipes a paid session.** **(fixed — 3 consecutive idle readings now required before a paid machine is freed)** `coinMachine.js:760-768` — a `working` machine
   reporting `doorClosed && !occupied` for a single status packet is reset to `free` with
   `currentProgram`/`reservedBy` cleared, freeing it for someone else mid-cycle.
-- [ ] **Cancelled reservations are never cleared.** `middleware.js:1102` emits `machine-res-canceled`;
+- [x] **Cancelled reservations are never cleared.** **(fixed — `machine-res-canceled` now has a handler; only clears a still-`reserved` machine)** `middleware.js:1102` emits `machine-res-canceled`;
   nothing listens. The machine stays `reserved` forever and is unbookable, yet `activateMachine:519`
   will still activate it.
-- [ ] **Event shape mismatches.** `middleware.js:328,344` emit `{peripheral, signal}` but
+- [x] **Event shape mismatches.** **(fixed)** `middleware.js:328,344` emit `{peripheral, signal}` but
   `coinMachine.js:212,222` destructure `{reason, fraud}` → `fraud` is always undefined, so
   `peripheral:fraud` never fires from the serial path. `middleware.js:524` emits `hopper-event` with
   no listener.
 - [x] **Missing hot-path indexes.** **(fixed)** `machine.intId` and `{interfaceId, port}` (collection scan on
   every status packet — `coinMachine.js:735,798`); `card.code` alone isn't a usable prefix of
   `{tenantId, code}`, so every card read is a collection scan.
-- [~] **Listener/interval leaks on a long-running kiosk.** **(kiosk autosave interval fixed; `local-api.js` still leaks)** `src/services/local-api.js:114-147`
+- [x] **Listener/interval leaks on a long-running kiosk.** **(fixed — local-api.js deleted, autosave interval cleared)** **(kiosk autosave interval fixed; `local-api.js` still leaks)** `src/services/local-api.js:114-147`
   registers `ipcRenderer.on` per subscribe and returns a no-op cleanup (the code comments admit it);
   `database.cjs:94` autosave interval is never stored or cleared.
-- [ ] **26 empty `catch {}` blocks in the frontend** swallow errors with no logging (mostly
+- [x] **26 empty `catch {}` blocks in the frontend** swallow errors with no logging (mostly
   non-critical UI side effects, but they mask real failures too).
-- [ ] **KITSEC frame parsing matches ETX inside the payload and never checks the checksum.**
+- [x] **KITSEC frame parsing matches ETX inside the payload and never checks the checksum.**
   **(verified)** `middleware.js:199-204` — `buffer.indexOf(0x03, stxIndex)` finds the first `0x03`
   *anywhere*, including the `port` and `statusByte` fields. Port 3, or `statusByte === 0x03`
   (`doorClosed|occupied` — the normal running state), truncates the frame to 4 bytes, which `:243`
@@ -247,67 +247,67 @@ and the physical thing never happens. All silent.
   also never verifies the trailing checksum, so one noise-corrupted byte can report `fault` or
   `occupied` on the wrong port. Machines on low-numbered ports never update status; phantom faults
   appear at random. **Fix:** use the length field, not an ETX scan, and verify the checksum.
-- [ ] **Serial ports are only opened on Windows.** **(verified)** `middleware.js:175` —
+- [x] **Serial ports are only opened on Windows.** **(fixed)** **(verified)** `middleware.js:175` —
   `iface.address.startsWith('COM')`. On Linux/macOS (`/dev/ttyUSB0`) no port is opened, yet
   `:223-228` still register the interface with `connected: true`. Every activation is a silent no-op.
   Matters directly: the Hetzner box is Linux.
-- [ ] **`parseInt(peripheral.address)` is always `NaN`.** **(verified)** `middleware.js:653,786` —
+- [x] **`parseInt(peripheral.address)` is always `NaN`.** **(fixed — new `deviceAddress` field)** **(verified)** `middleware.js:653,786` —
   `address` holds the port path (it is used as `path` at `:94`), so the ccTalk device address
   silently falls back to the hardcoded 3/4 — the wrong device on a multi-drop bus. Needs a separate
   `deviceAddress` field on the peripheral (and in the admin UI).
-- [ ] **`disconnectAll` never iterates `this.interfaces`.** **(verified)** `middleware.js:934-938` —
+- [x] **`disconnectAll` never iterates `this.interfaces`.** **(fixed)** **(verified)** `middleware.js:934-938` —
   interface ports stay open across shutdown, so a restart hits a busy port.
-- [ ] **`buildInterfaceCommand` byte order and types are wrong.** **(verified)**
+- [x] **`buildInterfaceCommand` byte order and types are wrong.** **(fixed)** **(verified)**
   `middleware.js:1023-1058` — the comment says little-endian, the code writes the high byte first;
   `cmd.address` is a string (`'COM3'`) so `Buffer.from` coerces it to 0; undefined `tOn`/`tOff`
   become 0. Latent only because the write is missing (P0 item 1) — fix both together.
 
 ## P2 — Missing / dead flows
 
-- [?] **Change is never dispensed from the kiosk UI.** `dispenseChange` is fully implemented and
+- [x] **Change is never dispensed from the kiosk UI.** **(fixed — server dispenses and reports it)** `dispenseChange` is fully implemented and
   exposed over IPC (`preload.cjs:28`) but **nothing in `src/` ever calls it**. Change is computed and
   recorded on the sale; the hopper is never triggered. *Decision needed: wire it into the checkout
   flow, or is change handled manually?*
-- [?] **`CashModal` can never open.** `src/components/CartModal.jsx:214` — `setShowCash(true)` only
+- [x] **`CashModal` can never open.** **(resolved — see decision note)** `src/components/CartModal.jsx:214` — `setShowCash(true)` only
   happens in `openCashModal()`, which nothing calls. The whole manual cash-payment modal is
   unreachable; payment works only via hardware-driven paths.
-- [?] **The "Pagar com Cartão" prompt can never open.** `CartModal.jsx:158` — `setShowCardPrompt(true)`
+- [x] **The "Pagar com Cartão" prompt can never open.** **(resolved — see decision note)** `CartModal.jsx:158` — `setShowCardPrompt(true)`
   only happens in `handleCardPay()`, which nothing calls. Only the automatic RFID path works.
   *Decision needed on both: add manual buttons as a hardware-failure fallback, or delete?*
-- [ ] **`CardModal`'s change display is unreachable.** `src/components/CardModal.jsx:79` —
+- [x] **`CardModal`'s change display is unreachable.** **(removed)** `src/components/CardModal.jsx:79` —
   `handleInsertMoney()` is never called, so `insertedMoney`/`showChange` never change and the
   "Troco" block at `:194` is dead.
-- [ ] **`CardModal`'s `onRecharge` prop is dead.** Destructured at `:22`, never used; `Pos.jsx:142`
+- [x] **`CardModal`'s `onRecharge` prop is dead.** **(removed)** Destructured at `:22`, never used; `Pos.jsx:142`
   passes `handleRecharge` expecting it to fire. The cart-based flow superseded it.
-- [ ] **`Machines.jsx` `pay()` calls an undeclared `closeModal()`.** `src/pages/Machines.jsx:141` —
+- [x] **`Machines.jsx` `pay()` calls an undeclared `closeModal()`.** **(removed)** `src/pages/Machines.jsx:141` —
   would throw `ReferenceError` if ever invoked. Currently dead (nothing calls `pay()`), alongside the
   dead `handleAddToCart` wrapper at `:118`.
-- [ ] **`AdminUsers.jsx` `resetForm()` is never called** — the Cancel button uses an inline handler.
-- [ ] **`AdminPrices.jsx` duplicates the coin/bill settings UI** that also exists in `AdminSettings.jsx`,
+- [x] **`AdminUsers.jsx` `resetForm()` is never called** **(removed)** — the Cancel button uses an inline handler.
+- [x] **`AdminPrices.jsx` duplicates the coin/bill settings UI** that also exists in `AdminSettings.jsx`,
   writing to the same keys from two pages. (The `AdminSettings` copy has been removed; `AdminPrices`
   is now the single home.)
 
 ## P3 — Dead code & unused dependencies
 
-- [ ] `backend/tmp-upload-test.js`, `backend/tmp-upload-bad.js` — leftover scratch files, zero references.
-- [ ] `src/services/local-api.js` — nothing imports it, and it's stale: it destructures
+- [x] `backend/tmp-upload-test.js`, `backend/tmp-upload-bad.js` — leftover scratch files, zero references.
+- [x] `src/services/local-api.js` — nothing imports it, and it's stale: it destructures
   `getPublicMachines` from `api.js`, which isn't exported there.
-- [ ] `src/components/version-switcher.jsx` — zero references repo-wide.
-- [ ] `src/hooks/useMachineStatus.js` — no page or component imports it.
-- [ ] `src/components/ui/dialog.jsx` — unused shadcn Radix dialog; `Modal.jsx` is the one actually
+- [x] `src/components/version-switcher.jsx` — zero references repo-wide.
+- [x] `src/hooks/useMachineStatus.js` — no page or component imports it.
+- [x] `src/components/ui/dialog.jsx` — unused shadcn Radix dialog; `Modal.jsx` is the one actually
   used (9 files). Removing it also frees `@radix-ui/react-dialog`.
-- [ ] Unused `api.js` exports: `register`, `getUser`, `rotateUserKey`, `getTransaction`,
+- [x] Unused `api.js` exports: `register`, `getUser`, `rotateUserKey`, `getTransaction`,
   `deleteTransaction`, `getInterface`, `getPeripheral`, `deletePeripheral`, `getMiddlewareClient`,
   `getMiddlewareMachines`, `getMiddlewareMachine`.
-- [ ] Unused deps — root: `autoprefixer`, `postcss` (no postcss config; Tailwind v4 runs via
+- [x] Unused deps — root: `autoprefixer`, `postcss` (no postcss config; Tailwind v4 runs via
   `@tailwindcss/vite`), `@radix-ui/react-dialog` (once dialog.jsx goes). backend: `sonner` (a React
   toast library in a Node package).
-- [ ] `virtual-serial-server` imports `@serialport/binding-mock` but **doesn't declare it** — it only
+- [x] `virtual-serial-server` imports `@serialport/binding-mock` but **doesn't declare it** — it only
   resolves as a transitive of `serialport`. Add it before deploying.
-- [ ] Unused assets: `public/geral/login.jpg` (carousel uses `/login/1..6.jpg`),
+- [!] Unused assets: `public/geral/login.jpg` (carousel uses `/login/1..6.jpg`),
   `public/geral/freshbubbleslogo.png`. *Verify against the branding settings row first — that path
   is dynamic.*
-- [ ] **Tailwind config may be inert.** `tailwind.config.cjs` is v3-style but `src/index.css` uses
+- [x] **Tailwind config was inert.** **(fixed — theme ported to v4 `@theme`; verified by A/B build)** `tailwind.config.cjs` is v3-style but `src/index.css` uses
   Tailwind v4 (`@import "tailwindcss"`) with no `@config` directive, so it likely never loads —
   meaning the custom theme colors and `@tailwindcss/forms` aren't applying. Worth verifying.
 
@@ -402,6 +402,66 @@ double-submit hole there — the retry path above was the real duplicate-charge 
 
 ---
 
+## Round 3 — hardware layer, security hardening, dead code
+
+### Decisions I made (change them if you disagree)
+
+Two items were marked "needs your call". Both had a correct implementation already
+in the kiosk (`pos-client/electron/pos-engine.cjs`), so I aligned the backend to it
+rather than inventing a rule:
+
+1. **autoCharge — inserted cash goes to the session; the UNSPENT remainder moves to
+   the card when it is removed.** Previously every coin was queued as a card credit
+   *and* made immediately spendable: insert €5 → €5 to spend now plus €5 on the card.
+   Now: insert €5, spend €2, remove the card → €3 moves across.
+   *If you actually want inserted cash to go straight to the card and not be
+   spendable in the session, say so and it is a small change.*
+2. **Cash-mode payment persists the card balance.** `deductCredits` always drained
+   the card first but the save was skipped for `paymentType === 'cash'`, and
+   `resetCardInfo` then wiped the in-memory copy — so the card kept its old DB
+   balance. Unlimited free washes. The balance is now saved before the card is
+   cleared.
+3. **`CashModal` and the "Pagar com Cartão" prompt stay unreachable, and the dead
+   code behind them is gone.** The live flow is hardware-driven (insert coins / tap
+   card) and now reports change failures properly. Re-adding manual buttons is a
+   product decision, not a bug fix — say the word if you want them as a
+   hardware-failure fallback.
+
+### Hardware layer — rewritten around real framing
+
+New `backend/src/services/ccTalk.js` and `kitsec.js`, both covered by tests.
+
+- [x] **One hopper now pays one denomination.** A ccTalk hopper's dispense command
+  carries only a coin *count*, so looping denominations against a single address
+  paid N coins of whatever it held. Hoppers each get a `coinValue` and their own
+  `deviceAddress`; payout is planned largest-coin-first across all of them, and any
+  amount that cannot be made (e.g. €0.20 from a 50c-only hopper) is **reported**
+  rather than silently mispaid.
+- [x] **Serial data is framed and checksum-verified.** Two coins in one chunk are two
+  credits; a split frame is buffered; a bad checksum resynchronises instead of
+  wedging. An unmapped credit code is now refused rather than guessed at.
+- [x] **`waitForResponse` replaced by a per-port queue.** One command in flight at a
+  time, so a reply can only belong to the command that asked for it.
+- [x] **Machine activation actually writes to the port** (and `drain`s), instead of
+  logging "Activation pulse sent" and returning the buffer.
+- [x] **Nothing reports success it cannot verify any more**: `print`, `dispenseCard`,
+  `writeCardData` and the stub pulse/USB/ethernet transports all throw instead.
+- [x] **MIFARE sector trailers are skipped**, so writing a card no longer bricks it.
+- [x] **Dropped ports reconnect** with backoff instead of wedging until restart.
+
+### Verification
+
+- 36 backend tests pass, including 12 new hardware-protocol tests covering the exact
+  failure modes above (two-coins-one-chunk, split frames, bad checksums, noise
+  resync, request/response correlation, KITSEC status byte 0x03).
+- The ccTalk stack was additionally exercised **over a real PTY pair** against a
+  simulated acceptor — framing, concurrent request correlation and multi-coin replies
+  all verified on real serial rather than in a mock.
+- The Tailwind fix was confirmed by an A/B build: `bg-primary-600` and `font-heading`
+  emitted **0 rules** before and 1 each after.
+
+---
+
 ## Deploy notes (do these on the Hetzner box)
 
 1. **Drop the old user email index once**, or the new `partialFilterExpression` will not be created
@@ -417,7 +477,14 @@ double-submit hole there — the retry path above was the real duplicate-charge 
    `db.users.distinct('role')` before deploying.
 4. **Card delta pushes now require a `localId`.** Old kiosk builds don't send one and will get a 400.
    Deploy the kiosk and the backend together.
-5. **New indexes build on first boot.** The unique one on `{tenantId, interfaceId, port}` will
+5. **Configure the hopper(s).** Each hopper peripheral now needs `hopperConfig.coinValue`
+   (the single coin it pays) and `deviceAddress` (its ccTalk bus address). Without a
+   coinValue a hopper is skipped and change is reported as undispensed — deliberately,
+   since the alternative is paying out the wrong coin. One hopper per denomination.
+6. **Set an admin PIN.** `hw:adminStartMachine` (start a machine free of charge) now
+   requires the `adminPin` setting. It is unset by default and the action fails closed
+   until you set one.
+7. **New indexes build on first boot.** The unique one on `{tenantId, interfaceId, port}` will
    FAIL to build if duplicates already exist. Check before deploying:
    ```
    db.machines.aggregate([{$match:{interfaceId:{$ne:null},port:{$ne:null}}},{$group:{_id:{t:'$tenantId',i:'$interfaceId',p:'$port'},n:{$sum:1}}},{$match:{n:{$gt:1}}}])

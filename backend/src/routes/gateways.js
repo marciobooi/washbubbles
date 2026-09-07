@@ -9,6 +9,7 @@ import { broadcastMachine } from '../wsServer.js'
 import { withTenant } from '../services/tenant.js'
 import { roundMoney, parseAmount } from '../utils/money.js'
 import { creditCard, applyCardDelta } from '../services/cardBalance.js'
+import { cardLookupLimiter } from '../middleware/rateLimits.js'
 import coinMachine from '../services/coinMachine.js'
 
 const router = express.Router()
@@ -81,7 +82,7 @@ async function resolveMachineLines(items, MachineT, PriceT, method) {
 }
 
 // GET /api/gateways/cards/:code - lookup card balance (kiosk only)
-router.get('/cards/:code', requireKiosk, async (req, res) => {
+router.get('/cards/:code', cardLookupLimiter, requireKiosk, async (req, res) => {
   const { code } = req.params
   if (!code) return res.status(400).json({ error: 'Missing card code' })
   const CardT = withTenant(Card, req)

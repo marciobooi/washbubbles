@@ -17,7 +17,7 @@ export function SidebarProvider({ children }) {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0')
-    } catch (e) {}
+    } catch { /* localStorage throws in private mode; the preference is optional */ }
   }, [collapsed])
 
   const toggle = () => setCollapsed((s) => !s)

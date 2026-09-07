@@ -13,7 +13,7 @@ export default function HelpTutorial({ run, onClose }) {
     const onBrand = (e) => setCompany(e && e.detail && e.detail.company ? e.detail.company : null)
     window.addEventListener('branding:update', onBrand)
     // try to initialize from document.title if present
-    try { if (!company && typeof document !== 'undefined' && document.title) setCompany(document.title) } catch (e) {}
+    try { if (!company && typeof document !== 'undefined' && document.title) setCompany(document.title) } catch { /* document.title is cosmetic; a sandboxed frame can refuse it */ }
     return () => window.removeEventListener('branding:update', onBrand)
   }, [company])
   const steps = [

@@ -90,24 +90,12 @@ export default function Pos() {
     if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('modal-close'))
   }
 
-  async function handleRecharge(amount = 10) {
-    if (!currentCard?.code) {
-      toast({ title: 'Aproxime o seu cartão para recarregar', variant: 'warning' })
-      return
-    }
-    try {
-      // Persist recharge via kiosk endpoint, linked to the active card
-      const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
-      const kioskKey = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
-      const resp = await api.request('/pos/recharge', { method: 'POST', json: { amount: Number(amount), items: [{ type: 'recharge', amount: Number(amount) }], method: 'card', inserted: Number(amount), change: 0, cardCode: currentCard.code }, headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined, skipAuth: true, expect: 'json' })
-      // Reload card data so balance updates immediately
-      await loadCard(currentCard.code)
-      toast({ title: t('recharge.success', { amount: Number(amount).toFixed(2) }), variant: 'success' })
-    } catch (e) {
-      console.error('Failed to recharge', e)
-      toast({ title: t('recharge.error'), variant: 'destructive' })
-    }
-  }
+  // NOTE: `handleRecharge` was removed with the dead `onRecharge` prop it fed.
+  // CardModal never called it, so this recharge path could not fire. Recharges
+  // go through the cart flow in App.jsx, which sends an idempotency key so a
+  // retry after a failure does not credit the card twice.
+
+
 
   return (
     <>
@@ -139,7 +127,7 @@ export default function Pos() {
         </div>
         <BuyCardModal open={buyCardOpen} onClose={closeBuyCard} />
 
-        <CardModal open={cardOpen} onClose={closeCard} transactions={transactions} balance={currentCard?.balance ?? 0} onRecharge={(amt)=>handleRecharge(amt)} />
+        <CardModal open={cardOpen} onClose={closeCard} transactions={transactions} balance={currentCard?.balance ?? 0} />
 
         
         <div className="fixed bottom-0 left-0 right-0 pointer-events-none z-0">

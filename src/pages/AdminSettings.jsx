@@ -47,7 +47,7 @@ export default function AdminSettings(){
   useEffect(() => {
     try {
       window.dispatchEvent(new CustomEvent('branding:update', { detail: { company: companyName || null, logo: logoUrl || null, primaryColor: primaryColor || null, accentColor: accentColor || null } }))
-    } catch (e) {}
+    } catch { /* a listener that throws must not break the caller */ }
   }, [companyName, logoUrl, primaryColor, accentColor])
 
   async function save(e) {
@@ -87,7 +87,7 @@ export default function AdminSettings(){
       if (url) {
         setLogoUrl(url)
         toast({ title: 'Logo uploaded', variant: 'success' })
-        try { window.dispatchEvent(new CustomEvent('branding:update', { detail: { logo: url } })) } catch (e) {}
+        try { window.dispatchEvent(new CustomEvent('branding:update', { detail: { logo: url } })) } catch { /* a listener that throws must not break the caller */ }
       } else {
         toast({ title: 'Upload failed', variant: 'destructive' })
       }
@@ -110,7 +110,7 @@ export default function AdminSettings(){
       toast({ title: 'Branding updated', variant: 'success' })
       load()
       loadBranding()
-      try { window.dispatchEvent(new CustomEvent('branding:update', { detail: { company: companyName, logo: logoUrl, primaryColor, accentColor } })) } catch (e) {}
+      try { window.dispatchEvent(new CustomEvent('branding:update', { detail: { company: companyName, logo: logoUrl, primaryColor, accentColor } })) } catch { /* a listener that throws must not break the caller */ }
     } catch (e) {
       console.error(e)
       toast({ title: 'Failed to update branding', variant: 'destructive' })
@@ -162,7 +162,7 @@ export default function AdminSettings(){
                     onClick={() => {
                       setLogoUrl('');
                       toast({ title: 'Logo cleared', variant: 'success' });
-                      try { window.dispatchEvent(new CustomEvent('branding:update', { detail: { logo: null } })) } catch (e) {}
+                      try { window.dispatchEvent(new CustomEvent('branding:update', { detail: { logo: null } })) } catch { /* a listener that throws must not break the caller */ }
                     }}
                     disabled={uploading}
                   >

@@ -8,6 +8,7 @@ import { broadcastMachines, broadcastMachine } from '../wsServer.js'
 import { withTenant } from '../services/tenant.js'
 import { roundMoney, parseAmount } from '../utils/money.js'
 import { creditCard, debitCard } from '../services/cardBalance.js'
+import { cardLookupLimiter } from '../middleware/rateLimits.js'
 import coinMachine from '../services/coinMachine.js'
 
 const router = express.Router()
@@ -381,7 +382,7 @@ router.post('/card/purchase', requireKiosk, async (req, res) => {
 })
 
 // Get card balance + recent transaction history (kiosk)
-router.get('/cards/:code/history', requireKiosk, async (req, res) => {
+router.get('/cards/:code/history', cardLookupLimiter, requireKiosk, async (req, res) => {
   const code = req.params.code
   const Card = (await import('../models/card.js')).default
   const CardT = withTenant(Card, req)
@@ -504,7 +505,7 @@ router.get('/card/read', requireKiosk, async (req, res) => {
 })
 
 // Public: lookup card by code (kiosk will use this to show balance)
-router.get('/cards/:code', requireKiosk, async (req, res) => {
+router.get('/cards/:code', cardLookupLimiter, requireKiosk, async (req, res) => {
   const code = req.params.code
   const Card = (await import('../models/card.js')).default
   const CardT = withTenant(Card, req)

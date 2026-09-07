@@ -993,9 +993,18 @@ router.post('/kiosks/:id/command', async (req, res) => {
     return res.status(400).json({ error: 'Invalid command type' })
   }
 
+  // Verify the kiosk belongs to the caller's tenant before queuing anything for
+  // it. Without this, a tenant-A admin could reboot or wipe the sync queue of any
+  // kiosk on the platform just by knowing its id.
+  const UserT = withTenant(User, req)
+  const kiosk = await UserT.findById(req.params.id)
+  if (!kiosk || kiosk.role !== 'KIOSK') {
+    return res.status(404).json({ error: 'Kiosk not found' })
+  }
+
   const SyncCommandT = withTenant(SyncCommand, req)
   const cmd = await SyncCommandT.create({
-    kioskId: req.params.id,
+    kioskId: kiosk._id,
     type,
     payload: payload || {},
     status: 'pending'

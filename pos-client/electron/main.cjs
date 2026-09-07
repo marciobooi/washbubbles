@@ -22,6 +22,12 @@ const KIOSK_API_KEY = process.env.ELECTRON_KIOSK_API_KEY || ''
 const API_BASE = process.env.ELECTRON_API_BASE || 'https://api.washbubbles.app'
 const TENANT_ID = process.env.ELECTRON_TENANT_ID || ''
 const IS_KIOSK = process.env.ELECTRON_IS_KIOSK === 'true'
+/**
+ * Development mode. Only ever true when explicitly asked for AND the app is not
+ * packaged, so a packaged kiosk build can never fall back to the relaxed CSP
+ * even if the env var leaks into the install.
+ */
+const IS_DEV = process.env.NODE_ENV === 'development' && !app.isPackaged
 
 function validateConfig() {
   if (!TENANT_ID || !KIOSK_API_KEY) {
@@ -69,12 +75,23 @@ function createWindow() {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
+        // `script-src 'unsafe-inline' 'unsafe-eval'` on a renderer that loads
+        // remote content means one XSS on the served origin can drive every IPC
+        // money handler — it owns the till. Scripts are restricted to bundles
+        // this app actually ships; inline styles stay because Tailwind and the
+        // component library emit them, and a style injection is not a code
+        // execution primitive.
+        //
+        // In development Vite needs eval for HMR, so the relaxed policy is
+        // scoped to dev only and never ships in a packaged kiosk build.
         'Content-Security-Policy': [
-          "default-src 'self' 'unsafe-inline' " + SERVER_URL + " " + API_BASE + "; " +
-          "script-src 'self' 'unsafe-inline' 'unsafe-eval' " + SERVER_URL + "; " +
+          "default-src 'self' " + SERVER_URL + " " + API_BASE + "; " +
+          "script-src 'self' " + SERVER_URL + (IS_DEV ? " 'unsafe-inline' 'unsafe-eval'" : "") + "; " +
           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
           "font-src 'self' https://fonts.gstatic.com; " +
-          "img-src 'self' data: " + SERVER_URL + " " + API_BASE + ";"
+          "connect-src 'self' " + SERVER_URL + " " + API_BASE + " ws: wss:; " +
+          "img-src 'self' data: " + SERVER_URL + " " + API_BASE + "; " +
+          "object-src 'none'; base-uri 'none'; frame-ancestors 'none';"
         ]
       }
     })
