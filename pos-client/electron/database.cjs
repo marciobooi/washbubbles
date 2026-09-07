@@ -7,7 +7,9 @@
  * - #11: Sync queue cleanup — auto-purge synced items > 7 days
  * - #21: generateId() uses top-level crypto import
  * - #23: Added index on sales.card_code
- * - #24: bulkReplace uses upsert instead of delete-all
+ * - #24: bulkReplace is delete-all + insert, so it may only ever be fed a FULL
+ *        server snapshot (see SNAPSHOT_ENTITIES in sync-engine.cjs) and refuses
+ *        an empty array.
  */
 const path = require('path')
 const fs = require('fs')
@@ -17,8 +19,12 @@ let initSqlJs, SQL
 let db = null
 let dbPath = null
 let saveTimer = null
+let autosaveTimer = null
 
-const DB_VERSION = 2
+const DB_VERSION = 3
+
+/** Attempts before a queued sync item is dead-lettered rather than retried forever. */
+const MAX_SYNC_ATTEMPTS = 10
 
 function generateId() {
   return randomUUID()
@@ -90,8 +96,11 @@ async function initDatabase(customPath) {
   db.run('PRAGMA foreign_keys = ON')
 
   runMigrations()
-  // Auto-save every 30s
-  setInterval(() => saveToDisk(), 30000)
+  // Auto-save every 30s. Kept on a handle so `closeDatabase` can clear it —
+  // an uncleared interval kept the process alive and held a stale `db` reference.
+  if (autosaveTimer) clearInterval(autosaveTimer)
+  autosaveTimer = setInterval(() => saveToDisk(), 30000)
+  if (autosaveTimer.unref) autosaveTimer.unref()
   console.log(`[DB] Initialized at ${dbPath}`)
   return db
 }
@@ -100,7 +109,7 @@ async function initDatabase(customPath) {
 
 function queryGet(sql, params) {
   const stmt = db.prepare(sql)
-  if (params) stmt.bind(Array.isArray(params) ? params : [params])
+  if (params) stmt.bind(normalizeParams(params))
   let result = undefined
   if (stmt.step()) result = stmt.getAsObject()
   stmt.free()
@@ -109,16 +118,28 @@ function queryGet(sql, params) {
 
 function queryAll(sql, params) {
   const stmt = db.prepare(sql)
-  if (params) stmt.bind(Array.isArray(params) ? params : [params])
+  if (params) stmt.bind(normalizeParams(params))
   const results = []
   while (stmt.step()) results.push(stmt.getAsObject())
   stmt.free()
   return results
 }
 
+/**
+ * sql.js refuses to bind `undefined` ("tried to bind a value of an unknown
+ * type"). The sync mappers produce `undefined` for any optional field the server
+ * omitted — a price with no `duration`, a peripheral with no `image` — which
+ * threw inside `bulkReplace`'s transaction and aborted the whole pull, so the
+ * kiosk silently stopped receiving config updates. Treat undefined as SQL NULL.
+ */
+function normalizeParams(params) {
+  const arr = Array.isArray(params) ? params : [params]
+  return arr.map((v) => (v === undefined ? null : v))
+}
+
 function run(sql, params) {
   if (params) {
-    db.run(sql, Array.isArray(params) ? params : [params])
+    db.run(sql, normalizeParams(params))
   } else {
     db.run(sql)
   }
@@ -158,6 +179,7 @@ function runMigrations() {
 
   if (currentVersion < 1) migrateV1()
   if (currentVersion < 2) migrateV2()
+  if (currentVersion < 3) migrateV3()
 
   run(`INSERT OR REPLACE INTO db_meta (key, value) VALUES (?, ?)`, ['version', String(DB_VERSION)])
   flushSave()
@@ -252,6 +274,20 @@ function migrateV1() {
       charged_arr TEXT DEFAULT '[]',
       created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
     );
+  `)
+}
+
+function migrateV3() {
+  // Dead-letter table: sync items that exhausted their retries used to just
+  // disappear from getPending() with no record and no operator-visible signal.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sync_dead_letter (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      entity_type TEXT NOT NULL, entity_id TEXT, action TEXT,
+      payload TEXT, attempts INTEGER DEFAULT 0, error TEXT,
+      created_at TEXT, failed_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_dead_letter_failed ON sync_dead_letter(failed_at);
   `)
 }
 
@@ -419,6 +455,14 @@ const prices = {
        p.promo_end_time,p.promo_days,p.created_at,p.updated_at])
   },
   bulkReplace(tenantId, arr) {
+    // Guard: bulkReplace deletes every local row first, so an empty or malformed
+    // payload would silently wipe the kiosk's config — leaving it unable to price
+    // a wash or drive a machine while offline. A sync should never be able to do
+    // that; an empty result means "nothing to apply", not "delete everything".
+    if (!Array.isArray(arr) || arr.length === 0) {
+      console.warn('[DB] bulkReplace(%s) called with no rows — refusing to wipe local config', 'prices')
+      return
+    }
     runTransaction(() => {
       run('DELETE FROM prices WHERE tenant_id=?', [tenantId])
       for (const p of arr) prices.upsert(p)
@@ -444,6 +488,14 @@ const settings = {
     return run('INSERT OR REPLACE INTO settings (id,tenant_id,key,value) VALUES (?,?,?,?)', [id, tenantId, key, val])
   },
   bulkReplace(tenantId, arr) {
+    // Guard: bulkReplace deletes every local row first, so an empty or malformed
+    // payload would silently wipe the kiosk's config — leaving it unable to price
+    // a wash or drive a machine while offline. A sync should never be able to do
+    // that; an empty result means "nothing to apply", not "delete everything".
+    if (!Array.isArray(arr) || arr.length === 0) {
+      console.warn('[DB] bulkReplace(%s) called with no rows — refusing to wipe local config', 'settings')
+      return
+    }
     runTransaction(() => {
       run('DELETE FROM settings WHERE tenant_id=?', [tenantId])
       for (const s of arr) {
@@ -466,6 +518,14 @@ const interfaces = {
       [i.id,i.tenant_id,i.name,i.brand,i.model,i.serial_number,i.address,i.ports,i.t_on,i.t_off,i.status,i.created_at,i.updated_at])
   },
   bulkReplace(tenantId, arr) {
+    // Guard: bulkReplace deletes every local row first, so an empty or malformed
+    // payload would silently wipe the kiosk's config — leaving it unable to price
+    // a wash or drive a machine while offline. A sync should never be able to do
+    // that; an empty result means "nothing to apply", not "delete everything".
+    if (!Array.isArray(arr) || arr.length === 0) {
+      console.warn('[DB] bulkReplace(%s) called with no rows — refusing to wipe local config', 'interfaces')
+      return
+    }
     runTransaction(() => {
       run('DELETE FROM interfaces WHERE tenant_id=?', [tenantId])
       for (const i of arr) interfaces.upsert(i)
@@ -486,6 +546,14 @@ const peripherals = {
       [p.id,p.tenant_id,p.name,p.type,p.enabled,p.protocol,p.address,p.baud_rate,p.brand,p.model,p.serial_number,p.status,p.image,p.hopper_config,p.created_at,p.updated_at])
   },
   bulkReplace(tenantId, arr) {
+    // Guard: bulkReplace deletes every local row first, so an empty or malformed
+    // payload would silently wipe the kiosk's config — leaving it unable to price
+    // a wash or drive a machine while offline. A sync should never be able to do
+    // that; an empty result means "nothing to apply", not "delete everything".
+    if (!Array.isArray(arr) || arr.length === 0) {
+      console.warn('[DB] bulkReplace(%s) called with no rows — refusing to wipe local config', 'peripherals')
+      return
+    }
     runTransaction(() => {
       run('DELETE FROM peripherals WHERE tenant_id=?', [tenantId])
       for (const p of arr) peripherals.upsert(p)
@@ -500,20 +568,58 @@ const syncQueue = {
       [entityType, entityId, action, JSON.stringify(payload), priority||5])
   },
   getPending(limit) {
-    // Fix #13: Also pick up failed items with < 10 attempts for retry
+    // Fix #13: Also pick up failed items with < MAX_SYNC_ATTEMPTS for retry.
+    //
+    // Exponential backoff on `last_attempt_at`: without it a hard 500 was retried
+    // every 60s until the attempt budget burned through in ten minutes, so a
+    // server-side outage guaranteed the sale was lost rather than delayed.
+    // Delay doubles per attempt from 1 minute up to a 1 hour cap.
     return queryAll(
-      `SELECT * FROM sync_outbound WHERE status IN ('pending','failed') AND attempts < 10
-       ORDER BY priority ASC, created_at ASC LIMIT ?`, [limit||50])
+      `SELECT * FROM sync_outbound
+       WHERE status IN ('pending','failed') AND attempts < ?
+         AND (last_attempt_at IS NULL
+              OR datetime(last_attempt_at, '+' || MIN(60 * (1 << attempts), 3600) || ' seconds') <= datetime('now'))
+       ORDER BY priority ASC, created_at ASC LIMIT ?`, [MAX_SYNC_ATTEMPTS, limit||50])
   },
   markSynced(id) {
     return run('UPDATE sync_outbound SET status=?, last_attempt_at=datetime("now") WHERE id=?', ['synced', id])
   },
   markFailed(id, error) {
-    return run('UPDATE sync_outbound SET status=?, error=?, attempts=attempts+1, last_attempt_at=datetime("now") WHERE id=?', ['failed', error, id])
+    run('UPDATE sync_outbound SET status=?, error=?, attempts=attempts+1, last_attempt_at=datetime("now") WHERE id=?', ['failed', error, id])
+    // Anything that exhausts its retries is money the server never heard about.
+    // Move it to a dead-letter table so an operator can see it, instead of it
+    // just vanishing from getPending() forever.
+    const row = queryGet('SELECT * FROM sync_outbound WHERE id=?', [id])
+    if (row && row.attempts >= MAX_SYNC_ATTEMPTS) {
+      run(`INSERT INTO sync_dead_letter (entity_type,entity_id,action,payload,attempts,error,created_at,failed_at)
+           VALUES (?,?,?,?,?,?,?,datetime('now'))`,
+        [row.entity_type, row.entity_id, row.action, row.payload, row.attempts, error, row.created_at])
+      console.error(`[DB] Sync item ${id} (${row.entity_type}/${row.entity_id}) dead-lettered after ${row.attempts} attempts: ${error}`)
+    }
+    return row
   },
   countPending() {
-    const row = queryGet('SELECT COUNT(*) as count FROM sync_outbound WHERE status IN (?,?)', ['pending', 'failed'])
+    const row = queryGet('SELECT COUNT(*) as count FROM sync_outbound WHERE status IN (?,?) AND attempts < ?', ['pending', 'failed', MAX_SYNC_ATTEMPTS])
     return row ? row.count : 0
+  },
+  /** Items that exhausted their retries — surfaced to the operator, never dropped. */
+  getDeadLetters(limit) {
+    return queryAll('SELECT * FROM sync_dead_letter ORDER BY failed_at DESC LIMIT ?', [limit||100])
+  },
+  countDeadLetters() {
+    const row = queryGet('SELECT COUNT(*) as count FROM sync_dead_letter')
+    return row ? row.count : 0
+  },
+  /** Put a dead-lettered item back in the queue (operator action after a fix). */
+  requeueDeadLetter(id) {
+    const row = queryGet('SELECT * FROM sync_dead_letter WHERE id=?', [id])
+    if (!row) return { changes: 0 }
+    runTransaction(() => {
+      run(`INSERT INTO sync_outbound (entity_type,entity_id,action,payload,priority) VALUES (?,?,?,?,?)`,
+        [row.entity_type, row.entity_id, row.action, row.payload, 1])
+      run('DELETE FROM sync_dead_letter WHERE id=?', [id])
+    })
+    return { changes: 1 }
   },
   /** Fix #11: Purge old synced items */
   cleanup() {
@@ -542,7 +648,10 @@ const session = {
     for (const [k, v] of Object.entries(data)) {
       if (!VALID_SESSION_COLS.has(k)) continue // Fix #8: skip invalid columns
       fields.push(`${k} = ?`)
-      values.push(typeof v === 'object' ? JSON.stringify(v) : v)
+      // `typeof null === 'object'`, so a plain null used to be stored as the
+      // *string* "null" — which reads back truthy and made the POS believe a card
+      // was still inserted after it had been removed.
+      values.push(v === null || v === undefined ? null : (typeof v === 'object' ? JSON.stringify(v) : v))
     }
     if (fields.length === 0) return
     fields.push('updated_at = datetime("now")')
@@ -560,10 +669,14 @@ const dayCloses = {
   create(dc) {
     const id = dc.id || generateId()
     const localId = dc.local_id || generateId()
-    return run(`INSERT INTO day_closes (id,local_id,tenant_id,date,total_sales,total_cash,total_card,total_recharges,sale_count,notes,created_at)
+    run(`INSERT INTO day_closes (id,local_id,tenant_id,date,total_sales,total_cash,total_card,total_recharges,sale_count,notes,created_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
       [id, localId, dc.tenant_id, dc.date, dc.total_sales||0, dc.total_cash||0, dc.total_card||0,
        dc.total_recharges||0, dc.sale_count||0, dc.notes||null, dc.created_at||new Date().toISOString()])
+    // Return the ids, like sales.create — this used to return run()'s {changes},
+    // so the caller's `result.local_id` was undefined and the queued Z-report
+    // carried no idempotency key.
+    return { id, local_id: localId }
   },
   getByDate(tenantId, date) {
     return queryGet('SELECT * FROM day_closes WHERE tenant_id=? AND date=?', [tenantId, date])
@@ -575,6 +688,7 @@ const dayCloses = {
 
 function getDb() { return db }
 function closeDatabase() {
+  if (autosaveTimer) { clearInterval(autosaveTimer); autosaveTimer = null }
   if (db) { flushSave(); db.close(); db = null }
 }
 

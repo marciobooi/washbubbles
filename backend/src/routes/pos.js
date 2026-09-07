@@ -6,6 +6,8 @@ import Price from '../models/price.js'
 import { requireKiosk } from '../middleware/auth.js'
 import { broadcastMachines, broadcastMachine } from '../wsServer.js'
 import { withTenant } from '../services/tenant.js'
+import { roundMoney, parseAmount } from '../utils/money.js'
+import coinMachine from '../services/coinMachine.js'
 
 const router = express.Router()
 
@@ -55,8 +57,12 @@ router.get('/machines', requireKiosk, async (req, res) => {
 })
 
 router.post('/sale', requireKiosk, async (req, res) => {
-  const { machineId, amount, items, method, inserted, change, type, cardCode, cardId, batchId } = req.body
-  if (!machineId || amount == null || !items) return res.status(400).json({ error: 'Missing parameters' })
+  const { machineId, amount, items, method, inserted, type, cardCode, cardId, batchId } = req.body
+  if (!machineId || !items) return res.status(400).json({ error: 'Missing parameters' })
+
+  const parsedSale = parseAmount(amount)
+  if (!parsedSale.ok) return res.status(400).json({ error: parsedSale.error })
+  const saleAmount = parsedSale.value
 
   // Only accept 'card' or 'cash' as payment methods from clients
   if (method && !['card', 'cash'].includes(String(method))) return res.status(400).json({ error: 'Unsupported payment method' })
@@ -78,18 +84,20 @@ router.post('/sale', requireKiosk, async (req, res) => {
     const CardT = withTenant(Card, req)
     card = cardId ? await CardT.findById(cardId) : await CardT.findOne({ code: cardCode })
     if (!card) return res.status(404).json({ error: 'Card not found' })
-    const price = Number(amount)
-    if ((card.balance || 0) < price) return res.status(400).json({ error: 'Insufficient balance' })
-    card.balance = Number((card.balance || 0) - price)
+    if (roundMoney(card.balance || 0) < saleAmount) return res.status(400).json({ error: 'Insufficient balance' })
+    card.balance = roundMoney((card.balance || 0) - saleAmount)
     if (!card.tenantId && req.tenantId) card.tenantId = req.tenantId
     await card.save()
   }
 
-  // Compute inserted/change defaults and create sale
-  const insertedNum = Number(inserted || 0)
-  const changeNum = (change != null) ? Number(change) : Math.max(0, insertedNum - Number(amount || 0))
+  // Compute inserted/change defaults and create sale. `change` is always derived,
+  // never taken from the request body — a client-supplied change value is a
+  // request to empty the hopper.
+  const parsedInserted = parseAmount(inserted, { allowZero: true })
+  const insertedNum = parsedInserted.ok ? parsedInserted.value : 0
+  const changeNum = roundMoney(Math.max(0, insertedNum - saleAmount))
   const SaleT = withTenant(Sale, req)
-  const sale = await SaleT.create({ machineId, amount: Number(amount), items, method, batchId, inserted: insertedNum, change: changeNum, type: type || 'payment', cardId: card ? card._id : undefined, cardCode: card ? card.code : (cardCode || undefined) })
+  const sale = await SaleT.create({ machineId, amount: saleAmount, items, method, batchId, inserted: insertedNum, change: changeNum, type: type || 'payment', cardId: card ? card._id : undefined, cardCode: card ? card.code : (cardCode || undefined) })
 
   // Update machine: increment cycle and mark as occupied after successful payment
   await MachineT.findByIdAndUpdate(machineId, { $inc: { cycle: 1 }, $set: { status: 'working', statusText: 'Ocupado' } })
@@ -104,68 +112,93 @@ router.post('/sale', requireKiosk, async (req, res) => {
 // Card recharge / top-up (kiosk) — stored as a transaction without a machine reference
 // Card recharge / top-up (kiosk) — stored as a transaction and optionally attached to a loyalty card
 router.post('/recharge', requireKiosk, async (req, res) => {
-  const { amount, items, method, inserted, change, cardCode, cardId, batchId } = req.body
-  if (amount == null) return res.status(400).json({ error: 'Missing amount' })
+  const { amount, items, method, inserted, cardCode, cardId, batchId } = req.body
 
   // Recharges are always card-based in this system
   if (method && String(method) !== 'card') return res.status(400).json({ error: 'Recharges must be performed with method "card"' })
 
-  // Calculate change if inserted amount provided
-  const insertedNum = Number(inserted || amount)
-  const rechargeAmount = Number(amount)
-  const changeAmount = insertedNum > rechargeAmount ? insertedNum - rechargeAmount : 0
+  const parsedAmount = parseAmount(amount)
+  if (!parsedAmount.ok) return res.status(400).json({ error: parsedAmount.error })
+  const rechargeAmount = parsedAmount.value
+
+  const parsedInserted = parseAmount(inserted == null ? rechargeAmount : inserted)
+  if (!parsedInserted.ok) return res.status(400).json({ error: `inserted: ${parsedInserted.error}` })
+  const insertedNum = parsedInserted.value
+
+  if (insertedNum < rechargeAmount) {
+    return res.status(400).json({ error: 'Inserted amount is less than the recharge amount' })
+  }
+  // Change is always derived here, never taken from the request — a client-supplied
+  // `change` is a request to empty the hopper.
+  const changeAmount = roundMoney(insertedNum - rechargeAmount)
+
+  // Both models must be tenant-scoped: without it a kiosk key from tenant A can
+  // top up tenant B's card by id or code.
+  const Card = (await import('../models/card.js')).default
+  const CardT = withTenant(Card, req)
+  const SaleT = withTenant(Sale, req)
 
   // If card specified, update its balance
   let card = null
   if (cardId || cardCode) {
-    const Card = (await import('../models/card.js')).default
-    if (cardId) card = await Card.findById(cardId)
-    else card = await Card.findOne({ code: cardCode })
+    if (cardId) card = await CardT.findById(cardId)
+    else card = await CardT.findOne({ code: cardCode })
     if (!card && cardCode) {
       // create card implicitly when code provided (CardT.create() injects tenantId automatically)
       card = await CardT.create({ code: cardCode, balance: 0 })
     }
     if (card) {
-      card.balance = Number(((card.balance || 0) + rechargeAmount).toFixed(2))
+      card.balance = roundMoney((card.balance || 0) + rechargeAmount)
       await card.save()
     }
   }
 
+  // Record the sale BEFORE any coin leaves the machine. If this throws, no change
+  // has been dispensed yet; the reverse ordering left coins in the customer's hand
+  // with no Sale row, which shows up at day-close as an unexplainable shortage.
+  const sale = await SaleT.create({
+    amount: rechargeAmount,
+    items,
+    method: method || 'card',
+    batchId,
+    inserted: insertedNum,
+    change: changeAmount,
+    type: 'recharge',
+    cardId: card ? card._id : undefined,
+    cardCode: card ? card.code : (cardCode || undefined)
+  })
+
   // Dispense change if needed
   let changeDispensed = false
+  let changeError = null
   if (changeAmount > 0) {
     try {
-      // Get middleware instance and dispense change via hopper
-      const { middleware } = await import('../index.js')
       const Peripheral = (await import('../models/peripheral.js')).default
-      const hopper = await Peripheral.findOne({ type: 'hopper', enabled: true })
-      
-      if (hopper && middleware) {
-        await middleware.dispenseChange(hopper._id, changeAmount)
-        changeDispensed = true
-        console.log(`Change dispensed: €${changeAmount.toFixed(2)}`)
+      const PeripheralT = withTenant(Peripheral, req)
+      const hopper = await PeripheralT.findOne({ type: 'hopper', enabled: true })
+
+      if (hopper) {
+        const result = await coinMachine.dispenseChange(hopper._id, changeAmount)
+        // dispenseChange resolves with `{success:false}` on a jam rather than throwing.
+        changeDispensed = result?.success !== false
+        if (!changeDispensed) changeError = result?.error || 'Hopper reported a fault'
       } else {
-        console.warn('No hopper available for change dispensing')
+        changeError = 'No hopper configured'
+        console.warn('[pos] No hopper available for change dispensing')
       }
     } catch (e) {
-      console.error('Failed to dispense change:', e.message)
-      // Continue even if change dispensing fails - return error in response
+      changeError = e.message
+      console.error('[pos] Failed to dispense change:', e.message)
+    }
+    if (!changeDispensed) {
+      // The sale is already recorded, so the shortfall is attributable. Tell the
+      // kiosk so it can show "collect your change at the counter" instead of
+      // silently keeping the customer's money.
+      console.error(`[pos] Change of €${changeAmount.toFixed(2)} owed on sale ${sale._id}: ${changeError}`)
     }
   }
 
-  const sale = await SaleT.create({ 
-    amount: rechargeAmount, 
-    items, 
-    method: method || 'card', 
-    batchId, 
-    inserted: insertedNum, 
-    change: changeAmount, 
-    type: 'recharge', 
-    cardId: card ? card._id : undefined, 
-    cardCode: card ? card.code : (cardCode || undefined) 
-  })
-  
-  res.json({ sale, card, change: changeAmount, changeDispensed })
+  res.json({ sale, card, change: changeAmount, changeDispensed, changeError })
 })
 
 // Card purchase endpoint - handles new card purchases with customer data
@@ -462,26 +495,32 @@ router.get('/settings/:key', async (req, res) => {
 router.post('/cards/:code/spend', requireKiosk, async (req, res) => {
   const code = req.params.code
   const { machineId, amount, items, method, batchId } = req.body
-  if (!code || amount == null) return res.status(400).json({ error: 'Missing parameters' })
+  if (!code) return res.status(400).json({ error: 'Missing parameters' })
+  if (method && String(method) !== 'card') return res.status(400).json({ error: 'Card spending must use method "card"' })
+
+  // Without this a negative amount *credits* the card: `balance - Number(-50)`.
+  const parsed = parseAmount(amount)
+  if (!parsed.ok) return res.status(400).json({ error: parsed.error })
+  const price = parsed.value
+
   const Card = (await import('../models/card.js')).default
   const CardT = withTenant(Card, req)
   const card = await CardT.findOne({ code })
   if (!card) return res.status(404).json({ error: 'Card not found' })
 
-  if (method && String(method) !== 'card') return res.status(400).json({ error: 'Card spending must use method "card"' })
-
-  const price = Number(amount)
-  if ((card.balance || 0) < price) return res.status(400).json({ error: 'Insufficient balance' })
-
-  card.balance = Number((card.balance || 0) - price)
-  await card.save()
-
-  // Prevent occupying a machine that is already working
+  // Check the machine is free *before* debiting — otherwise a 409 leaves the
+  // customer charged for a wash that never starts.
+  const MachineT = withTenant(Machine, req)
   if (machineId) {
-    const MachineT = withTenant(Machine, req)
     const m = await MachineT.findById(machineId)
-    if (m && m.status === 'working') return res.status(409).json({ error: 'Machine already in use' })
+    if (!m) return res.status(404).json({ error: 'Machine not found' })
+    if (m.status === 'working') return res.status(409).json({ error: 'Machine already in use' })
   }
+
+  if (roundMoney(card.balance || 0) < price) return res.status(400).json({ error: 'Insufficient balance' })
+
+  card.balance = roundMoney((card.balance || 0) - price)
+  await card.save()
 
   const SaleT = withTenant(Sale, req)
   const sale = await SaleT.create({ machineId, amount: price, items, method: 'card', batchId, type: 'payment', cardId: card._id, cardCode: card.code })

@@ -47,6 +47,23 @@ app.use('/api/sync', syncRoutes)
 
 app.get('/api/health', (req, res) => res.json({ ok: true }))
 
+// Catch-all error handler. Without this an unhandled rejection in any async
+// route handler takes the whole process down on Node 18+ — on a POS backend
+// that means one bad request stops every kiosk on every site.
+// Must be registered after all routes; Express identifies it by arity 4.
+app.use((err, req, res, next) => {
+  console.error(`[api] Unhandled error on ${req.method} ${req.originalUrl}:`, err)
+  if (res.headersSent) return next(err)
+  res.status(err.status || 500).json({ error: 'Internal server error' })
+})
+
+// Express 4 does not forward rejected promises from async handlers to the
+// error middleware, so catch what escapes rather than letting it kill the
+// process mid-transaction.
+process.on('unhandledRejection', (reason) => {
+  console.error('[api] Unhandled promise rejection:', reason)
+})
+
 // Initialize WebSocket server (models will be imported in wsServer.js)
 initWebSocket(server)
 

@@ -9,6 +9,13 @@ const EventEmitter = require('events')
 const { machines, cards, sales, prices, settings, interfaces, syncQueue, session,
         dayCloses, generateId, roundMoney, runTransaction, flushSave } = require('./database.cjs')
 
+/**
+ * Longest a wash/dry cycle can plausibly run before a machine still marked
+ * `working` at startup is treated as stale. Generous on purpose: freeing a
+ * machine that is genuinely running would let a second customer pay for it.
+ */
+const MAX_CYCLE_MS = 4 * 60 * 60 * 1000
+
 class PosEngine extends EventEmitter {
   constructor(hardwareAgent, tenantId) {
     super()
@@ -21,8 +28,88 @@ class PosEngine extends EventEmitter {
   init() {
     this.loadSettings()
     this.setupHardwareListeners()
-    session.reset()
+    this.restoreSession()
+    this.reconcileMachines()
     console.log('[POS] Engine initialized for tenant:', this.tenantId)
+  }
+
+  /**
+   * Restore the cash a customer had already fed in before a power cut.
+   *
+   * `init()` used to call `session.reset()` unconditionally, and the session was
+   * never written to disk in the first place, so a blip after someone inserted
+   * €20 destroyed it with no record — the customer's money simply disappeared.
+   */
+  restoreSession() {
+    let row = session.getCurrent()
+    if (!row) { session.create(); row = session.getCurrent() }
+    if (!row) return
+
+    this.sessionState.cashBalance = roundMoney(Number(row.cash_balance) || 0)
+    this.sessionState.bonus = roundMoney(Number(row.bonus) || 0)
+    this.sessionState.cardCode = row.card_code || null
+    this.sessionState.hasCard = Boolean(row.has_card) && Boolean(row.card_code)
+
+    // Re-read the card balance from the cards table rather than trusting the
+    // stored copy — the card is the source of truth and may have changed.
+    if (this.sessionState.hasCard) {
+      const card = cards.getByCode(this.tenantId, this.sessionState.cardCode)
+      if (card) {
+        this.sessionState.cardBalance = roundMoney(card.balance || 0)
+      } else {
+        this.sessionState.cardCode = null; this.sessionState.hasCard = false; this.sessionState.cardBalance = 0
+      }
+    } else {
+      this.sessionState.cardBalance = 0
+    }
+
+    this.updateCredits()
+    if (this.sessionState.cashBalance > 0) {
+      console.warn(`[POS] Recovered €${this.sessionState.cashBalance.toFixed(2)} of inserted cash from the previous session`)
+      this.emit('session:recovered', this.getSession())
+    }
+  }
+
+  /** Write the live session to disk so it survives a power loss. */
+  persistSession() {
+    try {
+      const row = session.getCurrent()
+      if (!row) return
+      session.update(row.id, {
+        cash_balance: this.sessionState.cashBalance,
+        bonus: this.sessionState.bonus,
+        card_code: this.sessionState.cardCode,
+        card_balance: this.sessionState.cardBalance,
+        has_card: this.sessionState.hasCard ? 1 : 0
+      })
+    } catch (err) {
+      console.error('[POS] Failed to persist session:', err.message)
+    }
+  }
+
+  /**
+   * Free machines this kiosk marked `working` but can no longer be running.
+   *
+   * Nothing frees a machine locally, so a crash mid-cycle left it permanently
+   * "Ocupado" and `processSale` rejected every following customer for it.
+   */
+  reconcileMachines() {
+    try {
+      const stale = machines.getAll(this.tenantId).filter((m) => {
+        if (m.status !== 'working') return false
+        if (!m.started_at) return true // marked busy with no start time — cannot be tracked
+        const runningMs = Date.now() - new Date(m.started_at).getTime()
+        return runningMs > MAX_CYCLE_MS
+      })
+      for (const m of stale) {
+        machines.updateStatus(m.id, 'free', 'Livre')
+        syncQueue.push('machine', m.id, 'update', { id: m.id, status: 'free' }, 3)
+        console.warn(`[POS] Machine ${m.name || m.id} was left 'working' across a restart — freed`)
+      }
+      if (stale.length) flushSave()
+    } catch (err) {
+      console.error('[POS] Machine reconciliation failed:', err.message)
+    }
   }
 
   loadSettings() {
@@ -62,6 +149,10 @@ class PosEngine extends EventEmitter {
     this.sessionState.cashBalance = roundMoney(this.sessionState.cashBalance + mappedAmount)
     this.sessionState.bonus = roundMoney(this.sessionState.bonus + bonus)
     this.updateCredits()
+    // Persist and flush immediately: the customer's cash is physically in the
+    // machine now, so it must survive a power cut from this moment on.
+    this.persistSession()
+    flushSave()
     this.emit('session:updated', this.getSession())
     this.emit('credit:accepted', { type, amount: mappedAmount, bonus, credits: this.sessionState.credits })
   }
@@ -74,10 +165,28 @@ class PosEngine extends EventEmitter {
       this.sessionState.cardBalance = card.balance || 0
       this.sessionState.hasCard = true
       this.updateCredits()
+      this.persistSession()
       this.emit('card:loaded', { card, session: this.getSession() })
     } else {
       this.emit('card:unknown', { cardCode })
     }
+  }
+
+  /**
+   * Queue a card balance delta for the server.
+   *
+   * Every delta carries its own `localId`. Card pushes are retried after a
+   * timeout or a power cut, and the server applies `balance += delta`, so
+   * without a stable per-operation key a retry turns a €20 recharge into €40.
+   * The server dedupes on this id and returns `status:'duplicate'`.
+   */
+  queueCardDelta(card, delta, localId) {
+    syncQueue.push('card', card.id, 'update', {
+      id: card.id,
+      code: card.code,
+      delta: roundMoney(delta),
+      localId: localId || generateId()
+    }, 2)
   }
 
   removeCard() {
@@ -86,13 +195,31 @@ class PosEngine extends EventEmitter {
       if (card) {
         const chargeAmount = roundMoney(this.sessionState.cashBalance + this.sessionState.bonus)
         const newBalance = roundMoney((card.balance || 0) + chargeAmount)
-        cards.updateBalance(card.id, newBalance)
-        syncQueue.push('card', card.id, 'update', { id: card.id, code: card.code, delta: chargeAmount }, 2)
+        const saleId = generateId()
+        // Record the transfer as a sale. Without this row the cash physically in
+        // the drawer could not be reconciled against the credit put on the card,
+        // and day-close showed an unexplained surplus.
+        runTransaction(() => {
+          cards.updateBalance(card.id, newBalance)
+          sales.create({
+            id: saleId, local_id: saleId, tenant_id: this.tenantId,
+            amount: chargeAmount,
+            items: [{ type: 'recharge', amount: chargeAmount, source: 'auto_charge_on_remove' }],
+            type: 'recharge', method: 'cash', card_id: card.id, card_code: card.code,
+            inserted: chargeAmount, change_amount: 0
+          })
+        })
+        syncQueue.push('sale', saleId, 'create', { local_id: saleId, tenant_id: this.tenantId, type: 'recharge', amount: chargeAmount, method: 'cash', card_code: card.code }, 1)
+        this.queueCardDelta(card, chargeAmount, saleId)
         this.sessionState.cashBalance = 0; this.sessionState.bonus = 0
+        // The customer is walking away with this credit — it must survive a power
+        // cut inside the 2s autosave debounce.
+        flushSave()
       }
     }
     this.sessionState.cardCode = null; this.sessionState.cardBalance = 0; this.sessionState.hasCard = false
     this.updateCredits()
+    this.persistSession()
     this.emit('card:removed')
     this.emit('session:updated', this.getSession())
   }
@@ -109,11 +236,20 @@ class PosEngine extends EventEmitter {
     if (!card) throw new Error('Card not found')
     const topUpAmount = roundMoney(Number(amount))
     const newBalance = roundMoney((card.balance || 0) + topUpAmount)
-    const saleResult = sales.create({ tenant_id: this.tenantId, amount: topUpAmount, items: [{ type: 'recharge', amount: topUpAmount }], type: 'recharge', method: 'cash', card_id: card.id, card_code: code, inserted: topUpAmount, change_amount: 0 })
-    cards.updateBalance(card.id, newBalance)
-    syncQueue.push('sale', saleResult.local_id, 'create', { local_id: saleResult.local_id, type: 'recharge', amount: topUpAmount, card_code: code }, 1)
-    syncQueue.push('card', card.id, 'update', { id: card.id, code, delta: topUpAmount }, 2)
-    if (this.sessionState.cardCode === code) { this.sessionState.cardBalance = newBalance; this.updateCredits(); this.emit('session:updated', this.getSession()) }
+    if (!(topUpAmount > 0)) throw new Error('Top-up amount must be greater than zero')
+    // The sale row and the balance update must land together, or a crash between
+    // them leaves either money taken with no credit or credit with no record.
+    const saleId = generateId()
+    runTransaction(() => {
+      sales.create({ id: saleId, local_id: saleId, tenant_id: this.tenantId, amount: topUpAmount, items: [{ type: 'recharge', amount: topUpAmount }], type: 'recharge', method: 'cash', card_id: card.id, card_code: code, inserted: topUpAmount, change_amount: 0 })
+      cards.updateBalance(card.id, newBalance)
+    })
+    syncQueue.push('sale', saleId, 'create', { local_id: saleId, tenant_id: this.tenantId, type: 'recharge', amount: topUpAmount, method: 'cash', card_code: code }, 1)
+    this.queueCardDelta(card, topUpAmount, saleId)
+    if (this.sessionState.cardCode === code) { this.sessionState.cardBalance = newBalance; this.updateCredits(); this.persistSession(); this.emit('session:updated', this.getSession()) }
+    // The customer has already paid for this — unlike processSale, this path used
+    // to rely on the 2s autosave debounce, so a power cut lost the recharge.
+    flushSave()
     return { card: { ...card, balance: newBalance }, newBalance }
   }
 
@@ -137,6 +273,12 @@ class PosEngine extends EventEmitter {
   processSale(machineId, amount, method, cardCode, batchId, items) {
     const machine = machines.getById(machineId); if (!machine) throw new Error('Machine not found'); if (machine.status === 'working') throw new Error('Machine already in use')
     const price = roundMoney(Number(amount)); const saleId = generateId(); let cardSyncData = null
+    if (!(price >= 0)) throw new Error('Invalid sale amount')
+    // `sessionState` is a plain JS object, so `runTransaction` cannot roll it
+    // back. A throw at `sales.create` used to undo the SQL but leave the customer
+    // debited in memory — their credits simply vanished. Snapshot and restore.
+    const sessionBefore = { ...this.sessionState }
+    try {
     runTransaction(() => {
       if (method === 'card' && cardCode) {
         const card = cards.getByCode(this.tenantId, cardCode); if (!card) throw new Error('Card not found')
@@ -159,12 +301,18 @@ class PosEngine extends EventEmitter {
       sales.create({ id: saleId, local_id: saleId, tenant_id: this.tenantId, machine_id: machineId, amount: price, items: items || [{ type: machine.type, weight: machine.weight, price }], type: 'payment', method: method || (cardCode ? 'card' : 'cash'), batch_id: batchId || null, card_code: cardCode || null, inserted: method === 'cash' ? roundMoney(this.sessionState.cashBalance + price) : 0, change_amount: 0 })
       machines.updateStatus(machineId, 'working', 'Ocupado'); machines.incrementCycle(machineId)
     })
+    } catch (err) {
+      this.sessionState = sessionBefore
+      this.emit('session:updated', this.getSession())
+      throw err
+    }
     syncQueue.push('sale', saleId, 'create', { local_id: saleId, tenant_id: this.tenantId, machine_id: machineId, amount: price, type: 'payment', method: method || (cardCode ? 'card' : 'cash'), card_code: cardCode || null }, 1)
-    if (cardSyncData) syncQueue.push('card', cardSyncData.id, 'update', cardSyncData, 2)
+    // Keyed on the sale id so a retried push is not applied twice.
+    if (cardSyncData) this.queueCardDelta({ id: cardSyncData.id, code: cardSyncData.code }, cardSyncData.delta, saleId)
     syncQueue.push('machine', machineId, 'update', { id: machineId, status: 'working', cycle: (machine.cycle || 0) + 1 }, 3)
     const iface = machine.interface_id ? interfaces.getById(machine.interface_id) : null
     if (iface && this.hw) this.hw.activateMachine(machine, iface)
-    flushSave(); this.emit('sale:completed', { sale: { id: saleId, amount: price }, machine: machines.getById(machineId) }); this.emit('session:updated', this.getSession())
+    this.persistSession(); flushSave(); this.emit('sale:completed', { sale: { id: saleId, amount: price }, machine: machines.getById(machineId) }); this.emit('session:updated', this.getSession())
     return { success: true, saleId, machine: machines.getById(machineId) }
   }
 
@@ -199,10 +347,15 @@ class PosEngine extends EventEmitter {
     }
 
     const result = dayCloses.create(report)
-    syncQueue.push('day_close', result.local_id, 'create', report, 4)
-    
+    // The pushed payload must carry the local id, or the server cannot dedupe a
+    // retried Z-report and the day gets counted twice.
+    syncQueue.push('day_close', result.local_id, 'create', { ...report, local_id: result.local_id }, 4)
+
+    // A Z-report is the operator's record of the day's takings — flush it rather
+    // than leaving it in the 2s autosave debounce.
+    flushSave()
     console.log(`[POS] Day Close completed for ${today}: €${totalSales}`)
-    return report
+    return { ...report, local_id: result.local_id }
   }
 
   // ─── Others ───

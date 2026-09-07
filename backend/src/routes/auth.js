@@ -45,19 +45,14 @@ router.post('/login', loginLimiter, async (req, res) => {
   return res.json({ token, role: user.role })
 })
 
-// Register new user (admin can create other admins via /admin endpoints). This endpoint is
-// intentionally permissive for development — adapt for production (captcha, email verification, etc.)
-router.post('/register', async (req, res) => {
-  const { username, password, role = 'USER', email } = req.body
-  if (!username || !password) return res.status(400).json({ error: 'Missing username or password' })
-  const existing = await User.findOne({ username })
-  if (existing) return res.status(400).json({ error: 'User already exists' })
-
-  const hash = await bcrypt.hash(password, 10)
-  const apiKey = role === 'KIOSK' ? crypto.randomBytes(24).toString('hex') : undefined
-  const user = await User.create({ username, email, password: hash, role, apiKey })
-  return res.json({ _id: user._id, username: user.username, role: user.role, apiKey: user.apiKey ? user.apiKey.slice(0,8)+'…' : null })
-})
+// NOTE: there is deliberately no public /register route.
+//
+// The old one took `role` straight from the request body, so
+// `POST {"username":"x","password":"y","role":"SUPERADMIN"}` from anywhere on the
+// internet granted full cross-tenant admin. It also never set the required
+// `tenantId`, so the create threw — an unauthenticated remote process kill.
+// User creation belongs in `routes/admin.js`, behind `requireAdmin`, where the
+// role and tenant are set by the server.
 
 // Change password for the authenticated user
 router.post('/change-password', requireAuth, async (req, res) => {

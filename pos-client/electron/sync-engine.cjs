@@ -7,6 +7,13 @@ const { app } = require('electron')
 const { machines, cards, sales, prices, settings, interfaces, peripherals, 
         syncQueue, syncMeta } = require('./database.cjs')
 
+/**
+ * Entities whose local table is rebuilt wholesale on every pull (`bulkReplace`).
+ * These must be fetched as a complete snapshot, never with `?since=` — see
+ * `pullEntity`. They are all small config tables, so a full fetch is cheap.
+ */
+const SNAPSHOT_ENTITIES = new Set(['prices', 'settings', 'interfaces', 'peripherals'])
+
 class SyncEngine extends EventEmitter {
   constructor(config, tenantId) {
     super()
@@ -145,7 +152,24 @@ class SyncEngine extends EventEmitter {
       default: return
     }
     const resp = await this._fetch(endpoint, { method: 'POST', body: JSON.stringify(payload) })
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    if (!resp.ok) {
+      // Include the server's message — "HTTP 400" alone told an operator nothing
+      // about why a sale was rejected, and the item was then retried ten times
+      // and dropped.
+      let detail = ''
+      try { detail = ` — ${(await resp.text()).slice(0, 200)}` } catch {}
+      throw new Error(`HTTP ${resp.status}${detail}`)
+    }
+
+    // Reflect the server's id back onto the local row. `sales.markSynced` was
+    // never called anywhere, so `sales.synced` stayed 0 for every sale ever made
+    // and the server id in the response was thrown away.
+    if (item.entity_type === 'sale') {
+      try {
+        const body = await resp.json()
+        if (body && body.id) sales.markSynced(payload.local_id || item.entity_id, String(body.id))
+      } catch { /* a non-JSON 2xx is still a successful push */ }
+    }
   }
 
   async pullAll() {
@@ -160,11 +184,19 @@ class SyncEngine extends EventEmitter {
   async pullEntity(entityType) {
     if (!this.online) return
     try {
+      // Entities handled by bulkReplace (DELETE-all + insert) MUST be pulled as a
+      // full snapshot. Feeding a `?since=` result into bulkReplace meant that an
+      // admin editing one price returned one row and deleted every other price
+      // locally — and a settings pull destroyed coinEqTable/billEqTable, so coins
+      // got miscredited, while an interfaces wipe meant customers paid and no
+      // machine started. Only the upsert-based entities can pull incrementally.
+      const snapshot = SNAPSHOT_ENTITIES.has(entityType)
       const meta = syncMeta.get(entityType)
       const since = meta?.last_synced_at || '1970-01-01T00:00:00Z'
       const endpoint = `/sync/pull/${entityType}`
+      const url = snapshot ? endpoint : `${endpoint}?since=${encodeURIComponent(since)}`
 
-      const resp = await this._fetch(`${endpoint}?since=${encodeURIComponent(since)}`, { method: 'GET' })
+      const resp = await this._fetch(url, { method: 'GET' })
       if (!resp.ok) return
 
       const items = await resp.json()
@@ -181,7 +213,10 @@ class SyncEngine extends EventEmitter {
         case 'peripherals': peripherals.bulkReplace(this.tenantId, items.map(p => this._mapPeripheral(p))); break
       }
       syncMeta.set(entityType, { last_synced_at: new Date().toISOString() })
-    } catch (err) {}
+    } catch (err) {
+      // A silent catch here hid every pull failure, including the config wipe above.
+      console.error(`[Sync] Pull ${entityType} failed:`, err.message)
+    }
   }
 
   async bootstrap() {

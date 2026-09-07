@@ -6,7 +6,17 @@ const cardSchema = new Schema({
   tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', required: true, index: true },
   code: { type: String, required: true }, // public card code
   balance: { type: Number, default: 0 },
-  
+  // Loyalty bonus accrued on recharges. `services/client.js` reads and writes this;
+  // without the field, Mongoose strict mode dropped every write silently and all
+  // loyalty bonus was permanently lost.
+  bonus: { type: Number, default: 0 },
+
+  // Deltas already applied to this card, keyed by the kiosk's local operation id.
+  // Kiosk pushes are delta-based ("add €20") and are retried after a timeout or a
+  // power cut, so without a dedupe key a retry credits the card twice.
+  appliedDeltas: { type: [String], default: [] },
+
+
   // Optional user data (collected during card purchase)
   name: { type: String, default: '' },
   email: { type: String, default: '' },

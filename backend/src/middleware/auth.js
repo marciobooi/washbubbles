@@ -72,3 +72,16 @@ export async function requireKiosk(req, res, next) {
     next()
   })
 }
+
+/** Kiosk terminals AND staff both drive the coin-machine/middleware endpoints,
+ *  so those need a guard that accepts either — requireKiosk rejects admins and
+ *  requireAdmin rejects kiosks. */
+export async function requireKioskOrAdmin(req, res, next) {
+  await requireAuth(req, res, () => {
+    const role = req.userModel && req.userModel.role
+    if (role !== 'KIOSK' && role !== 'ADMIN' && role !== 'SUPERADMIN') {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+    next()
+  })
+}

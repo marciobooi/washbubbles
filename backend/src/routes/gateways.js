@@ -1,12 +1,83 @@
 import express from 'express'
+import mongoose from 'mongoose'
 import Machine from '../models/machine.js'
 import Sale from '../models/sale.js'
 import Card from '../models/card.js'
+import Price from '../models/price.js'
 import { requireKiosk } from '../middleware/auth.js'
-import { broadcastMachine, broadcastHardwareEvent } from '../wsServer.js'
+import { broadcastMachine } from '../wsServer.js'
 import { withTenant } from '../services/tenant.js'
+import { roundMoney, parseAmount } from '../utils/money.js'
+import coinMachine from '../services/coinMachine.js'
 
 const router = express.Router()
+
+/** True when a cart line is a card recharge rather than a machine payment. */
+function isRecharge(item) {
+  return Boolean(
+    (item.type && String(item.type).toLowerCase().includes('recarga')) ||
+    (item.id && String(item.id).startsWith('recharge'))
+  )
+}
+
+/** Is a promo row active right now? Mirrors the kiosk's `pos-engine.getPrice`. */
+function promoIsActive(price, now = new Date()) {
+  if (!price.promoActive) return false
+  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+  if (Array.isArray(price.promoDays) && price.promoDays.length && !price.promoDays.includes(days[now.getDay()])) {
+    return false
+  }
+  const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  if (price.promoStartTime && hhmm < price.promoStartTime) return false
+  if (price.promoEndTime && hhmm > price.promoEndTime) return false
+  return true
+}
+
+/**
+ * Resolve every machine line against the DB up front and price it from the
+ * tenant's own Price table, not from the number the client sent.
+ *
+ * The kiosk runs on a public terminal, so `item.price` is attacker-controlled:
+ * trusting it means a €10 wash can be bought for €0.01. Validating all lines
+ * before any money moves also stops a mid-loop 404/409 from leaving the card
+ * debited for some items and the rest unstarted.
+ *
+ * Machines carry no price of their own — the rate lives in the Price collection,
+ * keyed by {type, weight}, with separate cash and card columns.
+ *
+ * @param method 'cash' or 'card'.
+ * @returns {{ok: true, lines: Array, total: number} | {ok: false, status: number, error: object}}
+ */
+async function resolveMachineLines(items, MachineT, PriceT, method) {
+  const lines = []
+  for (const it of items) {
+    const ref = it._id || it.id
+    const machine = (mongoose.Types.ObjectId.isValid(ref) ? await MachineT.findById(ref) : null) ||
+      await MachineT.findOne({ number: Number(ref) })
+    if (!machine) return { ok: false, status: 404, error: { error: 'Machine not found', machineRef: ref } }
+    if (machine.status === 'working') {
+      return { ok: false, status: 409, error: { error: 'Machine already in use', machineId: machine._id } }
+    }
+    if (lines.some((l) => String(l.machine._id) === String(machine._id))) {
+      return { ok: false, status: 400, error: { error: 'Machine listed twice in the same cart', machineId: machine._id } }
+    }
+
+    const priceRow = await PriceT.findOne({ type: machine.type || 'wash', weight: machine.weight })
+    if (!priceRow) {
+      return { ok: false, status: 409, error: { error: 'No price configured for this machine', machineId: machine._id, type: machine.type, weight: machine.weight } }
+    }
+    const promo = promoIsActive(priceRow)
+    const raw = method === 'card'
+      ? (promo && priceRow.promoCardPrice != null ? priceRow.promoCardPrice : priceRow.cardPrice)
+      : (promo && priceRow.promoCashPrice != null ? priceRow.promoCashPrice : priceRow.cashPrice)
+    const price = roundMoney(raw)
+    if (!(price > 0)) {
+      return { ok: false, status: 409, error: { error: 'Machine has no price configured', machineId: machine._id } }
+    }
+    lines.push({ machine, price, item: it })
+  }
+  return { ok: true, lines, total: roundMoney(lines.reduce((s, l) => s + l.price, 0)) }
+}
 
 // GET /api/gateways/cards/:code - lookup card balance (kiosk only)
 router.get('/cards/:code', requireKiosk, async (req, res) => {
@@ -22,7 +93,11 @@ router.get('/cards/:code', requireKiosk, async (req, res) => {
 router.post('/cards/:code/topup', requireKiosk, async (req, res) => {
   const { code } = req.params
   const { amount, batchId } = req.body
-  if (!code || amount == null) return res.status(400).json({ error: 'Missing parameters' })
+  if (!code) return res.status(400).json({ error: 'Missing parameters' })
+
+  const parsed = parseAmount(amount)
+  if (!parsed.ok) return res.status(400).json({ error: parsed.error })
+  const topUp = parsed.value
 
   const CardT = withTenant(Card, req)
   const SaleT = withTenant(Sale, req)
@@ -30,10 +105,10 @@ router.post('/cards/:code/topup', requireKiosk, async (req, res) => {
   if (!card) {
     card = await CardT.create({ code, balance: 0 })
   }
-  card.balance = Number((card.balance || 0) + Number(amount))
+  card.balance = roundMoney((card.balance || 0) + topUp)
   await card.save()
 
-  const sale = await SaleT.create({ amount: Number(amount), items: [{ type: 'recharge', amount }], method: 'card', batchId, inserted: Number(amount), change: 0, type: 'recharge', cardId: card._id, cardCode: card.code })
+  const sale = await SaleT.create({ amount: topUp, items: [{ type: 'recharge', amount: topUp }], method: 'card', batchId, inserted: topUp, change: 0, type: 'recharge', cardId: card._id, cardCode: card.code })
 
   res.json({ success: true, sale, card })
 })
@@ -51,42 +126,50 @@ router.post('/card/pay', requireKiosk, async (req, res) => {
   const card = await CardT.findOne({ code: cardCode })
   if (!card) return res.status(404).json({ error: 'Card not found' })
 
-  // Process recharges first
-  const recharges = items.filter(i => (i.type && i.type.toLowerCase().includes('recarga')) || (i.id && String(i.id).startsWith('recharge')))
-  for (const r of recharges) {
-    const amount = Number(r.amount || r.price || 0)
-    card.balance = Number((card.balance || 0) + amount)
-    await SaleT.create({ amount, items: r, method: 'card', batchId, inserted: amount, change: 0, type: 'recharge', cardId: card._id, cardCode: card.code })
+  // ── Validate the whole cart before a cent moves ──
+  // The previous version credited recharges and debited machines inside the same
+  // loop that could `return` on a 404/409, so a bad line left the card credited
+  // with revenue booked and no wash started — money the day-close can't explain.
+  const rechargeLines = []
+  for (const r of items.filter(isRecharge)) {
+    const parsed = parseAmount(r.amount ?? r.price)
+    if (!parsed.ok) return res.status(400).json({ error: `Recharge line: ${parsed.error}` })
+    rechargeLines.push({ amount: parsed.value, item: r })
   }
 
-  // Now process machine payments: ensure sufficient balance for total
-  const machineItems = items.filter(i => !( (i.type && i.type.toLowerCase().includes('recarga')) || (i.id && String(i.id).startsWith('recharge')) ))
-  const total = machineItems.reduce((s, i) => s + (Number(i.price || i.amount || 0)), 0)
+  const resolved = await resolveMachineLines(items.filter((i) => !isRecharge(i)), MachineT, withTenant(Price, req), 'card')
+  if (!resolved.ok) return res.status(resolved.status).json(resolved.error)
 
-  if ((card.balance || 0) < total) {
-    await card.save()
+  const rechargeTotal = roundMoney(rechargeLines.reduce((s, l) => s + l.amount, 0))
+  const available = roundMoney((card.balance || 0) + rechargeTotal)
+  if (available < resolved.total) {
     return res.status(400).json({ error: 'Insufficient balance', balance: card.balance })
   }
 
+  // ── Apply ──
+  card.balance = roundMoney(available - resolved.total)
+  await card.save()
+
   const sales = []
-  for (const it of machineItems) {
-    const price = Number(it.price || it.amount || 0)
-    // double-check machine exists and is free
-    const machine = await MachineT.findById(it._id || it.id) || await MachineT.findOne({ number: Number(it._id || it.id) })
-    if (!machine) return res.status(404).json({ error: 'Machine not found' })
-    if (machine.status === 'working') return res.status(409).json({ error: 'Machine already in use', machineId: machine._id })
+  for (const line of rechargeLines) {
+    sales.push(await SaleT.create({ amount: line.amount, items: line.item, method: 'card', batchId, inserted: line.amount, change: 0, type: 'recharge', cardId: card._id, cardCode: card.code }))
+  }
 
-    // Deduct from card
-    card.balance = Number((card.balance || 0) - price)
-    await card.save()
-
-    // Create sale
-    const sale = await SaleT.create({ machineId: machine._id, amount: price, items: [it], method: 'card', batchId, type: 'payment', cardId: card._id, cardCode: card.code })
+  for (const { machine, price, item } of resolved.lines) {
+    const sale = await SaleT.create({ machineId: machine._id, amount: price, items: [item], method: 'card', batchId, type: 'payment', cardId: card._id, cardCode: card.code })
     sales.push(sale)
 
-    // Update machine state
-    await MachineT.findByIdAndUpdate(machine._id, { $inc: { cycle: 1 }, $set: { status: 'working', statusText: 'Ocupado' } })
-    const updated = await MachineT.findById(machine._id)
+    // Only mark the machine busy if it is still free — a second kiosk may have
+    // taken it between validation and here.
+    const updated = await MachineT.findOneAndUpdate(
+      { _id: machine._id, status: { $ne: 'working' } },
+      { $inc: { cycle: 1 }, $set: { status: 'working', statusText: 'Ocupado' } },
+      { new: true }
+    )
+    if (!updated) {
+      console.error(`[gateways] Machine ${machine._id} was taken between validation and activation; sale ${sale._id} owes a refund`)
+      continue
+    }
     try { await broadcastMachine(updated) } catch (e) { console.error('[gateways] broadcastMachine error', e) }
   }
 
@@ -95,59 +178,93 @@ router.post('/card/pay', requireKiosk, async (req, res) => {
 
 // POST /api/gateways/cash/pay - charge by cash (inserted/change) and create sales
 router.post('/cash/pay', requireKiosk, async (req, res) => {
-  const { items = [], inserted = 0, batchId } = req.body
-  if (!Array.isArray(items) || inserted == null) return res.status(400).json({ error: 'Missing parameters' })
+  const { items = [], inserted, batchId } = req.body
+  if (!Array.isArray(items)) return res.status(400).json({ error: 'Missing parameters' })
 
-  const total = items.reduce((s, i) => s + (Number(i.price || i.amount || 0)), 0)
-  const change = Math.max(0, Math.round((Number(inserted) - total) * 100) / 100)
-  if (inserted + 0.0001 < total) return res.status(400).json({ error: 'Insufficient cash' })
+  // `inserted` MUST be coerced before it is compared. The old check was
+  // `inserted + 0.0001 < total` on the raw body value: for the string "5" that is
+  // the *string* "50.0001", which compares greater than any realistic total —
+  // a free wash plus €45 of change out of the hopper.
+  const parsedInserted = parseAmount(inserted, { allowZero: true })
+  if (!parsedInserted.ok) return res.status(400).json({ error: `inserted: ${parsedInserted.error}` })
+  const insertedNum = parsedInserted.value
 
-  const sales = []
-  // Persist recharges first
   const SaleT = withTenant(Sale, req)
   const MachineT = withTenant(Machine, req)
-  for (const r of items.filter(i => (i.type && i.type.toLowerCase().includes('recarga')) || (i.id && String(i.id).startsWith('recharge')))) {
-    const amount = Number(r.amount || r.price || 0)
+
+  // Validate the whole cart before recording anything.
+  const rechargeLines = []
+  for (const r of items.filter(isRecharge)) {
+    const parsed = parseAmount(r.amount ?? r.price)
+    if (!parsed.ok) return res.status(400).json({ error: `Recharge line: ${parsed.error}` })
+    rechargeLines.push({ amount: parsed.value, item: r })
+  }
+
+  const resolved = await resolveMachineLines(items.filter((i) => !isRecharge(i)), MachineT, withTenant(Price, req), 'cash')
+  if (!resolved.ok) return res.status(resolved.status).json(resolved.error)
+
+  const total = roundMoney(resolved.total + rechargeLines.reduce((s, l) => s + l.amount, 0))
+  if (insertedNum < total) return res.status(400).json({ error: 'Insufficient cash', total, inserted: insertedNum })
+  const change = roundMoney(insertedNum - total)
+
+  const sales = []
+  for (const line of rechargeLines) {
     // cash/pay handler — recharge method must be 'cash', not 'card'
-    const sale = await SaleT.create({ amount, items: r, method: 'cash', batchId, inserted: amount, change: 0, type: 'recharge' })
-    sales.push(sale)
+    sales.push(await SaleT.create({ amount: line.amount, items: line.item, method: 'cash', batchId, inserted: line.amount, change: 0, type: 'recharge' }))
   }
 
   // Then machine sales — attach inserted/change to first machine sale
   let assigned = false
-  for (const it of items.filter(i => !((i.type && i.type.toLowerCase().includes('recarga')) || (i.id && String(i.id).startsWith('recharge'))))) {
-    const price = Number(it.price || it.amount || 0)
-    const machine = await MachineT.findById(it._id || it.id) || await MachineT.findOne({ number: Number(it._id || it.id) })
-    if (!machine) return res.status(404).json({ error: 'Machine not found' })
-    if (machine.status === 'working') return res.status(409).json({ error: 'Machine already in use', machineId: machine._id })
-
+  for (const { machine, price, item } of resolved.lines) {
     let saleInserted = 0
     let saleChange = 0
     if (!assigned) {
-      saleInserted = Number(inserted)
+      saleInserted = insertedNum
       saleChange = change
       assigned = true
     }
 
-    const sale = await SaleT.create({ machineId: machine._id, amount: price, items: [it], method: 'cash', batchId, inserted: saleInserted, change: saleChange, type: 'payment' })
+    const sale = await SaleT.create({ machineId: machine._id, amount: price, items: [item], method: 'cash', batchId, inserted: saleInserted, change: saleChange, type: 'payment' })
     sales.push(sale)
 
-    await MachineT.findByIdAndUpdate(machine._id, { $inc: { cycle: 1 }, $set: { status: 'working', statusText: 'Ocupado' } })
-    const updated = await MachineT.findById(machine._id)
+    const updated = await MachineT.findOneAndUpdate(
+      { _id: machine._id, status: { $ne: 'working' } },
+      { $inc: { cycle: 1 }, $set: { status: 'working', statusText: 'Ocupado' } },
+      { new: true }
+    )
+    if (!updated) {
+      console.error(`[gateways] Machine ${machine._id} was taken between validation and activation; sale ${sale._id} owes a refund`)
+      continue
+    }
     try { await broadcastMachine(updated) } catch (e) { console.error('[gateways] broadcastMachine error', e) }
   }
 
   // Trigger hopper to dispense change if any is due
+  let changeDispensed = false
+  let changeError = null
   if (change > 0) {
     try {
-      broadcastHardwareEvent('hopper:dispense', { amount: change })
-      console.log(`[gateways] Dispatched hopper:dispense for €${change.toFixed(2)} change`)
+      const Peripheral = (await import('../models/peripheral.js')).default
+      const PeripheralT = withTenant(Peripheral, req)
+      const hopper = await PeripheralT.findOne({ type: 'hopper', enabled: true })
+      if (!hopper) throw new Error('No hopper configured')
+      const result = await coinMachine.dispenseChange(hopper._id, change)
+      changeDispensed = result?.success !== false
+      if (!changeDispensed) changeError = result?.error || 'Hopper reported a fault'
     } catch (e) {
-      console.error('[gateways] Failed to broadcast hopper:dispense:', e)
+      changeError = e.message
+      console.error('[gateways] Failed to dispense change:', e.message)
+    }
+    if (!changeDispensed) {
+      // The old code called broadcastHardwareEvent('hopper:dispense', {...}) with
+      // two arguments against a (tenantId, type, payload) signature, so the change
+      // never reached any hopper and nobody was told. Now the kiosk gets a flag it
+      // can act on.
+      console.error(`[gateways] Change of €${change.toFixed(2)} owed on batch ${batchId}: ${changeError}`)
     }
   }
 
-  res.json({ success: true, sales, total, inserted: Number(inserted), change })
+  res.json({ success: true, sales, total, inserted: insertedNum, change, changeDispensed, changeError })
 })
 
 export default router

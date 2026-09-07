@@ -1,6 +1,6 @@
 import express from 'express'
 import coinMachine from '../services/coinMachine.js'
-import { requireAdmin } from '../middleware/auth.js'
+import { requireAdmin, requireKioskOrAdmin } from '../middleware/auth.js'
 import { withTenant } from '../services/tenant.js'
 import Peripheral from '../models/peripheral.js'
 import Machine from '../models/machine.js'
@@ -11,7 +11,7 @@ const router = express.Router()
 /**
  * Get current client state (balance, credits, card info)
  */
-router.get('/client', (req, res) => {
+router.get('/client', requireKioskOrAdmin, (req, res) => {
   const state = coinMachine.getClientState()
   res.json(state)
 })
@@ -19,7 +19,7 @@ router.get('/client', (req, res) => {
 /**
  * Get balance summary
  */
-router.get('/client/balance', (req, res) => {
+router.get('/client/balance', requireKioskOrAdmin, (req, res) => {
   const summary = coinMachine.client.getBalanceSummary()
   res.json(summary)
 })
@@ -27,7 +27,7 @@ router.get('/client/balance', (req, res) => {
 /**
  * Reset client session
  */
-router.post('/client/reset', (req, res) => {
+router.post('/client/reset', requireKioskOrAdmin, (req, res) => {
   coinMachine.resetClient()
   res.json({ success: true })
 })
@@ -35,7 +35,7 @@ router.post('/client/reset', (req, res) => {
 /**
  * Remove card but keep cash balance
  */
-router.post('/client/remove-card', (req, res) => {
+router.post('/client/remove-card', requireKioskOrAdmin, (req, res) => {
   coinMachine.removeCard()
   res.json({ success: true })
 })
@@ -43,7 +43,7 @@ router.post('/client/remove-card', (req, res) => {
 /**
  * Manually add cash balance (for testing)
  */
-router.post('/client/add-cash', (req, res) => {
+router.post('/client/add-cash', requireKioskOrAdmin, (req, res) => {
   const { amount } = req.body
   if (!amount || amount <= 0) {
     return res.status(400).json({ error: 'Invalid amount' })
@@ -56,7 +56,7 @@ router.post('/client/add-cash', (req, res) => {
 /**
  * Load card by number
  */
-router.post('/client/load-card', async (req, res) => {
+router.post('/client/load-card', requireKioskOrAdmin, async (req, res) => {
   const { cardNumber } = req.body
   if (!cardNumber) {
     return res.status(400).json({ error: 'Missing cardNumber' })
@@ -78,7 +78,7 @@ router.post('/client/load-card', async (req, res) => {
 /**
  * Process payment for a machine
  */
-router.post('/payment', async (req, res) => {
+router.post('/payment', requireKioskOrAdmin, async (req, res) => {
   try {
     const { machineId, amount, paymentType } = req.body
     
@@ -170,7 +170,7 @@ router.post('/print', requireAdmin, async (req, res) => {
 /**
  * Get coin machine status
  */
-router.get('/status', (req, res) => {
+router.get('/status', requireKioskOrAdmin, (req, res) => {
   res.json({
     running: coinMachine.running,
     clientState: coinMachine.getClientState(),
@@ -206,7 +206,7 @@ router.post('/stop', requireAdmin, async (req, res) => {
  * Activate machine(s)
  * Body: { machines: [{id: intId, chn: channel, impulses: '1'}] } or { id, chn, impulses }
  */
-router.post('/activate-machine', async (req, res) => {
+router.post('/activate-machine', requireKioskOrAdmin, async (req, res) => {
   try {
     const { machines, id, chn, impulses } = req.body
     
@@ -241,7 +241,7 @@ router.post('/activate-machine', async (req, res) => {
 /**
  * Get machine states
  */
-router.get('/machines', (req, res) => {
+router.get('/machines', requireKioskOrAdmin, (req, res) => {
   const machines = coinMachine.getMachineStates()
   res.json(machines)
 })
@@ -249,7 +249,7 @@ router.get('/machines', (req, res) => {
 /**
  * Get specific machine state
  */
-router.get('/machines/:id', (req, res) => {
+router.get('/machines/:id', requireKioskOrAdmin, (req, res) => {
   const machineId = parseInt(req.params.id)
   const machine = coinMachine.getMachineState(machineId)
   

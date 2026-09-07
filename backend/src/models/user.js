@@ -8,7 +8,9 @@ const userSchema = new Schema({
   // email kept optional for compatibility
   email: { type: String, default: null },
   password: { type: String, required: true },
-  role: { type: String, default: 'USER' },
+  // Enumerated so a role can never be set to an arbitrary string from a request
+  // body — the last line of defence behind the route-level role checks.
+  role: { type: String, default: 'USER', enum: ['USER', 'KIOSK', 'ADMIN', 'SUPERADMIN'] },
   apiKey: { type: String, default: null },
   resetPasswordToken: { type: String, default: null },
   resetPasswordExpires: { type: Date, default: null },
@@ -18,7 +20,14 @@ const userSchema = new Schema({
 
 // Per-tenant uniqueness: usernames, emails and apiKeys are unique within a tenant
 userSchema.index({ tenantId: 1, username: 1 }, { unique: true })
-userSchema.index({ tenantId: 1, email: 1 }, { unique: true, sparse: true })
+// `sparse` skips a document only when *every* indexed field is absent. `tenantId`
+// is always present and `email` defaults to null, so sparse skipped nothing here
+// and the second user created without an email in a tenant failed with E11000.
+// `partialFilterExpression` is the correct tool for a compound index.
+userSchema.index(
+  { tenantId: 1, email: 1 },
+  { unique: true, partialFilterExpression: { email: { $type: 'string' } } }
+)
 // Ensure apiKey uniqueness only when an apiKey actually exists (avoid collisions on null)
 userSchema.index(
   { tenantId: 1, apiKey: 1 },

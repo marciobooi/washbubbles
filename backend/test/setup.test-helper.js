@@ -34,6 +34,8 @@ export async function buildTestApp() {
   const authRoutes = (await import('../src/routes/auth.js')).default
   const adminRoutes = (await import('../src/routes/admin.js')).default
   const posRoutes = (await import('../src/routes/pos.js')).default
+  const gatewaysRoutes = (await import('../src/routes/gateways.js')).default
+  const syncRoutes = (await import('../src/routes/sync.js')).default
 
   const app = express()
   app.use(cors())
@@ -43,7 +45,15 @@ export async function buildTestApp() {
   app.use('/api/admin', adminRoutes)
   app.use('/api/pos', posRoutes)
   app.use('/api', posRoutes)
+  app.use('/api/gateways', gatewaysRoutes)
+  app.use('/api/sync', syncRoutes)
   app.get('/api/health', (req, res) => res.json({ ok: true }))
+  // Mirrors index.js: without this an async throw would kill the test process
+  // instead of surfacing as a 500.
+  app.use((err, req, res, next) => {
+    if (res.headersSent) return next(err)
+    res.status(err.status || 500).json({ error: 'Internal server error' })
+  })
   return app
 }
 

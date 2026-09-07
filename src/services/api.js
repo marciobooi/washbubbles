@@ -185,10 +185,6 @@ export function createApi(config) {
     return request('/auth/login', { method: 'POST', json: payload, expect: 'json' });
   }
 
-  function register(payload) {
-    return request('/auth/register', { method: 'POST', json: payload, expect: 'json' });
-  }
-
   function changePassword(payload) {
     return request('/auth/change-password', { method: 'POST', json: payload, expect: 'json' });
   }

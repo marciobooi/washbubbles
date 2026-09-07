@@ -3,18 +3,29 @@
  * Server-side endpoints for POS clients to push/pull data
  */
 import express from 'express'
+import mongoose from 'mongoose'
 import { requireKiosk } from '../middleware/auth.js'
 import { withTenant } from '../services/tenant.js'
 
 import Sale from '../models/sale.js'
 import Card from '../models/card.js'
+import Machine from '../models/machine.js'
 import Price from '../models/price.js'
 import Setting from '../models/setting.js'
 import Interface from '../models/interface.js'
 import Peripheral from '../models/peripheral.js'
 import SyncCommand from '../models/syncCommand.js'
+import DayClose from '../models/dayClose.js'
+import { roundMoney } from '../utils/money.js'
 
 const router = express.Router()
+
+/** Largest single balance change a kiosk may push. Caps the blast radius of a
+ *  compromised or buggy terminal — a real recharge is tens of euros. */
+const MAX_DELTA = 1000
+/** How many applied-delta ids to keep per card. Well past any realistic retry
+ *  window, and bounded so the array can't grow forever. */
+const MAX_APPLIED_DELTAS = 200
 
 // All sync routes require kiosk authentication
 router.use(requireKiosk)
@@ -30,33 +41,49 @@ router.post('/push/sale', async (req, res) => {
     const data = req.body
     const SaleT = withTenant(Sale, req)
 
-    // Check for duplicate (by local_id or id)
+    // Check for duplicate (by local_id or id).
+    // Only match on `_id` when the value actually looks like an ObjectId — the
+    // kiosk generates UUIDs, and casting one threw a CastError that 500'd every
+    // single sale push, so offline sales never synced at all.
     const localId = data.local_id || data.id
-    const existing = await SaleT.findOne({
-      $or: [
-        { _id: data.id },
-        { 'metadata.localId': localId }
-      ]
-    })
+    const or = [{ 'metadata.localId': localId }]
+    if (mongoose.Types.ObjectId.isValid(data.id)) or.push({ _id: data.id })
+    const existing = await SaleT.findOne({ $or: or })
 
     if (existing) {
       return res.json({ success: true, id: existing._id, status: 'duplicate' })
     }
 
+    if (!localId) {
+      return res.status(400).json({ success: false, error: 'local_id is required for idempotent sale push' })
+    }
+
+    // `admin_start` sales are legitimately €0, so zero is allowed here; negatives
+    // are not — they would silently reduce the day's takings.
+    const amount = Number(data.amount)
+    if (!Number.isFinite(amount) || amount < 0) {
+      return res.status(400).json({ success: false, error: 'amount must be a non-negative number' })
+    }
+
     // Create sale on server
     const sale = await SaleT.create({
-      machineId: data.machine_id || data.machineId || undefined,
-      amount: Number(data.amount),
+      machineId: mongoose.Types.ObjectId.isValid(data.machine_id || data.machineId)
+        ? (data.machine_id || data.machineId)
+        : undefined,
+      amount: roundMoney(amount),
       items: typeof data.items === 'string' ? JSON.parse(data.items) : data.items,
       type: data.type || 'payment',
       method: data.method,
       batchId: data.batch_id || data.batchId,
-      cardId: data.card_id || data.cardId || undefined,
+      cardId: mongoose.Types.ObjectId.isValid(data.card_id || data.cardId)
+        ? (data.card_id || data.cardId)
+        : undefined,
       cardCode: data.card_code || data.cardCode,
-      inserted: Number(data.inserted || 0),
-      change: Number(data.change_amount || data.change || 0),
+      inserted: roundMoney(Math.max(0, Number(data.inserted) || 0)),
+      change: roundMoney(Math.max(0, Number(data.change_amount ?? data.change) || 0)),
       createdAt: data.created_at ? new Date(data.created_at) : new Date(),
-      metadata: { localId, posId: req.user?._id, syncedAt: new Date() }
+      // req.user is the decoded token and has no _id — use the loaded document.
+      metadata: { localId, posId: req.userModel?._id, syncedAt: new Date() }
     })
 
     res.json({ success: true, id: sale._id, status: 'created' })
@@ -83,12 +110,41 @@ router.post('/push/card', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Card not found' })
     }
 
-    // If delta is provided, apply it (preferred for multi-POS)
     if (data.delta !== undefined) {
-      card.balance = Number(((card.balance || 0) + Number(data.delta)).toFixed(2))
-    } else {
+      // Delta push (preferred for multi-POS). The kiosk retries these after a
+      // timeout or a power cut, so it MUST be idempotent: without the dedupe key
+      // a retry turns a €20 recharge into €40, and debits double the same way.
+      const delta = Number(data.delta)
+      if (!Number.isFinite(delta)) {
+        return res.status(400).json({ success: false, error: 'delta must be a number' })
+      }
+      if (Math.abs(delta) > MAX_DELTA) {
+        return res.status(400).json({ success: false, error: `delta exceeds ±${MAX_DELTA}` })
+      }
+
+      const opId = String(data.localId || data.local_id || data.opId || '')
+      if (!opId) {
+        return res.status(400).json({ success: false, error: 'delta pushes require a localId for idempotency' })
+      }
+      if ((card.appliedDeltas || []).includes(opId)) {
+        return res.json({ success: true, id: card._id, balance: card.balance, status: 'duplicate' })
+      }
+
+      const next = roundMoney((card.balance || 0) + delta)
+      if (next < 0) {
+        return res.status(409).json({ success: false, error: 'Delta would drive the balance negative', balance: card.balance })
+      }
+      card.balance = next
+      card.appliedDeltas = [...(card.appliedDeltas || []), opId].slice(-MAX_APPLIED_DELTAS)
+    } else if (data.balance !== undefined) {
       // Absolute value fallback (single POS scenario)
-      card.balance = Number(data.balance)
+      const balance = Number(data.balance)
+      if (!Number.isFinite(balance) || balance < 0) {
+        return res.status(400).json({ success: false, error: 'balance must be a non-negative number' })
+      }
+      card.balance = roundMoney(balance)
+    } else {
+      return res.status(400).json({ success: false, error: 'Provide either delta or balance' })
     }
 
     card.updatedAt = new Date()
@@ -97,6 +153,52 @@ router.post('/push/card', async (req, res) => {
     res.json({ success: true, id: card._id, balance: card.balance })
   } catch (err) {
     console.error('[Sync] Push card error:', err)
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+/**
+ * POST /api/sync/push/day-close
+ * Receives a Z-report (day close) produced locally on the POS.
+ *
+ * The kiosk has always pushed to this path (`sync-engine.cjs:_pushItem`) but the
+ * route did not exist, so every Z-report 404'd and was abandoned after 10 retries.
+ */
+router.post('/push/day-close', async (req, res) => {
+  try {
+    const data = req.body
+    const DayCloseT = withTenant(DayClose, req)
+
+    const localId = String(data.local_id || data.localId || data.id || '')
+    if (localId) {
+      const existing = await DayCloseT.findOne({ 'metadata.localId': localId })
+      if (existing) {
+        return res.json({ success: true, id: existing._id, status: 'duplicate' })
+      }
+    }
+
+    // Field names follow the kiosk's snake_case payload (`pos-engine.closeDay`).
+    const totalCash = roundMoney(data.total_cash ?? data.totalCash ?? 0)
+    const dayClose = await DayCloseT.create({
+      source: 'kiosk',
+      totalSales: roundMoney(data.total_sales ?? data.totalSales ?? 0),
+      totalCash,
+      totalCard: roundMoney(data.total_card ?? data.totalCard ?? 0),
+      totalRecharges: roundMoney(data.total_recharges ?? data.totalRecharges ?? 0),
+      salesCount: Number(data.sale_count ?? data.salesCount ?? 0) || 0,
+      // The kiosk cannot know the physical count, so expected == cash taken and
+      // the operator reconciles later from the dashboard.
+      expectedCash: totalCash,
+      closedBy: req.userModel?._id,
+      closedByUsername: req.userModel?.username || '',
+      periodTo: data.created_at ? new Date(data.created_at) : new Date(),
+      notes: data.notes || '',
+      metadata: { localId, date: data.date, syncedAt: new Date() }
+    })
+
+    res.json({ success: true, id: dayClose._id, status: 'created' })
+  } catch (err) {
+    console.error('[Sync] Push day-close error:', err)
     res.status(500).json({ success: false, error: err.message })
   }
 })
@@ -146,16 +248,19 @@ router.post('/push/machine', async (req, res) => {
 router.get('/commands', async (req, res) => {
   try {
     const SyncCommandT = withTenant(SyncCommand, req)
-    // Only fetch commands for the authenticated kiosk user
-    const commands = await SyncCommandT.find({ 
-      kioskId: req.user._id, 
-      status: 'pending' 
+    // Only fetch commands for the authenticated kiosk user.
+    // `req.user` is the decoded token ({sub, role}) and has no `_id`; Mongoose
+    // strips the undefined key, so this used to match EVERY pending command in
+    // the tenant and each kiosk executed every other kiosk's reboots.
+    const commands = await SyncCommandT.find({
+      kioskId: req.userModel._id,
+      status: 'pending'
     }).lean()
-    
+
     // Mark as "executing" so they aren't pulled twice
     if (commands.length > 0) {
       const ids = commands.map(c => c._id)
-      await SyncCommand.updateMany({ _id: { $in: ids } }, { status: 'executing' })
+      await SyncCommandT.updateMany({ _id: { $in: ids } }, { status: 'executing' })
     }
 
     res.json(commands.map(c => ({ id: c._id, type: c.type, payload: c.payload })))

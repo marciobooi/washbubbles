@@ -1,4 +1,5 @@
 import express from 'express'
+import mongoose from 'mongoose'
 import { requireAdmin, requireSuperAdmin } from '../middleware/auth.js'
 import Machine from '../models/machine.js'
 import User from '../models/user.js'
@@ -8,6 +9,7 @@ import Interface from '../models/interface.js'
 import Price from '../models/price.js'
 import Peripheral from '../models/peripheral.js'
 import { withTenant } from '../services/tenant.js'
+import { resetSoleTenantCache } from '../middleware/tenant.js'
 import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import fs from 'fs'
@@ -40,7 +42,7 @@ router.post('/machines', async (req, res) => {
   
   // Check if interface+port combo is already in use
   if (interfaceId && port) {
-    const existing = await Machine.findOne({ interfaceId, port })
+    const existing = await withTenant(Machine, req).findOne({ interfaceId, port })
     if (existing) {
       return res.status(400).json({ error: `Porto ${port} desta interface já está em uso pela máquina "${existing.name}"` })
     }
@@ -144,7 +146,7 @@ router.put('/machines/:id', async (req, res) => {
   
   // Check if interface+port combo is already in use by another machine
   if (interfaceId && port) {
-    const existing = await Machine.findOne({ interfaceId, port, _id: { $ne: req.params.id } })
+    const existing = await withTenant(Machine, req).findOne({ interfaceId, port, _id: { $ne: req.params.id } })
     if (existing) {
       return res.status(400).json({ error: `Porto ${port} desta interface já está em uso pela máquina "${existing.name}"` })
     }
@@ -178,8 +180,15 @@ router.delete('/machines/:id', async (req, res) => {
 })
 
 // User CRUD
+//
+// These MUST go through withTenant. With bare `User.findByIdAndUpdate` a tenant-A
+// admin could PUT any superadmin's id with a new password and role and take over
+// the whole platform from one low-value account.
+const ASSIGNABLE_ROLES = ['USER', 'KIOSK', 'ADMIN']
+
 router.get('/users/:id', async (req, res) => {
-  const u = await User.findById(req.params.id).select('username role apiKey createdAt').lean()
+  const UserT = withTenant(User, req)
+  const u = await UserT.findById(req.params.id).select('username role apiKey createdAt').lean()
   if (!u) return res.status(404).json({ error: 'User not found' })
   u.apiKey = u.apiKey ? u.apiKey.slice(0, 8) + '…' : null
   res.json(u)
@@ -187,19 +196,36 @@ router.get('/users/:id', async (req, res) => {
 
 router.put('/users/:id', async (req, res) => {
   const { username, role, password } = req.body
-  const update = { username, role }
-  if (password) {
-    const hash = await bcrypt.hash(password, 10)
-    update.password = hash
+  const update = {}
+  if (username) update.username = username
+  if (role !== undefined) {
+    // A tenant admin must not be able to mint a SUPERADMIN; only a superadmin can.
+    const allowed = req.userModel?.role === 'SUPERADMIN' ? [...ASSIGNABLE_ROLES, 'SUPERADMIN'] : ASSIGNABLE_ROLES
+    if (!allowed.includes(role)) return res.status(400).json({ error: 'Invalid role' })
+    update.role = role
   }
-  const u = await User.findByIdAndUpdate(req.params.id, update, { new: true }).select('username role apiKey createdAt')
+  if (password) {
+    if (typeof password !== 'string' || password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' })
+    }
+    update.password = await bcrypt.hash(password, 10)
+  }
+  const UserT = withTenant(User, req)
+  const u = await UserT.findByIdAndUpdate(req.params.id, update, { new: true }).select('username role apiKey createdAt')
   if (!u) return res.status(404).json({ error: 'User not found' })
   u.apiKey = u.apiKey ? u.apiKey.slice(0, 8) + '…' : null
   res.json(u)
 })
 
 router.delete('/users/:id', async (req, res) => {
-  await User.findByIdAndDelete(req.params.id)
+  const UserT = withTenant(User, req)
+  // Refuse to delete yourself — an admin locking themselves out of their own
+  // tenant needs a superadmin to recover it.
+  if (String(req.userModel?._id) === String(req.params.id)) {
+    return res.status(400).json({ error: 'You cannot delete your own account' })
+  }
+  const u = await UserT.findByIdAndDelete(req.params.id)
+  if (!u) return res.status(404).json({ error: 'User not found' })
   res.json({ success: true })
 })
 
@@ -273,7 +299,7 @@ router.post('/transactions', async (req, res) => {
 })
 
 router.delete('/transactions/:id', async (req, res) => {
-  await Sale.findByIdAndDelete(req.params.id)
+  await withTenant(Sale, req).findByIdAndDelete(req.params.id)
   res.json({ success: true })
 })
 
@@ -388,7 +414,7 @@ router.post('/settings/logo', (req, res) => {
 })
 
 router.delete('/settings/:key', async (req, res) => {
-  await Setting.findOneAndDelete({ key: req.params.key })
+  await withTenant(Setting, req).findOneAndDelete({ key: req.params.key })
   res.json({ success: true })
 })
 
@@ -458,6 +484,7 @@ router.post('/tenants', requireSuperAdmin, async (req, res) => {
   const existing = await Tenant.findOne({ slug })
   if (existing) return res.status(400).json({ error: 'Tenant slug already exists' })
   const t = await Tenant.create({ name, slug })
+  resetSoleTenantCache()
   res.json(t)
 })
 
@@ -509,6 +536,7 @@ router.post('/setup/tenant-complete', requireSuperAdmin, async (req, res) => {
     const existing = await Tenant.findOne({ slug: tenant.slug })
     if (existing) return res.status(400).json({ error: 'Tenant slug already exists' })
     const newTenant = await Tenant.create({ name: tenant.name, slug: tenant.slug })
+    resetSoleTenantCache()
 
     // 2. Create Admin User
     const adminHash = await bcrypt.hash(admin.password, 10)
@@ -561,14 +589,14 @@ router.put('/interfaces/:id', async (req, res) => {
   if (tOff !== undefined) update.tOff = Number(tOff)
   if (status !== undefined) update.status = status
 
-  const iface = await Interface.findByIdAndUpdate(req.params.id, update, { new: true })
+  const iface = await withTenant(Interface, req).findByIdAndUpdate(req.params.id, update, { new: true })
   if (!iface) return res.status(404).json({ error: 'Interface not found' })
   res.json(iface)
 })
 
 // Delete interface
 router.delete('/interfaces/:id', async (req, res) => {
-  await Interface.findByIdAndDelete(req.params.id)
+  await withTenant(Interface, req).findByIdAndDelete(req.params.id)
   res.json({ success: true })
 })
 
@@ -578,7 +606,7 @@ router.post('/interfaces/:id/status', async (req, res) => {
   if (!['active', 'inactive', 'fault'].includes(status)) {
     return res.status(400).json({ error: 'Invalid status. Must be active, inactive, or fault' })
   }
-  const iface = await Interface.findByIdAndUpdate(req.params.id, { status }, { new: true })
+  const iface = await withTenant(Interface, req).findByIdAndUpdate(req.params.id, { status }, { new: true })
   if (!iface) return res.status(404).json({ error: 'Interface not found' })
   res.json(iface)
 })
@@ -587,7 +615,7 @@ router.post('/interfaces/:id/status', async (req, res) => {
 
 // List all prices
 router.get('/prices', async (req, res) => {
-  const prices = await Price.find().sort({ type: 1, weight: 1 })
+  const prices = await withTenant(Price, req).find().sort({ type: 1, weight: 1 })
   res.json(prices)
 })
 
@@ -595,14 +623,14 @@ router.get('/prices', async (req, res) => {
 router.get('/prices/lookup', async (req, res) => {
   const { type, weight } = req.query
   if (!type || !weight) return res.status(400).json({ error: 'Missing type or weight' })
-  const price = await Price.findOne({ type, weight: Number(weight) })
+  const price = await withTenant(Price, req).findOne({ type, weight: Number(weight) })
   if (!price) return res.status(404).json({ error: 'Price not found for this type/weight' })
   res.json(price)
 })
 
 // Get single price
 router.get('/prices/:id', async (req, res) => {
-  const price = await Price.findById(req.params.id)
+  const price = await withTenant(Price, req).findById(req.params.id)
   if (!price) return res.status(404).json({ error: 'Price not found' })
   res.json(price)
 })
@@ -614,10 +642,10 @@ router.post('/prices', async (req, res) => {
   if (weight == null || weight <= 0) return res.status(400).json({ error: 'Invalid weight' })
 
   // Check for duplicate type+weight
-  const existing = await Price.findOne({ type, weight: Number(weight) })
+  const existing = await withTenant(Price, req).findOne({ type, weight: Number(weight) })
   if (existing) return res.status(400).json({ error: `Preço para ${type} ${weight}kg já existe` })
 
-  const price = await Price.create({
+  const price = await withTenant(Price, req).create({
     type,
     weight: Number(weight),
     duration: duration != null ? Number(duration) : null,
@@ -634,13 +662,13 @@ router.put('/prices/:id', async (req, res) => {
   
   // Check if changing type+weight would conflict with existing
   if (type || weight) {
-    const current = await Price.findById(req.params.id)
+    const current = await withTenant(Price, req).findById(req.params.id)
     if (!current) return res.status(404).json({ error: 'Price not found' })
     
     const newType = type || current.type
     const newWeight = weight != null ? Number(weight) : current.weight
     
-    const conflict = await Price.findOne({ 
+    const conflict = await withTenant(Price, req).findOne({ 
       type: newType, 
       weight: newWeight, 
       _id: { $ne: req.params.id } 
@@ -656,14 +684,14 @@ router.put('/prices/:id', async (req, res) => {
   if (cardPrice !== undefined) update.cardPrice = Number(cardPrice)
   if (mobilePrice !== undefined) update.mobilePrice = Number(mobilePrice)
 
-  const price = await Price.findByIdAndUpdate(req.params.id, update, { new: true })
+  const price = await withTenant(Price, req).findByIdAndUpdate(req.params.id, update, { new: true })
   if (!price) return res.status(404).json({ error: 'Price not found' })
   res.json(price)
 })
 
 // Delete price
 router.delete('/prices/:id', async (req, res) => {
-  await Price.findByIdAndDelete(req.params.id)
+  await withTenant(Price, req).findByIdAndDelete(req.params.id)
   res.json({ success: true })
 })
 
@@ -671,7 +699,7 @@ router.delete('/prices/:id', async (req, res) => {
 
 // List peripherals
 router.get('/peripherals', async (req, res) => {
-  const peripherals = await Peripheral.find().sort({ type: 1, name: 1 })
+  const peripherals = await withTenant(Peripheral, req).find().sort({ type: 1, name: 1 })
   res.json(peripherals)
 })
 
@@ -680,7 +708,7 @@ router.post('/peripherals', async (req, res) => {
   const { name, type, enabled, protocol, address, brand, model, serialNumber, status, image } = req.body
   if (!name || !type) return res.status(400).json({ error: 'Missing required fields' })
   
-  const peripheral = await Peripheral.create({
+  const peripheral = await withTenant(Peripheral, req).create({
     name, type, enabled, protocol, address, brand, model, serialNumber, status, image
   })
   res.json(peripheral)
@@ -702,14 +730,14 @@ router.put('/peripherals/:id', async (req, res) => {
   if (status !== undefined) update.status = status
   if (image !== undefined) update.image = image
   
-  const peripheral = await Peripheral.findByIdAndUpdate(req.params.id, update, { new: true })
+  const peripheral = await withTenant(Peripheral, req).findByIdAndUpdate(req.params.id, update, { new: true })
   if (!peripheral) return res.status(404).json({ error: 'Peripheral not found' })
   res.json(peripheral)
 })
 
 // Delete peripheral
 router.delete('/peripherals/:id', async (req, res) => {
-  await Peripheral.findByIdAndDelete(req.params.id)
+  await withTenant(Peripheral, req).findByIdAndDelete(req.params.id)
   res.json({ success: true })
 })
 
@@ -886,7 +914,7 @@ router.get('/analytics/revenue', async (req, res) => {
   const thirtyDaysAgo = new Date()
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
 
-  const stats = await Sale.aggregate([
+  const stats = await withTenant(Sale, req).aggregate([
     { $match: { 
         tenantId: new mongoose.Types.ObjectId(req.tenantId), 
         createdAt: { $gte: thirtyDaysAgo } 
@@ -909,7 +937,7 @@ router.get('/analytics/revenue', async (req, res) => {
  */
 router.get('/analytics/machines', async (req, res) => {
   const SaleT = withTenant(Sale, req)
-  const stats = await Sale.aggregate([
+  const stats = await withTenant(Sale, req).aggregate([
     { $match: { tenantId: new mongoose.Types.ObjectId(req.tenantId), machineId: { $ne: null } } },
     { $group: {
         _id: "$machineId",

@@ -27,8 +27,18 @@ const dayCloseSchema = new Schema({
   countedDenominations: [denominationSchema],
 
   // ── Cash management ──
-  amountToBank: { type: Number, required: true }, // cash removed for bank deposit
-  floatLeft:    { type: Number, required: true },  // cash left to start next session
+  // Not `required`: a Z-report pushed up from a kiosk (`/sync/push/day-close`) is
+  // generated from local sales and has no operator cash-handling input, so a
+  // required field here rejected every offline close.
+  amountToBank: { type: Number, default: 0 }, // cash removed for bank deposit
+  floatLeft:    { type: Number, default: 0 },  // cash left to start next session
+
+  // ── Origin ──
+  source: { type: String, enum: ['dashboard', 'kiosk'], default: 'dashboard' },
+  totalRecharges: { type: Number, default: 0 },
+  salesCount: { type: Number, default: 0 },
+  // `metadata.localId` dedupes retried kiosk pushes, same as Sale.
+  metadata: { type: Schema.Types.Mixed },
 
   // ── Opening state (carried from previous close for reference) ──
   openingMechanismCoins: [denominationSchema], // mechanism inventory at session start
