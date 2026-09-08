@@ -102,12 +102,51 @@ router.post('/push/card', async (req, res) => {
     const data = req.body
     const CardT = withTenant(Card, req)
 
+    if (data.create) {
+      // A card sold entirely offline (the kiosk's local engine, no
+      // connectivity at time of purchase) has no server row at all yet — a
+      // sale alone never creates one. Idempotent on code: a retried push
+      // (popup reopened, a timeout) must not mint a second card for the same
+      // physical card that was already dispensed.
+      if (!data.code) return res.status(400).json({ success: false, error: 'code is required to create a card' })
+      // The kiosk generates this id itself and asks the DOCUMENT to be
+      // created there, so the local and server copies are the SAME row from
+      // the moment it exists — no reconciliation needed on a later pull.
+      const explicitId = /^[a-f0-9]{24}$/i.test(String(data.id || '')) ? data.id : undefined
+      const created = await CardT.findOneAndUpdate(
+        { code: data.code },
+        {
+          $setOnInsert: {
+            ...(explicitId ? { _id: explicitId } : {}),
+            code: data.code,
+            balance: roundMoney(Math.max(0, Number(data.balance) || 0)),
+            status: data.status === 'active' ? 'active' : 'pending_write',
+            name: data.name || '', email: data.email || '', phone: data.phone || '', contribuinte: data.contribuinte || ''
+          }
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      )
+      return res.json({ success: true, id: created._id, status: 'created', balance: created.balance })
+    }
+
     const card = data.code
       ? await CardT.findOne({ code: data.code })
       : await CardT.findById(data.id)
 
     if (!card) {
       return res.status(404).json({ success: false, error: 'Card not found' })
+    }
+
+    if (data.status !== undefined && data.delta === undefined && data.balance === undefined) {
+      // The ONLY status transition a kiosk may push is finishing a write it
+      // just performed — pending_write -> active. Never blocked -> active: a
+      // compromised kiosk credential re-activating a card an admin blocked
+      // (lost/stolen) would silently defeat the whole point of blocking it.
+      if (data.status !== 'active' || card.status !== 'pending_write') {
+        return res.status(409).json({ success: false, error: 'Card is not awaiting activation' })
+      }
+      const updated = await CardT.findByIdAndUpdate(card._id, { $set: { status: 'active', updatedAt: new Date() } }, { new: true })
+      return res.json({ success: true, id: updated._id, status: updated.status })
     }
 
     if (data.delta !== undefined) {

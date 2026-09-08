@@ -16,7 +16,73 @@
  */
 const EventEmitter = require('events')
 const { SerialPort } = require('serialport')
-const { ReadlineParser } = require('@serialport/parser-readline')
+
+// ─── RFID: MIFARE Classic over a PC/SC-style pseudo-APDU reader ────────────
+// Mirrors backend/src/services/middleware.js's RFID section exactly — same
+// command bytes, same authenticate-before-every-block requirement, same
+// "read back what we wrote" write verification. See that file's header
+// comment for the full reasoning and, importantly, its confidence note:
+// these commands are the standard PC/SC Part 3 family (Get UID, Load Key,
+// General Authenticate, Read/Update Binary) supported by most USB CCID
+// contactless readers, but have NOT been exercised against a real reader in
+// either place — confirm against the actual reader's datasheet before
+// relying on this in production.
+const MIFARE_BLOCK_SIZE = 16
+const MIFARE_DEFAULT_KEY = Buffer.from('FFFFFFFFFFFF', 'hex')
+const MIFARE_KEY_SLOT = 0x00
+const MIFARE_KEY_TYPE_A = 0x60
+const RFID_POLL_INTERVAL_MS = 500
+
+/** Data block numbers on a MIFARE Classic card, skipping sector trailers (every 4th: 3, 7, 11, …). */
+function dataBlockNumbers(count, maxBlock = 63) {
+  const blocks = []
+  for (let b = 1; b <= maxBlock && blocks.length < count; b++) {
+    if ((b + 1) % 4 === 0) continue
+    blocks.push(b)
+  }
+  return blocks
+}
+
+/** PC/SC-style readers answer with a two-byte status word; 0x9000 means OK. */
+function isPcscSuccess(resp) {
+  if (!resp || resp.length < 2) return false
+  return resp[resp.length - 2] === 0x90 && resp[resp.length - 1] === 0x00
+}
+
+/**
+ * One command in flight at a time on an RFID port, matching how a PC/SC
+ * reader is actually addressed: it only ever speaks in reply to something we
+ * just asked it. Every byte it sends is therefore the answer to whichever
+ * request is currently queued — never a spontaneous "card tapped" push — so
+ * this must be the ONLY listener on the port's `data` event.
+ */
+class RfidLink {
+  constructor(port) {
+    this.port = port
+    this.queue = Promise.resolve()
+  }
+
+  request(command, timeoutMs = 500) {
+    const run = () => new Promise((resolve, reject) => {
+      let settled = false
+      const cleanup = () => { clearTimeout(timer); this.port.removeListener('data', onData) }
+      const onData = (data) => { if (settled) return; settled = true; cleanup(); resolve(data) }
+      const timer = setTimeout(() => {
+        if (settled) return
+        settled = true
+        cleanup()
+        resolve(null) // silence on a poll tick is routine, not fatal — caller decides
+      }, timeoutMs)
+      this.port.on('data', onData)
+      this.port.write(command, (err) => {
+        if (err && !settled) { settled = true; cleanup(); reject(err) }
+      })
+    })
+    const result = this.queue.then(run, run)
+    this.queue = result.then(() => {}, () => {})
+    return result
+  }
+}
 
 // ─── ccTalk framing (see https://cctalk.org — Part 1, section 4) ───────────
 const CC_HOST = 1
@@ -92,6 +158,7 @@ class EmbeddedHardwareAgent extends EventEmitter {
     this.config = config || { peripherals: {} }
     this.ports = {} // Maps type -> SerialPort object
     this.links = {} // Maps type -> CcTalkLink (bill_acceptor, coin_acceptor, hopper)
+    this.rfidLinks = {} // Maps type -> RfidLink (rfid_reader)
     this.pollTimers = {}
     this.peripheralsStatus = {} // Maps type -> { connected: bool, error: string, lastError: string }
     this.reconnectTimer = null
@@ -122,6 +189,7 @@ class EmbeddedHardwareAgent extends EventEmitter {
     }
     this.ports = {}
     this.links = {}
+    this.rfidLinks = {}
   }
 
   async initializePeripherals() {
@@ -204,8 +272,12 @@ class EmbeddedHardwareAgent extends EventEmitter {
 
   setupParser(type, port, config) {
     if (type === 'rfid_reader') {
-      const parser = port.pipe(new ReadlineParser({ delimiter: '\r\n' }))
-      parser.on('data', (line) => this.handleIncomingData(type, line.trim()))
+      // A PC/SC-style reader only speaks when asked, so `RfidLink` is the ONLY
+      // listener on this port's `data` event — see its class comment. Nothing
+      // else may attach a listener here, or a command's own reply gets
+      // reinterpreted as a spontaneous tap.
+      this.rfidLinks[type] = new RfidLink(port)
+      this.startRfidPolling(type)
       return
     }
     if (type === 'coin_acceptor' || type === 'bill_acceptor') {
@@ -268,9 +340,174 @@ class EmbeddedHardwareAgent extends EventEmitter {
     }
   }
 
-  handleIncomingData(type, data) {
-    if (!data) return
-    if (type === 'rfid_reader') this.emit('rfid:card_detected', { cardCode: data })
+  /**
+   * Read the card's factory UID via the standard PC/SC "Get Data" command.
+   * Used only to detect that a (possibly different) card is now present —
+   * never trusted as identity, since a cheap clone card can present any UID
+   * it likes. The card's real identity is the code WE write into its data
+   * blocks (see `readCardIdentity`), which requires the MIFARE key to forge.
+   */
+  async getCardUid(type) {
+    const link = this.rfidLinks[type]
+    if (!link) return null
+    try {
+      const resp = await link.request(Buffer.from([0xFF, 0xCA, 0x00, 0x00, 0x00]), 300)
+      if (!resp || !isPcscSuccess(resp) || resp.length <= 2) return null
+      return resp.slice(0, -2).toString('hex')
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Authenticate to the sector containing `blockNumber` with the factory
+   * default key. Every card this system dispenses is unformatted stock, so
+   * this is the only key ever needed. Throws (the safe outcome) for a card
+   * that isn't ours — a foreign card, or one formatted with a different key.
+   */
+  async authenticateBlock(type, blockNumber) {
+    const link = this.rfidLinks[type]
+    const loadKey = await link.request(
+      Buffer.from([0xFF, 0x82, 0x00, MIFARE_KEY_SLOT, MIFARE_DEFAULT_KEY.length, ...MIFARE_DEFAULT_KEY]), 300
+    )
+    if (!isPcscSuccess(loadKey)) throw new Error('Failed to load the authentication key')
+
+    const auth = await link.request(
+      Buffer.from([0xFF, 0x86, 0x00, 0x00, 0x05, 0x01, 0x00, blockNumber, MIFARE_KEY_TYPE_A, MIFARE_KEY_SLOT]), 300
+    )
+    if (!isPcscSuccess(auth)) {
+      throw new Error(`Authentication failed for block ${blockNumber} — not one of our cards, or a different key`)
+    }
+  }
+
+  /** Read data from RFID card sectors — skips sector trailers (keys/access bits, not card data). */
+  async readRFIDSectors(type, maxBlocks = 10) {
+    const link = this.rfidLinks[type]
+    if (!link) throw new Error('No RFID reader connected')
+    const blocks = []
+    for (const blockNumber of dataBlockNumbers(maxBlocks)) {
+      await this.authenticateBlock(type, blockNumber)
+      const resp = await link.request(Buffer.from([0xFF, 0xB0, 0x00, blockNumber, MIFARE_BLOCK_SIZE]), 500)
+      if (!resp || resp.length < MIFARE_BLOCK_SIZE) {
+        throw new Error(`No data back for block ${blockNumber} after a successful authentication`)
+      }
+      // A READ BINARY reply conventionally carries a trailing 2-byte status
+      // word, but not every reader/driver appends one over a plain
+      // byte-stream transport — strip it only when the length implies one is
+      // actually present.
+      const hasStatusWord = resp.length === MIFARE_BLOCK_SIZE + 2
+      if (hasStatusWord && !isPcscSuccess(resp)) {
+        throw new Error(`RFID reader rejected the read of block ${blockNumber}`)
+      }
+      blocks.push(resp.slice(0, MIFARE_BLOCK_SIZE))
+    }
+    return Buffer.concat(blocks).toString('utf-8').replace(/\0/g, '')
+  }
+
+  /** Write data to RFID card sectors, one authenticated block at a time. */
+  async writeRFIDSectors(type, dataString) {
+    const link = this.rfidLinks[type]
+    if (!link) throw new Error('No RFID reader connected')
+
+    const dataBuffer = Buffer.from(dataString, 'utf-8')
+    const blocks = []
+    for (let i = 0; i < dataBuffer.length; i += MIFARE_BLOCK_SIZE) {
+      const block = dataBuffer.slice(i, i + MIFARE_BLOCK_SIZE)
+      blocks.push(Buffer.concat([block, Buffer.alloc(MIFARE_BLOCK_SIZE - block.length)]))
+    }
+
+    const targets = dataBlockNumbers(blocks.length)
+    if (targets.length < blocks.length) {
+      throw new Error(`Card data is ${dataBuffer.length} bytes and needs ${blocks.length} blocks, but only ${targets.length} usable data blocks are available`)
+    }
+
+    for (let i = 0; i < blocks.length; i++) {
+      const blockNumber = targets[i]
+      await this.authenticateBlock(type, blockNumber)
+      const writeCommand = Buffer.concat([Buffer.from([0xFF, 0xD6, 0x00, blockNumber, MIFARE_BLOCK_SIZE]), blocks[i]])
+      const resp = await link.request(writeCommand, 500)
+      if (!isPcscSuccess(resp)) {
+        throw new Error(`RFID reader rejected the write to block ${blockNumber}` + (resp ? ` (SW=${resp.slice(-2).toString('hex')})` : ' (no response)'))
+      }
+    }
+    return blocks.length
+  }
+
+  /**
+   * Read this card's identity as WE wrote it — the single source of truth
+   * used everywhere a card needs recognising: explicit reads, write
+   * verification, and every-day tap detection. Never guesses: a card that
+   * fails authentication, or doesn't decode to our JSON shape, throws.
+   */
+  async readCardIdentity(type, maxBlocks = 10) {
+    const dataString = await this.readRFIDSectors(type, maxBlocks)
+    let identity
+    try { identity = JSON.parse(dataString) }
+    catch { throw new Error('Card data does not decode as a WashBubbles card') }
+    if (!identity || typeof identity.code !== 'string' || !identity.code) {
+      throw new Error('Card data has no usable code')
+    }
+    return identity
+  }
+
+  /**
+   * Poll for card presence and surface taps as `rfid:card_detected`. Goes
+   * through the same request queue as every other RFID command, so a poll
+   * tick and an in-progress write/read (BuyCardModal) can never collide.
+   */
+  startRfidPolling(type) {
+    let lastUid = null
+    this.pollTimers[type] = setInterval(async () => {
+      const uid = await this.getCardUid(type)
+      if (uid === lastUid) return // no change: same card still present, or still absent
+      lastUid = uid
+      if (!uid) return // card removed
+
+      try {
+        const identity = await this.readCardIdentity(type)
+        this.emit('rfid:card_detected', { cardCode: identity.code })
+      } catch (err) {
+        // Not one of our cards — blank, foreign, or a clone that can't pass
+        // authentication. A UID-prefixed id can never collide with a real
+        // generated code, so it flows through the existing "card not found"
+        // path with no other change needed — nothing is auto-registered.
+        console.warn(`[HW] Unrecognised card on ${type} (uid ${uid}): ${err.message}`)
+        this.emit('rfid:card_detected', { cardCode: `UID:${uid}` })
+      }
+    }, RFID_POLL_INTERVAL_MS)
+  }
+
+  /** Write a card's data (called from BuyCardModal's write flow) and read it back to verify. */
+  async writeCardData(cardData) {
+    const type = 'rfid_reader'
+    if (!this.rfidLinks[type]) throw new Error('RFID reader not available')
+
+    const dataString = JSON.stringify({
+      code: cardData.code || '', balance: cardData.balance || 0, name: cardData.name || '',
+      email: cardData.email || '', phone: cardData.phone || '', contribuinte: cardData.contribuinte || ''
+    })
+    const written = await this.writeRFIDSectors(type, dataString)
+
+    // Each block write was ACK'd, but that only proves the reader accepted
+    // the command — not that the full concatenated JSON round-trips. This is
+    // the last check before the customer is told their card is ready.
+    let confirmed
+    try { confirmed = await this.readCardIdentity(type) }
+    catch (err) { throw new Error(`Card was written but does not read back correctly: ${err.message}`) }
+    if (confirmed.code !== cardData.code) {
+      throw new Error(`Card was written but reads back as a different code (wrote ${cardData.code}, read ${confirmed.code})`)
+    }
+
+    this.emit('card:written', { cardData, blocks: written })
+    return { success: true, cardCode: cardData.code, blocksWritten: written }
+  }
+
+  /** Explicit on-demand read (distinct from the passive tap-detection poll). */
+  async readCardData() {
+    const type = 'rfid_reader'
+    if (!this.rfidLinks[type]) throw new Error('RFID reader not available')
+    const cardData = await this.readCardIdentity(type)
+    return { success: true, cardData }
   }
 
   handleRawData(type, data) {

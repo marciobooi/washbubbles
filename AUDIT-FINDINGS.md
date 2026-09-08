@@ -826,26 +826,15 @@ be topped up or spent against, because the local SQLite `cards` table had no
 
 ### Deliberately deferred — needs a decision or more work, not a quick fix
 
-- [?] **Multi-item cart checkout has no local equivalent.** `App.jsx`'s real
-  checkout path (`handlePay` → `PaymentContext` → `api.gatewayCashPay` /
-  `/pos/cards/:code/spend`) is a gateway-validated, atomic, multi-item flow
-  (`backend/src/routes/gateways.js` — validate everything, then apply
-  everything). `pos-engine.processSale` only ever handles one machine at a
-  time with no recharge-bundling. These are not equivalent, and porting the
-  gateway's atomicity into the local engine is real new work, not a rewire —
-  left for a follow-up round rather than rushed into this one.
-- [?] **RFID hardware model mismatch, same one flagged in Round 5.** The
-  kiosk's local `hardware-agent.cjs` assumes a simple read-only reader that
-  broadcasts a UID line over serial (`ReadlineParser` → raw string → card
-  code, no write capability at all). The server-side implementation built in
-  Round 5 assumes a PC/SC read/write reader doing MIFARE-key authentication.
-  These are two different classes of physical hardware, not two code paths
-  for the same one — this can't be reconciled by editing either file until
-  the actual reader model is confirmed against its datasheet (Round 5's
-  confidence note, still unresolved).
-- [?] **`BuyCardModal` (new card purchase/write flow)** depends on that same
-  write-capable RFID path, which doesn't exist locally — blocked on the same
-  hardware question above, not attempted separately.
+- [x] **Multi-item cart checkout local equivalent — done in Round 11.**
+  `pos-engine.processCart` now handles several machines and/or recharges in
+  one atomic batch, wired into `App.jsx`. See Round 11.
+- [x] **RFID hardware model mismatch — resolved in Round 11**, by standardising
+  on MIFARE (the user's explicit call, given a genuine hardware ambiguity —
+  see Round 11). The kiosk's local `hardware-agent.cjs` now does the same
+  PC/SC read/write authenticated exchange the server side already did.
+- [x] **`BuyCardModal` (new card purchase/write flow) — done in Round 11**,
+  now that the write-capable RFID path exists locally.
 - [!] **Kiosk day-close still requires connectivity**, by the design decided
   in Round 7 — it calls `/pos/day-close/summary` / `/pos/day-close` directly
   with no local fallback. Left as-is: it's a rare, staff-initiated action
@@ -863,14 +852,10 @@ be topped up or spent against, because the local SQLite `cards` table had no
   money is tracked and safe — but the UX looks stalled in the meantime. Purely
   a display gap, not a correctness one; left for a follow-up rather than
   folded into this round's money-path change.
-- [ ] **Card payment through the local engine, and RFID auto-pay, are not
-  wired to the UI at all yet** — this round only did cash. `topUpCard` and
-  `processSale`'s card branch are guarded and safe to call (Phase 2 above),
-  and `hardwareAgent.cjs` already emits `rfid:card_detected` over IPC, but
-  `CartModal`'s card auto-pay (`handleCardPayAutomatic`) still listens for
-  card detection over the legacy remote websocket, same as the cash
-  auto-detect discussed above. A card-based offline purchase does not work
-  yet even at a site with the embedded RFID reader wired up.
+- [x] **Card payment through the local engine, and RFID auto-pay — done in
+  Round 11.** `CartModal` now also listens for the embedded agent's own
+  `card:loaded`/`card:blocked` over IPC, and `App.jsx`'s card branch settles
+  locally the same way the cash branch does.
 - [ ] **No UI action gives cash back.** `pos-engine.dispenseChange(amount)` /
   the `hw:dispenseChange` IPC call exist and work, but nothing calls them —
   unspent local session credit just sits there for the customer's next
@@ -997,6 +982,80 @@ QR/code popup for time-limited guest WiFi, backed by a UniFi controller.
   them: `startTestDb`/`stopTestDb` weren't reentrant, so a second test file
   in the same run could silently break a previous file's DB connection —
   now guarded on `mongoose.connection.readyState`. 74 backend tests total.
+
+---
+
+## Round 11 — MIFARE locally, multi-item cart, and the card lifecycle offline
+
+Requested directly: the two biggest remaining gaps from Round 8 — no local
+multi-item cart, and the RFID hardware mismatch blocking card-based offline
+payment and new-card sales. The RFID question was a genuine ambiguity (two
+different hardware classes, flagged since Round 5); asked, and the answer was
+to standardise on MIFARE, matching what the server side already assumed.
+
+### MIFARE read/write, locally
+
+- [x] `pos-client/electron/hardware-agent.cjs` no longer treats the RFID
+  reader as a simple UID-broadcast device (`ReadlineParser` over a line
+  protocol). It now does the same PC/SC pseudo-APDU exchange the server side
+  (`backend/src/services/middleware.js`, Round 5) already does: Get UID,
+  Load Key + General Authenticate before every block, Read/Write Binary,
+  read-back verification after every write. `RfidLink` is the only listener
+  on the port's `data` event, so a poll tick and an in-progress write can
+  never be misread as each other — same reasoning as the ccTalk link.
+  **Carries the exact same confidence caveat as the server-side original**:
+  these are the standard PC/SC Part 3 commands most USB CCID contactless
+  readers speak, but neither implementation has been exercised against a
+  real reader. Confirm against the actual reader's datasheet before relying
+  on this in production.
+- [x] Unrecognised/blank/foreign cards surface as `UID:<hex>` through the
+  same `rfid:card_detected` event a real card uses — flows through the
+  existing "card not found" rejection with no separate code path, exactly
+  mirroring the server's approach.
+
+### Multi-item cart checkout, locally
+
+- [x] `pos-engine.processCart(items, method, cardCode, batchId)` — the local
+  equivalent of `backend/src/routes/gateways.js`'s cash/pay and card/pay:
+  several machines and/or recharges in one batch, every line validated
+  before any of them apply, one atomic balance delta for a card (not one
+  write per line), session snapshot/restore on any failure mid-batch.
+  Wired into `App.jsx`'s `handlePay` for both cash and card, alongside the
+  existing single-item fast path (kept — cheaper for the common case).
+
+### Card lifecycle, locally: buy, write, activate
+
+- [x] `pos-engine.purchaseCard` — sells a new card fully offline. Same
+  ordering the server enforces: dispense the blank card FIRST, only charge
+  once it's physically out, leave it `pending_write` (unspendable) until
+  written. `pos-engine.writeAndActivateCard` — writes the card at the reader
+  and only flips it to `active` once the reader confirms the read-back.
+  `BuyCardModal` tries both locally first, falling back to the network route
+  when there isn't enough local credit or the kiosk isn't running in Electron.
+- [x] **A real gap this surfaced, fixed alongside it**: a card created purely
+  offline had no way to ever reach the server — `/api/sync/push/card` only
+  ever updated an existing card, a sale alone doesn't create one, and the
+  kiosk's local id (a random UUID) doesn't match how MongoDB IDs look, so a
+  naive "create with a different id" would double up as a second row the
+  next time cards sync down. Fixed by generating the eventual server id
+  *locally*, in ObjectId shape (`generateObjectId()`), and having the push
+  ask the server to create the document at that exact id — local and remote
+  are the same row from the moment the card exists, no reconciliation
+  needed. `/api/sync/push/card` also gained a narrow status-push path for
+  the one transition a kiosk legitimately needs to report:
+  `pending_write → active`. Deliberately not `blocked → active` or anything
+  else — a compromised kiosk credential silently un-blocking a card an admin
+  blocked (lost/stolen) would defeat the entire point of blocking it.
+- 4 new backend tests for the create/status push paths (idempotent create,
+  missing code rejected, legitimate activation accepted, reactivating a
+  blocked card refused). 78 backend tests total.
+
+### Still open
+
+- [ ] No "give cash back" UI action, and no live on-screen session balance as
+  coins go in while offline — both display/polish gaps, not correctness
+  ones, carried over from Round 8 (see above).
+- [ ] Kiosk day-close still requires connectivity (Round 7 decision, unchanged).
 
 ---
 

@@ -5,6 +5,7 @@ import CashModal from './CashModal'
 import api from '@/services/api'
 import { toast } from '@/components/ui/Toast'
 import * as websocket from '@/services/websocket'
+import * as localApi from '@/services/local-api'
 
 export default function CartModal({ open, onClose, onPay = () => {}, onClear = () => {} }) {
   const { cart, removeFromCart, clearCart } = useCart()
@@ -128,6 +129,36 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
 
     return unsubscribe
   }, [open, total])
+
+  // Embedded hardware agent's own RFID tap, straight over IPC — no network
+  // hop, works with the kiosk fully offline. Separate from the websocket
+  // listener above (that one relays a different, legacy hardware pipeline —
+  // see AUDIT-FINDINGS.md Round 8); a site could have either, so both listen.
+  React.useEffect(() => {
+    if (!open || !localApi.isElectron) return
+    const electron = window.electronAPI
+
+    const onLoaded = ({ card }) => {
+      if (!card?.code) return
+      console.log('[CartModal] Local card detected:', card.code)
+      setDetectedCardCode(card.code)
+      toast({ title: 'Cartão detetado', variant: 'success' })
+      setTimeout(() => handleCardPayAutomatic(card.code), 500)
+    }
+    const onBlocked = ({ status }) => {
+      toast({
+        title: status === 'pending_write' ? 'Cartão ainda não ativado' : 'Cartão bloqueado',
+        description: status === 'pending_write' ? 'Insira o cartão no leitor para o ativar primeiro.' : 'Contacte o balcão.',
+        variant: 'destructive',
+      })
+    }
+    electron.onCardLoaded(onLoaded)
+    electron.onCardBlocked(onBlocked)
+    // preload exposes no removeListener — these accumulate for the life of
+    // the renderer, same as the existing onSaleCompleted/onSyncStatusChanged
+    // listeners elsewhere in this app; harmless since only one renderer ever
+    // runs at a time.
+  }, [open])
 
   async function handleCardPayAutomatic(code) {
     // Auto-pay with detected card

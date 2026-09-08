@@ -253,6 +253,63 @@ describe('WashBubbles backend', function () {
     })
   })
 
+  describe('Sync push: card creation and status (offline card purchase)', () => {
+    it('creates a card at the id the kiosk generated, and is idempotent on code', async () => {
+      const id = 'aaaaaaaaaaaaaaaaaaaaaaaa' // 24 hex chars, like a Mongo ObjectId
+      const body = { create: true, id, code: 'OFFLINE-CARD-1', balance: 5, status: 'pending_write' }
+
+      const first = await request(app).post('/api/sync/push/card')
+        .set('Authorization', `Bearer ${kioskToken}`).send(body)
+      expect(first.status).to.equal(200)
+      expect(first.body.status).to.equal('created')
+      expect(first.body.id).to.equal(id)
+      expect(first.body.balance).to.equal(5)
+
+      // Retried create (popup reopened, a timeout) must not mint a second card.
+      const retry = await request(app).post('/api/sync/push/card')
+        .set('Authorization', `Bearer ${kioskToken}`).send(body)
+      expect(retry.status).to.equal(200)
+      expect(retry.body.id).to.equal(id)
+
+      const Card = (await import('../src/models/card.js')).default
+      const count = await Card.countDocuments({ tenantId: tenant._id, code: 'OFFLINE-CARD-1' })
+      expect(count).to.equal(1)
+    })
+
+    it('refuses to create a card with no code', async () => {
+      const res = await request(app).post('/api/sync/push/card')
+        .set('Authorization', `Bearer ${kioskToken}`).send({ create: true, balance: 5 })
+      expect(res.status).to.equal(400)
+    })
+
+    it('lets the kiosk confirm pending_write -> active once the card is written', async () => {
+      const Card = (await import('../src/models/card.js')).default
+      const pending = await Card.create({ tenantId: tenant._id, code: 'WRITE-ME', balance: 5, status: 'pending_write' })
+
+      const res = await request(app).post('/api/sync/push/card')
+        .set('Authorization', `Bearer ${kioskToken}`).send({ code: 'WRITE-ME', status: 'active' })
+      expect(res.status).to.equal(200)
+      expect(res.body.status).to.equal('active')
+
+      const reloaded = await Card.findById(pending._id)
+      expect(reloaded.status).to.equal('active')
+    })
+
+    it('refuses to reactivate a blocked card via a status push', async () => {
+      // A compromised kiosk credential silently un-blocking a lost/stolen
+      // card would defeat the entire point of blocking it.
+      const Card = (await import('../src/models/card.js')).default
+      await Card.create({ tenantId: tenant._id, code: 'BLOCKED-CARD', balance: 5, status: 'blocked' })
+
+      const res = await request(app).post('/api/sync/push/card')
+        .set('Authorization', `Bearer ${kioskToken}`).send({ code: 'BLOCKED-CARD', status: 'active' })
+      expect(res.status).to.equal(409)
+
+      const reloaded = await Card.findOne({ tenantId: tenant._id, code: 'BLOCKED-CARD' })
+      expect(reloaded.status).to.equal('blocked')
+    })
+  })
+
   // The whole point of the atomic helpers in services/cardBalance.js: two kiosks
   // in the same tenant hitting one card concurrently used to both read the old
   // balance, and the second save() overwrote the first.

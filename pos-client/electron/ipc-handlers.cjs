@@ -54,6 +54,13 @@ function registerIpcHandlers(posEngine, syncEngine, hardwareAgent) {
   ipcMain.handle('pos:getTransactions', (e, limit) => posEngine.getTransactions(limit))
   ipcMain.handle('pos:getSettings', () => posEngine.getAllSettings())
   ipcMain.handle('pos:performDayClose', (e, notes) => posEngine.performDayClose(notes))
+  ipcMain.handle('pos:processCart', (e, items, method, cardCode, batchId) =>
+    posEngine.processCart(
+      Array.isArray(items) ? items : [],
+      assertMethod(method),
+      cardCode == null ? null : assertId(cardCode, 'cardCode'),
+      batchId == null ? null : String(batchId).slice(0, 128)
+    ))
   ipcMain.handle('wifi:issueVoucher', (e, batchId) => posEngine.issueWifiVoucher(assertId(batchId, 'batchId')))
 
   // ─── Card Operations ───
@@ -72,6 +79,25 @@ function registerIpcHandlers(posEngine, syncEngine, hardwareAgent) {
     return posEngine.topUpCard(cardCode, value)
   })
   ipcMain.handle('card:remove', () => posEngine.removeCard())
+  ipcMain.handle('card:purchase', (e, payload) => {
+    const inserted = assertAmount(payload?.inserted, 'inserted')
+    // Same guard as card:topUp — the renderer must not be able to sell
+    // itself a card against cash that was never physically inserted.
+    const session = posEngine.getSession()
+    const available = Math.round(((session.cashBalance || 0) + (session.bonus || 0)) * 100) / 100
+    if (inserted > available) {
+      throw new Error(`Cannot pay ${inserted.toFixed(2)} — only ${available.toFixed(2)} has been inserted`)
+    }
+    return posEngine.purchaseCard({
+      inserted,
+      customerName: payload?.customerName ? String(payload.customerName).slice(0, 200) : '',
+      customerEmail: payload?.customerEmail ? String(payload.customerEmail).slice(0, 200) : '',
+      customerPhone: payload?.customerPhone ? String(payload.customerPhone).slice(0, 50) : '',
+      customerContribuinte: payload?.customerContribuinte ? String(payload.customerContribuinte).slice(0, 50) : '',
+      batchId: payload?.batchId ? String(payload.batchId).slice(0, 128) : null
+    })
+  })
+  ipcMain.handle('card:write', (e, code) => posEngine.writeAndActivateCard(assertId(code, 'card code')))
 
   // ─── Sync Engine ───
   ipcMain.handle('sync:getStatus', () => syncEngine.getStatus())

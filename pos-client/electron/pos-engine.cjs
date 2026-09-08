@@ -6,9 +6,22 @@
  * - #7: Day Close (X/Z Report) logic
  */
 const EventEmitter = require('events')
+const crypto = require('crypto')
 const { machines, cards, sales, prices, settings, interfaces, syncQueue, session,
         dayCloses, wifiVouchers, generateId, roundMoney, runTransaction, flushSave } = require('./database.cjs')
 const unifiVoucher = require('./unifi-voucher.cjs')
+
+/**
+ * A 24-hex-char id in the same shape as a MongoDB ObjectId — used ONLY for a
+ * card created entirely offline (see `purchaseCard`). Generating the eventual
+ * server id up front, instead of a random UUID, means the sync push can ask
+ * the server to create the document AT THIS EXACT id: local and remote agree
+ * from the moment the card exists, so a later settings/cards pull merges it
+ * as the SAME row instead of a second, duplicate one under a different id.
+ */
+function generateObjectId() {
+  return crypto.randomBytes(12).toString('hex')
+}
 
 /**
  * Longest a wash/dry cycle can plausibly run before a machine still marked
@@ -254,6 +267,107 @@ class PosEngine extends EventEmitter {
     return { card, transactions: sales.getByCardCode(this.tenantId, code, 30) }
   }
 
+  /**
+   * Sell a new loyalty card, entirely offline — no card, no charge: the
+   * dispenser must actually eject a blank card BEFORE anything is booked.
+   * Mirrors the server's /pos/card/purchase, including leaving the card
+   * `pending_write` (unspendable) until it's written at the reader.
+   */
+  async purchaseCard({ inserted, customerName, customerEmail, customerPhone, customerContribuinte, batchId }) {
+    const priceRow = settings.get(this.tenantId, 'loyaltyCard.cost')
+    const creditRow = settings.get(this.tenantId, 'loyaltyCard.credit')
+    const price = roundMoney(Number(priceRow ? (priceRow.parsedValue ?? priceRow.value) : 0))
+    const credit = roundMoney(Number(creditRow ? (creditRow.parsedValue ?? creditRow.value) : 0))
+    if (!(price > 0)) throw new Error('Card purchase price not configured')
+
+    const insertedAmount = roundMoney(Number(inserted))
+    if (!Number.isFinite(insertedAmount) || insertedAmount + 0.005 < price) {
+      throw new Error(`Insufficient payment. Card costs €${price.toFixed(2)}`)
+    }
+    const changeAmount = roundMoney(insertedAmount - price)
+
+    // The customer's id, written onto the card. Random so one code never
+    // reveals another; retried until it lands on one not already taken.
+    let cardCode = ''
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const candidate = String(Math.floor(1000000000 + Math.random() * 9000000000))
+      if (!cards.getByCode(this.tenantId, candidate)) { cardCode = candidate; break }
+    }
+    if (!cardCode) throw new Error('Could not allocate a card code')
+
+    if (!this.hw) throw new Error('No card dispenser configured — cannot sell a card')
+    const dispensed = await this.hw.dispenseCard()
+    if (!dispensed) throw new Error('The card dispenser did not release a card. You have not been charged.')
+
+    // A card is physically out. From here the customer owns it, and this
+    // must not fail silently — a jam here loses a card nobody gets billed for.
+    const cardId = generateObjectId()
+    const saleId = generateId()
+    const now = new Date().toISOString()
+    runTransaction(() => {
+      cards.upsert({
+        id: cardId, local_id: null, tenant_id: this.tenantId, code: cardCode, balance: credit,
+        status: 'pending_write', name: customerName || '', email: customerEmail || '',
+        phone: customerPhone || '', contribuinte: customerContribuinte || '', metadata: null,
+        created_at: now, updated_at: now, synced: 0
+      })
+      sales.create({
+        id: saleId, local_id: saleId, tenant_id: this.tenantId, amount: price,
+        items: [{ type: 'card_purchase', amount: price, cardCode }], type: 'card_purchase', method: 'cash',
+        batch_id: batchId || null, card_id: cardId, card_code: cardCode,
+        inserted: insertedAmount, change_amount: changeAmount
+      })
+    })
+    syncQueue.push('sale', saleId, 'create', {
+      local_id: saleId, tenant_id: this.tenantId, amount: price, type: 'card_purchase', method: 'cash',
+      card_code: cardCode, batch_id: batchId || null, inserted: insertedAmount, change_amount: changeAmount
+    }, 1)
+    // `create: true` + this exact id tells the server to create the card AT
+    // this id rather than treat a not-found as an error — see
+    // `generateObjectId`'s comment for why the id has to match up front.
+    syncQueue.push('card', cardId, 'create', {
+      id: cardId, code: cardCode, create: true, balance: credit, status: 'pending_write',
+      name: customerName || '', email: customerEmail || '', phone: customerPhone || '',
+      contribuinte: customerContribuinte || '', localId: saleId
+    }, 2)
+
+    let changeDispensed = false
+    if (changeAmount > 0) {
+      const result = await this.dispenseChange(changeAmount)
+      changeDispensed = Boolean(result && result.success)
+    }
+    flushSave()
+
+    return {
+      success: true, card: cards.getByCode(this.tenantId, cardCode),
+      change: changeAmount, changeDispensed, message: 'Insira o cartão no leitor para o activar.'
+    }
+  }
+
+  /**
+   * Write a purchased card's identity onto the physical card and, only once
+   * the reader confirms the write, flip it from pending_write to active.
+   * Mirrors the server's /pos/card/write/:code — the card stays pending on
+   * any failure so the customer can retry rather than losing what they paid for.
+   */
+  async writeAndActivateCard(code) {
+    const card = cards.getByCode(this.tenantId, code)
+    if (!card) throw new Error('Card not found')
+    if (card.status === 'blocked') throw new Error('Card is blocked')
+    if (!this.hw) throw new Error('No RFID reader configured')
+
+    await this.hw.writeCardData({
+      code: card.code, balance: card.balance, name: card.name,
+      email: card.email, phone: card.phone, contribuinte: card.contribuinte
+    })
+
+    cards.upsert({ ...card, status: 'active', updated_at: new Date().toISOString(), synced: 0 })
+    syncQueue.push('card', card.id, 'update', { id: card.id, code: card.code, status: 'active' }, 2)
+    flushSave()
+
+    return { success: true, card: cards.getByCode(this.tenantId, code), message: 'Cartão activado.' }
+  }
+
   topUpCard(code, amount) {
     const card = cards.getByCode(this.tenantId, code)
     assertCardSpendable(card)
@@ -337,6 +451,129 @@ class PosEngine extends EventEmitter {
     if (iface && this.hw) this.hw.activateMachine(machine, iface)
     this.persistSession(); flushSave(); this.emit('sale:completed', { sale: { id: saleId, amount: price }, machine: machines.getById(machineId) }); this.emit('session:updated', this.getSession())
     return { success: true, saleId, machine: machines.getById(machineId) }
+  }
+
+  /**
+   * Multi-item checkout — several machines and/or card recharges in one
+   * batch — the local equivalent of the server's cash/pay and card/pay
+   * gateways (backend/src/routes/gateways.js). Validates every line before
+   * applying any of them, exactly like those routes: a bad line partway
+   * through must never leave a partial charge with no matching wash, or a
+   * recharge credited with nothing to show for it.
+   */
+  processCart(items, method, cardCode, batchId) {
+    const isRecharge = (i) => i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge'))
+    const rechargeLines = (items || []).filter(isRecharge).map((it) => ({
+      amount: roundMoney(Number(it.amount ?? it.price ?? 0)), item: it
+    }))
+    if (rechargeLines.some((l) => !(l.amount > 0))) throw new Error('Invalid recharge amount')
+    const rechargeTotal = roundMoney(rechargeLines.reduce((s, l) => s + l.amount, 0))
+
+    // Validate every machine line up front — a machine taken by another
+    // customer between "open cart" and "pay" must reject the WHOLE batch,
+    // not silently charge for the ones that were still free.
+    const resolved = (items || []).filter((i) => !isRecharge(i)).map((it) => {
+      const machineId = it._id || it.id
+      const machine = machines.getById(machineId)
+      if (!machine) throw new Error(`Machine not found: ${machineId}`)
+      if (machine.status === 'working') throw new Error(`${machine.name || 'Máquina'} já em uso`)
+      const price = roundMoney(Number(it.price ?? it.amount ?? 0))
+      if (!(price >= 0)) throw new Error('Invalid sale amount')
+      return { machine, price, item: it }
+    })
+    const machineTotal = roundMoney(resolved.reduce((s, l) => s + l.price, 0))
+    const total = roundMoney(machineTotal + rechargeTotal)
+
+    let card = null
+    if (cardCode) { card = cards.getByCode(this.tenantId, cardCode); assertCardSpendable(card) }
+
+    if (method === 'card') {
+      if (!card) throw new Error('Card not found')
+      const available = roundMoney((card.balance || 0) + rechargeTotal)
+      if (available < machineTotal) throw new Error('Insufficient balance')
+    } else {
+      // Recharges are always paid for with cash physically inserted this
+      // session — they can never themselves be funded by the card they credit.
+      if (roundMoney(this.sessionState.cashBalance) < rechargeTotal) throw new Error('Insufficient cash for recharge')
+      if (roundMoney(this.sessionState.credits) < total) throw new Error('Insufficient credits')
+    }
+
+    const sessionBefore = { ...this.sessionState }
+    const saleRows = []
+    let cardDelta = 0
+    try {
+      runTransaction(() => {
+        if (method === 'card') {
+          // One net delta for the whole batch — matches the server's
+          // atomic $inc, so a card never sits mid-batch at a balance that
+          // reflects only half of what was just charged.
+          cardDelta = roundMoney(rechargeTotal - machineTotal)
+          cards.updateBalance(card.id, roundMoney((card.balance || 0) + cardDelta))
+          if (this.sessionState.cardCode === cardCode) this.sessionState.cardBalance = roundMoney((card.balance || 0) + cardDelta)
+        } else {
+          this.sessionState.cashBalance = roundMoney(this.sessionState.cashBalance - rechargeTotal)
+          // Machine total spends session credits the same combined
+          // card-then-cash way a single-item cash sale already does.
+          let remaining = machineTotal
+          if (this.sessionState.hasCard && this.sessionState.cardBalance > 0) {
+            const fromCard = Math.min(this.sessionState.cardBalance, remaining)
+            if (fromCard > 0) {
+              const sessionCard = cards.getByCode(this.tenantId, this.sessionState.cardCode)
+              if (sessionCard) {
+                cards.updateBalance(sessionCard.id, roundMoney(sessionCard.balance - fromCard))
+                cardDelta = roundMoney(cardDelta - fromCard)
+              }
+              this.sessionState.cardBalance = roundMoney(this.sessionState.cardBalance - fromCard)
+              remaining = roundMoney(remaining - fromCard)
+            }
+          }
+          this.sessionState.cashBalance = roundMoney(this.sessionState.cashBalance - remaining)
+          if (this.sessionState.cashBalance < -0.01) throw new Error('Insufficient cash balance')
+          this.updateCredits()
+        }
+
+        for (const line of rechargeLines) {
+          const saleId = generateId()
+          sales.create({
+            id: saleId, local_id: saleId, tenant_id: this.tenantId, amount: line.amount,
+            items: line.item, type: 'recharge', method, batch_id: batchId || null,
+            card_code: cardCode || null, inserted: line.amount, change_amount: 0
+          })
+          saleRows.push({ id: saleId, amount: line.amount, type: 'recharge' })
+        }
+        for (const { machine, price, item } of resolved) {
+          const saleId = generateId()
+          sales.create({
+            id: saleId, local_id: saleId, tenant_id: this.tenantId, machine_id: machine.id, amount: price,
+            items: [item], type: 'payment', method, batch_id: batchId || null, card_code: cardCode || null,
+            inserted: 0, change_amount: 0
+          })
+          saleRows.push({ id: saleId, amount: price, type: 'payment', machineId: machine.id })
+          machines.updateStatus(machine.id, 'working', 'Ocupado'); machines.incrementCycle(machine.id)
+        }
+      })
+    } catch (err) {
+      this.sessionState = sessionBefore
+      this.emit('session:updated', this.getSession())
+      throw err
+    }
+
+    for (const row of saleRows) {
+      syncQueue.push('sale', row.id, 'create', {
+        local_id: row.id, tenant_id: this.tenantId, machine_id: row.machineId || null, amount: row.amount,
+        type: row.type, method, batch_id: batchId || null, card_code: cardCode || null
+      }, 1)
+    }
+    if (card && cardDelta !== 0) this.queueCardDelta({ id: card.id, code: card.code }, cardDelta, batchId || generateId())
+    for (const { machine } of resolved) {
+      syncQueue.push('machine', machine.id, 'update', { id: machine.id, status: 'working', cycle: (machine.cycle || 0) + 1 }, 3)
+      const iface = machine.interface_id ? interfaces.getById(machine.interface_id) : null
+      if (iface && this.hw) this.hw.activateMachine(machine, iface)
+    }
+
+    this.persistSession(); flushSave()
+    this.emit('session:updated', this.getSession())
+    return { success: true, sales: saleRows, card: card ? cards.getByCode(this.tenantId, cardCode) : null }
   }
 
   // ─── Day Close (X/Z Report) (#7) ───

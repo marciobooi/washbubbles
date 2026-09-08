@@ -6,6 +6,7 @@ import { Label } from './ui/label'
 import { CreditCard, User, Mail, Phone, FileText, Banknote, CheckCircle2 } from 'lucide-react'
 import { toast } from './ui/Toast'
 import api from '@/services/api'
+import * as localApi from '@/services/local-api'
 
 const STEPS = {
   FORM: 'form',
@@ -43,6 +44,9 @@ export default function BuyCardModal({ open, onClose }) {
   
   // Purchase result
   const [purchasedCard, setPurchasedCard] = useState(null)
+  // Whether this purchase went through the local engine (no network) — decides
+  // which path the write step retries against.
+  const [purchasedLocally, setPurchasedLocally] = useState(false)
   // Set when writing the card at the reader fails. The customer has already paid,
   // so the step must stay open for a retry rather than reporting success.
   const [writeError, setWriteError] = useState(null)
@@ -93,6 +97,7 @@ export default function BuyCardModal({ open, onClose }) {
     setInsertedAmount(0)
     setChangeAmount(0)
     setPurchasedCard(null)
+    setPurchasedLocally(false)
     setWriteError(null)
     setLoading(false)
   }
@@ -126,12 +131,44 @@ export default function BuyCardModal({ open, onClose }) {
     setStep(STEPS.DISPENSING)
 
     try {
+      // Offline-first: if the kiosk's local session already holds enough real
+      // cash credit, sell the card entirely locally — dispense, charge, and
+      // leave it pending_write, with zero dependency on the network. Falls
+      // through to the remote route otherwise (no local credit yet, or not
+      // running in Electron at all).
+      if (localApi.isElectron) {
+        const session = await localApi.getSession()
+        if (session && session.credits >= cardPrice) {
+          const local = await localApi.purchaseCard({
+            inserted: amount,
+            customerName: formData.name,
+            customerEmail: formData.email,
+            customerPhone: formData.phone,
+            customerContribuinte: formData.contribuinte,
+            batchId: `BATCH-${Date.now()}`
+          })
+          setPurchasedCard(local.card)
+          setPurchasedLocally(true)
+          if (local.change > 0) {
+            toast({
+              title: `Troco: €${local.change.toFixed(2)}`,
+              description: local.changeDispensed ? 'Recolha o seu troco' : 'Dispensador de troco não disponível',
+              variant: local.changeDispensed ? 'success' : 'warning',
+            })
+          }
+          setStep(STEPS.INSERT_CARD)
+          toast({ title: 'Cartão dispensado!', description: local.message, variant: 'success' })
+          return
+        }
+      }
+
       // Get kiosk API key
-      const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey 
-        ? window.electronAPI.kioskKey() 
+      const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey
+        ? window.electronAPI.kioskKey()
         : null
       const kioskKey = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
 
+      setPurchasedLocally(false)
       // Call card purchase API
       const response = await api.request('/pos/card/purchase', {
         method: 'POST',
@@ -199,22 +236,26 @@ export default function BuyCardModal({ open, onClose }) {
     setLoading(true)
 
     try {
-      const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey 
-        ? window.electronAPI.kioskKey() 
-        : null
-      const kioskKey = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
-
       // Actually WRITE the card: this puts the customer's id and balance onto
       // the blank card sitting in the reader, and only marks it active once the
       // reader confirms. The old code called `/card/mark-written`, which just
       // flips a database boolean — the physical card was never written at all
       // and the customer walked away with blank plastic.
-      await api.request(`/pos/card/write/${purchasedCard.code}`, {
-        method: 'POST',
-        headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined,
-        skipAuth: true,
-        expect: 'json'
-      })
+      if (purchasedLocally) {
+        await localApi.writeCard(purchasedCard.code)
+      } else {
+        const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey
+          ? window.electronAPI.kioskKey()
+          : null
+        const kioskKey = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
+
+        await api.request(`/pos/card/write/${purchasedCard.code}`, {
+          method: 'POST',
+          headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined,
+          skipAuth: true,
+          expect: 'json'
+        })
+      }
 
       setWriteError(null)
       setStep(STEPS.COMPLETE)

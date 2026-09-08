@@ -279,6 +279,29 @@ function AppInner() {
           }
         }
 
+        // Offline-first, multi-item: several machines and/or recharges in
+        // this same cart. Same idea as above, one step broader — settles the
+        // whole batch locally when the session already holds enough credit.
+        if (localApi.isElectron && (hasRecharge || machineItems.length > 1)) {
+          const total = items.reduce((s, i) => s + Number(i.price || i.amount || 0), 0)
+          try {
+            const session = await localApi.getSession()
+            if (session && session.credits >= total) {
+              await localApi.processCart(items, 'cash', null, batchId)
+              toast({ title: `Pagamento efetuado (Dinheiro)`, variant: 'success' })
+              try { if (machineItems.length) showMachineNotice(machineItems.map(i => i.name).filter(Boolean)) } catch { /* the notice is cosmetic; the payment already succeeded */ }
+              tryShowWifiVoucher(machineItems, batchId, kioskKey)
+              clearCart()
+              setCartOpen(false)
+              return
+            }
+          } catch (e) {
+            const msg = e?.message || 'Erro no pagamento com dinheiro'
+            toast({ title: 'Pagamento falhou', description: msg, variant: 'destructive' })
+            return
+          }
+        }
+
         // Validate cash via CashGateway (server-side gateway will persist sales atomically)
         const res = await processPayment(items, { method: 'cash', inserted: opts.inserted })
         if (!res.success) {
@@ -314,6 +337,61 @@ function AppInner() {
       // Card flow
       // If a cardCode is provided, use CardGateway to charge machines and post recharges server-side first
       const cardCode = opts.cardCode || null
+
+      // Offline-first: a single machine, no recharges bundled into this same
+      // batch, and the local mirror of this specific card already holds
+      // enough balance — settle it entirely against the local engine, no
+      // network call at all. Anything the local engine doesn't cover (bundled
+      // recharges, several machines, an unknown/not-yet-synced card, or not
+      // enough local balance) falls straight through to the existing network
+      // path below, unchanged.
+      if (localApi.isElectron && cardCode) {
+        const rechargeItems = items.filter(i => (i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge'))))
+        const machineItemsOnly = items.filter(i => !(i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge'))))
+        if (rechargeItems.length === 0 && machineItemsOnly.length === 1) {
+          const only = machineItemsOnly[0]
+          const price = Number(only.price || only.amount || 0)
+          try {
+            const card = await localApi.getCard(cardCode)
+            if (card && card.status === 'active' && Number(card.balance || 0) >= price) {
+              await localApi.processSale(only._id || only.id, price, 'card', cardCode, batchId, null)
+              try { if (only.name) showMachineNotice([only.name]) } catch { /* the notice is cosmetic; the payment already succeeded */ }
+              tryShowWifiVoucher(machineItemsOnly, batchId, kioskKey)
+              toast({ title: `Pagamento efetuado (Cartão)`, variant: 'success' })
+              clearCart()
+              setCartOpen(false)
+              return
+            }
+          } catch (e) {
+            const msg = e?.message || 'Erro no pagamento com cartão'
+            toast({ title: 'Erro no pagamento com cartão', description: msg, variant: 'destructive' })
+            return
+          }
+        }
+
+        // Offline-first, multi-item: several machines and/or recharges onto
+        // this same card in one batch — same idea as above, one step broader.
+        if (rechargeItems.length > 0 || machineItemsOnly.length > 1) {
+          const machineTotal = machineItemsOnly.reduce((s, i) => s + Number(i.price || i.amount || 0), 0)
+          const rechargeTotal = rechargeItems.reduce((s, i) => s + Number(i.price || i.amount || 0), 0)
+          try {
+            const card = await localApi.getCard(cardCode)
+            if (card && card.status === 'active' && Number(card.balance || 0) + rechargeTotal >= machineTotal) {
+              await localApi.processCart(items, 'card', cardCode, batchId)
+              try { if (machineItemsOnly.length) showMachineNotice(machineItemsOnly.map(i => i.name).filter(Boolean)) } catch { /* the notice is cosmetic; the payment already succeeded */ }
+              tryShowWifiVoucher(machineItemsOnly, batchId, kioskKey)
+              toast({ title: `Pagamento efetuado (Cartão)`, variant: 'success' })
+              clearCart()
+              setCartOpen(false)
+              return
+            }
+          } catch (e) {
+            const msg = e?.message || 'Erro no pagamento com cartão'
+            toast({ title: 'Erro no pagamento com cartão', description: msg, variant: 'destructive' })
+            return
+          }
+        }
+      }
 
       // first persist recharges (if any) — recharges are always card-based
       try {

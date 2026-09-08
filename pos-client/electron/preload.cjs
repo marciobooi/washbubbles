@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getTransactions: (limit) => ipcRenderer.invoke('pos:getTransactions', limit),
   getSettings: () => ipcRenderer.invoke('pos:getSettings'),
   performDayClose: (notes) => ipcRenderer.invoke('pos:performDayClose', notes),
+  processCart: (items, method, cardCode, batchId) => ipcRenderer.invoke('pos:processCart', items, method, cardCode, batchId),
   issueWifiVoucher: (batchId) => ipcRenderer.invoke('wifi:issueVoucher', batchId),
 
   // Card Operations
@@ -19,6 +20,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getCardHistory: (code) => ipcRenderer.invoke('card:getHistory', code),
   topUpCard: (code, amount) => ipcRenderer.invoke('card:topUp', code, amount),
   removeCard: () => ipcRenderer.invoke('card:remove'),
+  purchaseCard: (payload) => ipcRenderer.invoke('card:purchase', payload),
+  writeCard: (code) => ipcRenderer.invoke('card:write', code),
 
   // Sync Engine
   getSyncStatus: () => ipcRenderer.invoke('sync:getStatus'),
