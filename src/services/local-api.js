@@ -87,3 +87,14 @@ export function onSessionUpdate(callback) {
   if (!electron) return
   electron.onSessionUpdate(callback)
 }
+
+/**
+ * Print a receipt on the kiosk's own thermal printer, if one is configured.
+ * Purely local hardware — unlike the emailed receipt, this doesn't need the
+ * sale to exist server-side yet, so it works for a locally-settled sale too.
+ * Resolves `false` (not an error) when no printer is wired up.
+ */
+export async function printReceipt(content) {
+  if (!electron) throw new Error('Local engine not available outside the kiosk app')
+  return electron.printReceipt(content)
+}

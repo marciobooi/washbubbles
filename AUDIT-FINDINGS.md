@@ -1117,15 +1117,25 @@ codebase rather than standing up a new channel.
 
 - [x] `POST /pos/receipt` — emails a plain confirmation (items, total, date)
   for a sale batch. Explicitly not a fiscal document; the code says so.
+- [x] **The kiosk already had a thermal printer wired end-to-end
+  (`hardwareAgent.printReceipt` → `posEngine.printReceipt` → `hw:printReceipt`
+  IPC → `preload.cjs`) with zero frontend usage — same pattern as the
+  analytics routes above.** `ReceiptPrompt` now offers both: print (purely
+  local hardware, no server round trip, so it works on the Round 11/12
+  local-engine fast paths too, not just network-settled sales) and email
+  (needs the sale to already exist server-side, so network-settled only —
+  the receipt route looks it up by batch). `src/lib/receipt.js` formats the
+  same plain-text body either way, so the printed and emailed versions read
+  identically. Also backfilled `tryShowWifiVoucher` onto the one local
+  single-item cash success path that had been missing it since Round 11.
 - [x] `ReceiptPrompt` — a small dismissible corner card, not a modal (most
-  customers won't want to stop and type an email for a €3 wash), offered
-  after a **network-settled** cash or card payment. Not offered on the
-  local-engine fast paths from Round 11/12: the receipt route looks up the
-  sale by batch server-side, and a purely local sale has no server-side row
-  to find until it syncs.
+  customers won't want to stop and type an email for a €3 wash).
 
 10 new backend tests (alert push validation, watchdog stale/recovery/never-seen
-behaviour, receipt validation + send). 88 backend tests total.
+behaviour, receipt validation + send). 88 backend tests total — the printer
+wiring itself is local-hardware-only and untestable here, same caveat as
+every other serial peripheral in this project without a real device to test
+against.
 
 ### A test-suite fix that unblocks adding more test files
 

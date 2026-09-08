@@ -87,13 +87,14 @@ function AppInner() {
   const [helpOpen, setHelpOpen] = React.useState(false)
   const [wifiVoucher, setWifiVoucher] = React.useState(null)
   const [receiptBatchId, setReceiptBatchId] = React.useState(null)
+  const [receiptItems, setReceiptItems] = React.useState(null)
   // Auto-dismiss so a previous customer's "want a receipt?" card doesn't sit
   // in the corner through the next customer's whole visit.
   React.useEffect(() => {
-    if (!receiptBatchId) return
-    const t = setTimeout(() => setReceiptBatchId(null), 30000)
+    if (!receiptBatchId && !receiptItems) return
+    const t = setTimeout(() => { setReceiptBatchId(null); setReceiptItems(null) }, 30000)
     return () => clearTimeout(t)
-  }, [receiptBatchId])
+  }, [receiptBatchId, receiptItems])
   // Count of externally-dispatched modal opens (e.g., CardModal in `Pos`)
   const [externalModalCount, setExternalModalCount] = React.useState(0)
 
@@ -278,6 +279,8 @@ function AppInner() {
               await localApi.processSale(only._id || only.id, price, 'cash', null, batchId, null)
               toast({ title: `Pagamento efetuado (Dinheiro)`, variant: 'success' })
               try { if (only.name) showMachineNotice([only.name]) } catch { /* the notice is cosmetic; the payment already succeeded */ }
+              tryShowWifiVoucher([only], batchId, kioskKey)
+              setReceiptItems([only])
               clearCart()
               setCartOpen(false)
               return
@@ -301,6 +304,7 @@ function AppInner() {
               toast({ title: `Pagamento efetuado (Dinheiro)`, variant: 'success' })
               try { if (machineItems.length) showMachineNotice(machineItems.map(i => i.name).filter(Boolean)) } catch { /* the notice is cosmetic; the payment already succeeded */ }
               tryShowWifiVoucher(machineItems, batchId, kioskKey)
+              setReceiptItems(items)
               clearCart()
               setCartOpen(false)
               return
@@ -340,6 +344,7 @@ function AppInner() {
         } catch { /* the notice is cosmetic; the payment already succeeded */ }
         tryShowWifiVoucher(items.filter(i => !(i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge')))), batchId, kioskKey)
         setReceiptBatchId(batchId)
+        setReceiptItems(items)
         clearCart()
         setCartOpen(false)
         return
@@ -368,6 +373,7 @@ function AppInner() {
               await localApi.processSale(only._id || only.id, price, 'card', cardCode, batchId, null)
               try { if (only.name) showMachineNotice([only.name]) } catch { /* the notice is cosmetic; the payment already succeeded */ }
               tryShowWifiVoucher(machineItemsOnly, batchId, kioskKey)
+              setReceiptItems(machineItemsOnly)
               toast({ title: `Pagamento efetuado (Cartão)`, variant: 'success' })
               clearCart()
               setCartOpen(false)
@@ -391,6 +397,7 @@ function AppInner() {
               await localApi.processCart(items, 'card', cardCode, batchId)
               try { if (machineItemsOnly.length) showMachineNotice(machineItemsOnly.map(i => i.name).filter(Boolean)) } catch { /* the notice is cosmetic; the payment already succeeded */ }
               tryShowWifiVoucher(machineItemsOnly, batchId, kioskKey)
+              setReceiptItems(items)
               toast({ title: `Pagamento efetuado (Cartão)`, variant: 'success' })
               clearCart()
               setCartOpen(false)
@@ -434,6 +441,7 @@ function AppInner() {
           } catch { /* the notice is cosmetic; the payment already succeeded */ }
           tryShowWifiVoucher(machineItems, batchId, kioskKey)
           setReceiptBatchId(batchId)
+          setReceiptItems(machineItems)
 
           toast({ title: `Pagamento efetuado (Cartão)`, variant: 'success' })
           clearCart()
@@ -455,6 +463,7 @@ function AppInner() {
         } catch { /* the notice is cosmetic; the payment already succeeded */ }
         tryShowWifiVoucher(machineItems, batchId, kioskKey)
         setReceiptBatchId(batchId)
+        setReceiptItems(machineItems)
 
         toast({ title: `Pagamento efetuado (Cartão)`, variant: 'success' })
         clearCart()
@@ -568,9 +577,10 @@ function AppInner() {
       <CartModal open={cartOpen} onClose={() => setCartOpen(false)} onPay={handlePay} />
       <WifiQrModal open={Boolean(wifiVoucher)} onClose={() => setWifiVoucher(null)} voucher={wifiVoucher} />
       <ReceiptPrompt
+        items={receiptItems}
         batchId={receiptBatchId}
         kioskKey={(typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null) || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY}
-        onClose={() => setReceiptBatchId(null)}
+        onClose={() => { setReceiptBatchId(null); setReceiptItems(null) }}
       />
       <HelpTutorial run={helpOpen} onClose={() => setHelpOpen(false)} />
 
