@@ -6,21 +6,25 @@ import { Wifi } from 'lucide-react'
 /**
  * Shown after a wash/dry purchase when a WiFi voucher was issued.
  *
- * The QR just encodes the voucher's own redemption link (not raw WPA
- * credentials) — the guest network itself is open, so a phone still needs to
- * join it manually and hit the captive portal to actually get online. The
- * link is a convenience for a phone that already scans well; the code
- * printed below it is the fallback for typing it in by hand.
+ * The guest network itself is open (no password) — the voucher code is what
+ * the UniFi captive portal actually checks. When the SSID is known, the QR
+ * encodes a standard WiFi-join payload (`WIFI:T:nopass;S:<ssid>;;`), which a
+ * phone's own camera recognises as "join this network" — one tap connects,
+ * and the captive portal then opens on its own. That still leaves the
+ * voucher code itself to be typed into the portal by hand; nothing about a
+ * UniFi voucher can skip that step. If no SSID is configured, the QR just
+ * encodes the code as plain text (join is manual too, in that case).
  */
 export default function WifiQrModal({ open, onClose, voucher }) {
   const canvasRef = useRef(null)
 
   useEffect(() => {
     if (!open || !voucher?.code || !canvasRef.current) return
-    QRCode.toCanvas(canvasRef.current, voucher.code, { width: 220, margin: 1 }, (err) => {
+    const payload = voucher.ssid ? `WIFI:T:nopass;S:${voucher.ssid};;` : voucher.code
+    QRCode.toCanvas(canvasRef.current, payload, { width: 220, margin: 1 }, (err) => {
       if (err) console.error('[WifiQrModal] Failed to render QR code', err)
     })
-  }, [open, voucher?.code])
+  }, [open, voucher?.code, voucher?.ssid])
 
   if (!voucher) return null
 
@@ -40,7 +44,11 @@ export default function WifiQrModal({ open, onClose, voucher }) {
         </div>
 
         <ol className="text-sm text-neutral-700 text-left list-decimal list-inside space-y-1 max-w-xs">
-          <li>Ligue-se à rede WiFi{voucher.ssid ? ` "${voucher.ssid}"` : ''}</li>
+          {voucher.ssid ? (
+            <li>Aponte a câmara do telemóvel para o código para se ligar à rede</li>
+          ) : (
+            <li>Ligue-se à rede WiFi do estabelecimento</li>
+          )}
           <li>Quando a página de acesso abrir, introduza o código acima</li>
         </ol>
 
