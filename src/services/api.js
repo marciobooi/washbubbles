@@ -423,7 +423,6 @@ export function createApi(config) {
   return {
     request,
     login,
-    register,
     changePassword,
 
     // Machines

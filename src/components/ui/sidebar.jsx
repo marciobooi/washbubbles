@@ -2,8 +2,29 @@ import React, { createContext, useContext, useEffect, useState } from 'react'
 
 const SidebarContext = createContext({})
 const STORAGE_KEY = 'app.sidebar.collapsed'
+// Below this width the sidebar was previously squeezed permanently alongside
+// the content in a flex row (min width 5rem even "collapsed") rather than
+// adapting at all — on a phone that left almost no room for the actual page.
+const MOBILE_BREAKPOINT_PX = 768
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth < MOBILE_BREAKPOINT_PX
+  )
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT_PX - 1}px)`)
+    const onChange = () => setIsMobile(mql.matches)
+    onChange()
+    mql.addEventListener('change', onChange)
+    return () => mql.removeEventListener('change', onChange)
+  }, [])
+  return isMobile
+}
 
 export function SidebarProvider({ children }) {
+  const isMobile = useIsMobile()
+
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem(STORAGE_KEY) === '1'
@@ -11,6 +32,11 @@ export function SidebarProvider({ children }) {
       return false
     }
   })
+
+  // Separate from `collapsed`: on mobile the sidebar is an off-canvas drawer
+  // that starts closed, rather than a narrower permanent column. The two
+  // states don't interact — switching screen sizes doesn't fight over one flag.
+  const [mobileOpen, setMobileOpen] = useState(false)
 
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -20,10 +46,13 @@ export function SidebarProvider({ children }) {
     } catch { /* localStorage throws in private mode; the preference is optional */ }
   }, [collapsed])
 
-  const toggle = () => setCollapsed((s) => !s)
+  // toggle() is what SidebarTrigger calls; its meaning depends on device size
+  // so the header button doesn't need to know which mode it's driving.
+  const toggle = () => (isMobile ? setMobileOpen((s) => !s) : setCollapsed((s) => !s))
+  const closeMobile = () => setMobileOpen(false)
 
   return (
-    <SidebarContext.Provider value={{ collapsed, toggle, searchQuery, setSearchQuery }}>{children}</SidebarContext.Provider>
+    <SidebarContext.Provider value={{ collapsed, toggle, isMobile, mobileOpen, closeMobile, searchQuery, setSearchQuery }}>{children}</SidebarContext.Provider>
   )
 }
 
@@ -32,8 +61,32 @@ export function useSidebar() {
 }
 
 export function Sidebar({ children, className = '', ...props }) {
-  const { collapsed } = useSidebar() || { collapsed: false }
-  // When collapsed, use smaller width and hide overflow
+  const { collapsed, isMobile, mobileOpen, closeMobile } = useSidebar() || { collapsed: false }
+
+  if (isMobile) {
+    // Off-canvas drawer: fixed over the content, slides in, with a backdrop to
+    // dismiss it. Never takes up layout space of its own, unlike the desktop
+    // column, so the page underneath keeps its full width.
+    return (
+      <>
+        {mobileOpen && (
+          <div
+            className="fixed inset-0 z-40 bg-black/40"
+            onClick={closeMobile}
+            aria-hidden="true"
+          />
+        )}
+        <aside
+          className={`fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] border-r bg-sidebar p-2 overflow-y-auto transition-transform duration-200 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} ${className}`}
+          {...props}
+        >
+          {children}
+        </aside>
+      </>
+    )
+  }
+
+  // Desktop: an inline column, narrower when collapsed.
   return (
     <aside
       className={`relative transition-all duration-150 flex-shrink-0 ${collapsed ? 'w-20' : 'w-64'} min-h-screen border-r bg-sidebar p-2 overflow-y-auto overflow-x-hidden ${className}`}
@@ -58,15 +111,19 @@ export function SidebarGroup({ children, className = '' }) {
 }
 
 export function SidebarGroupLabel({ children, className = '' }) {
-  const { collapsed } = useSidebar() || { collapsed: false }
+  const { collapsed, isMobile } = useSidebar() || { collapsed: false }
+  // The icon-only "collapsed" treatment is a desktop-only space saving — the
+  // mobile drawer is always full width, so text must stay visible there even
+  // if the desktop column happened to be left collapsed.
+  const hideText = collapsed && !isMobile
   return (
     <div className={`px-2 text-xs text-muted-foreground mb-1 ${className}`}>
       {typeof children === 'string' ? (
-        <span className={`${collapsed ? 'hidden' : ''}`}>{children}</span>
+        <span className={`${hideText ? 'hidden' : ''}`}>{children}</span>
       ) : (
         // if children contains icon + text, let it render but hide textual nodes when collapsed
         React.Children.map(children, (c) => {
-          if (typeof c === 'string') return <span className={`${collapsed ? 'hidden' : ''}`}>{c}</span>
+          if (typeof c === 'string') return <span className={`${hideText ? 'hidden' : ''}`}>{c}</span>
           return c
         })
       )}
@@ -89,13 +146,19 @@ export function SidebarMenuItem({ children, className = '' }) {
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 
 export function SidebarMenuButton({ children, isActive, asChild = false, className = '', title, Icon, ...props }) {
-  const { collapsed } = useSidebar() || { collapsed: false }
+  const { collapsed: collapsedDesktop, isMobile, closeMobile } = useSidebar() || { collapsed: false }
+  // Icon-only mode is a desktop space-saving affordance; the mobile drawer is
+  // always full width and has room for labels, so never collapse there.
+  const collapsed = collapsedDesktop && !isMobile
   const base = `flex items-center gap-2 w-full text-left p-2 rounded-md ${isActive ? 'bg-primary text-primary-foreground' : 'hover:bg-muted/50'}`
   // set title attribute so tooltips work when collapsed
   const mergedTitle = title || (typeof children === 'string' ? children : undefined)
+  // Tapping a nav item on mobile should close the drawer over the page it just
+  // navigated to, rather than leaving it covering the new screen.
+  const mobileProps = isMobile ? { onClick: closeMobile } : {}
 
   const content = (
-    <div className={`${base} ${className}`} {...props}>
+    <div className={`${base} ${className}`} {...mobileProps} {...props}>
       {Icon && <Icon className="!h-6 !w-6 shrink-0" aria-hidden />}
       <span className={`${collapsed ? 'hidden' : ''}`}>{children}</span>
     </div>
@@ -116,6 +179,7 @@ export function SidebarMenuButton({ children, isActive, asChild = false, classNa
       className: `${children.props.className || ''} ${base} ${className}`,
       title: mergedTitle,
       children: newChildren,
+      ...mobileProps,
       ...props,
     })
   }
@@ -147,20 +211,23 @@ export function SidebarInset({ children }) {
   return <div className="flex flex-1 flex-col min-h-screen">{children}</div>
 }
 
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Menu, X } from 'lucide-react'
 
 export function SidebarTrigger({ className = '' }) {
   const ctx = useSidebar() || { toggle: () => {}, collapsed: false }
+  const expanded = ctx.isMobile ? ctx.mobileOpen : !ctx.collapsed
   return (
     <button
       className={`p-2 rounded-md hover:bg-muted/50 ${className}`}
-      // aria-expanded should be true when the sidebar is expanded
-      aria-expanded={!ctx.collapsed}
+      aria-expanded={expanded}
+      aria-label={ctx.isMobile ? (ctx.mobileOpen ? 'Fechar menu' : 'Abrir menu') : (ctx.collapsed ? 'Expandir barra lateral' : 'Colapsar barra lateral')}
       onClick={ctx.toggle}
-      title={ctx.collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+      title={ctx.isMobile ? undefined : (ctx.collapsed ? 'Expand sidebar' : 'Collapse sidebar')}
     >
-      <span className={`inline-block transform transition-transform`}>
-        {ctx.collapsed ? <ChevronRight className="h-6 w-6" /> : <ChevronLeft className="h-6 w-6" />}
+      <span className="inline-block transform transition-transform">
+        {ctx.isMobile
+          ? (ctx.mobileOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />)
+          : (ctx.collapsed ? <ChevronRight className="h-6 w-6" /> : <ChevronLeft className="h-6 w-6" />)}
       </span>
     </button>
   )

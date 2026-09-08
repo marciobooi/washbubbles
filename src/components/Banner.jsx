@@ -1,35 +1,84 @@
-
-  import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 
 const banners = [
-    { id: 'banner1', 
-        title: 'Limpeza a seco', 
-        text: 'Entre em contacto mail@mail.com', 
+    { id: 'banner1',
+        title: 'Limpeza a seco',
+        text: 'Entre em contacto mail@mail.com',
         image: '/banner/dry.png'
     },
-    { id: 'banner2', 
-        title: 'Lavagem de carpetes', 
-        text: 'Entre em contacto mail@mail.com', 
+    { id: 'banner2',
+        title: 'Lavagem de carpetes',
+        text: 'Entre em contacto mail@mail.com',
         image: '/banner/carpet.png'
     },
 ]
 
+const AUTOPLAY_INTERVAL_MS = 10000
+// Minimum horizontal drag before it counts as a swipe rather than a stray tap
+// or a slightly-off-axis touch that shouldn't move the slide.
+const SWIPE_THRESHOLD_PX = 50
+
 export default function Banner() {
   const [currentIndex, setCurrentIndex] = useState(0)
+  const timerRef = useRef(null)
+  const dragStartX = useRef(null)
+  const dragDeltaX = useRef(0)
 
-  useEffect(() => {
-    const interval = setInterval(() => {
+  // Restarting the timer (rather than letting a fixed setInterval run
+  // untouched) means a manual swipe or dot tap doesn't get overridden a moment
+  // later by an autoplay tick someone didn't ask for.
+  const restartAutoplay = useCallback(() => {
+    if (timerRef.current) clearInterval(timerRef.current)
+    timerRef.current = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % banners.length)
-    }, 10000)
-    return () => clearInterval(interval)
+    }, AUTOPLAY_INTERVAL_MS)
   }, [])
 
-  const goToSlide = (index) => setCurrentIndex(index)
-  const goToPrevious = () => setCurrentIndex((prev) => (prev - 1 + banners.length) % banners.length)
-  const goToNext = () => setCurrentIndex((prev) => (prev + 1) % banners.length)
+  useEffect(() => {
+    restartAutoplay()
+    return () => { if (timerRef.current) clearInterval(timerRef.current) }
+  }, [restartAutoplay])
+
+  const goToSlide = (index) => {
+    setCurrentIndex(index)
+    restartAutoplay()
+  }
+  const goToPrevious = () => {
+    setCurrentIndex((prev) => (prev - 1 + banners.length) % banners.length)
+    restartAutoplay()
+  }
+  const goToNext = () => {
+    setCurrentIndex((prev) => (prev + 1) % banners.length)
+    restartAutoplay()
+  }
+
+  // Swipe left/right on the slide itself. Pointer events (not just touch)
+  // so a mouse-drag works too when testing outside a real touchscreen.
+  const onPointerDown = (e) => {
+    dragStartX.current = e.clientX
+    dragDeltaX.current = 0
+  }
+  const onPointerMove = (e) => {
+    if (dragStartX.current === null) return
+    dragDeltaX.current = e.clientX - dragStartX.current
+  }
+  const onPointerUp = () => {
+    if (dragStartX.current === null) return
+    const delta = dragDeltaX.current
+    dragStartX.current = null
+    dragDeltaX.current = 0
+    if (delta <= -SWIPE_THRESHOLD_PX) goToNext()
+    else if (delta >= SWIPE_THRESHOLD_PX) goToPrevious()
+  }
 
   return (
-    <div className="relative w-full h-[20rem] overflow-hidden bg-gradient-to-r from-teal-500 to-teal-600 shadow-xl">
+    <div
+      className="relative w-full h-[20rem] overflow-hidden bg-gradient-to-r from-teal-500 to-teal-600 shadow-xl touch-pan-y select-none"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+    >
       {banners.map((banner, index) => (
         <div
           key={banner.id}
@@ -60,27 +109,9 @@ export default function Banner() {
         </div>
       ))}
 
-      {/* Navigation Arrows */}
-      <button
-        onClick={goToPrevious}
-        className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white p-3 rounded-full transition-all z-20"
-        aria-label="Previous slide"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-        </svg>
-      </button>
-      <button
-        onClick={goToNext}
-        className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white p-3 rounded-full transition-all z-20"
-        aria-label="Next slide"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
-      </button>
-
-      {/* Dots Indicator */}
+      {/* Dots Indicator. Swipe and autoplay replace the arrow buttons that used
+          to sit here — on a touchscreen kiosk they were redundant with a swipe
+          gesture, and could still register a tap through an open modal. */}
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-20">
         {banners.map((_, index) => (
           <button

@@ -2,9 +2,8 @@ import React from 'react'
 import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
 import { Button } from '@/components/ui/button'
-import { Play, Square, X, Power } from 'lucide-react'
-import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
-import { connect, subscribe } from '@/services/websocket' 
+import { Play, Square, X, Power, Wrench, CheckCircle2, RefreshCw } from 'lucide-react'
+import { connect, subscribe } from '@/services/websocket'
 
 export default function AdminOperations() {
   const [machines, setMachines] = React.useState([])
@@ -85,85 +84,100 @@ export default function AdminOperations() {
   const stopMachine = (m) => setMachineStatus(m, 'free', 'Livre')
   const setOffline = (m) => setMachineStatus(m, 'offline', 'Offline')
   const setOnline = (m) => setMachineStatus(m, 'free', 'Livre')
+  // "Avariar" / "Reparado": the machine's own status enum already has a
+  // `fault` state distinct from `offline` — offline is an admin choice (e.g.
+  // taken out of rotation for cleaning), fault means it's broken and needs a
+  // technician. Both matter for "put a machine in/out of service" but they are
+  // not the same action, so both get their own button.
+  const setFault = (m) => setMachineStatus(m, 'fault', 'Avariada')
+  const setRepaired = (m) => setMachineStatus(m, 'free', 'Livre')
 
   const wash = machines.filter(m => (m.type || 'wash') === 'wash')
   const dry = machines.filter(m => m.type === 'dry')
 
-  const MachineTile = ({ m }) => (
-    <div className={`aspect-square flex flex-col p-4 rounded-lg border hover:shadow-md transition ${m.status === 'working' ? 'bg-yellow-50' : m.status === 'offline' ? 'bg-gray-50' : 'bg-white'}`}>
-      <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center">
-        {m.icon && <img src={m.icon} alt="icon" className="h-16 w-16 object-contain tealFilter" />}
-        <div className="font-semibold">{m.name}</div>
-        <div className="text-xs text-muted-foreground">{m.weight ? `${m.weight} kg` : ''}</div>
-      </div>
-      <div className="mt-3 flex flex-col items-end gap-2">
-        <span className={`text-xs px-2 py-1 rounded ${m.status === 'working' ? 'bg-yellow-100 text-yellow-800' : m.status === 'offline' ? 'bg-gray-100 text-gray-800' : 'bg-green-100 text-green-800'}`}>{m.statusText || (m.status === 'working' ? 'Ocupado' : m.status === 'offline' ? 'Offline' : 'Livre')}</span>
-        <div className="flex gap-2 mt-2">
-          {m.status !== 'working' && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button size="sm" variant="ghost" className="p-2" onClick={() => startMachine(m)} aria-label="Iniciar">
-                  <Play className="w-5 h-5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent sideOffset={6}>Iniciar</TooltipContent>
-            </Tooltip>
+  const STATUS_STYLE = {
+    working: { card: 'bg-yellow-50 border-yellow-200', badge: 'bg-yellow-100 text-yellow-800', label: 'Ocupado' },
+    offline: { card: 'bg-gray-50 border-gray-200', badge: 'bg-gray-100 text-gray-800', label: 'Offline' },
+    fault: { card: 'bg-red-50 border-red-200', badge: 'bg-red-100 text-red-800', label: 'Avariada' },
+    free: { card: 'bg-white', badge: 'bg-green-100 text-green-800', label: 'Livre' },
+  }
+
+  // A labelled action button — deliberately not a hover-only icon+tooltip.
+  // Tooltips need a hover state a touchscreen never provides, so on a phone
+  // the old icon-only buttons had no visible explanation at all.
+  // Three labelled buttons in one flex row truncated to "Inici...", "Ava...",
+  // "Offli..." even at full phone width — there just isn't 1/3 of a card's
+  // width to spare for a 7-letter word plus an icon. A 2-column grid gives
+  // each button roughly half the tile's width, which fits every label used
+  // here; a leftover 3rd button (the common case) wraps to its own row
+  // instead of squeezing into the first, and a single button (Reparada) can
+  // span both columns to read as the one clear action available.
+  const ActionButton = ({ onClick, variant, Icon, children, full = false }) => (
+    <Button
+      variant={variant}
+      onClick={onClick}
+      className={`min-h-11 gap-1.5 px-2 ${full ? 'col-span-2' : ''}`}
+    >
+      <Icon className="w-4 h-4 shrink-0" aria-hidden />
+      <span className="text-sm">{children}</span>
+    </Button>
+  )
+
+  const MachineTile = ({ m }) => {
+    const style = STATUS_STYLE[m.status] || STATUS_STYLE.free
+    return (
+      <div className={`flex flex-col p-4 rounded-lg border transition ${style.card}`}>
+        <div className="flex items-center gap-3">
+          {m.icon && <img src={m.icon} alt="" className="h-12 w-12 object-contain tealFilter shrink-0" />}
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold truncate">{m.name}</div>
+            <div className="text-xs text-muted-foreground">{m.weight ? `${m.weight} kg` : ''}</div>
+          </div>
+          <span className={`text-xs px-2 py-1 rounded whitespace-nowrap ${style.badge}`}>{m.statusText || style.label}</span>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          {m.status !== 'working' && m.status !== 'fault' && (
+            <ActionButton onClick={() => startMachine(m)} variant="default" Icon={Play}>Iniciar</ActionButton>
           )}
           {m.status === 'working' && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button size="sm" variant="destructive" className="p-2" onClick={() => stopMachine(m)} aria-label="Parar">
-                  <Square className="w-5 h-5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent sideOffset={6}>Parar</TooltipContent>
-            </Tooltip>
+            <ActionButton onClick={() => stopMachine(m)} variant="destructive" Icon={Square}>Parar</ActionButton>
           )}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button size="sm" variant="ghost" className="p-2" onClick={() => setMachineStatus(m, 'free', 'Livre')} aria-label="Cancelar">
-                <X className="w-5 h-5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent sideOffset={6}>Cancelar</TooltipContent>
-          </Tooltip>
-          {m.status !== 'offline' && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button size="sm" variant="outline" className="p-2" onClick={() => setOffline(m)} aria-label="Offline">
-                  <Power className="w-5 h-5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent sideOffset={6}>Offline</TooltipContent>
-            </Tooltip>
+          {m.status === 'reserved' && (
+            <ActionButton onClick={() => setMachineStatus(m, 'free', 'Livre')} variant="ghost" Icon={X}>Cancelar</ActionButton>
+          )}
+          {m.status === 'fault' ? (
+            <ActionButton onClick={() => setRepaired(m)} variant="default" Icon={CheckCircle2} full={m.status === 'fault'}>Reparada</ActionButton>
+          ) : (
+            <ActionButton onClick={() => setFault(m)} variant="outline" Icon={Wrench}>Avariar</ActionButton>
+          )}
+          {m.status !== 'offline' && m.status !== 'fault' && (
+            <ActionButton onClick={() => setOffline(m)} variant="outline" Icon={Power}>Offline</ActionButton>
           )}
           {m.status === 'offline' && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button size="sm" variant="outline" className="p-2" onClick={() => setOnline(m)} aria-label="Online">
-                  <Power className="w-5 h-5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent sideOffset={6}>Online</TooltipContent>
-            </Tooltip>
+            <ActionButton onClick={() => setOnline(m)} variant="outline" Icon={Power}>Online</ActionButton>
           )}
         </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   return (
-    <TooltipProvider>
-      <div className="p-4">
-      <h2 className="text-lg font-semibold mb-4">Operações</h2>
+    <div className="p-4">
+      <div className="flex items-center justify-between mb-4 gap-2">
+        <h2 className="text-lg font-semibold">Operações</h2>
+        <Button variant="outline" size="sm" onClick={load} disabled={loading} className="gap-1.5">
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} aria-hidden />
+          Atualizar
+        </Button>
+      </div>
 
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">
           <div className="font-semibold">Lavagem</div>
-          <div className="text-sm text-muted-foreground">Use os controlos em cada cartão para alterar o estado</div>
         </div>
         {loading ? <div>Carregando...</div> : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {wash.map((m) => <MachineTile key={m._id} m={m} />)}
           </div>
         )}
@@ -174,12 +188,11 @@ export default function AdminOperations() {
           <div className="font-semibold">Secagem</div>
         </div>
         {loading ? <div>Carregando...</div> : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {dry.map((m) => <MachineTile key={m._id} m={m} />)}
           </div>
         )}
       </div>
     </div>
-    </TooltipProvider>
   )
 }

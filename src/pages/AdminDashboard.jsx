@@ -30,7 +30,10 @@ export default function AdminDashboard() {
                 <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
               </div>
 
-              <div className="flex-1 flex justify-center px-4">
+              {/* A full-width search bar squeezed between two icon buttons on a
+                  375px phone left almost no room for either — search isn't the
+                  priority for a phone session, so it's tablet+ only here. */}
+              <div className="hidden sm:flex flex-1 justify-center px-4">
                 <NavSearch className="w-full max-w-lg" />
               </div>
 
