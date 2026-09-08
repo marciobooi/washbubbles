@@ -979,10 +979,19 @@ QR/code popup for time-limited guest WiFi, backed by a UniFi controller.
   QR of the voucher code, the code as text, and join instructions. Silently
   does nothing if the feature is off or the controller call fails — never
   interrupts or contradicts the payment success toast.
-- [!] Not wired into the offline local-engine cash path — issuing a voucher
-  needs the backend (and the backend needs the sale to already exist there),
-  so a sale settled purely offline just doesn't get a voucher this trip
-  rather than block or queue one.
+- [x] **Fixed same-day, before this ever shipped**: the design above routed
+  every voucher through the cloud backend — which meant a customer couldn't
+  get WiFi at exactly the moment the kiosk's own internet was down, the one
+  case the feature exists for. Moved voucher issuance into the local engine
+  instead: `pos-client/electron/unifi-voucher.cjs` talks to the UniFi
+  controller directly over the shop's LAN (DB migration v5 adds a local
+  `wifi_vouchers` table for the same batchId idempotency, config lives in
+  `pos-client/config.json`'s new `wifi` block). `App.jsx` tries the local
+  path first and only falls back to the cloud route when the local engine
+  confirms this particular sale wasn't settled locally (i.e. it really did
+  go through the network gateway, which needed internet anyway). `wifi.*`
+  settings reach the kiosk through the sync engine's existing generic
+  settings pull — no new sync plumbing needed for that part.
 - 4 new backend tests (validation + idempotency, controller call stubbed).
   Fixed a real bug in `backend/test/setup.test-helper.js` while adding
   them: `startTestDb`/`stopTestDb` weren't reentrant, so a second test file

@@ -54,6 +54,7 @@ function registerIpcHandlers(posEngine, syncEngine, hardwareAgent) {
   ipcMain.handle('pos:getTransactions', (e, limit) => posEngine.getTransactions(limit))
   ipcMain.handle('pos:getSettings', () => posEngine.getAllSettings())
   ipcMain.handle('pos:performDayClose', (e, notes) => posEngine.performDayClose(notes))
+  ipcMain.handle('wifi:issueVoucher', (e, batchId) => posEngine.issueWifiVoucher(assertId(batchId, 'batchId')))
 
   // ─── Card Operations ───
   ipcMain.handle('card:get', (e, code) => posEngine.getCard(assertId(code, 'card code')))

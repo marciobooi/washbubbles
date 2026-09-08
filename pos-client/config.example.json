@@ -9,5 +9,14 @@
     "card_dispenser": { "enabled": false, "port": "COM5" },
     "printer": { "enabled": false, "port": "COM6" },
     "rfid_reader": { "enabled": false, "port": "COM7" }
+  },
+  "wifi": {
+    "host": "192.168.1.1",
+    "port": 8443,
+    "site": "default",
+    "username": "REPLACE_WITH_UNIFI_USERNAME",
+    "password": "REPLACE_WITH_UNIFI_PASSWORD",
+    "basePath": "",
+    "verifySsl": false
   }
 }

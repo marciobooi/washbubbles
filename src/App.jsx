@@ -201,10 +201,32 @@ function AppInner() {
    * feature is turned on (Admin > Definições > WiFi). Never lets a voucher
    * problem look like the purchase itself failed — the money already moved
    * by the time this runs, so any failure here is silently swallowed.
+   *
+   * Tries the LOCAL engine first (straight to the UniFi controller over the
+   * shop's LAN, no cloud backend involved) — this is what makes the voucher
+   * actually available when the kiosk's own internet is down, which is
+   * exactly when a customer wants it most. Falls back to the remote API only
+   * when the local engine reports this batch wasn't settled locally at all
+   * (it went through the network gateway instead) — any other local failure
+   * (feature off, controller unreachable) is the real answer and isn't
+   * retried against the cloud.
    */
   async function tryShowWifiVoucher(machineItems, batchId, kioskKey) {
+    if (!machineItems.some((i) => i.type === 'wash' || i.type === 'dry')) return
+    if (localApi.isElectron) {
+      try {
+        const voucher = await localApi.issueWifiVoucher(batchId)
+        if (voucher?.code) setWifiVoucher(voucher)
+        return
+      } catch (e) {
+        if (e?.message !== 'No matching machine purchase for this batch') {
+          console.warn('[WiFi] Local voucher not issued', e)
+          return
+        }
+        // Not a local sale — it was settled through the network gateway. Fall through.
+      }
+    }
     try {
-      if (!machineItems.some((i) => i.type === 'wash' || i.type === 'dry')) return
       const voucher = await api.wifiVoucher(batchId, { apiKey: kioskKey })
       if (voucher?.code) setWifiVoucher(voucher)
     } catch (e) {

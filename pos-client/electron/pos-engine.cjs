@@ -7,7 +7,8 @@
  */
 const EventEmitter = require('events')
 const { machines, cards, sales, prices, settings, interfaces, syncQueue, session,
-        dayCloses, generateId, roundMoney, runTransaction, flushSave } = require('./database.cjs')
+        dayCloses, wifiVouchers, generateId, roundMoney, runTransaction, flushSave } = require('./database.cjs')
+const unifiVoucher = require('./unifi-voucher.cjs')
 
 /**
  * Longest a wash/dry cycle can plausibly run before a machine still marked
@@ -30,10 +31,11 @@ function assertCardSpendable(card) {
 }
 
 class PosEngine extends EventEmitter {
-  constructor(hardwareAgent, tenantId) {
+  constructor(hardwareAgent, tenantId, wifiConfig) {
     super()
     this.hw = hardwareAgent
     this.tenantId = tenantId
+    this.wifiConfig = wifiConfig || {}
     this.sessionState = { cashBalance: 0, cardCode: null, cardBalance: 0, hasCard: false, bonus: 0, credits: 0 }
     this.settings = {}
   }
@@ -408,6 +410,43 @@ class PosEngine extends EventEmitter {
   getTransactions(limit) { return sales.getAll(this.tenantId, limit) }
   getSetting(key) { return settings.get(this.tenantId, key) }
   getAllSettings() { return settings.getAll(this.tenantId) }
+
+  /**
+   * Issue (or re-fetch) a guest-WiFi voucher for a wash/dry purchase — fully
+   * local, straight against the UniFi controller on the shop's own LAN. This
+   * deliberately never touches the cloud backend: it needs to work exactly
+   * when the kiosk's own uplink is the thing that's down, which is the case
+   * a customer most wants the shop's WiFi for in the first place.
+   */
+  async issueWifiVoucher(batchId) {
+    const enabledRow = settings.get(this.tenantId, 'wifi.enabled')
+    const enabled = enabledRow ? Boolean(enabledRow.parsedValue ?? enabledRow.value) : false
+    if (!enabled) throw new Error('WiFi voucher feature is disabled')
+
+    const existing = wifiVouchers.getByBatchId(this.tenantId, batchId)
+    if (existing) {
+      return { code: existing.code, ssid: existing.ssid, durationMinutes: existing.duration_minutes, expiresAt: existing.expires_at }
+    }
+
+    const batchSales = sales.getByBatchId(this.tenantId, batchId)
+    const machineSale = batchSales.find((s) => s.type === 'payment' && s.machine_id)
+    if (!machineSale) throw new Error('No matching machine purchase for this batch')
+    const machine = machines.getById(machineSale.machine_id)
+    if (!machine || (machine.type !== 'wash' && machine.type !== 'dry')) {
+      throw new Error('Not a wash/dry purchase')
+    }
+
+    const durationRow = settings.get(this.tenantId, 'wifi.durationMinutes')
+    const durationMinutes = Number(durationRow ? (durationRow.parsedValue ?? durationRow.value) : 60) || 60
+    const ssidRow = settings.get(this.tenantId, 'wifi.ssid')
+    const ssid = ssidRow ? (ssidRow.parsedValue ?? ssidRow.value) : ''
+
+    const code = await unifiVoucher.createVoucher(this.wifiConfig, durationMinutes, `sale ${machineSale.id}`)
+    const expiresAt = new Date(Date.now() + durationMinutes * 60000).toISOString()
+    wifiVouchers.create({ tenant_id: this.tenantId, batch_id: batchId, code, ssid, duration_minutes: durationMinutes, expires_at: expiresAt })
+    flushSave()
+    return { code, ssid, durationMinutes, expiresAt }
+  }
 }
 
 module.exports = { PosEngine }

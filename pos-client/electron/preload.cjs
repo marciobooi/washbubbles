@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getTransactions: (limit) => ipcRenderer.invoke('pos:getTransactions', limit),
   getSettings: () => ipcRenderer.invoke('pos:getSettings'),
   performDayClose: (notes) => ipcRenderer.invoke('pos:performDayClose', notes),
+  issueWifiVoucher: (batchId) => ipcRenderer.invoke('wifi:issueVoucher', batchId),
 
   // Card Operations
   getCard: (code) => ipcRenderer.invoke('card:get', code),

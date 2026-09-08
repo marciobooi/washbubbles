@@ -27,3 +27,15 @@ export async function processSale(machineId, amount, method, cardCode, batchId, 
   if (!electron) throw new Error('Local engine not available outside the kiosk app')
   return electron.processSale(machineId, amount, method, cardCode, batchId, items)
 }
+
+/**
+ * Issue a guest-WiFi voucher straight against the shop's UniFi controller —
+ * no cloud backend involved. This is the path that actually works when the
+ * kiosk's own internet is down, which is the scenario the voucher matters
+ * most for; the remote api.wifiVoucher() call is only a fallback for a
+ * plain-browser (non-Electron) kiosk.
+ */
+export async function issueWifiVoucher(batchId) {
+  if (!electron) throw new Error('Local engine not available outside the kiosk app')
+  return electron.issueWifiVoucher(batchId)
+}

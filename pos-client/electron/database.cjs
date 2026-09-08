@@ -21,7 +21,7 @@ let dbPath = null
 let saveTimer = null
 let autosaveTimer = null
 
-const DB_VERSION = 4
+const DB_VERSION = 5
 
 /** Attempts before a queued sync item is dead-lettered rather than retried forever. */
 const MAX_SYNC_ATTEMPTS = 10
@@ -181,6 +181,7 @@ function runMigrations() {
   if (currentVersion < 2) migrateV2()
   if (currentVersion < 3) migrateV3()
   if (currentVersion < 4) migrateV4()
+  if (currentVersion < 5) migrateV5()
 
   run(`INSERT OR REPLACE INTO db_meta (key, value) VALUES (?, ?)`, ['version', String(DB_VERSION)])
   flushSave()
@@ -274,6 +275,21 @@ function migrateV1() {
       bonus REAL DEFAULT 0, money_arr TEXT DEFAULT '[]', bonus_arr TEXT DEFAULT '[]',
       charged_arr TEXT DEFAULT '[]',
       created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
+    );
+  `)
+}
+
+function migrateV5() {
+  // Guest-WiFi vouchers issued directly against the LAN's UniFi controller —
+  // this must work with zero connectivity to the cloud backend, since the
+  // whole point is giving the customer internet when the kiosk's own uplink
+  // is the thing that's down. Keyed on batch_id so a retried request (popup
+  // re-opened) doesn't mint a second voucher on the controller.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wifi_vouchers (
+      id TEXT PRIMARY KEY, tenant_id TEXT, batch_id TEXT UNIQUE,
+      code TEXT, ssid TEXT, duration_minutes INTEGER,
+      expires_at TEXT, created_at TEXT DEFAULT (datetime('now'))
     );
   `)
 }
@@ -445,6 +461,9 @@ const sales = {
   },
   getByCardCode(tenantId, code, limit) {
     return queryAll('SELECT * FROM sales WHERE tenant_id=? AND card_code=? ORDER BY created_at DESC LIMIT ?', [tenantId, code, limit||30])
+  },
+  getByBatchId(tenantId, batchId) {
+    return queryAll('SELECT * FROM sales WHERE tenant_id=? AND batch_id=?', [tenantId, batchId])
   },
   getUnsynced(limit) {
     return queryAll('SELECT * FROM sales WHERE synced=0 ORDER BY created_at ASC LIMIT ?', [limit||50])
@@ -703,6 +722,19 @@ const dayCloses = {
   }
 }
 
+const wifiVouchers = {
+  getByBatchId(tenantId, batchId) {
+    return queryGet('SELECT * FROM wifi_vouchers WHERE tenant_id=? AND batch_id=?', [tenantId, batchId])
+  },
+  create(v) {
+    const id = v.id || generateId()
+    run(`INSERT INTO wifi_vouchers (id,tenant_id,batch_id,code,ssid,duration_minutes,expires_at)
+         VALUES (?,?,?,?,?,?,?)`,
+      [id, v.tenant_id, v.batch_id, v.code, v.ssid || null, v.duration_minutes, v.expires_at])
+    return { id }
+  }
+}
+
 function getDb() { return db }
 function closeDatabase() {
   if (autosaveTimer) { clearInterval(autosaveTimer); autosaveTimer = null }
@@ -713,5 +745,5 @@ module.exports = {
   initDatabase, getDb, closeDatabase, generateId, roundMoney,
   runTransaction, flushSave,
   machines, cards, sales, prices, settings, interfaces, peripherals,
-  syncQueue, syncMeta, session, dayCloses
+  syncQueue, syncMeta, session, dayCloses, wifiVouchers
 }

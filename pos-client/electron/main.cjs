@@ -76,12 +76,13 @@ async function initOfflineSystems() {
   const { initDatabase } = require('./database.cjs')
   await initDatabase()
   
+  const hwConfig = loadHardwareConfig()
   const { EmbeddedHardwareAgent } = require('./hardware-agent.cjs')
-  hardwareAgent = new EmbeddedHardwareAgent(loadHardwareConfig())
+  hardwareAgent = new EmbeddedHardwareAgent(hwConfig)
   await hardwareAgent.start()
 
   const { PosEngine } = require('./pos-engine.cjs')
-  posEngine = new PosEngine(hardwareAgent, TENANT_ID)
+  posEngine = new PosEngine(hardwareAgent, TENANT_ID, hwConfig.wifi)
   posEngine.init()
 
   const { SyncEngine } = require('./sync-engine.cjs')
