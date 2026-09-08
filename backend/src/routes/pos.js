@@ -624,7 +624,7 @@ router.get('/settings/:key', async (req, res) => {
   // read publicly. None of these leak anything sensitive — knowing whether the
   // maintenance-lock feature is turned on isn't meaningful information, and the
   // kiosk needs it before a customer session even authenticates as anything.
-  if (!key.startsWith('branding.') && !key.startsWith('cardPurchase.') && !key.startsWith('loyaltyCard.') && key !== 'kioskLockEnabled') {
+  if (!key.startsWith('branding.') && !key.startsWith('cardPurchase.') && !key.startsWith('loyaltyCard.') && !key.startsWith('wifi.') && key !== 'kioskLockEnabled') {
     return res.status(404).json({ error: 'Not found' })
   }
   const SettingT = withTenant(Setting, req)

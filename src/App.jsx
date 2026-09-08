@@ -10,6 +10,7 @@ import Admin from './pages/Admin'
 import { CartProvider, useCart } from './context/CartContext'
 import { PaymentProvider, usePayment } from './context/PaymentContext'
 import CartModal from './components/CartModal'
+import WifiQrModal from './components/WifiQrModal'
 import { ToastProvider, toast } from './components/ui/Toast'
 import HelpTutorial from './components/HelpTutorial'
 import LanguageSwitcher from './components/LanguageSwitcher'
@@ -82,6 +83,7 @@ function AppInner() {
   const cartCount = cart.length
   const [cartOpen, setCartOpen] = React.useState(false)
   const [helpOpen, setHelpOpen] = React.useState(false)
+  const [wifiVoucher, setWifiVoucher] = React.useState(null)
   // Count of externally-dispatched modal opens (e.g., CardModal in `Pos`)
   const [externalModalCount, setExternalModalCount] = React.useState(0)
 
@@ -194,6 +196,22 @@ function AppInner() {
     return () => window.removeEventListener('open-cart', onOpen)
   }, [])
 
+  /**
+   * Best-effort: a wash/dry purchase earns a guest-WiFi voucher when the
+   * feature is turned on (Admin > Definições > WiFi). Never lets a voucher
+   * problem look like the purchase itself failed — the money already moved
+   * by the time this runs, so any failure here is silently swallowed.
+   */
+  async function tryShowWifiVoucher(machineItems, batchId, kioskKey) {
+    try {
+      if (!machineItems.some((i) => i.type === 'wash' || i.type === 'dry')) return
+      const voucher = await api.wifiVoucher(batchId, { apiKey: kioskKey })
+      if (voucher?.code) setWifiVoucher(voucher)
+    } catch (e) {
+      console.warn('[WiFi] Voucher not issued', e)
+    }
+  }
+
   async function handlePay(items, opts = { useFidelity: false }) {
     try {
       const method = opts && opts.method === 'cash' ? 'cash' : 'card'
@@ -265,6 +283,7 @@ function AppInner() {
           const machineNames = items.filter(i => !(i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge')))).map(i => i.name).filter(Boolean)
           if (machineNames.length) showMachineNotice(machineNames)
         } catch { /* the notice is cosmetic; the payment already succeeded */ }
+        tryShowWifiVoucher(items.filter(i => !(i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge')))), batchId, kioskKey)
         clearCart()
         setCartOpen(false)
         return
@@ -302,6 +321,7 @@ function AppInner() {
             const machineNames = machineItems.map(i => i.name).filter(Boolean)
             if (machineNames.length) showMachineNotice(machineNames)
           } catch { /* the notice is cosmetic; the payment already succeeded */ }
+          tryShowWifiVoucher(machineItems, batchId, kioskKey)
 
           toast({ title: `Pagamento efetuado (Cartão)`, variant: 'success' })
           clearCart()
@@ -321,6 +341,7 @@ function AppInner() {
           const machineNames = machineItems.map(i => i.name).filter(Boolean)
           if (machineNames.length) showMachineNotice(machineNames)
         } catch { /* the notice is cosmetic; the payment already succeeded */ }
+        tryShowWifiVoucher(machineItems, batchId, kioskKey)
 
         toast({ title: `Pagamento efetuado (Cartão)`, variant: 'success' })
         clearCart()
@@ -431,6 +452,7 @@ function AppInner() {
       </main>
 
       <CartModal open={cartOpen} onClose={() => setCartOpen(false)} onPay={handlePay} />
+      <WifiQrModal open={Boolean(wifiVoucher)} onClose={() => setWifiVoucher(null)} voucher={wifiVoucher} />
       <HelpTutorial run={helpOpen} onClose={() => setHelpOpen(false)} />
 
       <Modal open={machineNotice.open} onClose={closeMachineNotice} title={machineNotice.names.length === 1 ? `Máquina ${machineNotice.names[0]}` : 'Máquina Iniciada'}>

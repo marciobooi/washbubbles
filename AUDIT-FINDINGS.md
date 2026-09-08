@@ -954,6 +954,43 @@ work fine over HTTP (where `/x.png` always means "site root") but break under
   image icons.
 - 70 backend tests still pass; no backend changes.
 
+## Round 10 — post-purchase guest WiFi voucher
+
+New feature, not an audit finding: after a wash/dry sale, the kiosk shows a
+QR/code popup for time-limited guest WiFi, backed by a UniFi controller.
+
+- [x] `backend/src/services/unifiVoucher.js` — logs into a UniFi Network
+  Controller (classic or UniFi OS via `UNIFI_BASE_PATH`) and creates a
+  single-use hotspot voucher. Self-signed cert on the LAN controller is the
+  default assumption (`UNIFI_VERIFY_SSL=false`). **Untestable here** — the
+  controller only exists at the shop, not in dev — so this is built against
+  the documented UniFi API shape and stubbed in tests, not exercised live.
+  Verify against the real controller before relying on it.
+- [x] `POST /api/wifi/voucher` (kiosk-authenticated, `backend/src/routes/wifi.js`) —
+  idempotent per sale `batchId` (retrying returns the same voucher, doesn't
+  mint a new one), and only issues one when a real machine-payment `Sale`
+  exists for that batch and `wifi.enabled` is on. A controller failure
+  returns 502 without touching the sale — never lets a WiFi problem look
+  like the purchase itself failed.
+- [x] Admin > Definições > WiFi — on/off toggle, access duration (minutes),
+  and a display-only SSID field (instructs the customer, doesn't configure
+  the network). Same settings/toggle pattern as Staff & Manutenção.
+- [x] Kiosk: `WifiQrModal` pops up after a wash/dry cash or card sale with a
+  QR of the voucher code, the code as text, and join instructions. Silently
+  does nothing if the feature is off or the controller call fails — never
+  interrupts or contradicts the payment success toast.
+- [!] Not wired into the offline local-engine cash path — issuing a voucher
+  needs the backend (and the backend needs the sale to already exist there),
+  so a sale settled purely offline just doesn't get a voucher this trip
+  rather than block or queue one.
+- 4 new backend tests (validation + idempotency, controller call stubbed).
+  Fixed a real bug in `backend/test/setup.test-helper.js` while adding
+  them: `startTestDb`/`stopTestDb` weren't reentrant, so a second test file
+  in the same run could silently break a previous file's DB connection —
+  now guarded on `mongoose.connection.readyState`. 74 backend tests total.
+
+---
+
 ## Deploy notes (do these on the Hetzner box)
 
 1. **Drop the old user email index once**, or the new `partialFilterExpression` will not be created
@@ -1012,6 +1049,12 @@ work fine over HTTP (where `/x.png` always means "site root") but break under
 12. **Kiosk DB migrates to v4 automatically** on first launch of this build
     (adds `cards.status`). One-way, like the v3 migration above — take a
     copy of `washbubbles.db` first if you want to be able to roll back.
+13. **Set `UNIFI_HOST`/`UNIFI_USERNAME`/`UNIFI_PASSWORD` (and `UNIFI_BASE_PATH`
+    if it's a UDM/UniFi OS console)** in `backend/.env` before turning the
+    WiFi-voucher toggle on in Admin > Definições — see the new block in
+    `backend/.env.example`. The feature fails closed (502, sale unaffected)
+    with no controller configured, but stays visibly broken until this is
+    set.
 
 ---
 

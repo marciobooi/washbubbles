@@ -11,11 +11,18 @@ process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret'
 // touches real dev data.
 const TEST_MONGODB_URL = process.env.MONGODB_TEST_URL || 'mongodb://localhost:27017/washstore_test'
 
+// readyState-guarded so two test files can each call start/stop around their
+// own suite without fighting over one shared mongoose connection — a second
+// connect() while already connected (or a disconnect() while already
+// disconnected) is otherwise a no-op that still resolves, but leaves the
+// connection in a state where a same-tick query can silently miss.
 export async function startTestDb() {
+  if (mongoose.connection.readyState === 1) return
   await mongoose.connect(TEST_MONGODB_URL)
 }
 
 export async function stopTestDb() {
+  if (mongoose.connection.readyState !== 1) return
   await mongoose.connection.dropDatabase()
   await mongoose.disconnect()
 }
@@ -36,6 +43,7 @@ export async function buildTestApp() {
   const posRoutes = (await import('../src/routes/pos.js')).default
   const gatewaysRoutes = (await import('../src/routes/gateways.js')).default
   const syncRoutes = (await import('../src/routes/sync.js')).default
+  const wifiRoutes = (await import('../src/routes/wifi.js')).default
 
   const app = express()
   app.use(cors())
@@ -47,6 +55,7 @@ export async function buildTestApp() {
   app.use('/api', posRoutes)
   app.use('/api/gateways', gatewaysRoutes)
   app.use('/api/sync', syncRoutes)
+  app.use('/api/wifi', wifiRoutes)
   app.get('/api/health', (req, res) => res.json({ ok: true }))
   // Mirrors index.js: without this an async throw would kill the test process
   // instead of surfacing as a 500.

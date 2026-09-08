@@ -13,6 +13,7 @@ import { resolveTenant } from './middleware/tenant.js'
 import gatewaysRoutes from './routes/gateways.js'
 import middlewareRoutes from './routes/middleware.js'
 import syncRoutes from './routes/sync.js'
+import wifiRoutes from './routes/wifi.js'
 
 // Enforce presence of JWT secret in production-like environments
 if (!process.env.JWT_SECRET) {
@@ -44,6 +45,9 @@ app.use('/api/middleware', middlewareRoutes)
 
 // Sync routes (offline-first POS ↔ server)
 app.use('/api/sync', syncRoutes)
+
+// Guest WiFi vouchers (post-purchase)
+app.use('/api/wifi', wifiRoutes)
 
 app.get('/api/health', (req, res) => res.json({ ok: true }))
 

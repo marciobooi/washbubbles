@@ -295,6 +295,12 @@ export function createApi(config) {
     return request('/gateways/cash/pay', { method: 'POST', json: payload, expect: 'json', headers, skipAuth: true })
   }
 
+  // Post-purchase guest-WiFi voucher (batchId of a wash/dry sale)
+  function wifiVoucher(batchId, opts) {
+    const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
+    return request('/wifi/voucher', { method: 'POST', json: { batchId }, expect: 'json', headers, skipAuth: true })
+  }
+
   // Day Close
   function getDayCloseSummary() {
     return request('/admin/day-close/summary', { method: 'GET', expect: 'json' });
@@ -473,6 +479,7 @@ export function createApi(config) {
     createKioskDayClose,
     gatewayCardPay,
     gatewayCashPay,
+    wifiVoucher,
 
     // Interfaces
     getInterfaces,
@@ -549,6 +556,7 @@ export const {
   verifyAdminPin,
   gatewayCardPay,
   gatewayCashPay,
+  wifiVoucher,
   getInterfaces,
   createInterface,
   updateInterface,
