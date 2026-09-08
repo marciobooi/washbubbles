@@ -106,6 +106,7 @@ function registerIpcHandlers(posEngine, syncEngine, hardwareAgent) {
   // ─── Hardware Agent ───
   ipcMain.handle('hw:getStatus', () => hardwareAgent.getStatus())
   ipcMain.handle('hw:dispenseChange', (e, amount) => posEngine.dispenseChange(assertAmount(amount)))
+  ipcMain.handle('pos:cashOut', () => posEngine.cashOut())
   ipcMain.handle('hw:printReceipt', (e, content) => {
     if (typeof content !== 'string') throw new Error('receipt content must be a string')
     return posEngine.printReceipt(content.slice(0, 4000))

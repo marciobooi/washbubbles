@@ -31,6 +31,11 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
   const [cashInserted, setCashInserted] = React.useState(0)
   const [detectedCardCode, setDetectedCardCode] = React.useState(null)
 
+  // Local (offline) session credit — kept separate from `cashInserted` above,
+  // which tracks the legacy remote-websocket hardware pipeline.
+  const [localSession, setLocalSession] = React.useState(null)
+  const [cashingOut, setCashingOut] = React.useState(false)
+
   // Separate purchase items (machines/services) from recharge items
   const purchaseTotal = cart.reduce((s, i) => (i.type === 'Recarga de Cartão' ? s : s + (i.price || i.amount || 0)), 0)
   const rechargeTotal = cart.reduce((s, i) => (i.type === 'Recarga de Cartão' ? s + (i.price || i.amount || 0) : s), 0)
@@ -45,6 +50,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
       // Reset detection state when modal closes
       setCashInserted(0)
       setDetectedCardCode(null)
+      setLocalSession(null)
       return
     }
 
@@ -137,6 +143,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
   React.useEffect(() => {
     if (!open || !localApi.isElectron) return
     const electron = window.electronAPI
+    let autoPayFired = false
 
     const onLoaded = ({ card }) => {
       if (!card?.code) return
@@ -152,13 +159,44 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
         variant: 'destructive',
       })
     }
+    // Live local credit, straight from the embedded hardware agent — updates
+    // the instant a coin lands, offline included, and auto-confirms cash
+    // payment once it covers the cart, same as the legacy websocket path
+    // does for `cashInserted` above.
+    const onSession = (session) => {
+      setLocalSession(session)
+      if (!autoPayFired && session && session.credits >= total && total > 0) {
+        autoPayFired = true
+        setTimeout(() => handleCashConfirm(session.credits), 500)
+      }
+    }
     electron.onCardLoaded(onLoaded)
     electron.onCardBlocked(onBlocked)
+    electron.onSessionUpdate(onSession)
+    localApi.getSession().then((s) => s && setLocalSession(s))
     // preload exposes no removeListener — these accumulate for the life of
     // the renderer, same as the existing onSaleCompleted/onSyncStatusChanged
     // listeners elsewhere in this app; harmless since only one renderer ever
     // runs at a time.
-  }, [open])
+  }, [open, total])
+
+  async function handleCashOut() {
+    setCashingOut(true)
+    try {
+      const result = await localApi.cashOut()
+      if (result.amount > 0) {
+        toast({
+          title: result.success ? `Troco: €${result.amount.toFixed(2)}` : 'Falha ao devolver troco',
+          description: result.success ? 'Recolha o seu dinheiro' : 'Dispensador indisponível — contacte o balcão',
+          variant: result.success ? 'success' : 'destructive',
+        })
+      }
+    } catch (e) {
+      toast({ title: 'Erro ao devolver troco', description: e?.message, variant: 'destructive' })
+    } finally {
+      setCashingOut(false)
+    }
+  }
 
   async function handleCardPayAutomatic(code) {
     // Auto-pay with detected card
@@ -391,12 +429,36 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
                 </div>
               )}
 
-              <button 
-                onClick={onClose}
-                className="mt-4 px-6 py-3 rounded-xl bg-neutral-100 text-neutral-700 hover:bg-neutral-200 font-semibold transition-all"
-              >
-                Cancelar
-              </button>
+              {/* Local (offline) session credit — updates live as coins land
+                  on the embedded hardware agent, independent of the legacy
+                  websocket pipeline tracked by cashInserted above. */}
+              {localApi.isElectron && localSession && localSession.credits > 0 && (
+                <div className="mt-3 p-4 bg-teal-50 rounded-xl">
+                  <p className="text-sm text-neutral-600">Crédito inserido</p>
+                  <p className="text-2xl font-bold text-teal-700">{localSession.credits.toFixed(2)}€</p>
+                  {localSession.credits < total && (
+                    <p className="text-xs text-neutral-500 mt-1">Faltam {(total - localSession.credits).toFixed(2)}€</p>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-2 mt-4">
+                <button
+                  onClick={onClose}
+                  className="flex-1 px-6 py-3 rounded-xl bg-neutral-100 text-neutral-700 hover:bg-neutral-200 font-semibold transition-all"
+                >
+                  Cancelar
+                </button>
+                {localApi.isElectron && localSession && localSession.cashBalance > 0 && (
+                  <button
+                    onClick={handleCashOut}
+                    disabled={cashingOut}
+                    className="flex-1 px-6 py-3 rounded-xl bg-amber-100 text-amber-800 hover:bg-amber-200 font-semibold transition-all disabled:opacity-50"
+                  >
+                    {cashingOut ? 'A devolver…' : `Levantar troco (${localSession.cashBalance.toFixed(2)}€)`}
+                  </button>
+                )}
+              </div>
 
               {/* Staff fallback for when the hardware is down. Deliberately
                   understated so customers do not reach for it by default. */}

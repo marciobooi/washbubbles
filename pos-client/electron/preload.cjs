@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Hardware Agent
   getHardwareStatus: () => ipcRenderer.invoke('hw:getStatus'),
   dispenseChange: (amount) => ipcRenderer.invoke('hw:dispenseChange', amount),
+  cashOut: () => ipcRenderer.invoke('pos:cashOut'),
   printReceipt: (content) => ipcRenderer.invoke('hw:printReceipt', content),
   // Requires the operator's admin PIN — this starts a machine without payment.
   adminStartMachine: (id, adminPin) => ipcRenderer.invoke('hw:adminStartMachine', id, adminPin),

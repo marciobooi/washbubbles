@@ -841,27 +841,18 @@ be topped up or spent against, because the local SQLite `cards` table had no
   with a PIN gate already, not something blocking routine customer
   transactions, so it wasn't in scope for "make the kiosk usable while
   offline."
-- [ ] **The UI still doesn't show the customer their local session balance
-  as coins go in.** The embedded hardware agent already updates
-  `pos-engine.sessionState` and emits `session:updated` / `credit:accepted`
-  over IPC the instant a coin lands — `preload.cjs` already exposes
-  `onSessionUpdate`/`onCreditAccepted` — but no component subscribes to them.
-  A customer feeding the local coin acceptor while offline sees nothing
-  change on screen until they happen to have inserted enough, at which point
-  `handlePay`'s new local branch will still settle the sale correctly — the
-  money is tracked and safe — but the UX looks stalled in the meantime. Purely
-  a display gap, not a correctness one; left for a follow-up rather than
-  folded into this round's money-path change.
+- [x] **Live local session balance — done in Round 12.** `CartModal` now
+  subscribes to `onSessionUpdate` and shows the running credit as coins land,
+  auto-confirming cash payment once it covers the cart — same UX the legacy
+  websocket `cashInserted` path already had.
 - [x] **Card payment through the local engine, and RFID auto-pay — done in
   Round 11.** `CartModal` now also listens for the embedded agent's own
   `card:loaded`/`card:blocked` over IPC, and `App.jsx`'s card branch settles
   locally the same way the cash branch does.
-- [ ] **No UI action gives cash back.** `pos-engine.dispenseChange(amount)` /
-  the `hw:dispenseChange` IPC call exist and work, but nothing calls them —
-  unspent local session credit just sits there for the customer's next
-  purchase rather than being handed back as physical change. Whether that's
-  the intended behaviour (session-as-running-tab) or a "cash out" button is
-  genuinely missing is a product question, not something to guess at here.
+- [x] **"Levantar troco" cash-out button — done in Round 12.** New
+  `pos-engine.cashOut()` hands back unspent cash + bonus (not a loaded
+  card's own balance) via the hopper; a button next to "Cancelar" in
+  `CartModal` calls it when there's local cash to return.
 
 No backend changes this round — frontend/Electron only. 70 backend tests
 still pass (regression check, unaffected as expected).
@@ -1052,10 +1043,27 @@ to standardise on MIFARE, matching what the server side already assumed.
 
 ### Still open
 
-- [ ] No "give cash back" UI action, and no live on-screen session balance as
-  coins go in while offline — both display/polish gaps, not correctness
-  ones, carried over from Round 8 (see above).
 - [ ] Kiosk day-close still requires connectivity (Round 7 decision, unchanged).
+
+---
+
+## Round 12 — live balance display and cash-out
+
+The two remaining polish items from Round 8/11: nothing showed the customer
+their local credit as coins went in offline, and there was no way to get
+unspent cash back short of spending it on another machine.
+
+- [x] `CartModal` subscribes to the embedded hardware agent's
+  `onSessionUpdate` (already emitted, never listened to before now) and
+  shows the running local credit live, auto-confirming cash payment once it
+  covers the cart — mirrors the UX the legacy remote-websocket
+  `cashInserted` path already had, just for the offline pipeline.
+- [x] `pos-engine.cashOut()` — hands back unspent cash **and** recharge
+  bonus (itself cash-backed) via the hopper, explicitly leaving a loaded
+  card's own balance untouched (that money is the card's, not the kiosk's to
+  refund as coins). Exposed as a "Levantar troco" button next to "Cancelar"
+  in `CartModal`, shown only when there's local cash to return.
+- No backend changes; 78 backend tests still pass (regression check).
 
 ---
 

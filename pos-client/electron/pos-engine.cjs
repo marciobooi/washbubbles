@@ -640,6 +640,29 @@ class PosEngine extends EventEmitter {
     const success = await this.hw.dispenseCoins(amount, opts)
     return { success, amount }
   }
+
+  /**
+   * Hand back whatever unspent cash (plus recharge bonus, itself cash-backed)
+   * is sitting in the session — the customer walking away without spending
+   * it all, rather than it silently carrying into a stranger's next session.
+   * Only the cash side: a loaded card's balance is the card's own money, not
+   * the kiosk's to hand back as coins, so it's left untouched.
+   */
+  async cashOut() {
+    const amount = roundMoney(this.sessionState.cashBalance + this.sessionState.bonus)
+    if (!(amount > 0)) return { success: true, amount: 0 }
+    const result = await this.dispenseChange(amount)
+    if (result.success) {
+      this.sessionState.cashBalance = 0
+      this.sessionState.bonus = 0
+      this.updateCredits()
+      this.persistSession()
+      flushSave()
+      this.emit('session:updated', this.getSession())
+    }
+    return { success: result.success, amount }
+  }
+
   printReceipt(content) { if (!this.hw) return false; return this.hw.printReceipt(content) }
   updateCredits() { this.sessionState.credits = roundMoney(this.sessionState.cashBalance + this.sessionState.cardBalance + this.sessionState.bonus) }
   getSession() { return { ...this.sessionState } }

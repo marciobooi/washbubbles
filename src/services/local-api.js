@@ -75,3 +75,15 @@ export async function processCart(items, method, cardCode, batchId) {
   if (!electron) throw new Error('Local engine not available outside the kiosk app')
   return electron.processCart(items, method, cardCode, batchId)
 }
+
+/** Hand back unspent local cash credit as physical coins from the hopper. */
+export async function cashOut() {
+  if (!electron) throw new Error('Local engine not available outside the kiosk app')
+  return electron.cashOut()
+}
+
+/** Subscribe to live local session updates (fires on every coin/bill/spend). Returns nothing to unsubscribe with — see preload.cjs. */
+export function onSessionUpdate(callback) {
+  if (!electron) return
+  electron.onSessionUpdate(callback)
+}
