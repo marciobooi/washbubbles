@@ -6,6 +6,8 @@ import * as ws from '@/services/websocket'
 import Modal from '@/components/ui/Modal'
 import { Pencil, Trash2, Plus, Check, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import washL1 from '@/assets/washingmashine/L1.png'
+import dryS1 from '@/assets/drymachine/S1.png'
 
 export default function AdminMachines(){
   const navigate = useNavigate()
@@ -416,7 +418,7 @@ export default function AdminMachines(){
                 </div>
 
                 <div className="flex justify-center">
-                  <img src={(editing && editing.icon) || (type === 'dry' ? '/drymachine/S1.png' : '/washingmashine/L1.png')} alt="preview" className={`h-12 w-12 object-contain rounded transition-transform duration-300 ${animating ? 'scale-95 opacity-60' : 'scale-100 opacity-100'} tealFilter`} aria-hidden />
+                  <img src={(editing && editing.icon) || (type === 'dry' ? dryS1 : washL1)} alt="preview" className={`h-12 w-12 object-contain rounded transition-transform duration-300 ${animating ? 'scale-95 opacity-60' : 'scale-100 opacity-100'} tealFilter`} aria-hidden />
                 </div>
               </div>
             </div>

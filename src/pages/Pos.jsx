@@ -9,15 +9,25 @@ import Banner from '../components/Banner'
 import api from '@/services/api'
 import { useTranslation } from 'react-i18next'
 import { connect, subscribe } from '@/services/websocket'
+import washL1 from '@/assets/washingmashine/L1.png'
+import washL2 from '@/assets/washingmashine/L2.png'
+import washL3 from '@/assets/washingmashine/L3.png'
+import washL4 from '@/assets/washingmashine/L4.png'
+import dryS1 from '@/assets/drymachine/S1.png'
+import dryS2 from '@/assets/drymachine/S2.png'
+import dryS3 from '@/assets/drymachine/S3.png'
+import dryS4 from '@/assets/drymachine/S4.png'
+import cardIcon from '@/assets/card/card.png'
+import cardGroupIcon from '@/assets/card/card-group.png'
 
 export default function Pos() {
   const { t } = useTranslation('pos')
 
   const cards = [
-    { id: 'wash', title: t('cards.wash.title'), text: t('cards.wash.text'), frames: ['/washingmashine/L1.png', '/washingmashine/L2.png', '/washingmashine/L3.png', '/washingmashine/L4.png'] },
-    { id: 'dry', title: t('cards.dry.title'), text: t('cards.dry.text'), frames: ['/drymachine/S1.png', '/drymachine/S2.png', '/drymachine/S3.png', '/drymachine/S4.png'] },
-    { id: 'card', title: t('cards.card.title'), text: t('cards.card.text'), frames: ['/card/card.png' ] },
-    { id: 'buyCard', title: t('cards.buyCard.title'), text: t('cards.buyCard.text') , frames: ['/card/card-group.png' ] }
+    { id: 'wash', title: t('cards.wash.title'), text: t('cards.wash.text'), frames: [washL1, washL2, washL3, washL4] },
+    { id: 'dry', title: t('cards.dry.title'), text: t('cards.dry.text'), frames: [dryS1, dryS2, dryS3, dryS4] },
+    { id: 'card', title: t('cards.card.title'), text: t('cards.card.text'), frames: [cardIcon] },
+    { id: 'buyCard', title: t('cards.buyCard.title'), text: t('cards.buyCard.text') , frames: [cardGroupIcon] }
   ]
 
   // Card component moved to src/components/Card.jsx

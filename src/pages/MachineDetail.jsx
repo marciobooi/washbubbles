@@ -5,6 +5,17 @@ import Wave from '../components/ui/wave'
 import api from '@/services/api'
 import { isPromoActive, getEffectivePrice } from '@/lib/promo'
 import { Tag } from 'lucide-react'
+import washL1 from '@/assets/washingmashine/L1.png'
+import washL2 from '@/assets/washingmashine/L2.png'
+import washL3 from '@/assets/washingmashine/L3.png'
+import washL4 from '@/assets/washingmashine/L4.png'
+import dryS1 from '@/assets/drymachine/S1.png'
+import dryS2 from '@/assets/drymachine/S2.png'
+import dryS3 from '@/assets/drymachine/S3.png'
+import dryS4 from '@/assets/drymachine/S4.png'
+
+const WASH_FRAMES = [washL1, washL2, washL3, washL4]
+const DRY_FRAMES = [dryS1, dryS2, dryS3, dryS4]
 
 export default function MachineDetail() {
   const { id } = useParams()
@@ -24,7 +35,7 @@ export default function MachineDetail() {
         const data = await api.getMachine(id)
         if (mounted && data && data._id) {
           setMachine(data)
-          setFrames(data.type === 'wash' ? ['/washingmashine/L1.png','/washingmashine/L2.png','/washingmashine/L3.png','/washingmashine/L4.png'] : ['/drymachine/S1.png','/drymachine/S2.png','/drymachine/S3.png','/drymachine/S4.png'])
+          setFrames(data.type === 'wash' ? WASH_FRAMES : DRY_FRAMES)
           
           // Fetch price data based on machine type and weight
           if (data.type && data.weight) {
@@ -52,9 +63,7 @@ export default function MachineDetail() {
           const found = list.find((m) => (m._id || m.id) === id)
           if (found) {
             setMachine(found)
-            setFrames(found.type === 'wash'
-              ? ['/washingmashine/L1.png','/washingmashine/L2.png','/washingmashine/L3.png','/washingmashine/L4.png']
-              : ['/drymachine/S1.png','/drymachine/S2.png','/drymachine/S3.png','/drymachine/S4.png'])
+            setFrames(found.type === 'wash' ? WASH_FRAMES : DRY_FRAMES)
             return
           }
         }
@@ -64,11 +73,9 @@ export default function MachineDetail() {
       }
 
       // final small fallback
-      const fallback = { id: id || 'm1', name: 'Maquina', weight: 12, price: 3.5, status: 'free', statusText: 'Livre', type, icon: type === 'wash' ? '/washingmashine/L1.png' : '/drymachine/S1.png' }
+      const fallback = { id: id || 'm1', name: 'Maquina', weight: 12, price: 3.5, status: 'free', statusText: 'Livre', type, icon: type === 'wash' ? washL1 : dryS1 }
       setMachine(fallback)
-      setFrames(type === 'wash'
-        ? ['/washingmashine/L1.png','/washingmashine/L2.png','/washingmashine/L3.png','/washingmashine/L4.png']
-        : ['/drymachine/S1.png','/drymachine/S2.png','/drymachine/S3.png','/drymachine/S4.png'])
+      setFrames(type === 'wash' ? WASH_FRAMES : DRY_FRAMES)
     }
     load()
     return () => { mounted = false }

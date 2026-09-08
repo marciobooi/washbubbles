@@ -1,6 +1,12 @@
 import React, { useEffect, useState } from 'react'
+import login1 from '@/assets/login/1.jpg'
+import login2 from '@/assets/login/2.jpg'
+import login3 from '@/assets/login/3.jpg'
+import login4 from '@/assets/login/4.jpg'
+import login5 from '@/assets/login/5.jpg'
+import login6 from '@/assets/login/6.jpg'
 
-// simple carousel that cycles through images located in /login folder under public
+// simple carousel that cycles through the bundled login images
 export default function LoginCarousel({ className }) {
   const [images, setImages] = useState([])
   const [current, setCurrent] = useState(null)
@@ -9,14 +15,7 @@ export default function LoginCarousel({ className }) {
   const [showCurrent, setShowCurrent] = useState(false)
 
   useEffect(() => {
-    const urls = [
-      '/login/1.jpg',
-      '/login/2.jpg',
-      '/login/3.jpg',
-      '/login/4.jpg',
-      '/login/5.jpg',
-      '/login/6.jpg',
-    ]
+    const urls = [login1, login2, login3, login4, login5, login6]
     setImages(urls)
     if (urls.length) {
       setCurrent(urls[0])

@@ -26,12 +26,19 @@ if (!process.env.ELECTRON_START_URL) {
  * `loadURL` a remote site (`https://washbubbles.app`) unconditionally, which
  * meant the kiosk had nothing to render at all the moment the internet dropped:
  * not a degraded local screen, an actual browser connection error, because the
- * UI itself had never been fetched. The frontend's own `npm run build` output
- * (repo-root `dist/`) is expected to sit alongside this `pos-client` folder —
- * see `LOCAL_UI_PATH` below and the packaging note in the README.
+ * UI itself had never been fetched.
+ *
+ * This MUST be the `npm run build:electron` output (repo-root `dist-electron/`),
+ * not the plain `npm run build` one (`dist/`, deployed to the web server).
+ * The two are built with different Vite `base` values — `dist/` uses
+ * absolute asset paths, which 404 under `file://`; `dist-electron/` uses
+ * relative ones, which is what a bundle loaded off disk with no server needs.
+ * Pointing this at `dist/` looks like it works (the very first paint does)
+ * and then breaks the instant the app client-navigates anywhere, or fails to
+ * load a single `public/`-folder image — see AUDIT-FINDINGS.md Round 9.
  */
 const DEV_SERVER_URL = process.env.ELECTRON_START_URL || null
-const LOCAL_UI_PATH = path.join(__dirname, '..', '..', 'dist', 'index.html')
+const LOCAL_UI_PATH = path.join(__dirname, '..', '..', 'dist-electron', 'index.html')
 const KIOSK_API_KEY = process.env.ELECTRON_KIOSK_API_KEY || ''
 const API_BASE = process.env.ELECTRON_API_BASE || 'https://api.washbubbles.app'
 const TENANT_ID = process.env.ELECTRON_TENANT_ID || ''
@@ -169,7 +176,7 @@ function createWindow() {
   if (!fs.existsSync(LOCAL_UI_PATH)) {
     // Fail loudly rather than show a silent blank/error window a technician
     // would have no way to diagnose from the kiosk screen itself.
-    console.error(`[Main] FATAL: bundled UI not found at ${LOCAL_UI_PATH}. Run "npm run build" in the repo root and deploy its dist/ alongside pos-client/, or set ELECTRON_START_URL for local dev.`)
+    console.error(`[Main] FATAL: bundled UI not found at ${LOCAL_UI_PATH}. Run "npm run build:electron" in the repo root and deploy its dist-electron/ alongside pos-client/, or set ELECTRON_START_URL for local dev.`)
     mainWindow.loadURL('data:text/html,' + encodeURIComponent(
       '<body style="background:#111;color:#eee;font:16px sans-serif;padding:2rem">' +
       '<h1>Aplicação não encontrada</h1>' +

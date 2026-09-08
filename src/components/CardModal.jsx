@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import { useCart } from '../context/CartContext'
 import { useTranslation } from 'react-i18next'
+import washIcon from '@/assets/washingmashine/L1.png'
+import dryIcon from '@/assets/drymachine/S1.png'
+import cardIcon from '@/assets/card/card.png'
 
 function formatDate(iso) {
   const d = new Date(iso)
@@ -14,9 +17,9 @@ function formatTime(iso) {
 
 function getTxIcon(type) {
   const t = type.toLowerCase()
-  if (t.includes('lavagem')) return '/washingmashine/L1.png'
-  if (t.includes('secagem')) return '/drymachine/S1.png'
-  return '/card/card.png'
+  if (t.includes('lavagem')) return washIcon
+  if (t.includes('secagem')) return dryIcon
+  return cardIcon
 }
 
 // `onRecharge` used to be accepted here and never called — Pos.jsx passed a real
@@ -89,7 +92,7 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
       <div className="bg-white shadow-sm px-6 py-4 flex items-center justify-between shrink-0 z-10">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-primary-50 rounded-xl">
-            <img src="/card/card.png" alt="Card" className="w-8 h-8 object-contain" />
+            <img src={cardIcon} alt="Card" className="w-8 h-8 object-contain" />
           </div>
           <h2 className="text-2xl font-bold text-neutral-800 tracking-tight">{t('card.title')}</h2>
         </div>

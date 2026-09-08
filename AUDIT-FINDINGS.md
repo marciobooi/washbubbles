@@ -883,6 +883,77 @@ still pass (regression check, unaffected as expected).
 
 ---
 
+## Round 9 — the relative-base fix from Round 8 was itself broken
+
+**Caught in live testing, not by inspection** — the user reported "some icons
+are missing" after Round 8 shipped. Chasing it down turned up something worse
+than missing icons: Round 8's `base: './'` change, needed so the kiosk's
+bundle would load over `file://`, silently broke the **web deployment** on
+every route except exactly `/`.
+
+### Why: one `base` cannot serve both targets
+
+The web app is a client-routed SPA (`BrowserRouter`, history-API routing) and
+nginx serves it with `try_files ... /index.html` — a request for
+`/admin/machines` gets index.html's bytes back, but the browser's address bar
+still reads `/admin/machines`. A **relative** asset path in that document
+(`./assets/index.js`) resolves against the *current URL*, not the file's real
+location — on that route it resolves to `/admin/assets/index.js`, which
+doesn't exist. Verified directly: served the built `dist/` through `serve -s`
+(mirrors nginx's fallback behaviour) and loaded `/admin/machines` — the
+browser requested `/admin/assets/index-*.js`, got index.html's bytes back
+instead (wrong content, `text/html`), and refused to execute it as a module:
+_"Expected a JavaScript-or-Wasm module script but the server responded with a
+MIME type of 'text/html'"_. The whole app fails to load — not a cosmetic bug.
+Absolute paths (`/assets/index.js`, Vite's default `base: '/'`) don't have
+this problem, which is exactly why nothing broke before Round 8 touched it.
+
+The icons the user actually noticed were a second, independent symptom of the
+same root cause: `Pos.jsx`, `Machines.jsx`, `MachineDetail.jsx`, `CardModal.jsx`,
+`LoginCarousel.jsx`, `LanguageSwitcher.jsx`, `Banner.jsx`, and three admin
+pages all referenced images in `public/` by hand-typed absolute path
+(`'/washingmashine/L1.png'`, `'/geral/interface.png'`, etc.). Those paths are
+never touched by Vite's `base` config at all — they're plain strings, resolved
+by the browser at runtime against the *current document location* — so they
+work fine over HTTP (where `/x.png` always means "site root") but break under
+`file://` (where a leading `/` means *filesystem* root) regardless of which
+`base` the build used.
+
+### The fix: two builds, not one config
+
+- [x] `vite.config.js` now takes a `mode`: `npm run build` (default, web) is
+  `base: '/'` → `dist/`, unchanged from before Round 8 ever happened. New
+  `npm run build:electron` is `base: './'` → `dist-electron/`, used only by
+  the kiosk. One `base` value genuinely cannot satisfy both targets — this
+  isn't a workaround, it's the correct shape for a SPA that has to run both
+  from a domain root with client-side routing *and* standalone off disk.
+- [x] `pos-client/electron/main.cjs`'s `LOCAL_UI_PATH` now points at
+  `dist-electron/index.html`, not `dist/index.html`. **Deploy note 11 from
+  Round 8 is now wrong** — see the corrected one below. Pointing the kiosk at
+  plain `dist/` looks fine at first paint and then breaks the instant the app
+  client-navigates anywhere, which is exactly how this shipped unnoticed.
+- [x] Every hardcoded `public/`-folder image reference across the 10 files
+  above was replaced with a real `import` from `src/assets/...` (the actual
+  files were `git mv`'d out of `public/` into `src/assets/`, split by the
+  original folder name). This is not interchangeable with just prefixing
+  `./` onto the old strings — a plain relative string has the *exact same
+  current-URL-relative resolution problem* as the `<script>` tag did, so it
+  would still break on any nested route in both the web and the Electron
+  build the moment the app client-navigates away from `/`. A real `import`
+  is resolved by Vite at build time independent of whatever route is active
+  when the image renders, in both builds.
+  `public/uploads/` (admin-uploaded branding images, written at runtime, not
+  part of the build) and two genuinely unreferenced files
+  (`geral/freshbubbleslogo.png`, `geral/login.jpg`) were left alone.
+- Verified both ways: rebuilt both targets from clean, confirmed `dist/`
+  emits `/assets/...` and `dist-electron/` emits `./assets/...`, re-ran the
+  `serve -s dist` deep-route repro (now resolves and executes correctly on
+  `/admin/machines`, confirmed via a fresh tab with zero console errors), and
+  loaded the root route in a live browser to confirm the banner, flag, and
+  machine-animation images render from their new bundled paths, not broken
+  image icons.
+- 70 backend tests still pass; no backend changes.
+
 ## Deploy notes (do these on the Hetzner box)
 
 1. **Drop the old user email index once**, or the new `partialFilterExpression` will not be created
@@ -924,16 +995,20 @@ still pass (regression check, unaffected as expected).
     lock — every one of them fails closed with no PIN configured, by design.
     Turn on the maintenance-lock toggle there too if you want it available.
 11. **The kiosk now needs the frontend's build output present on disk, not
-    just reachable over the network.** Run `npm run build` at the repo root
-    and copy the resulting `dist/` folder so it sits as a sibling of
-    `pos-client/` on the actual kiosk machine (`LOCAL_UI_PATH` in
-    `main.cjs` resolves to `<repo root>/dist/index.html`). This is a new
-    deploy step, not an update to an existing one — previous kiosk builds
-    never needed `dist/` at all, since they loaded the UI from
+    just reachable over the network — but it is a DIFFERENT build from the
+    one deployed to the web server.** Run `npm run build:electron` at the
+    repo root (not plain `npm run build` — see Round 9, that one is `base: '/'`
+    and silently breaks under `file://` past the very first paint) and copy
+    the resulting `dist-electron/` folder so it sits as a sibling of
+    `pos-client/` on the actual kiosk machine (`LOCAL_UI_PATH` in `main.cjs`
+    resolves to `<repo root>/dist-electron/index.html`). This is a new deploy
+    step, not an update to an existing one — previous kiosk builds never
+    needed either `dist/` folder at all, since they loaded the UI from
     `https://washbubbles.app` directly. A kiosk missing this folder boots to
     a "não encontrada" error screen instead of the POS UI, online or not.
-    Rebuild and redeploy `dist/` to every kiosk on every frontend release
-    from now on.
+    Rebuild and redeploy `dist-electron/` (never plain `dist/`) to every
+    kiosk on every frontend release from now on. The web server keeps
+    deploying `dist/` from plain `npm run build`, exactly as before.
 12. **Kiosk DB migrates to v4 automatically** on first launch of this build
     (adds `cards.status`). One-way, like the v3 migration above — take a
     copy of `washbubbles.db` first if you want to be able to roll back.

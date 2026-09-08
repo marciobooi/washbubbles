@@ -7,14 +7,22 @@ import api from '@/services/api'
 import { connect, subscribe } from '@/services/websocket'
 import { useCart } from '../context/CartContext'
 import { useTranslation } from 'react-i18next'
+import washL1 from '@/assets/washingmashine/L1.png'
+import washL2 from '@/assets/washingmashine/L2.png'
+import washL3 from '@/assets/washingmashine/L3.png'
+import washL4 from '@/assets/washingmashine/L4.png'
+import dryS1 from '@/assets/drymachine/S1.png'
+import dryS2 from '@/assets/drymachine/S2.png'
+import dryS3 from '@/assets/drymachine/S3.png'
+import dryS4 from '@/assets/drymachine/S4.png'
 export default function Machines() {
   const [searchParams] = useSearchParams()
   const type = searchParams.get('type') || 'wash'
   const navigate = useNavigate()
 
   const frames = type === 'wash'
-    ? ['/washingmashine/L1.png', '/washingmashine/L2.png', '/washingmashine/L3.png', '/washingmashine/L4.png']
-    : ['/drymachine/S1.png', '/drymachine/S2.png', '/drymachine/S3.png', '/drymachine/S4.png']
+    ? [washL1, washL2, washL3, washL4]
+    : [dryS1, dryS2, dryS3, dryS4]
 
   const [machines, setMachines] = React.useState([])
   const [loading, setLoading] = React.useState(true)
@@ -45,9 +53,9 @@ export default function Machines() {
 
         // Fallback to local mock
         setMachines([
-          { id: 'm1', name: 'Maquina Lavar 1', weight: 12, price: 3.5, status: 'free', statusText: 'Livre', type: 'wash', icon: '/washingmashine/L1.png' },
-          { id: 'm2', name: 'Maquina Lavar 2', weight: 8, price: 2.5, statusText: 'Ocupado', status: 'working', type: 'wash', icon: '/washingmashine/L1.png' },
-          { id: 'm3', name: 'Maquina Lavar 3', weight: 18, price: 4.5, status: 'free', statusText: 'Livre', type: 'wash', icon: '/washingmashine/L1.png' },
+          { id: 'm1', name: 'Maquina Lavar 1', weight: 12, price: 3.5, status: 'free', statusText: 'Livre', type: 'wash', icon: washL1 },
+          { id: 'm2', name: 'Maquina Lavar 2', weight: 8, price: 2.5, statusText: 'Ocupado', status: 'working', type: 'wash', icon: washL1 },
+          { id: 'm3', name: 'Maquina Lavar 3', weight: 18, price: 4.5, status: 'free', statusText: 'Livre', type: 'wash', icon: washL1 },
         ].filter(m => m.type === type))
       } finally {
         if (mounted) setLoading(false)

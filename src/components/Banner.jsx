@@ -1,15 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
+import dryBanner from '@/assets/banner/dry.png'
+import carpetBanner from '@/assets/banner/carpet.png'
 
 const banners = [
     { id: 'banner1',
         title: 'Limpeza a seco',
         text: 'Entre em contacto mail@mail.com',
-        image: '/banner/dry.png'
+        image: dryBanner
     },
     { id: 'banner2',
         title: 'Lavagem de carpetes',
         text: 'Entre em contacto mail@mail.com',
-        image: '/banner/carpet.png'
+        image: carpetBanner
     },
 ]
 

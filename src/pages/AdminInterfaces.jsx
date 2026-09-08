@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import interfaceIcon from '@/assets/geral/interface.png'
 import api from '@/services/api'
 import { toast } from '@/components/ui/Toast'
 import Modal from '@/components/ui/Modal'
@@ -155,7 +156,7 @@ export default function AdminInterfaces() {
                     </span>
                   </div>
                   <div className="flex items-center gap-3">
-                    <img src="/geral/interface.png" alt="Interface" className="w-12 h-12 object-contain rounded" />
+                    <img src={interfaceIcon} alt="Interface" className="w-12 h-12 object-contain rounded" />
                     <div className="flex-1 text-sm text-neutral-600">
                       <div className="flex items-center gap-2">
                         <span className="font-medium">S/N:</span>

@@ -6,6 +6,12 @@ import { Label } from '@/components/ui/label'
 import { Card } from '@/components/ui/card'
 import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
+import billAcceptorImg from '@/assets/geral/bill_acceptor.jpg'
+import cardDispenserImg from '@/assets/geral/card_dispenser.jpg'
+import coinAcceptorImg from '@/assets/geral/coin_acceptor.jpg'
+import miniHopperImg from '@/assets/geral/mini_hopper.jpg'
+import printerImg from '@/assets/geral/printer.jpg'
+import rfidReaderImg from '@/assets/geral/rfid_reader.jpg'
 
 export default function AdminPeripherals() {
   const [peripherals, setPeripherals] = React.useState([])
@@ -14,12 +20,12 @@ export default function AdminPeripherals() {
   const [showConfig, setShowConfig] = React.useState(false)
 
   const peripheralTypes = [
-    { type: 'bill_acceptor', name: 'Leitor de Notas', protocols: ['cctalk', 'MDB'], image: '/geral/bill_acceptor.jpg' },
-    { type: 'card_dispenser', name: 'Disp. de Cartões', protocols: ['cctalk', 'pulse'], image: '/geral/card_dispenser.jpg' },
-    { type: 'coin_acceptor', name: 'Leitor de Moedas', protocols: ['cctalk', 'MDB'], image: '/geral/coin_acceptor.jpg' },
-    { type: 'hopper', name: 'Hopper', protocols: ['cctalk', 'MDB'], image: '/geral/mini_hopper.jpg' },
-    { type: 'printer', name: 'Impressora', protocols: ['rs232'], image: '/geral/printer.jpg' },
-    { type: 'rfid_reader', name: 'Leitor/Gravador RFID', protocols: [], image: '/geral/rfid_reader.jpg' }
+    { type: 'bill_acceptor', name: 'Leitor de Notas', protocols: ['cctalk', 'MDB'], image: billAcceptorImg },
+    { type: 'card_dispenser', name: 'Disp. de Cartões', protocols: ['cctalk', 'pulse'], image: cardDispenserImg },
+    { type: 'coin_acceptor', name: 'Leitor de Moedas', protocols: ['cctalk', 'MDB'], image: coinAcceptorImg },
+    { type: 'hopper', name: 'Hopper', protocols: ['cctalk', 'MDB'], image: miniHopperImg },
+    { type: 'printer', name: 'Impressora', protocols: ['rs232'], image: printerImg },
+    { type: 'rfid_reader', name: 'Leitor/Gravador RFID', protocols: [], image: rfidReaderImg }
   ]
 
   const [formData, setFormData] = React.useState({

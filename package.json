@@ -10,6 +10,7 @@
     "dev:db:setup": "npm --prefix backend run seed",
     "dev:backend": "npm --prefix backend run dev",
     "build": "vite build",
+    "build:electron": "vite build --mode electron",
     "preview": "vite preview",
     "package:agent": "pkg backend/src/agentServer.js --targets node18-win-x64 --output dist-agent/hardware-agent.exe"
   },
