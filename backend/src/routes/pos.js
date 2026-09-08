@@ -3,7 +3,7 @@ import Machine from '../models/machine.js'
 import Sale from '../models/sale.js'
 import Setting from '../models/setting.js'
 import Price from '../models/price.js'
-import { requireKiosk } from '../middleware/auth.js'
+import { requireKiosk, requireKioskOrAdmin } from '../middleware/auth.js'
 import { broadcastMachines, broadcastMachine } from '../wsServer.js'
 import { withTenant } from '../services/tenant.js'
 import { roundMoney, parseAmount } from '../utils/money.js'
@@ -143,35 +143,77 @@ router.post('/sale', requireKiosk, async (req, res) => {
 })
 
 /**
- * POST /pos/admin/verify-pin
+ * Check a staff PIN against the tenant's configured `adminPin` setting.
  *
- * Confirms the operator's admin PIN so the kiosk can unlock staff-only actions
- * (manual payment when the coin acceptor or card reader is down).
- *
- * The PIN is verified server-side and never sent to the client: shipping it to a
- * renderer on a public terminal would make the gate decorative. Compared in
- * constant time and rate limited, since a short numeric PIN is otherwise
+ * Shared by `/admin/verify-pin` (the kiosk UI's own gate check) and any route
+ * that should not trust a kiosk apiKey alone — an apiKey extracted from a
+ * compromised terminal's stored config is still just a kiosk credential; the
+ * PIN is the second factor a physical operator has to actually be there and
+ * know. Compared in constant time, since a short numeric PIN is otherwise
  * brute-forcible in minutes.
  */
-router.post('/admin/verify-pin', adminPinLimiter, requireKiosk, async (req, res) => {
-  const { pin } = req.body
-  if (typeof pin !== 'string' || !pin) return res.status(400).json({ error: 'Missing pin' })
+async function checkAdminPin(req, pin) {
+  if (typeof pin !== 'string' || !pin) return { ok: false, status: 400, error: 'Missing pin' }
 
   const SettingT = withTenant(Setting, req)
   const row = await SettingT.findOne({ key: 'adminPin' })
   const expected = row ? String(row.value ?? '') : ''
 
   // Fail closed: with no PIN configured, staff actions stay locked.
-  if (!expected) {
-    return res.status(409).json({ error: 'No admin PIN is configured for this site', configured: false })
-  }
+  if (!expected) return { ok: false, status: 409, error: 'No admin PIN is configured for this site', configured: false }
 
   const a = Buffer.from(expected)
   const b = Buffer.from(pin)
-  const ok = a.length === b.length && crypto.timingSafeEqual(a, b)
-  if (!ok) return res.status(401).json({ error: 'Invalid PIN' })
+  const match = a.length === b.length && crypto.timingSafeEqual(a, b)
+  if (!match) return { ok: false, status: 401, error: 'Invalid PIN' }
 
+  return { ok: true }
+}
+
+/**
+ * POST /pos/admin/verify-pin
+ *
+ * Confirms the operator's admin PIN so the kiosk can unlock staff-only actions
+ * (manual payment when the coin acceptor or card reader is down).
+ *
+ * The PIN is verified server-side and never sent to the client: shipping it to a
+ * renderer on a public terminal would make the gate decorative.
+ */
+router.post('/admin/verify-pin', adminPinLimiter, requireKiosk, async (req, res) => {
+  const result = await checkAdminPin(req, req.body.pin)
+  if (!result.ok) return res.status(result.status).json({ error: result.error, ...(result.configured === false ? { configured: false } : {}) })
   res.json({ ok: true })
+})
+
+/**
+ * GET /pos/day-close/summary, POST /pos/day-close
+ *
+ * Lets staff close the cash session directly from the kiosk, not only from the
+ * admin dashboard — same wizard, same reconciliation logic
+ * (`services/dayClose.js`), just reachable with a kiosk token.
+ *
+ * The summary is read-only (today's running totals) and needs no more than the
+ * kiosk's own credential. Actually WRITING the close is gated behind the staff
+ * PIN a second time, server-side — a kiosk apiKey lifted from a compromised
+ * terminal's stored config is still just a kiosk credential, and unlike a
+ * payment it can't be undone by a chargeback: a bogus reconciliation record
+ * corrupts the books. The PIN is the proof a physical operator is actually
+ * there. An admin token skips this — the admin JWT is already that credential,
+ * and the dashboard's own close route asks for no PIN either.
+ */
+router.get('/day-close/summary', requireKioskOrAdmin, async (req, res) => {
+  const { getDayCloseSummary } = await import('../services/dayClose.js')
+  res.json(await getDayCloseSummary(req))
+})
+
+router.post('/day-close', requireKioskOrAdmin, async (req, res) => {
+  if (req.userModel?.role === 'KIOSK') {
+    const pinCheck = await checkAdminPin(req, req.body.pin)
+    if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error })
+  }
+  const { createDayClose } = await import('../services/dayClose.js')
+  const { status, body } = await createDayClose(req, req.body)
+  res.status(status).json(body)
 })
 
 // Card recharge / top-up (kiosk) — stored as a transaction without a machine reference
@@ -578,8 +620,11 @@ router.get('/cards/:code', cardLookupLimiter, requireKiosk, async (req, res) => 
 // Public: lightweight settings lookup for branding and card purchase keys (no auth)
 router.get('/settings/:key', async (req, res) => {
   const key = String(req.params.key || '')
-  // Allow branding and cardPurchase settings to be accessed publicly
-  if (!key.startsWith('branding.') && !key.startsWith('cardPurchase.') && !key.startsWith('loyaltyCard.')) {
+  // Allow branding, cardPurchase, loyaltyCard and the kiosk-lock toggle to be
+  // read publicly. None of these leak anything sensitive — knowing whether the
+  // maintenance-lock feature is turned on isn't meaningful information, and the
+  // kiosk needs it before a customer session even authenticates as anything.
+  if (!key.startsWith('branding.') && !key.startsWith('cardPurchase.') && !key.startsWith('loyaltyCard.') && key !== 'kioskLockEnabled') {
     return res.status(404).json({ error: 'Not found' })
   }
   const SettingT = withTenant(Setting, req)

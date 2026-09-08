@@ -32,6 +32,9 @@ import ResetPassword from './pages/ResetPassword'
 import RequireAdmin from './components/RequireAdmin'
 
 import { BrandingProvider } from './context/BrandingContext'
+import { KioskLockProvider } from './context/KioskLockContext'
+import StaffMenu from './components/StaffMenu'
+import KioskLockOverlay from './components/KioskLockOverlay'
 import { TenantProvider } from './context/TenantContext'
 import { useAuth } from './context/AuthContext'
 import AdminTenants from './pages/AdminTenants'
@@ -61,7 +64,9 @@ export default function App() {
         <PaymentProvider>
         <CartProvider>
           <ToastProvider>
-            <AppInner />
+            <KioskLockProvider>
+              <AppInner />
+            </KioskLockProvider>
           </ToastProvider>
         </CartProvider>
         </PaymentProvider>
@@ -415,6 +420,11 @@ function AppInner() {
           </div>
         </div>
       </Modal>
+
+      {/* Staff-only kiosk actions (day-close, maintenance lock) — not on the
+          admin dashboard, which has its own equivalent pages/auth. */}
+      {!location.pathname.startsWith('/admin') && <StaffMenu />}
+      {!location.pathname.startsWith('/admin') && <KioskLockOverlay />}
     </div>
   )
 }

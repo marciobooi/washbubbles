@@ -745,24 +745,6 @@ router.delete('/peripherals/:id', async (req, res) => {
 // Day Close / Cash Session
 // =====================
 
-/**
- * Find the most recent *dashboard* cash-reconciliation close, ignoring any
- * kiosk-pushed Z-report rows that share this collection.
- *
- * `/sync/push/day-close` writes an informational backup record from the
- * kiosk's own local sales — it never has a real floatLeft/amountToBank (both
- * default to 0) and its periodTo is whenever the kiosk happened to run its
- * local close, uncoordinated with when staff actually count the drawer. If one
- * of those were ever picked up as "the last close" here, the float chain would
- * silently reset to zero and the reconciliation window would shift to the
- * wrong moment. The dashboard flow is the only source of truth for the cash
- * chain; kiosk pushes are a record, not a reconciliation.
- */
-async function findLastDashboardClose(DayCloseT) {
-  const arr = await DayCloseT.find({ source: { $ne: 'kiosk' } }).sort({ createdAt: -1 }).limit(1).lean()
-  return arr[0] || null
-}
-
 // GET /admin/day-close — list previous closes (newest first, limit 90)
 router.get('/day-close', async (req, res) => {
   const DayClose = (await import('../models/dayClose.js')).default
@@ -773,54 +755,8 @@ router.get('/day-close', async (req, res) => {
 
 // GET /admin/day-close/summary — live sales totals + reconciliation data for the current open session
 router.get('/day-close/summary', async (req, res) => {
-  const DayClose = (await import('../models/dayClose.js')).default
-  const DayCloseT = withTenant(DayClose, req)
-  const SaleT = withTenant(Sale, req)
-
-  // The period starts from the last *dashboard* close — never a kiosk auto-push.
-  // The kiosk pushes its own Z-report to this same collection as an offline
-  // backup record; it never has a floatLeft or amountToBank (both default to
-  // 0), and its periodTo is whatever moment the kiosk happened to run its local
-  // day-close. If one of those slipped into this chain, it would silently zero
-  // out the real cash float every time and shift the reconciliation window to a
-  // timestamp uncoordinated with when the operator actually counts the drawer.
-  const lastClose = await findLastDashboardClose(DayCloseT)
-  // periodTo (not createdAt) is the correct chain boundary: createdAt is set
-  // when the document is finally written, which is measurably later than the
-  // periodTo captured at the start of the SAME request that created it. A sale
-  // landing in that gap used to belong to neither period and vanished from
-  // every future report.
-  const periodFrom = lastClose ? (lastClose.periodTo || lastClose.createdAt) : new Date(0)
-  const openingFloat = lastClose ? Number(lastClose.floatLeft || 0) : 0
-
-  const sales = await SaleT.find({ createdAt: { $gt: periodFrom } }).lean()
-  let totalCash = 0
-  let totalCard = 0
-  let totalChangeDispensed = 0
-  for (const s of sales) {
-    const amt = Number(s.amount || 0)
-    if (s.method === 'cash') totalCash += amt
-    else totalCard += amt
-    totalChangeDispensed += Number(s.change || 0)
-  }
-  const tc = Number(totalCash.toFixed(2))
-  const expectedCash = Number((openingFloat + tc).toFixed(2))
-
-  res.json({
-    periodFrom,
-    periodTo: new Date(),
-    openingFloat,
-    totalCash: tc,
-    totalCard: Number(totalCard.toFixed(2)),
-    totalSales: Number((tc + totalCard).toFixed(2)),
-    expectedCash,
-    salesCount: sales.length,
-    totalChangeDispensed: Number(totalChangeDispensed.toFixed(2)),
-    openingMechanismCoins: lastClose?.coinMechanismInventory || [],
-    openingMechanismTotal: lastClose?.coinMechanismTotal || 0,
-    openingHopperCoins: lastClose?.hopperCoins || [],
-    openingHopperTotal: lastClose?.hopperTotal || 0
-  })
+  const { getDayCloseSummary } = await import('../services/dayClose.js')
+  res.json(await getDayCloseSummary(req))
 })
 
 // GET /admin/day-close/:id — single record
@@ -832,156 +768,14 @@ router.get('/day-close/:id', async (req, res) => {
   res.json(dc)
 })
 
-// POST /admin/day-close — close / reconcile the current cash session
+// POST /admin/day-close — close / reconcile the current cash session.
+// Shared with the kiosk's own staff-mode wizard — see routes/pos.js and
+// services/dayClose.js, the single implementation both call into.
 router.post('/day-close', async (req, res) => {
-  const {
-    amountToBank,
-    floatLeft,
-    countedCash,
-    countedDenominations = [],
-    coinMechanismInventory = [],
-    hopperActualBefore = [],
-    hopperCoins = [],
-    notes
-  } = req.body
-
-  if (amountToBank == null || floatLeft == null) {
-    return res.status(400).json({ error: 'amountToBank and floatLeft are required' })
-  }
-
-  // Reading "the last close", aggregating sales since it, and writing the new
-  // close is a read-then-write sequence, not a single atomic operation — two
-  // admins closing at the same moment (or one double-tapping through a slow
-  // network) could otherwise both read the same opening state and both
-  // succeed, silently double-booking the same cash and sales window under two
-  // separate records. A per-tenant lock serialises the whole sequence; the
-  // lock itself IS atomic (a single-document update against a unique index),
-  // so this holds even without a replica set / multi-document transactions.
-  const { acquireLock, releaseLock } = await import('../models/lock.js')
-  const gotLock = await acquireLock(req.tenantId, 'day-close')
-  if (!gotLock) {
-    return res.status(409).json({ error: 'A cash session close is already in progress for this site. Please try again in a few seconds.' })
-  }
-
-  try {
-    return await performDayClose(req, res, { amountToBank, floatLeft, countedCash, countedDenominations, coinMechanismInventory, hopperActualBefore, hopperCoins, notes })
-  } finally {
-    await releaseLock(req.tenantId, 'day-close')
-  }
+  const { createDayClose } = await import('../services/dayClose.js')
+  const { status, body } = await createDayClose(req, req.body)
+  res.status(status).json(body)
 })
-
-async function performDayClose(req, res, { amountToBank, floatLeft, countedCash, countedDenominations, coinMechanismInventory, hopperActualBefore, hopperCoins, notes }) {
-
-  // Sanitise denomination arrays (recompute totals server-side)
-  function cleanDenoms(arr) {
-    return (arr || [])
-      .filter(d => d && Number(d.value) > 0 && Number(d.count) >= 0)
-      .map(d => ({
-        value: Number(d.value),
-        count: Number(d.count),
-        total: Number((Number(d.value) * Number(d.count)).toFixed(2))
-      }))
-  }
-
-  const amountToBankNum = Number(amountToBank)
-  const floatLeftNum = Number(floatLeft)
-  if (!Number.isFinite(amountToBankNum) || !Number.isFinite(floatLeftNum) || amountToBankNum < 0 || floatLeftNum < 0) {
-    return res.status(400).json({ error: 'amountToBank and floatLeft must be non-negative numbers' })
-  }
-
-  const countedDenomsClean       = cleanDenoms(countedDenominations)
-  const coinMechClean             = cleanDenoms(coinMechanismInventory)
-  const hopperActualClean         = cleanDenoms(hopperActualBefore)
-  const hopperCoinsClean          = cleanDenoms(hopperCoins)
-  const coinMechanismTotal        = Number(coinMechClean.reduce((s, d) => s + d.total, 0).toFixed(2))
-  const hopperActualBeforeTotal   = Number(hopperActualClean.reduce((s, d) => s + d.total, 0).toFixed(2))
-  const hopperTotal               = Number(hopperCoinsClean.reduce((s, d) => s + d.total, 0).toFixed(2))
-
-  // Fetch authoritative sales totals from DB
-  const DayClose = (await import('../models/dayClose.js')).default
-  const DayCloseT = withTenant(DayClose, req)
-  const SaleT = withTenant(Sale, req)
-
-  const lastClose = await findLastDashboardClose(DayCloseT)
-  // See the summary route for why this is periodTo, not createdAt, and why
-  // kiosk-sourced rows are excluded from this chain entirely.
-  const periodFrom = lastClose ? (lastClose.periodTo || lastClose.createdAt) : new Date(0)
-  const openingFloat = lastClose ? Number(lastClose.floatLeft || 0) : 0
-  const periodTo = new Date()
-
-  const sales = await SaleT.find({ createdAt: { $gt: periodFrom, $lte: periodTo } }).lean()
-  let totalCash = 0; let totalCard = 0; let totalChangeDisp = 0
-  for (const s of sales) {
-    const amt = Number(s.amount || 0)
-    if (s.method === 'cash') totalCash += amt
-    else totalCard += amt
-    totalChangeDisp += Number(s.change || 0)
-  }
-  const tc = Number(totalCash.toFixed(2))
-  const tk = Number(totalCard.toFixed(2))
-  const expectedCash = Number((openingFloat + tc).toFixed(2))
-  const totalChangeDispensed = Number(totalChangeDisp.toFixed(2))
-
-  // If countedCash wasn't provided, derive it from denomination sum
-  const actualCountedCash = countedCash != null
-    ? Number(Number(countedCash).toFixed(2))
-    : Number(countedDenomsClean.reduce((s, d) => s + d.total, 0).toFixed(2))
-
-  // The dashboard already checks amountToBank + floatLeft === countedCash before
-  // submitting, but a financial record shouldn't rely on the client that
-  // produced the numbers to also be the only thing policing them — a stale tab,
-  // a direct API call, or a client bug could otherwise write a close where the
-  // cash split doesn't add up to what was actually counted.
-  if (Math.abs(amountToBankNum + floatLeftNum - actualCountedCash) > 0.005) {
-    return res.status(400).json({
-      error: `amountToBank + floatLeft (${(amountToBankNum + floatLeftNum).toFixed(2)}) must equal countedCash (${actualCountedCash.toFixed(2)})`
-    })
-  }
-
-  const discrepancy = Number((actualCountedCash - expectedCash).toFixed(2))
-
-  // No re-check needed here for a racing close: the per-tenant lock acquired
-  // by the caller already guarantees only one request executes this whole
-  // read-compute-write sequence at a time.
-  const dc = await DayCloseT.create({
-    source: 'dashboard',
-    openingFloat,
-    expectedCash,
-    countedCash: actualCountedCash,
-    discrepancy,
-    countedDenominations: countedDenomsClean,
-    amountToBank: Number(amountToBankNum.toFixed(2)),
-    floatLeft: Number(floatLeftNum.toFixed(2)),
-    coinMechanismInventory: coinMechClean,
-    coinMechanismTotal,
-    openingMechanismCoins: lastClose?.coinMechanismInventory || [],
-    openingHopperCoins: lastClose?.hopperCoins || [],
-    totalChangeDispensed,
-    hopperActualBefore: hopperActualClean,
-    hopperActualBeforeTotal,
-    hopperCoins: hopperCoinsClean,
-    hopperTotal,
-    notes: String(notes || '').slice(0, 500),
-    totalCash: tc,
-    totalCard: tk,
-    totalSales: Number((tc + tk).toFixed(2)),
-    salesCount: sales.length,
-    closedBy: req.userModel?._id,
-    closedByUsername: req.userModel?.username || '',
-    periodFrom,
-    periodTo
-  })
-
-  // Tag every sale this close actually covered so the association survives
-  // independent of the timestamp-range logic used to compute it — an auditor
-  // (or a future bug hunt) can trust `Sale.dayCloseId` even if this query
-  // changes later.
-  if (sales.length) {
-    await SaleT.updateMany({ _id: { $in: sales.map(s => s._id) } }, { $set: { dayCloseId: dc._id } })
-  }
-
-  return res.json(dc)
-}
 
 // =====================
 // 📊 ANALYTICS & BUSINESS INTEL

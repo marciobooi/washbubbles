@@ -18,6 +18,12 @@ export default function AdminSettings(){
   const [primaryColor, setPrimaryColor] = useState('')
   const [accentColor, setAccentColor] = useState('')
 
+  // Staff & maintenance helper state
+  const [adminPin, setAdminPin] = useState('')
+  const [savingPin, setSavingPin] = useState(false)
+  const [kioskLockEnabled, setKioskLockEnabled] = useState(false)
+  const [savingLockToggle, setSavingLockToggle] = useState(false)
+
   async function loadBranding() {
     try {
       const name = await api.getSetting('branding.companyName').catch(() => null)
@@ -41,7 +47,16 @@ export default function AdminSettings(){
     }
   }
 
-  useEffect(() => { load(); loadBranding() }, [])
+  async function loadStaffSettings() {
+    try {
+      const pin = await api.getSetting('adminPin').catch(() => null)
+      const lockEnabled = await api.getSetting('kioskLockEnabled').catch(() => null)
+      setAdminPin(pin && pin.value != null ? String(pin.value) : '')
+      setKioskLockEnabled(Boolean(lockEnabled && lockEnabled.value))
+    } catch (e) { console.warn('loadStaffSettings failed', e) }
+  }
+
+  useEffect(() => { load(); loadBranding(); loadStaffSettings() }, [])
 
   // Live preview: dispatch branding:update when fields change so app updates immediately
   useEffect(() => {
@@ -114,6 +129,38 @@ export default function AdminSettings(){
     } catch (e) {
       console.error(e)
       toast({ title: 'Failed to update branding', variant: 'destructive' })
+    }
+  }
+
+  async function saveAdminPin(e) {
+    e.preventDefault()
+    if (adminPin && !/^\d{4,8}$/.test(adminPin)) {
+      return toast({ title: 'O PIN deve ter entre 4 e 8 dígitos', variant: 'destructive' })
+    }
+    setSavingPin(true)
+    try {
+      await api.setSetting({ key: 'adminPin', value: adminPin || null })
+      toast({ title: adminPin ? 'PIN de staff atualizado' : 'PIN de staff removido — ações de staff ficam bloqueadas', variant: 'success' })
+    } catch (e) {
+      console.error(e)
+      toast({ title: 'Erro ao guardar PIN', variant: 'destructive' })
+    } finally {
+      setSavingPin(false)
+    }
+  }
+
+  async function toggleKioskLock(nextEnabled) {
+    setSavingLockToggle(true)
+    setKioskLockEnabled(nextEnabled) // optimistic — the kiosk polls this, so a beat of lag is fine either way
+    try {
+      await api.setSetting({ key: 'kioskLockEnabled', value: nextEnabled })
+      toast({ title: nextEnabled ? 'Bloqueio de ecrã ativado' : 'Bloqueio de ecrã desativado', variant: 'success' })
+    } catch (e) {
+      console.error(e)
+      setKioskLockEnabled(!nextEnabled)
+      toast({ title: 'Erro ao guardar', variant: 'destructive' })
+    } finally {
+      setSavingLockToggle(false)
     }
   }
 
@@ -254,6 +301,59 @@ export default function AdminSettings(){
               </Button>
             </div>
           </form>
+        </CardContent>
+      </Card>
+
+      {/* Staff & Maintenance */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Staff &amp; Manutenção</CardTitle>
+          <CardDescription>PIN de staff e bloqueio de ecrã do quiosque durante manutenção</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <form onSubmit={saveAdminPin} className="space-y-2 max-w-xs">
+            <Label htmlFor="adminPin">PIN de staff</Label>
+            <Input
+              id="adminPin"
+              type="text"
+              inputMode="numeric"
+              placeholder="Ex: 4821"
+              value={adminPin}
+              onChange={(e) => setAdminPin(e.target.value.replace(/\D/g, '').slice(0, 8))}
+            />
+            <p className="text-xs text-muted-foreground">
+              Necessário no quiosque para pagamento manual, fecho de caixa e bloqueio de ecrã.
+              Sem um PIN definido, essas ações ficam bloqueadas — nunca desativadas por omissão.
+            </p>
+            <Button type="submit" size="sm" disabled={savingPin}>
+              {savingPin ? 'A guardar…' : 'Guardar PIN'}
+            </Button>
+          </form>
+
+          <div className="border-t pt-4 flex items-start justify-between gap-4 max-w-xl">
+            <div>
+              <div className="font-medium text-sm">Bloqueio de ecrã do quiosque</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Quando ativo, o staff pode congelar o ecrã do quiosque (com PIN) durante
+                manutenção física — reabastecer o hopper, destravar uma máquina, etc. —
+                para que um cliente não possa tocar no ecrã entretanto.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={kioskLockEnabled}
+              onClick={() => toggleKioskLock(!kioskLockEnabled)}
+              disabled={savingLockToggle}
+              className={`shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50
+                ${kioskLockEnabled ? 'bg-primary-600' : 'bg-neutral-300'}`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform
+                  ${kioskLockEnabled ? 'translate-x-6' : 'translate-x-1'}`}
+              />
+            </button>
+          </div>
         </CardContent>
       </Card>
 

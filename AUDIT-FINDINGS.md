@@ -649,6 +649,70 @@ tests total, stable across repeated runs.
 
 ---
 
+## Round 7 — day-close on the kiosk, and a maintenance lock screen
+
+Two feature additions, requested directly rather than found in audit.
+
+### Close the day from the kiosk, not just the dashboard
+
+- [x] The reconciliation logic (opening-float chain, the atomic per-tenant lock,
+  server-side split validation, sale-tagging) was extracted from `admin.js` into
+  `services/dayClose.js`, since `admin.js` applies `requireAdmin` to its whole
+  router and a kiosk token could never reach it there. Both `admin.js`'s route and
+  a new one in `pos.js` now call the same functions — there is exactly one
+  implementation, not two that could quietly drift apart.
+- [x] **Kiosk day-close writes are gated by the staff PIN a second time,
+  server-side** — not just a kiosk apiKey. A payment can be charged back; a bogus
+  reconciliation record just corrupts the books, and an apiKey lifted from a
+  compromised terminal's stored config is still only a kiosk credential. The PIN
+  is the proof a physical operator is actually there. Reading the live summary
+  needs no PIN (nothing is written); an admin token skips the PIN entirely, since
+  the admin JWT already is that credential and the dashboard's own route never
+  asked for one either.
+- [x] The wizard UI itself (5 steps: count, mechanism, hopper, bank/float split,
+  notes) was extracted into `components/dayClose/` and is now shared verbatim
+  between `AdminDayClose.jsx` and the new `KioskDayCloseModal.jsx` — one set of
+  components, two entry points.
+- Verified live end-to-end against the real dev backend: PIN gate → wizard loads
+  the server's real summary → submits → lands in Mongo tagged
+  `source: 'dashboard'`, `closedByUsername: 'kiosk'` — chains into the next
+  session's opening float exactly like an admin-initiated close, and shows
+  correctly in the dashboard's own history list.
+
+### Maintenance lock screen
+
+- [x] A full-screen "Ecrã bloqueado" overlay (padlock icon) that a staff member
+  can engage from a discreet always-present control on the kiosk, for stepping
+  away to do physical maintenance — refilling the hopper, clearing a jam,
+  physically counting cash — without a customer being able to touch the screen
+  in the meantime. Deliberately separate from any modal's own backdrop: a modal
+  only blocks interaction while it happens to be open, and closes the moment
+  that action finishes — this is for an open-ended "staff isn't watching the
+  screen right now" state.
+- [x] Unlocking requires the staff PIN again, verified server-side — otherwise
+  any customer could tap "Desbloquear" and defeat the entire feature.
+- [x] A `kioskLockEnabled` setting, toggled from a new "Staff & Manutenção" card
+  in `AdminSettings.jsx`, turns the feature on/off — when off, the lock control
+  is hidden entirely (the day-close entry point is unaffected either way, since
+  it's a separate action).
+- [x] **Caught in live testing, not by inspection**: the day-close modal
+  originally also engaged this same global lock while open, on the reasoning
+  that counting cash is "maintenance" too. In practice this rendered the
+  full-screen "enter PIN to unlock" overlay *on top of* the day-close wizard
+  itself the moment it opened — staff would have been locked out of the very
+  screen they just opened. Removed; the day-close modal's own backdrop is
+  sufficient, since staff are actively present, not stepped away.
+- [x] Also added: `AdminSettings.jsx` had no UI at all for the `adminPin`
+  setting introduced in Round 4 (manual payment, admin-start-machine) — it was
+  only settable via the raw key/value editor at the bottom of the page. Given a
+  dedicated field in the same new card.
+
+8 backend tests (kiosk summary read, no-PIN/wrong-PIN/right-PIN on the kiosk
+create route, and admin-token-skips-PIN), reusing the existing day-close test
+tenant. 70 backend tests total.
+
+---
+
 ## Deploy notes (do these on the Hetzner box)
 
 1. **Drop the old user email index once**, or the new `partialFilterExpression` will not be created
@@ -685,6 +749,10 @@ tests total, stable across repeated runs.
    db.machines.aggregate([{$match:{interfaceId:{$ne:null},port:{$ne:null}}},{$group:{_id:{t:'$tenantId',i:'$interfaceId',p:'$port'},n:{$sum:1}}},{$match:{n:{$gt:1}}}])
    ```
    Anything returned is two machines wired to one physical port — fix the data first.
+10. **Set the staff PIN** in Admin → Definições → Staff & Manutenção before relying
+    on manual payment, admin-start-machine, kiosk day-close, or the maintenance
+    lock — every one of them fails closed with no PIN configured, by design.
+    Turn on the maintenance-lock toggle there too if you want it available.
 
 ---
 

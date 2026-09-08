@@ -267,6 +267,19 @@ export function createApi(config) {
     return request('/pos/admin/verify-pin', { method: 'POST', json: { pin }, headers, skipAuth: true, expect: 'json' })
   }
 
+  // Kiosk day-close: same reconciliation as the admin dashboard's, reachable
+  // with the kiosk's own apiKey. The POST additionally carries the staff PIN,
+  // verified again server-side — see routes/pos.js.
+  function getKioskDayCloseSummary(opts) {
+    const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
+    return request('/pos/day-close/summary', { method: 'GET', headers, skipAuth: true, expect: 'json' })
+  }
+
+  function createKioskDayClose(payload, opts) {
+    const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
+    return request('/pos/day-close', { method: 'POST', json: payload, headers, skipAuth: true, expect: 'json' })
+  }
+
   function gatewayTopupCard(code, payload, opts) {
     const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
     return request(`/gateways/cards/${encodeURIComponent(code)}/topup`, { method: 'POST', json: payload, expect: 'json', headers, skipAuth: true })
@@ -454,6 +467,10 @@ export function createApi(config) {
     gatewayGetCard,
     gatewayTopupCard,
     verifyAdminPin,
+  getKioskDayCloseSummary,
+  createKioskDayClose,
+    getKioskDayCloseSummary,
+    createKioskDayClose,
     gatewayCardPay,
     gatewayCashPay,
 

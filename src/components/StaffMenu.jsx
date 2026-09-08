@@ -1,0 +1,134 @@
+import React, { useState } from 'react'
+import { Settings, Lock, Wallet } from 'lucide-react'
+import Modal from '@/components/ui/Modal'
+import api from '@/services/api'
+import { useKioskLock } from '@/context/KioskLockContext'
+import KioskDayCloseModal from '@/components/KioskDayCloseModal'
+
+function getKioskApiKey() {
+  const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
+  return electronKey || (typeof localStorage !== 'undefined' ? localStorage.getItem('kiosk_api_key') : null) || import.meta.env.VITE_KIOSK_API_KEY
+}
+
+/**
+ * Discreet, always-present entry point to staff-only kiosk actions: closing
+ * the cash session, and freezing the screen for physical maintenance.
+ *
+ * Deliberately small and low-contrast — a customer has no reason to tap it,
+ * and everything behind it is gated by the staff PIN regardless.
+ */
+export default function StaffMenu() {
+  const { lockFeatureEnabled, lock } = useKioskLock()
+  const [showPinPrompt, setShowPinPrompt] = useState(false)
+  const [pin, setPin] = useState('')
+  const [pinError, setPinError] = useState(null)
+  const [checking, setChecking] = useState(false)
+  const [verifiedPin, setVerifiedPin] = useState(null) // held only long enough to submit the close it authorised
+  const [showChooser, setShowChooser] = useState(false)
+  const [showDayClose, setShowDayClose] = useState(false)
+
+  async function verifyPin() {
+    setChecking(true)
+    setPinError(null)
+    try {
+      await api.verifyAdminPin(pin, { apiKey: getKioskApiKey() })
+      setVerifiedPin(pin)
+      setShowPinPrompt(false)
+      setShowChooser(true)
+      setPin('')
+    } catch (e) {
+      setPinError(e?.status === 409 ? 'Nenhum PIN configurado para este local.' : e?.status === 429 ? 'Demasiadas tentativas. Aguarde.' : 'PIN inválido')
+      setPin('')
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  function closeAll() {
+    setShowPinPrompt(false)
+    setShowChooser(false)
+    setPin('')
+    setPinError(null)
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => { setPinError(null); setShowPinPrompt(true) }}
+        aria-label="Staff"
+        className="fixed bottom-2 left-2 z-30 w-8 h-8 rounded-full bg-black/5 hover:bg-black/15 text-neutral-400 hover:text-neutral-700 flex items-center justify-center transition-colors"
+      >
+        <Settings className="w-4 h-4" aria-hidden />
+      </button>
+
+      {showPinPrompt && (
+        <Modal open={showPinPrompt} onClose={closeAll} title="Área de Staff">
+          <div className="space-y-4">
+            <p className="text-sm text-neutral-600">Introduza o PIN de staff para continuar.</p>
+            <input
+              type="password"
+              inputMode="numeric"
+              autoComplete="off"
+              value={pin}
+              onChange={(e) => setPin(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && pin && !checking) verifyPin() }}
+              placeholder="PIN"
+              className="w-full px-4 py-3 rounded-lg border border-neutral-300 text-center text-2xl tracking-widest"
+              autoFocus
+            />
+            {pinError && <div className="text-sm text-red-600 font-semibold">{pinError}</div>}
+            <div className="flex gap-2">
+              <button onClick={closeAll} className="flex-1 py-2 rounded-lg border">Cancelar</button>
+              <button
+                onClick={verifyPin}
+                disabled={checking || !pin}
+                className={`flex-1 py-2 rounded-lg ${checking || !pin ? 'bg-neutral-100 text-neutral-500' : 'bg-teal-600 text-white'}`}
+              >
+                {checking ? 'A verificar…' : 'Continuar'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {showChooser && (
+        <Modal open={showChooser} onClose={closeAll} title="Área de Staff">
+          <div className="space-y-3">
+            <button
+              onClick={() => { setShowChooser(false); setShowDayClose(true) }}
+              className="w-full flex items-center gap-3 rounded-xl border border-neutral-200 hover:border-teal-400 hover:bg-teal-50 px-4 py-4 text-left transition"
+            >
+              <Wallet className="w-6 h-6 text-teal-600 shrink-0" aria-hidden />
+              <div>
+                <div className="font-semibold text-neutral-800">Fechar Caixa</div>
+                <div className="text-xs text-neutral-500">Contar dinheiro e reconciliar a sessão</div>
+              </div>
+            </button>
+
+            {lockFeatureEnabled && (
+              <button
+                onClick={() => { lock('maintenance'); closeAll() }}
+                className="w-full flex items-center gap-3 rounded-xl border border-neutral-200 hover:border-neutral-400 hover:bg-neutral-50 px-4 py-4 text-left transition"
+              >
+                <Lock className="w-6 h-6 text-neutral-600 shrink-0" aria-hidden />
+                <div>
+                  <div className="font-semibold text-neutral-800">Bloquear Ecrã</div>
+                  <div className="text-xs text-neutral-500">Congela o ecrã durante manutenção física</div>
+                </div>
+              </button>
+            )}
+
+            <button onClick={closeAll} className="w-full py-2 rounded-lg border mt-1">Cancelar</button>
+          </div>
+        </Modal>
+      )}
+
+      <KioskDayCloseModal
+        open={showDayClose}
+        pin={verifiedPin}
+        onClose={() => { setShowDayClose(false); setVerifiedPin(null) }}
+      />
+    </>
+  )
+}

@@ -548,6 +548,64 @@ describe('WashBubbles backend', function () {
       const statuses = [a.status, b.status].sort()
       expect(statuses, `got statuses ${a.status},${b.status}`).to.deep.equal([200, 409])
     })
+
+    // The kiosk can now perform the same close, not just the admin dashboard.
+    describe('from the kiosk', () => {
+      before(async () => {
+        const Setting = (await import('../src/models/setting.js')).default
+        await Setting.updateOne(
+          { tenantId: dcTenant._id, key: 'adminPin' },
+          { $set: { value: '7391' } },
+          { upsert: true }
+        )
+      })
+
+      it('lets a kiosk token read the live summary with no PIN required', async () => {
+        const res = await request(app).get('/api/pos/day-close/summary').set('Authorization', `Bearer ${dcKioskToken}`)
+        expect(res.status).to.equal(200)
+        expect(res.body).to.have.property('expectedCash')
+      })
+
+      it('refuses a kiosk-submitted close with no PIN', async () => {
+        const summary = await request(app).get('/api/pos/day-close/summary').set('Authorization', `Bearer ${dcKioskToken}`)
+        const cash = summary.body.expectedCash
+        const res = await request(app).post('/api/pos/day-close')
+          .set('Authorization', `Bearer ${dcKioskToken}`)
+          .send({ amountToBank: cash, floatLeft: 0, countedCash: cash })
+        expect(res.status).to.equal(400)
+      })
+
+      it('refuses a kiosk-submitted close with the wrong PIN', async () => {
+        const summary = await request(app).get('/api/pos/day-close/summary').set('Authorization', `Bearer ${dcKioskToken}`)
+        const cash = summary.body.expectedCash
+        const res = await request(app).post('/api/pos/day-close')
+          .set('Authorization', `Bearer ${dcKioskToken}`)
+          .send({ amountToBank: cash, floatLeft: 0, countedCash: cash, pin: '0000' })
+        expect(res.status).to.equal(401)
+      })
+
+      it('accepts a kiosk-submitted close with the right PIN, recorded exactly like a dashboard close', async () => {
+        const summary = await request(app).get('/api/pos/day-close/summary').set('Authorization', `Bearer ${dcKioskToken}`)
+        const cash = summary.body.expectedCash
+        const res = await request(app).post('/api/pos/day-close')
+          .set('Authorization', `Bearer ${dcKioskToken}`)
+          .send({ amountToBank: cash, floatLeft: 0, countedCash: cash, pin: '7391' })
+        expect(res.status).to.equal(200)
+        // Tagged as a real reconciliation, not a kiosk auto-push -- it must
+        // chain into future closes' opening float the same way a dashboard
+        // close does.
+        expect(res.body.source).to.equal('dashboard')
+      })
+
+      it('does not require a PIN when the SAME route is called with an admin token', async () => {
+        const summary = await request(app).get('/api/pos/day-close/summary').set('Authorization', `Bearer ${dcAdminToken}`)
+        const cash = summary.body.expectedCash
+        const res = await request(app).post('/api/pos/day-close')
+          .set('Authorization', `Bearer ${dcAdminToken}`)
+          .send({ amountToBank: cash, floatLeft: 0, countedCash: cash })
+        expect(res.status).to.equal(200)
+      })
+    })
   })
 
   describe('Tenant isolation', () => {
