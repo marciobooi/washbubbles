@@ -17,11 +17,30 @@ if (!process.env.ELECTRON_START_URL) {
   process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'false'
 }
 
-const SERVER_URL = process.env.ELECTRON_START_URL || 'https://washbubbles.app' // Production default
+/**
+ * Where the kiosk gets its UI from.
+ *
+ * `ELECTRON_START_URL` is a developer override for pointing at a live Vite dev
+ * server (hot reload while working on the UI). With no override, the kiosk
+ * loads its OWN bundled copy of the frontend straight off disk — it used to
+ * `loadURL` a remote site (`https://washbubbles.app`) unconditionally, which
+ * meant the kiosk had nothing to render at all the moment the internet dropped:
+ * not a degraded local screen, an actual browser connection error, because the
+ * UI itself had never been fetched. The frontend's own `npm run build` output
+ * (repo-root `dist/`) is expected to sit alongside this `pos-client` folder —
+ * see `LOCAL_UI_PATH` below and the packaging note in the README.
+ */
+const DEV_SERVER_URL = process.env.ELECTRON_START_URL || null
+const LOCAL_UI_PATH = path.join(__dirname, '..', '..', 'dist', 'index.html')
 const KIOSK_API_KEY = process.env.ELECTRON_KIOSK_API_KEY || ''
 const API_BASE = process.env.ELECTRON_API_BASE || 'https://api.washbubbles.app'
 const TENANT_ID = process.env.ELECTRON_TENANT_ID || ''
 const IS_KIOSK = process.env.ELECTRON_IS_KIOSK === 'true'
+// Used only for the CSP / navigation allowlist below — in dev this is the Vite
+// dev server's own origin; in production there is no remote UI origin at all,
+// so this is just a label, not something the app actually fetches its shell
+// from. API_BASE (below) is what every actual network call targets.
+const SERVER_URL = DEV_SERVER_URL || 'http://localhost'
 /**
  * Development mode. Only ever true when explicitly asked for AND the app is not
  * packaged, so a packaged kiosk build can never fall back to the relaxed CSP
@@ -84,13 +103,16 @@ function createWindow() {
         //
         // In development Vite needs eval for HMR, so the relaxed policy is
         // scoped to dev only and never ships in a packaged kiosk build.
+        // The dev-server origin only needs to appear here at all when actually
+        // loading from one — a packaged kiosk build has no remote UI origin to
+        // allow, only the API it talks to.
         'Content-Security-Policy': [
-          "default-src 'self' " + SERVER_URL + " " + API_BASE + "; " +
-          "script-src 'self' " + SERVER_URL + (IS_DEV ? " 'unsafe-inline' 'unsafe-eval'" : "") + "; " +
+          "default-src 'self' " + (DEV_SERVER_URL ? SERVER_URL + " " : '') + API_BASE + "; " +
+          "script-src 'self' " + (DEV_SERVER_URL ? SERVER_URL + " " : '') + (IS_DEV ? "'unsafe-inline' 'unsafe-eval'" : '') + "; " +
           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
           "font-src 'self' https://fonts.gstatic.com; " +
-          "connect-src 'self' " + SERVER_URL + " " + API_BASE + " ws: wss:; " +
-          "img-src 'self' data: " + SERVER_URL + " " + API_BASE + "; " +
+          "connect-src 'self' " + (DEV_SERVER_URL ? SERVER_URL + " " : '') + API_BASE + " ws: wss:; " +
+          "img-src 'self' data: " + (DEV_SERVER_URL ? SERVER_URL + " " : '') + API_BASE + "; " +
           "object-src 'none'; base-uri 'none'; frame-ancestors 'none';"
         ]
       }
@@ -115,10 +137,14 @@ function createWindow() {
     backgroundColor: '#000000'
   })
 
-  // Security: Prevent navigation to untrusted origins
+  // Security: Prevent navigation to untrusted origins. The bundled UI itself
+  // is always file:// and trusted (it shipped with this app, not fetched at
+  // runtime); anything else is only allowed in dev, to the dev server's own
+  // origin.
   mainWindow.webContents.on('will-navigate', (event, url) => {
     const parsedUrl = new URL(url)
-    const allowed = [new URL(SERVER_URL).hostname, 'localhost']
+    if (parsedUrl.protocol === 'file:') return
+    const allowed = DEV_SERVER_URL ? [new URL(DEV_SERVER_URL).hostname, 'localhost'] : []
     if (!allowed.includes(parsedUrl.hostname)) {
       console.warn(`[Main] Security: Blocked navigation to ${url}`)
       event.preventDefault()
@@ -135,7 +161,25 @@ function createWindow() {
     mainWindow.on('close', (e) => { if (!isQuitting) e.preventDefault() })
   }
 
-  mainWindow.loadURL(SERVER_URL)
+  if (DEV_SERVER_URL) {
+    mainWindow.loadURL(DEV_SERVER_URL)
+    return
+  }
+
+  if (!fs.existsSync(LOCAL_UI_PATH)) {
+    // Fail loudly rather than show a silent blank/error window a technician
+    // would have no way to diagnose from the kiosk screen itself.
+    console.error(`[Main] FATAL: bundled UI not found at ${LOCAL_UI_PATH}. Run "npm run build" in the repo root and deploy its dist/ alongside pos-client/, or set ELECTRON_START_URL for local dev.`)
+    mainWindow.loadURL('data:text/html,' + encodeURIComponent(
+      '<body style="background:#111;color:#eee;font:16px sans-serif;padding:2rem">' +
+      '<h1>Aplicação não encontrada</h1>' +
+      '<p>O ficheiro da interface não foi encontrado neste computador. Contacte o suporte técnico.</p>' +
+      '</body>'
+    ))
+    return
+  }
+
+  mainWindow.loadFile(LOCAL_UI_PATH)
 }
 
 function loadHardwareConfig() {

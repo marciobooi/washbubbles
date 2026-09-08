@@ -21,7 +21,7 @@ let dbPath = null
 let saveTimer = null
 let autosaveTimer = null
 
-const DB_VERSION = 3
+const DB_VERSION = 4
 
 /** Attempts before a queued sync item is dead-lettered rather than retried forever. */
 const MAX_SYNC_ATTEMPTS = 10
@@ -180,6 +180,7 @@ function runMigrations() {
   if (currentVersion < 1) migrateV1()
   if (currentVersion < 2) migrateV2()
   if (currentVersion < 3) migrateV3()
+  if (currentVersion < 4) migrateV4()
 
   run(`INSERT OR REPLACE INTO db_meta (key, value) VALUES (?, ?)`, ['version', String(DB_VERSION)])
   flushSave()
@@ -275,6 +276,18 @@ function migrateV1() {
       created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
     );
   `)
+}
+
+function migrateV4() {
+  // A card can be dispensed but not yet written at the reader — see the
+  // server's Card.status (pending_write/active/blocked), added after the
+  // first version of this table. Without a local mirror of it, a blank card
+  // (paid for, physically dispensed, but never successfully personalised)
+  // could still be spent OFFLINE with no server round-trip to catch it.
+  const hasStatus = queryAll("PRAGMA table_info(cards)").some(c => c.name === 'status')
+  if (!hasStatus) {
+    db.exec(`ALTER TABLE cards ADD COLUMN status TEXT DEFAULT 'active'`)
+  }
 }
 
 function migrateV3() {
@@ -377,10 +390,10 @@ const cards = {
   },
   upsert(c) {
     return run(`INSERT OR REPLACE INTO cards
-      (id,local_id,tenant_id,code,balance,name,email,phone,contribuinte,metadata,created_at,updated_at,synced,last_synced_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      (id,local_id,tenant_id,code,balance,name,email,phone,contribuinte,metadata,created_at,updated_at,synced,last_synced_at,status)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [c.id,c.local_id,c.tenant_id,c.code,c.balance,c.name,c.email,c.phone,c.contribuinte,
-       c.metadata,c.created_at,c.updated_at,c.synced,c.last_synced_at])
+       c.metadata,c.created_at,c.updated_at,c.synced,c.last_synced_at,c.status || 'active'])
   },
   updateBalance(id, newBalance) {
     return run('UPDATE cards SET balance=?, updated_at=datetime("now"), synced=0 WHERE id=?',
@@ -392,10 +405,14 @@ const cards = {
       for (const c of arr) {
         const existing = queryGet('SELECT id, balance, synced FROM cards WHERE id=?', [c.id])
         if (existing && existing.synced === 0) {
-          // Local has unsynced changes — keep local balance, update other fields
+          // Local has unsynced changes — keep local balance, update other fields.
+          // `status` DOES sync even with an unsynced balance: it's the server
+          // telling us a card just finished being activated (or got blocked),
+          // and holding that back until the balance also happens to sync would
+          // leave a freshly-written card refusing to spend locally for no reason.
           run(`UPDATE cards SET name=?,email=?,phone=?,contribuinte=?,metadata=?,
-               updated_at=?,last_synced_at=datetime('now') WHERE id=?`,
-            [c.name,c.email,c.phone,c.contribuinte,c.metadata,c.updated_at,c.id])
+               updated_at=?,last_synced_at=datetime('now'),status=? WHERE id=?`,
+            [c.name,c.email,c.phone,c.contribuinte,c.metadata,c.updated_at,c.status || 'active',c.id])
         } else {
           cards.upsert(c)
         }

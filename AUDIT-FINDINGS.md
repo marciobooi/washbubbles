@@ -713,6 +713,119 @@ tenant. 70 backend tests total.
 
 ---
 
+## Round 8 — offline-first kiosk: bundle the UI locally, and card status parity
+
+Requested directly: what happens to the kiosk when the internet drops. The
+answer turned out to be "nothing works, not even the screen" — production
+`main.cjs` called `loadURL('https://washbubbles.app')` unconditionally, so a
+dropped connection didn't degrade to a local screen, it showed a browser
+connection error, because the UI itself had never been fetched onto the
+machine in the first place. Worse: even while fully online, the React UI
+never used the offline-capable local engine (`pos-engine.cjs` / `database.cjs`
+/ `sync-engine.cjs`) that was already built and wired through `preload.cjs` —
+every money operation (`App.jsx`'s `handlePay`, recharge, `/pos/sale`) went
+straight over HTTP to the remote API, so none of that local machinery was
+ever actually in the loop for a real transaction.
+
+This round did the two pieces of that gap that could be closed safely without
+a hardware decision or a redesign of multi-item cart checkout — both deferred
+below, with the reasons.
+
+### Bundle the frontend locally, load it from disk
+
+- [x] `vite.config.js` now builds with `base: './'` — relative asset paths
+  instead of absolute `/assets/...`. The kiosk loads its bundle via `file://`,
+  which resolves an absolute path against the filesystem root, not the HTML
+  file's own folder; without this the bundled `index.html` would 404 every
+  script and stylesheet the instant it wasn't served over HTTP. Safe for the
+  normal nginx deployment too, since it's a client-routed SPA and the HTML
+  document is always served from the site root regardless of which page is
+  active.
+- [x] `pos-client/electron/main.cjs` rewritten: `loadURL(remote)` replaced
+  with `loadFile(LOCAL_UI_PATH)`, where `LOCAL_UI_PATH` points at the
+  repo-root `dist/` build sitting alongside `pos-client/`. A developer
+  override (`ELECTRON_START_URL`) still points at a live Vite dev server for
+  local work; the CSP and `will-navigate` allowlist only admit that dev
+  origin when the override is actually set, so a packaged kiosk build has no
+  remote UI origin to fall back to at all.
+- [x] If `dist/index.html` is missing on the kiosk machine (packaging
+  mistake, forgot to deploy it), the app fails loud on a local data: URL
+  ("Aplicação não encontrada — Contacte o suporte técnico") and logs the
+  expected path to the console, rather than a browser's generic offline error
+  a technician has no way to diagnose from the kiosk screen itself.
+- [x] Verified live, not just by inspection: built the real `dist/` output,
+  served it over plain HTTP from a throwaway server, and loaded it in a fresh
+  browser tab — renders correctly, zero console errors, confirming the
+  relative-path resolution actually works before trusting it under real
+  `file://` loading in Electron (which nothing here can drive directly).
+
+### Card status parity — local can't spend what the server would refuse
+
+The local engine already tracked card balance, but not activation state.
+Offline, a `pending_write` (not yet activated) or `blocked` card could still
+be topped up or spent against, because the local SQLite `cards` table had no
+`status` column at all — the server-side lifecycle simply didn't exist here.
+
+- [x] Local DB migration v4 (`database.cjs`, `DB_VERSION` 3→4) adds
+  `cards.status`, idempotent via a `PRAGMA table_info` guard. `cards.upsert`
+  and `cards.bulkUpsertPreserveBalance` both carry it now — the latter
+  updates status independently of balance sync, since a card can be blocked
+  server-side well before its balance next changes, and status must not wait
+  on that.
+- [x] `sync-engine.cjs`'s `_mapCard` now pulls `status` down from the server
+  on every pull, so a card blocked from the dashboard reaches the kiosk on
+  the next sync even with no transaction against that card in between.
+- [x] A shared `assertCardSpendable(card)` guard (not found / `pending_write`
+  / `blocked`) is now the single check applied at all three places a card can
+  be spent or loaded locally: `handleCardDetected` (refuses to load a
+  non-active card into session state at all, emitting a new `card:blocked`
+  event distinct from `card:unknown`), `topUpCard`, and the card branch of
+  `processSale`. One helper, three call sites, instead of three chances to
+  forget the check.
+
+### Deliberately deferred — needs a decision or more work, not a quick fix
+
+- [?] **Multi-item cart checkout has no local equivalent.** `App.jsx`'s real
+  checkout path (`handlePay` → `PaymentContext` → `api.gatewayCashPay` /
+  `/pos/cards/:code/spend`) is a gateway-validated, atomic, multi-item flow
+  (`backend/src/routes/gateways.js` — validate everything, then apply
+  everything). `pos-engine.processSale` only ever handles one machine at a
+  time with no recharge-bundling. These are not equivalent, and porting the
+  gateway's atomicity into the local engine is real new work, not a rewire —
+  left for a follow-up round rather than rushed into this one.
+- [?] **RFID hardware model mismatch, same one flagged in Round 5.** The
+  kiosk's local `hardware-agent.cjs` assumes a simple read-only reader that
+  broadcasts a UID line over serial (`ReadlineParser` → raw string → card
+  code, no write capability at all). The server-side implementation built in
+  Round 5 assumes a PC/SC read/write reader doing MIFARE-key authentication.
+  These are two different classes of physical hardware, not two code paths
+  for the same one — this can't be reconciled by editing either file until
+  the actual reader model is confirmed against its datasheet (Round 5's
+  confidence note, still unresolved).
+- [?] **`BuyCardModal` (new card purchase/write flow)** depends on that same
+  write-capable RFID path, which doesn't exist locally — blocked on the same
+  hardware question above, not attempted separately.
+- [!] **Kiosk day-close still requires connectivity**, by the design decided
+  in Round 7 — it calls `/pos/day-close/summary` / `/pos/day-close` directly
+  with no local fallback. Left as-is: it's a rare, staff-initiated action
+  with a PIN gate already, not something blocking routine customer
+  transactions, so it wasn't in scope for "make the kiosk usable while
+  offline."
+- [ ] **Not done yet: nothing in the UI actually calls the local engine for
+  a real transaction.** Everything above makes the local engine safe and
+  correct to call — `window.electronAPI.processSale` / `.topUpCard` etc. are
+  fully wired via `preload.cjs` and have been since before this round — but
+  `App.jsx` still calls the remote HTTP API exclusively for every payment.
+  The bundled-UI and card-status work in this round is what a rewire would
+  need underneath it; the rewire itself (starting with the highest-frequency
+  path, single-machine cash payment, since the cart/gateway flow above is
+  explicitly out of scope for now) is the next piece of this effort.
+
+No backend changes this round — frontend/Electron only. 70 backend tests
+still pass (regression check, unaffected as expected).
+
+---
+
 ## Deploy notes (do these on the Hetzner box)
 
 1. **Drop the old user email index once**, or the new `partialFilterExpression` will not be created
@@ -753,6 +866,20 @@ tenant. 70 backend tests total.
     on manual payment, admin-start-machine, kiosk day-close, or the maintenance
     lock — every one of them fails closed with no PIN configured, by design.
     Turn on the maintenance-lock toggle there too if you want it available.
+11. **The kiosk now needs the frontend's build output present on disk, not
+    just reachable over the network.** Run `npm run build` at the repo root
+    and copy the resulting `dist/` folder so it sits as a sibling of
+    `pos-client/` on the actual kiosk machine (`LOCAL_UI_PATH` in
+    `main.cjs` resolves to `<repo root>/dist/index.html`). This is a new
+    deploy step, not an update to an existing one — previous kiosk builds
+    never needed `dist/` at all, since they loaded the UI from
+    `https://washbubbles.app` directly. A kiosk missing this folder boots to
+    a "não encontrada" error screen instead of the POS UI, online or not.
+    Rebuild and redeploy `dist/` to every kiosk on every frontend release
+    from now on.
+12. **Kiosk DB migrates to v4 automatically** on first launch of this build
+    (adds `cards.status`). One-way, like the v3 migration above — take a
+    copy of `washbubbles.db` first if you want to be able to roll back.
 
 ---
 

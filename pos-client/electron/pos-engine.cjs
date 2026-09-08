@@ -16,6 +16,19 @@ const { machines, cards, sales, prices, settings, interfaces, syncQueue, session
  */
 const MAX_CYCLE_MS = 4 * 60 * 60 * 1000
 
+/**
+ * A card that has been paid for and physically dispensed but not yet written
+ * at the reader is blank — no id, no balance a physical thief could even find
+ * — and must not be spendable. This mirrors the server's own guard
+ * (services/cardBalance.js SPENDABLE) so the same protection holds locally,
+ * offline, not only when the request happens to reach the server.
+ */
+function assertCardSpendable(card) {
+  if (!card) throw new Error('Card not found')
+  if (card.status === 'pending_write') throw new Error('Card is not activated yet — insert it in the reader first')
+  if (card.status === 'blocked') throw new Error('Card is blocked')
+}
+
 class PosEngine extends EventEmitter {
   constructor(hardwareAgent, tenantId) {
     super()
@@ -160,16 +173,24 @@ class PosEngine extends EventEmitter {
   handleCardDetected(data) {
     const { cardCode } = data
     const card = cards.getByCode(this.tenantId, cardCode)
-    if (card) {
-      this.sessionState.cardCode = cardCode
-      this.sessionState.cardBalance = card.balance || 0
-      this.sessionState.hasCard = true
-      this.updateCredits()
-      this.persistSession()
-      this.emit('card:loaded', { card, session: this.getSession() })
-    } else {
+    if (!card) {
       this.emit('card:unknown', { cardCode })
+      return
     }
+    // A blank (pending_write) or blocked card must never become spendable, not
+    // even locally — refusing it here means `sessionState.hasCard`/`cardBalance`
+    // are never set for it, so nothing downstream in processSale/topUpCard can
+    // spend against it regardless of connectivity.
+    if (card.status && card.status !== 'active') {
+      this.emit('card:blocked', { cardCode, status: card.status })
+      return
+    }
+    this.sessionState.cardCode = cardCode
+    this.sessionState.cardBalance = card.balance || 0
+    this.sessionState.hasCard = true
+    this.updateCredits()
+    this.persistSession()
+    this.emit('card:loaded', { card, session: this.getSession() })
   }
 
   /**
@@ -233,7 +254,7 @@ class PosEngine extends EventEmitter {
 
   topUpCard(code, amount) {
     const card = cards.getByCode(this.tenantId, code)
-    if (!card) throw new Error('Card not found')
+    assertCardSpendable(card)
     const topUpAmount = roundMoney(Number(amount))
     const newBalance = roundMoney((card.balance || 0) + topUpAmount)
     if (!(topUpAmount > 0)) throw new Error('Top-up amount must be greater than zero')
@@ -281,7 +302,7 @@ class PosEngine extends EventEmitter {
     try {
     runTransaction(() => {
       if (method === 'card' && cardCode) {
-        const card = cards.getByCode(this.tenantId, cardCode); if (!card) throw new Error('Card not found')
+        const card = cards.getByCode(this.tenantId, cardCode); assertCardSpendable(card)
         const newBalance = roundMoney((card.balance || 0) - price); if (newBalance < 0) throw new Error('Insufficient card balance')
         cards.updateBalance(card.id, newBalance); if (this.sessionState.cardCode === cardCode) this.sessionState.cardBalance = newBalance
         cardSyncData = { id: card.id, code: cardCode, delta: -price }
