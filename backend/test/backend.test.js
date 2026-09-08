@@ -407,6 +407,149 @@ describe('WashBubbles backend', function () {
     })
   })
 
+  // Isolated tenant so these totals are never polluted by sales created in
+  // earlier describe blocks that share the same test database.
+  describe('Day close — cash reconciliation', () => {
+    let dcTenant, dcAdminToken, dcKioskToken, dcMachine
+
+    before(async () => {
+      const Tenant = (await import('../src/models/tenant.js')).default
+      const User = (await import('../src/models/user.js')).default
+      const bcrypt = (await import('bcryptjs')).default
+
+      dcTenant = await Tenant.create({ name: 'Day Close Tenant', slug: 'day-close-tenant' })
+      const adminHash = await bcrypt.hash('admin1234', 10)
+      await User.create({ username: 'dc-admin', password: adminHash, role: 'SUPERADMIN', tenantId: dcTenant._id })
+      const kioskHash = await bcrypt.hash('kiosk1234', 10)
+      await User.create({ username: 'dc-kiosk', password: kioskHash, role: 'KIOSK', apiKey: 'dc-kiosk-api-key', tenantId: dcTenant._id })
+
+      const adminLogin = await request(app).post('/api/auth/login').send({ username: 'dc-admin', password: 'admin1234' })
+      dcAdminToken = adminLogin.body.token
+      const kioskLogin = await request(app).post('/api/auth/login').send({ apiKey: 'dc-kiosk-api-key' })
+      dcKioskToken = kioskLogin.body.token
+
+      const Machine = (await import('../src/models/machine.js')).default
+      dcMachine = await Machine.create({ tenantId: dcTenant._id, name: 'DC Machine', type: 'wash' })
+    })
+
+    async function makeCashSale(amount) {
+      // Each sale marks the machine 'working'; free it first so this helper can
+      // be called repeatedly across tests without a real wash cycle in between.
+      const Machine = (await import('../src/models/machine.js')).default
+      await Machine.updateOne({ _id: dcMachine._id }, { $set: { status: 'free' } })
+      return request(app).post('/api/pos/sale')
+        .set('Authorization', `Bearer ${dcKioskToken}`)
+        .send({ machineId: dcMachine._id.toString(), amount, items: [{}], method: 'cash', inserted: amount })
+    }
+
+    it('starts with an empty session (no prior close)', async () => {
+      const res = await request(app).get('/api/admin/day-close/summary').set('Authorization', `Bearer ${dcAdminToken}`)
+      expect(res.status).to.equal(200)
+      expect(res.body.openingFloat).to.equal(0)
+      expect(res.body.totalCash).to.equal(0)
+    })
+
+    it('rolls up cash sales into the live summary', async () => {
+      const sale = await makeCashSale(5)
+      expect(sale.status).to.equal(200)
+
+      const res = await request(app).get('/api/admin/day-close/summary').set('Authorization', `Bearer ${dcAdminToken}`)
+      expect(res.body.totalCash).to.equal(5)
+      expect(res.body.expectedCash).to.equal(5) // openingFloat 0 + 5 cash
+      expect(res.body.salesCount).to.equal(1)
+    })
+
+    it('rejects a close where amountToBank + floatLeft does not equal countedCash', async () => {
+      const res = await request(app).post('/api/admin/day-close')
+        .set('Authorization', `Bearer ${dcAdminToken}`)
+        .send({ amountToBank: 3, floatLeft: 1, countedCash: 5 }) // 3+1 != 5
+      expect(res.status).to.equal(400)
+      expect(res.body.error).to.match(/must equal countedCash/)
+    })
+
+    it('closes the session, computing discrepancy and tagging the covered sales', async () => {
+      const res = await request(app).post('/api/admin/day-close')
+        .set('Authorization', `Bearer ${dcAdminToken}`)
+        .send({ amountToBank: 4, floatLeft: 1, countedCash: 5 })
+      expect(res.status).to.equal(200)
+      expect(res.body.expectedCash).to.equal(5)
+      expect(res.body.discrepancy).to.equal(0)
+      expect(res.body.floatLeft).to.equal(1)
+      expect(res.body.source).to.equal('dashboard')
+
+      const Sale = (await import('../src/models/sale.js')).default
+      const tagged = await Sale.find({ tenantId: dcTenant._id, dayCloseId: res.body._id })
+      expect(tagged).to.have.length(1)
+      expect(tagged[0].amount).to.equal(5)
+    })
+
+    it('carries floatLeft forward as the next session\'s opening float', async () => {
+      const res = await request(app).get('/api/admin/day-close/summary').set('Authorization', `Bearer ${dcAdminToken}`)
+      expect(res.body.openingFloat).to.equal(1) // floatLeft from the previous close
+      expect(res.body.totalCash).to.equal(0) // no new sales yet this session
+      expect(res.body.expectedCash).to.equal(1)
+    })
+
+    it('does not lose a sale that lands in the gap between periodTo and createdAt', async () => {
+      // Simulates the real timing gap directly: a close whose periodTo (when the
+      // counted period logically ended) is a moment before its createdAt (when
+      // Mongo actually wrote the document) — inescapable, since periodTo is
+      // captured at the start of the request and createdAt at the very end.
+      // The fix reads periodTo, not createdAt, as the next session's start.
+      // In production periodTo is captured at the START of the closing request
+      // and createdAt is set when the document is finally saved, moments LATER
+      // — so periodTo is always a little earlier than createdAt. Reproduce that
+      // ordering directly rather than relying on real timing.
+      const DayClose = (await import('../src/models/dayClose.js')).default
+      const priorClose = await DayClose.findOne({ tenantId: dcTenant._id }).sort({ createdAt: -1 })
+      const periodTo = new Date(priorClose.createdAt.getTime() - 5)
+      await DayClose.updateOne({ _id: priorClose._id }, { $set: { periodTo } })
+
+      // A sale timestamped between the (earlier) periodTo and the (later)
+      // createdAt: under the old buggy boundary (`$gt: createdAt`) this falls
+      // BEFORE createdAt and is excluded forever; under the fix (`$gt: periodTo`)
+      // it correctly lands in the next open session.
+      const gapSale = await makeCashSale(2)
+      const Sale = (await import('../src/models/sale.js')).default
+      await Sale.updateOne({ _id: gapSale.body.sale._id }, { $set: { createdAt: new Date(priorClose.createdAt.getTime() - 2) } })
+
+      const res = await request(app).get('/api/admin/day-close/summary').set('Authorization', `Bearer ${dcAdminToken}`)
+      expect(res.body.totalCash).to.equal(2)
+      expect(new Date(res.body.periodFrom).getTime()).to.equal(periodTo.getTime())
+    })
+
+    it('never lets a kiosk-pushed Z-report reset the float chain', async () => {
+      // The kiosk pushes its own informational record to the same collection.
+      // It must be invisible to the dashboard's reconciliation chain.
+      const kioskPush = await request(app).post('/api/sync/push/day-close')
+        .set('Authorization', `Bearer ${dcKioskToken}`)
+        .send({ local_id: 'kiosk-close-1', date: '2026-01-01', total_sales: 999, total_cash: 999 })
+      expect(kioskPush.status).to.equal(200)
+
+      const res = await request(app).get('/api/admin/day-close/summary').set('Authorization', `Bearer ${dcAdminToken}`)
+      // Still chained off the last DASHBOARD close's floatLeft (1), not reset to
+      // 0 by the kiosk's push, and totalCash still reflects the gap sale above,
+      // not the kiosk's unrelated figures.
+      expect(res.body.openingFloat).to.equal(1)
+      expect(res.body.totalCash).to.equal(2)
+    })
+
+    it('refuses to double-book two closes racing on the same opening state', async () => {
+      // Two submissions fired together, same tenant. The lock is acquired
+      // atomically at the very start of the route — before any of the slower
+      // read/compute work — so exactly one of two truly concurrent callers can
+      // ever hold it; the other is rejected immediately rather than being left
+      // to race the reconciliation logic itself.
+      const submit = () => request(app).post('/api/admin/day-close')
+        .set('Authorization', `Bearer ${dcAdminToken}`)
+        .send({ amountToBank: 3, floatLeft: 0, countedCash: 3 })
+
+      const [a, b] = await Promise.all([submit(), submit()])
+      const statuses = [a.status, b.status].sort()
+      expect(statuses, `got statuses ${a.status},${b.status}`).to.deep.equal([200, 409])
+    })
+  })
+
   describe('Tenant isolation', () => {
     it('will not let one tenant\'s admin modify another tenant\'s user', async () => {
       const Tenant = (await import('../src/models/tenant.js')).default

@@ -594,6 +594,61 @@ confirmation as the hopper `coinValue`/`deviceAddress` settings.
 
 ---
 
+## Round 6 — day-close cash reconciliation
+
+The admin "Fecho de Caixa" flow (`AdminDayClose.jsx` + `admin.js`'s `/day-close`
+routes) turned out to already be a genuinely thorough 5-step wizard — cash count,
+mechanism count, hopper actual-vs-target with a gap calculator, bank/float split
+with live client-side validation, notes, plus an expandable history. The audit here
+found real bugs in the *server-side* reconciliation logic underneath it, not gaps
+in the UI.
+
+- [x] **A sale could vanish from every future report.** The next session's start
+  boundary was `lastClose.createdAt` — but `createdAt` is set when the document is
+  finally written, which is measurably *after* `periodTo` (captured at the start of
+  the same request, before several queries run). A sale landing in that gap had a
+  timestamp before `createdAt`, so it satisfied neither the closed period's
+  `$lte: periodTo` nor the next period's `$gt: createdAt` — it belonged to no
+  report, ever, with no error and no trace. Fixed: the next period's start now
+  reads `periodTo`, the field that actually marks where counting stopped.
+- [x] **A kiosk auto-push could reset the float chain to zero.** `/sync/push/day-close`
+  writes its own record to the same `DayClose` collection as an offline backup of
+  the kiosk's local Z-report — it never has a real `floatLeft`/`amountToBank` (both
+  default to 0) and its `periodTo` is whenever the kiosk happened to run its local
+  close, uncoordinated with when staff actually count the drawer. The admin route's
+  "last close" query didn't distinguish source, so a kiosk push landing between two
+  manual closes would silently zero out `openingFloat` for the next one and shift
+  the reconciliation window to the wrong moment. Fixed: the dashboard's chain now
+  explicitly excludes `source: 'kiosk'` rows — the kiosk push is a record, the
+  dashboard flow is the only source of truth for the cash chain.
+- [x] **The bank/float split was only validated client-side.** The dashboard
+  already checks `amountToBank + floatLeft === countedCash` before submitting, but
+  the server trusted that blindly — a stale tab, a direct API call, or a client bug
+  could write a permanent financial record where the split doesn't add up to what
+  was counted. Added the same check server-side.
+- [x] **Two closes could race and double-book the same cash.** Reading "the last
+  close," aggregating sales since it, and writing the new close is a read-then-write
+  sequence — two admins closing at the same moment (or one double-tapping through a
+  slow network) could both read the same opening state and both succeed, silently
+  creating two records over the same sales window. Added a per-tenant lock
+  (`models/lock.js`) that serialises the whole sequence — a single atomic
+  document update against a unique index, so it holds without needing a replica set
+  or multi-document transactions. Verified with a genuinely concurrent test
+  (`Promise.all`, not sequential): exactly one of two simultaneous submissions wins.
+- [x] **No audit trail linking a close to the sales it covered.** The association
+  only ever existed as an implicit re-query by timestamp range. Added
+  `Sale.dayCloseId`, set once at close time — an auditor (or the next bug hunt) can
+  now trust it directly instead of re-deriving "which sales belong to this report"
+  from the same date-range logic that had the gap bug above.
+
+6 new backend tests, all against a dedicated tenant to avoid cross-test pollution:
+empty-session baseline, live summary roll-up, the bank/float mismatch rejection, a
+full close with sale-tagging verification, float-forward-carry, the periodTo/gap
+fix, kiosk-push isolation, and the concurrent double-close rejection. 65 backend
+tests total, stable across repeated runs.
+
+---
+
 ## Deploy notes (do these on the Hetzner box)
 
 1. **Drop the old user email index once**, or the new `partialFilterExpression` will not be created

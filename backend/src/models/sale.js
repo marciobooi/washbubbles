@@ -21,11 +21,28 @@ const saleSchema = new Schema({
   inserted: { type: Number, default: 0 },
   change: { type: Number, default: 0 },
   metadata: { type: Schema.Types.Mixed },
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now },
+  /**
+   * Which admin day-close this sale was reconciled into, if any.
+   *
+   * Without this, "which sales belong to this Z-report" is only ever an
+   * implicit re-query by timestamp range — fine until someone needs to audit a
+   * historical close, or until a boundary bug (there was one — see
+   * admin.js day-close route) quietly drops a sale between two periods with no
+   * way to detect it. Set once, at close time, and never changed after.
+   */
+  dayCloseId: { type: Schema.Types.ObjectId, ref: 'DayClose', default: null }
 })
 
 // common query patterns: per-tenant date queries
 saleSchema.index({ tenantId: 1, createdAt: -1 })
+
+// Audit query: "which sales have never been reconciled into a close" — finds
+// both ordinary unclosed sales and any that fell into a boundary gap.
+saleSchema.index(
+  { tenantId: 1, dayCloseId: 1, createdAt: 1 },
+  { partialFilterExpression: { dayCloseId: null } }
+)
 
 // `/sync/push/sale` dedupes on metadata.localId on EVERY push from EVERY kiosk.
 // With no index that is a full collection scan per sale — on a year of sales it
