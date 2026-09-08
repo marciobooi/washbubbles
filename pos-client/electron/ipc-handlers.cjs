@@ -119,6 +119,7 @@ function setupEventForwarding(posEngine, syncEngine, hardwareAgent, getWindow) {
   posEngine.on('session:updated', (session) => forward('pos:session-updated', session))
   posEngine.on('card:loaded', (data) => forward('card:loaded', data))
   posEngine.on('card:unknown', (data) => forward('card:unknown', data))
+  posEngine.on('card:blocked', (data) => forward('card:blocked', data))
   posEngine.on('card:removed', () => forward('card:removed'))
   posEngine.on('credit:accepted', (data) => forward('pos:credit-accepted', data))
   posEngine.on('sale:completed', (data) => forward('pos:sale-completed', data))

@@ -38,6 +38,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onSessionUpdate: (callback) => ipcRenderer.on('pos:session-updated', (event, value) => callback(value)),
   onCardLoaded: (callback) => ipcRenderer.on('card:loaded', (event, value) => callback(value)),
   onCardUnknown: (callback) => ipcRenderer.on('card:unknown', (event, value) => callback(value)),
+  onCardBlocked: (callback) => ipcRenderer.on('card:blocked', (event, value) => callback(value)),
   onCardRemoved: (callback) => ipcRenderer.on('card:removed', (event) => callback()),
   onCreditAccepted: (callback) => ipcRenderer.on('pos:credit-accepted', (event, value) => callback(value)),
   onSaleCompleted: (callback) => ipcRenderer.on('pos:sale-completed', (event, value) => callback(value)),

@@ -783,6 +783,47 @@ be topped up or spent against, because the local SQLite `cards` table had no
   `processSale`. One helper, three call sites, instead of three chances to
   forget the check.
 
+### The UI now actually calls the local engine — single-machine cash payment
+
+- [x] New `src/services/local-api.js` — a narrow wrapper around
+  `window.electronAPI`, deliberately not a 1:1 mirror of the remote `api.js`.
+  It exposes exactly `isElectron`, `getSession()`, and `processSale(...)`,
+  because that is exactly as much of the local engine as `handlePay` can
+  safely drive today — see the cart/gateway gap above.
+- [x] `App.jsx`'s `handlePay` cash branch now checks, before ever touching
+  the network: is this a single machine with no card recharges bundled in,
+  and does the kiosk's own local session already hold enough real cash
+  credit to cover it (money the embedded hardware agent has actually
+  received through the physical coin/bill acceptor, tracked in
+  `pos-engine.sessionState` independent of connectivity)? If so, the sale is
+  settled entirely through `local-api.processSale` — no HTTP call at all —
+  and the machine is activated the same way `adminStartMachine` already was:
+  directly by the embedded hardware agent, in-process. If not — a multi-item
+  cart, a bundled recharge, or simply not enough local credit yet — it falls
+  straight through to the existing network path, byte-for-byte unchanged.
+  Verified this fallthrough is inert outside Electron: `window.electronAPI`
+  is `undefined` in a plain browser, so `isElectron` is `false` and the new
+  branch never runs there — confirmed live by loading the built app in a
+  browser with no Electron shell and checking `typeof window.electronAPI`.
+- [x] **Deliberately did not try to reconcile this with `CashModal`'s
+  "declare cash by tapping on-screen coin buttons" flow, or with
+  `CartModal`'s cash auto-detection.** That auto-detection currently listens
+  for `peripheral:credit` over the *remote* websocket
+  (`src/services/websocket.js`) — which traces back to
+  `backend/src/hardwareAgentServer.js`, explicitly labelled "Legacy hardware
+  agent support" in `ARCHITECTURE.md`, relaying from the standalone
+  `backend/src/hardwareAgent.js` agent (also marked legacy/deprecated there).
+  That is a *third*, separate hardware pipeline from the one this whole round
+  has been hardening (the embedded `pos-client/electron/hardware-agent.cjs`
+  feeding `pos-engine.cjs` directly, zero network hop). A site whose cash
+  intake genuinely comes from that legacy pipeline, or from a staff member
+  manually tapping `CashModal`'s buttons, has no local credit sitting in
+  `pos-engine.sessionState` at all — for it, nothing changes: `handlePay`
+  simply falls through to the network path exactly as it always did. Nothing
+  here can make cash payment worse anywhere; it only adds a path for sites
+  where the embedded agent is the one actually wired to the coin acceptor.
+- 70 backend tests still pass; no backend changes this round.
+
 ### Deliberately deferred — needs a decision or more work, not a quick fix
 
 - [?] **Multi-item cart checkout has no local equivalent.** `App.jsx`'s real
@@ -811,15 +852,31 @@ be topped up or spent against, because the local SQLite `cards` table had no
   with a PIN gate already, not something blocking routine customer
   transactions, so it wasn't in scope for "make the kiosk usable while
   offline."
-- [ ] **Not done yet: nothing in the UI actually calls the local engine for
-  a real transaction.** Everything above makes the local engine safe and
-  correct to call — `window.electronAPI.processSale` / `.topUpCard` etc. are
-  fully wired via `preload.cjs` and have been since before this round — but
-  `App.jsx` still calls the remote HTTP API exclusively for every payment.
-  The bundled-UI and card-status work in this round is what a rewire would
-  need underneath it; the rewire itself (starting with the highest-frequency
-  path, single-machine cash payment, since the cart/gateway flow above is
-  explicitly out of scope for now) is the next piece of this effort.
+- [ ] **The UI still doesn't show the customer their local session balance
+  as coins go in.** The embedded hardware agent already updates
+  `pos-engine.sessionState` and emits `session:updated` / `credit:accepted`
+  over IPC the instant a coin lands — `preload.cjs` already exposes
+  `onSessionUpdate`/`onCreditAccepted` — but no component subscribes to them.
+  A customer feeding the local coin acceptor while offline sees nothing
+  change on screen until they happen to have inserted enough, at which point
+  `handlePay`'s new local branch will still settle the sale correctly — the
+  money is tracked and safe — but the UX looks stalled in the meantime. Purely
+  a display gap, not a correctness one; left for a follow-up rather than
+  folded into this round's money-path change.
+- [ ] **Card payment through the local engine, and RFID auto-pay, are not
+  wired to the UI at all yet** — this round only did cash. `topUpCard` and
+  `processSale`'s card branch are guarded and safe to call (Phase 2 above),
+  and `hardwareAgent.cjs` already emits `rfid:card_detected` over IPC, but
+  `CartModal`'s card auto-pay (`handleCardPayAutomatic`) still listens for
+  card detection over the legacy remote websocket, same as the cash
+  auto-detect discussed above. A card-based offline purchase does not work
+  yet even at a site with the embedded RFID reader wired up.
+- [ ] **No UI action gives cash back.** `pos-engine.dispenseChange(amount)` /
+  the `hw:dispenseChange` IPC call exist and work, but nothing calls them —
+  unspent local session credit just sits there for the customer's next
+  purchase rather than being handed back as physical change. Whether that's
+  the intended behaviour (session-as-running-tab) or a "cash out" button is
+  genuinely missing is a product question, not something to guess at here.
 
 No backend changes this round — frontend/Electron only. 70 backend tests
 still pass (regression check, unaffected as expected).

@@ -2,6 +2,7 @@ import { Link, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import React from 'react'
 import Pos from './pages/Pos'
 import api from './services/api'
+import * as localApi from './services/local-api'
 import { Home } from 'lucide-react'
 import Machines from './pages/Machines'
 import MachineDetail from './pages/MachineDetail'
@@ -208,6 +209,36 @@ function AppInner() {
       const batchId = checkoutBatchId(items)
 
       if (method === 'cash') {
+        // Offline-first path: a single machine, no card recharges bundled in, and
+        // the kiosk's own local engine already holds enough real cash credit for
+        // it (physically inserted through the embedded hardware agent) — settle
+        // it entirely against the local session, no network round trip at all.
+        // Anything the local engine doesn't cover (bundled recharges, several
+        // machines, or simply not enough local credit yet — e.g. a site with no
+        // physical coin acceptor wired up) falls straight through to the
+        // existing network path below, exactly as before.
+        const machineItems = items.filter(i => !(i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge'))))
+        const hasRecharge = machineItems.length !== items.length
+        if (localApi.isElectron && !hasRecharge && machineItems.length === 1) {
+          const only = machineItems[0]
+          const price = Number(only.price || only.amount || 0)
+          try {
+            const session = await localApi.getSession()
+            if (session && session.credits >= price) {
+              await localApi.processSale(only._id || only.id, price, 'cash', null, batchId, null)
+              toast({ title: `Pagamento efetuado (Dinheiro)`, variant: 'success' })
+              try { if (only.name) showMachineNotice([only.name]) } catch { /* the notice is cosmetic; the payment already succeeded */ }
+              clearCart()
+              setCartOpen(false)
+              return
+            }
+          } catch (e) {
+            const msg = e?.message || 'Erro no pagamento com dinheiro'
+            toast({ title: 'Pagamento falhou', description: msg, variant: 'destructive' })
+            return
+          }
+        }
+
         // Validate cash via CashGateway (server-side gateway will persist sales atomically)
         const res = await processPayment(items, { method: 'cash', inserted: opts.inserted })
         if (!res.success) {
