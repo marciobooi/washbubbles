@@ -11,6 +11,7 @@ import { CartProvider, useCart } from './context/CartContext'
 import { PaymentProvider, usePayment } from './context/PaymentContext'
 import CartModal from './components/CartModal'
 import WifiQrModal from './components/WifiQrModal'
+import ReceiptPrompt from './components/ReceiptPrompt'
 import { ToastProvider, toast } from './components/ui/Toast'
 import HelpTutorial from './components/HelpTutorial'
 import LanguageSwitcher from './components/LanguageSwitcher'
@@ -22,6 +23,7 @@ import AdminUsers from './pages/AdminUsers'
 import AdminMachines from './pages/AdminMachines'
 import AdminTransactions from './pages/AdminTransactions'
 import AdminOperations from './pages/AdminOperations'
+import AdminOverview from './pages/AdminOverview'
 import AdminSettings from './pages/AdminSettings'
 import AdminProfile from './pages/AdminProfile'
 import AdminInterfaces from './pages/AdminInterfaces'
@@ -84,6 +86,14 @@ function AppInner() {
   const [cartOpen, setCartOpen] = React.useState(false)
   const [helpOpen, setHelpOpen] = React.useState(false)
   const [wifiVoucher, setWifiVoucher] = React.useState(null)
+  const [receiptBatchId, setReceiptBatchId] = React.useState(null)
+  // Auto-dismiss so a previous customer's "want a receipt?" card doesn't sit
+  // in the corner through the next customer's whole visit.
+  React.useEffect(() => {
+    if (!receiptBatchId) return
+    const t = setTimeout(() => setReceiptBatchId(null), 30000)
+    return () => clearTimeout(t)
+  }, [receiptBatchId])
   // Count of externally-dispatched modal opens (e.g., CardModal in `Pos`)
   const [externalModalCount, setExternalModalCount] = React.useState(0)
 
@@ -329,6 +339,7 @@ function AppInner() {
           if (machineNames.length) showMachineNotice(machineNames)
         } catch { /* the notice is cosmetic; the payment already succeeded */ }
         tryShowWifiVoucher(items.filter(i => !(i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge')))), batchId, kioskKey)
+        setReceiptBatchId(batchId)
         clearCart()
         setCartOpen(false)
         return
@@ -422,6 +433,7 @@ function AppInner() {
             if (machineNames.length) showMachineNotice(machineNames)
           } catch { /* the notice is cosmetic; the payment already succeeded */ }
           tryShowWifiVoucher(machineItems, batchId, kioskKey)
+          setReceiptBatchId(batchId)
 
           toast({ title: `Pagamento efetuado (Cartão)`, variant: 'success' })
           clearCart()
@@ -442,6 +454,7 @@ function AppInner() {
           if (machineNames.length) showMachineNotice(machineNames)
         } catch { /* the notice is cosmetic; the payment already succeeded */ }
         tryShowWifiVoucher(machineItems, batchId, kioskKey)
+        setReceiptBatchId(batchId)
 
         toast({ title: `Pagamento efetuado (Cartão)`, variant: 'success' })
         clearCart()
@@ -531,9 +544,10 @@ function AppInner() {
 
           {/* Protected admin area */}
           <Route path="/admin" element={<RequireAdmin><AdminDashboard /></RequireAdmin>}>
-            <Route index element={<Navigate to="operations" replace />} />
+            <Route index element={<Navigate to="overview" replace />} />
             {/* Backwards-compat: support legacy /admin/dashboard URLs */}
-            <Route path="dashboard" element={<Navigate to="operations" replace />} />
+            <Route path="dashboard" element={<Navigate to="overview" replace />} />
+            <Route path="overview" element={<AdminOverview />} />
             <Route path="users" element={<AdminUsers />} />
             <Route path="tenants" element={<AdminTenants />} />
             <Route path="machines" element={<AdminMachines />} />
@@ -553,6 +567,11 @@ function AppInner() {
 
       <CartModal open={cartOpen} onClose={() => setCartOpen(false)} onPay={handlePay} />
       <WifiQrModal open={Boolean(wifiVoucher)} onClose={() => setWifiVoucher(null)} voucher={wifiVoucher} />
+      <ReceiptPrompt
+        batchId={receiptBatchId}
+        kioskKey={(typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null) || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY}
+        onClose={() => setReceiptBatchId(null)}
+      />
       <HelpTutorial run={helpOpen} onClose={() => setHelpOpen(false)} />
 
       <Modal open={machineNotice.open} onClose={closeMachineNotice} title={machineNotice.names.length === 1 ? `Máquina ${machineNotice.names[0]}` : 'Máquina Iniciada'}>

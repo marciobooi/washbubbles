@@ -11,6 +11,8 @@ import { creditCard, debitCard, SPENDABLE } from '../services/cardBalance.js'
 import { cardLookupLimiter, adminPinLimiter } from '../middleware/rateLimits.js'
 import crypto from 'crypto'
 import coinMachine from '../services/coinMachine.js'
+import { sendAlert } from '../services/alerts.js'
+import { sendMail } from '../services/mailer.js'
 
 const router = express.Router()
 
@@ -583,6 +585,56 @@ router.post('/card/write/:code', requireKiosk, async (req, res) => {
 })
 
 // Read card data from RFID reader
+/**
+ * POST /pos/alert — a kiosk pushes a hardware-fault notice up while it has
+ * connectivity, for the operator's own email alert (hopper empty, RFID
+ * reader disconnected, etc.). Best-effort by design: if `alerts.email`
+ * isn't configured, this just no-ops rather than erroring the kiosk's
+ * hardware-event handling.
+ */
+router.post('/alert', requireKiosk, async (req, res) => {
+  const subject = String(req.body?.subject || '').slice(0, 200)
+  const message = String(req.body?.message || '').slice(0, 2000)
+  if (!subject) return res.status(400).json({ error: 'subject is required' })
+  await sendAlert(req, subject, message)
+  res.json({ success: true })
+})
+
+/**
+ * POST /pos/receipt — email a plain purchase confirmation for a sale batch.
+ *
+ * Deliberately NOT a fiscal document (no ATCUD, no QR code, no AT/SAF-T
+ * registration) — a certified invoicing setup is a separate business/legal
+ * decision, not something to fake here. This is just what it already looks
+ * like: a confirmation of what was paid, sent to whoever asks for one.
+ */
+router.post('/receipt', requireKiosk, async (req, res) => {
+  const batchId = String(req.body?.batchId || '').trim()
+  const email = String(req.body?.email || '').trim()
+  if (!batchId) return res.status(400).json({ error: 'batchId is required' })
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'A valid email is required' })
+
+  const SaleT = withTenant(Sale, req)
+  const sales = await SaleT.find({ batchId }).populate('machineId', 'name').lean()
+  if (!sales.length) return res.status(404).json({ error: 'No sale found for this batch' })
+
+  const total = sales.reduce((s, sale) => s + (sale.amount || 0), 0)
+  const lines = sales.map((s) => {
+    const label = s.type === 'recharge' ? 'Recarga de cartão' : (s.machineId?.name || 'Máquina')
+    return `${label} — €${roundMoney(s.amount).toFixed(2)}`
+  })
+  const text = [
+    'Recibo de compra', '',
+    ...lines, '',
+    `Total: €${roundMoney(total).toFixed(2)}`,
+    `Data: ${new Date(sales[0].createdAt).toLocaleString('pt-PT')}`, '',
+    'Obrigado pela sua visita!',
+  ].join('\n')
+
+  await sendMail({ to: email, subject: 'O seu recibo', text })
+  res.json({ success: true })
+})
+
 router.get('/card/read', requireKiosk, async (req, res) => {
   try {
     const Peripheral = (await import('../models/peripheral.js')).default

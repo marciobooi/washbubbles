@@ -1067,6 +1067,84 @@ unspent cash back short of spending it on another machine.
 
 ---
 
+## Round 13 — business-side gaps: reporting, alerts, receipts
+
+Not audit findings — requested directly, after being asked what's missing
+from a shop-operator's point of view rather than a code-correctness one.
+Scoped down deliberately: cash-only payments and wash/dry-only machines were
+confirmed as intentional, not gaps, so neither was touched. Two decisions
+were needed before starting (asked, not guessed): receipts stay a plain
+confirmation, not a certified fiscal document (Portuguese AT/SAF-T
+certification is a business/legal step with an accountant, not something to
+fake in code); alerts go out by email, reusing the mailer already in the
+codebase rather than standing up a new channel.
+
+### Reporting dashboard
+
+- [x] **The backend already had this — nothing used it.** `/admin/analytics/revenue`,
+  `/admin/analytics/machines`, and `/admin/kiosks/health` were fully built,
+  fully working, and called from exactly zero frontend code — `/admin` just
+  redirected straight to Operações. New `AdminOverview.jsx` (now the admin
+  landing page) surfaces all three: 30-day revenue (cash/card split, hand-rolled
+  bars, no new chart dependency), per-machine utilization, and kiosk fleet status.
+- [x] **Fixed a real bug in `kiosks/health` while surfacing it**: "online" there
+  checks a websocket connection from the *legacy* standalone hardware-agent
+  pipeline (see Round 8's ARCHITECTURE.md note) — an embedded/offline-first
+  kiosk (this whole project's actual architecture) never opens that socket,
+  so it would always show "offline" even mid-sale. The new page uses
+  `lastSeen` instead (updated on every authenticated kiosk request — pulls,
+  pushes — regardless of protocol) as the real, protocol-agnostic freshness
+  signal, and says so in the page copy rather than silently disagreeing with
+  the API's own field.
+
+### Operator email alerts
+
+- [x] `alerts.email` setting (Admin > Definições > Alertas) — where alerts go;
+  blank disables the feature entirely, on both paths below.
+- [x] **Hardware faults, pushed live.** `pos-client/electron/main.cjs` wires
+  the embedded hardware agent's `hopper:fault`/`hopper:empty`/`hardware:error`/
+  `hardware:disconnected` events to `sync-engine.cjs`'s new `pushAlert()`,
+  which reaches the new `POST /pos/alert` (kiosk-authenticated) only while
+  online. Dropped, not queued, when offline — by the time a queued alert
+  would reach the server it's almost always stale (staff already noticed, or
+  the next sale surfaces it anyway).
+- [x] **Kiosk gone quiet, checked periodically.** `services/kioskWatchdog.js`
+  scans kiosk `User.lastSeen` every 5 minutes; anything stale past 15 minutes
+  gets one email, not one per check — `User.offlineAlertSent` tracks that and
+  clears the moment the kiosk is seen again.
+
+### Customer receipts
+
+- [x] `POST /pos/receipt` — emails a plain confirmation (items, total, date)
+  for a sale batch. Explicitly not a fiscal document; the code says so.
+- [x] `ReceiptPrompt` — a small dismissible corner card, not a modal (most
+  customers won't want to stop and type an email for a €3 wash), offered
+  after a **network-settled** cash or card payment. Not offered on the
+  local-engine fast paths from Round 11/12: the receipt route looks up the
+  sale by batch server-side, and a purely local sale has no server-side row
+  to find until it syncs.
+
+10 new backend tests (alert push validation, watchdog stale/recovery/never-seen
+behaviour, receipt validation + send). 88 backend tests total.
+
+### A test-suite fix that unblocks adding more test files
+
+- [x] **`/api/auth/login`'s rate limit (6/15min, process-wide) was already
+  right at the edge before this round** — every test file that wanted "an
+  authenticated token" was hitting the real HTTP login route to get one, and
+  the limiter is a module-level singleton shared across the *entire*
+  `npm test` run, not per-file. Adding one more file's one more login (this
+  round's `alerts.test.js`) tipped it over into a 429 → cascading 401s
+  across unrelated tests, the same failure mode already patched once in
+  Round 10's wifi.test.js fix. Fixed properly this time: `signToken(user)` in
+  `setup.test-helper.js` mints a token directly (mirrors `auth.js`'s own
+  `jwt.sign` call) for every call site that doesn't actually test the login
+  route itself. Only the tests that genuinely exercise login/wrong-password/
+  apiKey-login still make a real HTTP call — 3 total, well under the cap,
+  with real headroom for future test files.
+
+---
+
 ## Deploy notes (do these on the Hetzner box)
 
 1. **Drop the old user email index once**, or the new `partialFilterExpression` will not be created
@@ -1131,6 +1209,12 @@ unspent cash back short of spending it on another machine.
     `backend/.env.example`. The feature fails closed (502, sale unaffected)
     with no controller configured, but stays visibly broken until this is
     set.
+14. **Set `MAIL_HOST`/`MAIL_PORT`/`MAIL_USER`/`MAIL_PASS`/`MAIL_FROM`** in
+    `backend/.env` for operator alerts and customer receipts to actually send
+    anything — without it, both features run (no errors) but every "email"
+    just gets logged to the server console instead of delivered. Then set
+    `alerts.email` in Admin > Definições > Alertas to whoever should receive
+    hardware-fault and kiosk-offline notices.
 
 ---
 

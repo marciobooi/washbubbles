@@ -301,6 +301,12 @@ export function createApi(config) {
     return request('/wifi/voucher', { method: 'POST', json: { batchId }, expect: 'json', headers, skipAuth: true })
   }
 
+  // Email a plain (non-fiscal) purchase confirmation for a sale batch
+  function emailReceipt(batchId, email, opts) {
+    const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
+    return request('/pos/receipt', { method: 'POST', json: { batchId, email }, expect: 'json', headers, skipAuth: true })
+  }
+
   // Day Close
   function getDayCloseSummary() {
     return request('/admin/day-close/summary', { method: 'GET', expect: 'json' });
@@ -315,6 +321,17 @@ export function createApi(config) {
     return request('/admin/day-close', { method: 'POST', json: payload, expect: 'json' });
   }
 
+
+  // Analytics
+  function getAnalyticsRevenue() {
+    return request('/admin/analytics/revenue', { method: 'GET', expect: 'json' });
+  }
+  function getAnalyticsMachines() {
+    return request('/admin/analytics/machines', { method: 'GET', expect: 'json' });
+  }
+  function getKioskHealth() {
+    return request('/admin/kiosks/health', { method: 'GET', expect: 'json' });
+  }
 
   // Settings
   function getSettings() {
@@ -463,6 +480,9 @@ export function createApi(config) {
     createTransaction,
 
     // Settings
+    getAnalyticsRevenue,
+    getAnalyticsMachines,
+    getKioskHealth,
     getSettings,
     getSetting,
     getPublicSetting,
@@ -480,6 +500,7 @@ export function createApi(config) {
     gatewayCardPay,
     gatewayCashPay,
     wifiVoucher,
+    emailReceipt,
 
     // Interfaces
     getInterfaces,
@@ -546,6 +567,9 @@ export const {
   deleteUser,
   getTransactions,
   createTransaction,
+  getAnalyticsRevenue,
+  getAnalyticsMachines,
+  getKioskHealth,
   getSettings,
   getSetting,
   getPublicSetting,
@@ -557,6 +581,7 @@ export const {
   gatewayCardPay,
   gatewayCashPay,
   wifiVoucher,
+  emailReceipt,
   getInterfaces,
   createInterface,
   updateInterface,

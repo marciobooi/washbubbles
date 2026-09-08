@@ -2,8 +2,23 @@ import mongoose from 'mongoose'
 import bcrypt from 'bcryptjs'
 import express from 'express'
 import cors from 'cors'
+import jwt from 'jsonwebtoken'
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret'
+
+/**
+ * Mint a token directly, the same way POST /api/auth/login does — for tests
+ * that just need an authenticated context and aren't testing login itself.
+ *
+ * /auth/login is rate-limited to 6/15min per IP, and that limiter is a
+ * module-level singleton shared across every test file in one `npm test`
+ * run (see backend.test.js's own note on this). With several test files each
+ * wanting a token, real HTTP logins add up fast and 429 the whole suite —
+ * this sidesteps that entirely for the common "just give me a token" case.
+ */
+export function signToken(user) {
+  return jwt.sign({ sub: user._id.toString(), role: user.role, username: user.username }, process.env.JWT_SECRET, { expiresIn: '8h' })
+}
 
 // Requires a reachable MongoDB (same as running the app itself — no
 // downloaded-binary in-memory server, which is unreliable across

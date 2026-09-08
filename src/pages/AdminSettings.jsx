@@ -31,6 +31,10 @@ export default function AdminSettings(){
   const [wifiSsid, setWifiSsid] = useState('')
   const [savingWifi, setSavingWifi] = useState(false)
 
+  // Operator alert email helper state
+  const [alertsEmail, setAlertsEmail] = useState('')
+  const [savingAlertsEmail, setSavingAlertsEmail] = useState(false)
+
   async function loadBranding() {
     try {
       const name = await api.getSetting('branding.companyName').catch(() => null)
@@ -74,7 +78,14 @@ export default function AdminSettings(){
     } catch (e) { console.warn('loadWifiSettings failed', e) }
   }
 
-  useEffect(() => { load(); loadBranding(); loadStaffSettings(); loadWifiSettings() }, [])
+  async function loadAlertsSettings() {
+    try {
+      const email = await api.getSetting('alerts.email').catch(() => null)
+      setAlertsEmail(email && email.value != null ? String(email.value) : '')
+    } catch (e) { console.warn('loadAlertsSettings failed', e) }
+  }
+
+  useEffect(() => { load(); loadBranding(); loadStaffSettings(); loadWifiSettings(); loadAlertsSettings() }, [])
 
   // Live preview: dispatch branding:update when fields change so app updates immediately
   useEffect(() => {
@@ -213,6 +224,23 @@ export default function AdminSettings(){
       toast({ title: 'Erro ao guardar definições de WiFi', variant: 'destructive' })
     } finally {
       setSavingWifi(false)
+    }
+  }
+
+  async function saveAlertsEmail(e) {
+    e.preventDefault()
+    if (alertsEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(alertsEmail)) {
+      return toast({ title: 'Endereço de email inválido', variant: 'destructive' })
+    }
+    setSavingAlertsEmail(true)
+    try {
+      await api.setSetting({ key: 'alerts.email', value: alertsEmail || null })
+      toast({ title: alertsEmail ? 'Email de alertas guardado' : 'Alertas por email desativados', variant: 'success' })
+    } catch (e) {
+      console.error(e)
+      toast({ title: 'Erro ao guardar', variant: 'destructive' })
+    } finally {
+      setSavingAlertsEmail(false)
     }
   }
 
@@ -471,6 +499,36 @@ export default function AdminSettings(){
             </div>
             <Button type="submit" size="sm" disabled={savingWifi}>
               {savingWifi ? 'A guardar…' : 'Guardar'}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* Operator Alerts */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Alertas por email</CardTitle>
+          <CardDescription>Avisos automáticos de avarias e quiosques offline</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={saveAlertsEmail} className="space-y-2 max-w-xs">
+            <Label htmlFor="alertsEmail">Email para alertas</Label>
+            <Input
+              id="alertsEmail"
+              type="email"
+              placeholder="operador@exemplo.com"
+              value={alertsEmail}
+              onChange={(e) => setAlertsEmail(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Recebe um email quando um quiosque não comunica com o servidor há
+              mais de 15 minutos, ou quando um quiosque reporta uma avaria de
+              hardware (hopper vazio, leitor desligado, etc.) enquanto está
+              online. Deixe em branco para desativar. Não afeta o quiosque
+              offline em si — só o aviso.
+            </p>
+            <Button type="submit" size="sm" disabled={savingAlertsEmail}>
+              {savingAlertsEmail ? 'A guardar…' : 'Guardar'}
             </Button>
           </form>
         </CardContent>

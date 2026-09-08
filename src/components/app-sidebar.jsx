@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { useSidebar } from './ui/sidebar'
 import Fuse from 'fuse.js'
 import Highlight from './Highlight'
-import { Cpu, Users, CreditCard, Settings, Activity, PlugZap, Coins, Cable, Wallet, Banknote } from 'lucide-react'
+import { Cpu, Users, CreditCard, Settings, Activity, PlugZap, Coins, Cable, Wallet, Banknote, LayoutDashboard } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import {
   Sidebar,
@@ -20,6 +20,7 @@ import {
 
 // base admin navigation; some items only appear for superadmins
 const navItems = [
+  { title: 'Visão Geral', url: '/admin/overview', Icon: LayoutDashboard },
   { title: 'Operações', url: '/admin/operations', Icon: Activity },
   { title: 'Máquinas', url: '/admin/machines', Icon: Cpu },
   { title: 'Interfaces', url: '/admin/interfaces', Icon: PlugZap },

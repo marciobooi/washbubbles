@@ -89,6 +89,13 @@ async function initOfflineSystems() {
   syncEngine = new SyncEngine({ serverUrl: API_BASE, apiKey: KIOSK_API_KEY }, TENANT_ID)
   syncEngine.start()
 
+  // Hardware faults worth an operator email — pushed only while online (see
+  // pushAlert's own comment for why offline ones are just dropped, not queued).
+  hardwareAgent.on('hopper:fault', (data) => syncEngine.pushAlert('Falha no hopper', `Motivo: ${data?.reason || 'desconhecido'}`))
+  hardwareAgent.on('hopper:empty', () => syncEngine.pushAlert('Hopper sem troco', 'O hopper reportou que está vazio.'))
+  hardwareAgent.on('hardware:error', (data) => syncEngine.pushAlert(`Erro de hardware: ${data?.type || ''}`, data?.error || ''))
+  hardwareAgent.on('hardware:disconnected', (data) => syncEngine.pushAlert(`Periférico desligado: ${data?.type || ''}`, 'Verifique a ligação física.'))
+
   const { registerIpcHandlers, setupEventForwarding } = require('./ipc-handlers.cjs')
   registerIpcHandlers(posEngine, syncEngine, hardwareAgent)
   setupEventForwarding(posEngine, syncEngine, hardwareAgent, () => mainWindow)

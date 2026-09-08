@@ -14,6 +14,7 @@ import gatewaysRoutes from './routes/gateways.js'
 import middlewareRoutes from './routes/middleware.js'
 import syncRoutes from './routes/sync.js'
 import wifiRoutes from './routes/wifi.js'
+import kioskWatchdog from './services/kioskWatchdog.js'
 
 // Enforce presence of JWT secret in production-like environments
 if (!process.env.JWT_SECRET) {
@@ -181,6 +182,7 @@ async function start() {
         console.warn('Failed to initialize CoinMachine (peripherals may not be connected):', err.message)
       }
     }
+    kioskWatchdog.start()
   } catch (err) {
     console.error('Warning: Failed to connect to MongoDB at startup — continuing without DB (some endpoints will fail).', err.message || err)
   }

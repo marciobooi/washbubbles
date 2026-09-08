@@ -60,6 +60,23 @@ class SyncEngine extends EventEmitter {
     return { success: true, stats: this.getStatus() }
   }
 
+  /**
+   * Push a hardware-fault notice up for the operator's email alert, when
+   * there's actually a connection to push it over. Silently drops it
+   * offline — there is nowhere for the alert to go until the kiosk is back,
+   * and by the time it reconnects a hopper-empty/reader-disconnected notice
+   * is usually stale (staff either already noticed, or the retry queue's
+   * next successful sale will surface it anyway).
+   */
+  async pushAlert(subject, message) {
+    if (!this.online) return
+    try {
+      await this._fetch('/pos/alert', { method: 'POST', body: JSON.stringify({ subject, message }) })
+    } catch (err) {
+      console.warn('[Sync] Failed to push alert:', err.message)
+    }
+  }
+
   async checkConnectivity() {
     try {
       const resp = await this._fetch('/health', { method: 'GET', timeout: 5000 })

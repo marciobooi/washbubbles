@@ -1,7 +1,7 @@
 import { expect } from 'chai'
 import request from 'supertest'
 import {
-  startTestDb, stopTestDb, clearTestDb, buildTestApp, seedTenantAndUsers,
+  startTestDb, stopTestDb, clearTestDb, buildTestApp, seedTenantAndUsers, signToken,
 } from './setup.test-helper.js'
 
 // NOTE: /api/auth/login is rate-limited to 6 requests/15min per IP (see
@@ -476,14 +476,14 @@ describe('WashBubbles backend', function () {
 
       dcTenant = await Tenant.create({ name: 'Day Close Tenant', slug: 'day-close-tenant' })
       const adminHash = await bcrypt.hash('admin1234', 10)
-      await User.create({ username: 'dc-admin', password: adminHash, role: 'SUPERADMIN', tenantId: dcTenant._id })
+      const dcAdmin = await User.create({ username: 'dc-admin', password: adminHash, role: 'SUPERADMIN', tenantId: dcTenant._id })
       const kioskHash = await bcrypt.hash('kiosk1234', 10)
-      await User.create({ username: 'dc-kiosk', password: kioskHash, role: 'KIOSK', apiKey: 'dc-kiosk-api-key', tenantId: dcTenant._id })
+      const dcKiosk = await User.create({ username: 'dc-kiosk', password: kioskHash, role: 'KIOSK', apiKey: 'dc-kiosk-api-key', tenantId: dcTenant._id })
 
-      const adminLogin = await request(app).post('/api/auth/login').send({ username: 'dc-admin', password: 'admin1234' })
-      dcAdminToken = adminLogin.body.token
-      const kioskLogin = await request(app).post('/api/auth/login').send({ apiKey: 'dc-kiosk-api-key' })
-      dcKioskToken = kioskLogin.body.token
+      // signToken, not a real login — this block only needs tokens for a
+      // freshly-created tenant, it isn't testing the login route itself.
+      dcAdminToken = signToken(dcAdmin)
+      dcKioskToken = signToken(dcKiosk)
 
       const Machine = (await import('../src/models/machine.js')).default
       dcMachine = await Machine.create({ tenantId: dcTenant._id, name: 'DC Machine', type: 'wash' })

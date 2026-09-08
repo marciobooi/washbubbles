@@ -15,6 +15,10 @@ const userSchema = new Schema({
   resetPasswordToken: { type: String, default: null },
   resetPasswordExpires: { type: Date, default: null },
   lastSeen: { type: Date, default: null },
+  // Set once an "offline too long" alert email has gone out for this kiosk,
+  // so the watchdog doesn't re-send every check while the outage continues —
+  // cleared automatically the moment lastSeen looks healthy again.
+  offlineAlertSent: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }
 })
 

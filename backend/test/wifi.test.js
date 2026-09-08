@@ -1,20 +1,20 @@
 import { expect } from 'chai'
 import request from 'supertest'
 import {
-  startTestDb, stopTestDb, clearTestDb, buildTestApp, seedTenantAndUsers
+  startTestDb, stopTestDb, clearTestDb, buildTestApp, seedTenantAndUsers, signToken
 } from './setup.test-helper.js'
 import unifiVoucher from '../src/services/unifiVoucher.js'
 
 describe('WiFi voucher route', () => {
   let app, kioskApiKey, adminToken, tenantId
 
-  // Log in ONCE for the whole file, like backend.test.js does — /api/auth/login
-  // is rate-limited to 6/15min per IP, process-wide (the limiter is a module
-  // singleton, shared across every test file in the same `npm test` run). A
-  // beforeEach login here exhausted it against backend.test.js's own logins and
-  // every "enable the feature" call below then silently failed as an
-  // unauthenticated 401, which is why these tests only ever saw the disabled
-  // (403) response — not a bug in the route itself.
+  // Mint the admin token directly (signToken) rather than a real HTTP login —
+  // /api/auth/login is rate-limited to 6/15min per IP, process-wide (the
+  // limiter is a module singleton, shared across every test file in the same
+  // `npm test` run). A beforeEach login here once exhausted it against other
+  // files' own logins and every "enable the feature" call below then silently
+  // failed as an unauthenticated 401, which is why these tests only ever saw
+  // the disabled (403) response — not a bug in the route itself.
   before(async () => {
     await startTestDb()
     await clearTestDb()
@@ -22,8 +22,7 @@ describe('WiFi voucher route', () => {
     const seeded = await seedTenantAndUsers()
     kioskApiKey = seeded.kiosk.apiKey
     tenantId = seeded.tenant._id
-    const login = await request(app).post('/api/auth/login').send({ username: 'admin', password: 'admin1234' })
-    adminToken = login.body.token
+    adminToken = signToken(seeded.admin)
   })
   after(stopTestDb)
   beforeEach(() => {
