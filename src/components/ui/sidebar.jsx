@@ -77,7 +77,7 @@ export function Sidebar({ children, className = '', ...props }) {
           />
         )}
         <aside
-          className={`fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] border-r bg-sidebar p-2 overflow-y-auto transition-transform duration-200 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} ${className}`}
+          className={`fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] bg-[#152535] p-3.5 overflow-y-auto transition-transform duration-200 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} ${className}`}
           {...props}
         >
           {children}
@@ -89,7 +89,7 @@ export function Sidebar({ children, className = '', ...props }) {
   // Desktop: an inline column, narrower when collapsed.
   return (
     <aside
-      className={`relative transition-all duration-150 flex-shrink-0 ${collapsed ? 'w-20' : 'w-64'} min-h-screen border-r bg-sidebar p-2 overflow-y-auto overflow-x-hidden ${className}`}
+      className={`relative transition-all duration-150 flex-shrink-0 ${collapsed ? 'w-20' : 'w-64'} min-h-screen bg-[#152535] p-3.5 overflow-y-auto overflow-x-hidden ${className}`}
       data-collapsed={collapsed}
       {...props}
     >
@@ -99,11 +99,11 @@ export function Sidebar({ children, className = '', ...props }) {
 }
 
 export function SidebarHeader({ children, className = '' }) {
-  return <div className={`px-2 py-4 ${className}`}>{children}</div>
+  return <div className={`px-1 pb-4 ${className}`}>{children}</div>
 }
 
 export function SidebarContent({ children, className = '' }) {
-  return <div className={`px-2 ${className}`}>{children}</div>
+  return <div className={`px-0 ${className}`}>{children}</div>
 }
 
 export function SidebarGroup({ children, className = '' }) {
@@ -136,7 +136,7 @@ export function SidebarGroupContent({ children, className = '' }) {
 }
 
 export function SidebarMenu({ children, className = '' }) {
-  return <ul className={`space-y-1 ${className}`}>{children}</ul>
+  return <ul className={`space-y-1 overflow-y-auto ${className}`}>{children}</ul>
 }
 
 export function SidebarMenuItem({ children, className = '' }) {
@@ -150,7 +150,7 @@ export function SidebarMenuButton({ children, isActive, asChild = false, classNa
   // Icon-only mode is a desktop space-saving affordance; the mobile drawer is
   // always full width and has room for labels, so never collapse there.
   const collapsed = collapsedDesktop && !isMobile
-  const base = `flex items-center gap-2 w-full text-left p-2 rounded-md ${isActive ? 'bg-primary text-primary-foreground' : 'hover:bg-muted/50'}`
+  const base = `flex items-center gap-2.5 w-full text-left px-3 py-2.5 rounded-xl text-sm transition-colors duration-150 ${isActive ? 'bg-primary-300 text-[#0f2a2c] font-bold' : 'text-white/60 font-medium hover:bg-white/[0.06] hover:text-white/85'}`
   // set title attribute so tooltips work when collapsed
   const mergedTitle = title || (typeof children === 'string' ? children : undefined)
   // Tapping a nav item on mobile should close the drawer over the page it just
@@ -159,7 +159,7 @@ export function SidebarMenuButton({ children, isActive, asChild = false, classNa
 
   const content = (
     <div className={`${base} ${className}`} {...mobileProps} {...props}>
-      {Icon && <Icon className="!h-6 !w-6 shrink-0" aria-hidden />}
+      {Icon && <Icon className="!h-[18px] !w-[18px] shrink-0" strokeWidth={1.7} aria-hidden />}
       <span className={`${collapsed ? 'hidden' : ''}`}>{children}</span>
     </div>
   )
@@ -170,7 +170,7 @@ export function SidebarMenuButton({ children, isActive, asChild = false, classNa
     const childText = children.props.children
     const newChildren = (
       <>
-        {Icon && <Icon className="!h-6 !w-6 shrink-0" aria-hidden />}
+        {Icon && <Icon className="!h-[18px] !w-[18px] shrink-0" strokeWidth={1.7} aria-hidden />}
         <span className={`${collapsed ? 'hidden' : ''}`}>{childText}</span>
       </>
     )
@@ -212,13 +212,14 @@ export function SidebarInset({ children }) {
 }
 
 import { ChevronLeft, ChevronRight, Menu, X } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 export function SidebarTrigger({ className = '' }) {
   const ctx = useSidebar() || { toggle: () => {}, collapsed: false }
   const expanded = ctx.isMobile ? ctx.mobileOpen : !ctx.collapsed
   return (
     <button
-      className={`p-2 rounded-md hover:bg-muted/50 ${className}`}
+      className={cn('p-2 rounded-md hover:bg-muted/50', className)}
       aria-expanded={expanded}
       aria-label={ctx.isMobile ? (ctx.mobileOpen ? 'Fechar menu' : 'Abrir menu') : (ctx.collapsed ? 'Expandir barra lateral' : 'Colapsar barra lateral')}
       onClick={ctx.toggle}

@@ -14,5 +14,5 @@ export default function Highlight({ text, matches = [] }) {
   })
   if (last < text.length) parts.push({ text: text.slice(last), mark: false, key: 'last' })
 
-  return <>{parts.map((p) => p.mark ? <mark key={p.key} className="bg-yellow-200 rounded px-0.5">{p.text}</mark> : <span key={p.key}>{p.text}</span>)}</>
+  return <>{parts.map((p) => p.mark ? <mark key={p.key} className="bg-yellow-200 text-neutral-900 rounded px-0.5">{p.text}</mark> : <span key={p.key}>{p.text}</span>)}</>
 }
