@@ -2,7 +2,7 @@ import React from 'react'
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import NavSearch from '@/components/NavSearch'
-import { LogOut, Bell, Sun, Moon, ChevronDown, User } from 'lucide-react'
+import { LogOut, Bell, Sun, Moon, ChevronDown } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import { useAuth } from '../context/AuthContext'
 import { useNavigate, Outlet } from 'react-router-dom'
@@ -57,15 +57,13 @@ export default function AdminDashboard() {
         <AppSidebar />
         <SidebarInset>
           <div className="flex flex-1 flex-col gap-4 min-w-0 px-4 sm:px-6 py-5">
-            <header className="h-[60px] shrink-0 flex items-center gap-3.5 px-3 sm:px-[18px] rounded-2xl bg-white shadow-[0_1px_2px_rgba(20,25,30,0.04),0_8px_20px_-12px_rgba(20,25,30,0.10)]">
+            <header className="h-[60px] shrink-0 flex items-center gap-3.5 px-3 sm:px-[18px] rounded-2xl shadow-[0_1px_2px_rgba(20,25,30,0.04),0_8px_20px_-12px_rgba(20,25,30,0.10)]">
               <SidebarTrigger className="shrink-0 rounded-full hover:bg-[#f7f5f1] md:hidden" />
 
               <NavSearch className="flex-1 max-w-[380px]" />
 
               <div className="ml-auto flex items-center gap-2">
-                <TopbarIconButton aria-label="Notificações">
-                  <Bell className="h-4 w-4" strokeWidth={1.7} />
-                </TopbarIconButton>
+              
 
                 <div className="flex items-center p-[3px] rounded-full border border-black/[0.09] bg-[#f7f5f1] gap-0.5">
                   <button
@@ -92,9 +90,7 @@ export default function AdminDashboard() {
                         onClick={() => navigate('/admin/profile')}
                         className="flex items-center gap-2 h-10 pl-[3px] pr-3.5 rounded-full border border-black/[0.09] bg-[#f7f5f1] cursor-pointer transition-colors duration-150 hover:bg-[#eeebe4]"
                       >
-                        <span className="h-8 w-8 rounded-full shrink-0 bg-linear-to-br from-primary-300 to-primary-600 flex items-center justify-center">
-                          <User className="h-4 w-4 text-white" strokeWidth={2} />
-                        </span>
+                        <span className="h-8 w-8 rounded-full shrink-0" />
                         <span className="text-[13.5px] font-bold text-[#1c2530]">{roleLabel}</span>
                         <ChevronDown className="h-[13px] w-[13px]" strokeWidth={2} />
                       </button>
