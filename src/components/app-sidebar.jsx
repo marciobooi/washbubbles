@@ -61,7 +61,10 @@ export function AppSidebar(props) {
   return (
     <Sidebar {...props}>
       <SidebarHeader>
-        <div className="font-semibold">Admin</div>
+        <div className="flex items-center gap-2.5 px-2 pt-1 pb-3.5">
+          <div className="h-8 w-8 shrink-0 rounded-[10px] bg-linear-to-br from-primary-300 to-primary-600" />
+          <span className="font-extrabold text-[17px] tracking-tight text-white">Admin</span>
+        </div>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
