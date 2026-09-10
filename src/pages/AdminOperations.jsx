@@ -134,8 +134,8 @@ export default function AdminOperations() {
   // here; a leftover 3rd button (the common case) wraps to its own row
   // instead of squeezing into the first, and a single button (Reparada) can
   // span both columns to read as the one clear action available.
-  const PRIMARY = 'bg-linear-to-b from-teal-400 to-primary-600 text-white shadow-[0_6px_14px_-6px_rgba(13,148,136,0.55)] hover:brightness-[1.04]'
-  const SECONDARY = 'bg-[#f7f5f1] text-[#1c2530] border border-black/[0.09] hover:bg-[#eeebe4]'
+  const PRIMARY = 'inline-flex items-center gap-2 h-[42px] px-5 rounded-full border border-black/[0.12] text-[#1c2530] font-semibold text-sm cursor-pointer transition-colors duration-150 hover:bg-[#f7f5f1] disabled:opacity-60'
+  const SECONDARY = 'inline-flex items-center gap-2 h-[42px] px-5 rounded-full border border-black/[0.12] text-[#1c2530] font-semibold text-sm cursor-pointer transition-colors duration-150 hover:bg-[#f7f5f1] disabled:opacity-60'
 
   const ActionButton = ({ onClick, variant, Icon, children, full = false }) => (
     <button
@@ -155,7 +155,7 @@ export default function AdminOperations() {
           {/* Machine.icon is a stale public/-relative path left over from the
               Round 9 asset migration and 404s on every machine — never trust
               it for display. These badge icons are drawn locally instead. */}
-          <div className={`w-[54px] h-[54px] rounded-[20px] flex items-center justify-center shrink-0 ${isDry ? 'bg-amber-500' : 'bg-teal-400'}`}>
+          <div className={`w-[54px] h-[54px] rounded-[18px] flex items-center justify-center shrink-0 ${isDry ? 'bg-[#f7eac8]' : 'bg-[#a9e0bc]'}`}>
             {isDry ? <DryIcon /> : <WashIcon />}
           </div>
           <div className="min-w-0 flex-1">
@@ -163,6 +163,7 @@ export default function AdminOperations() {
             <div className="text-xs text-[#8a8478]">{m.weight ? `${m.weight} kg` : ''}</div>
           </div>
         </div>
+
 
         <div className="flex items-center gap-[7px]">
           <StatusDot status={m.status} />
