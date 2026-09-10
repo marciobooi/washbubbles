@@ -72,20 +72,17 @@ export default function NavSearch({ className = '' }) {
 
   return (
     <div ref={ref} className={`relative hidden md:flex items-center ${className}`}>
-      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#1c2530]/40 pointer-events-none">
-        <Search className="h-4 w-4" strokeWidth={1.7} />
-      </span>
       <Input
         id="nav-search"
         placeholder="Search…"
-        className="h-10 w-full rounded-full border-black/[0.09] bg-[#f7f5f1] pl-[38px] pr-10 text-sm text-[#1c2530] shadow-none focus-visible:ring-2 focus-visible:ring-primary-400/40 focus-visible:border-primary-400"
+        className="h-10 w-full rounded-full border-black/[0.09] bg-[#f7f5f1] pl-4 pr-10 text-sm text-[#1c2530] shadow-none focus-visible:ring-2 focus-visible:ring-primary-400/40 focus-visible:border-primary-400"
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
         onFocus={() => { if ((searchQuery||'').trim().length >= 3) setOpen(true) }}
       />
-      {!searchQuery && (
-        <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[11px] text-[#a09a8e] pointer-events-none">⌘K</span>
-      )}
+      <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[#1c2530]/40 pointer-events-none">
+        <Search className="h-4 w-4" strokeWidth={1.7} />
+      </span>
 
       {open && (userMatches.length || machineMatches.length) ? (
         <div className="absolute left-0 mt-10 w-[28rem] bg-white shadow rounded z-50 p-2">

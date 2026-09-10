@@ -2,7 +2,7 @@ import React from 'react'
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import NavSearch from '@/components/NavSearch'
-import { LogOut, Bell, Sun, Moon, ChevronDown } from 'lucide-react'
+import { LogOut, Bell, Sun, Moon, ChevronDown, User } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import { useAuth } from '../context/AuthContext'
 import { useNavigate, Outlet } from 'react-router-dom'
@@ -92,7 +92,9 @@ export default function AdminDashboard() {
                         onClick={() => navigate('/admin/profile')}
                         className="flex items-center gap-2 h-10 pl-[3px] pr-3.5 rounded-full border border-black/[0.09] bg-[#f7f5f1] cursor-pointer transition-colors duration-150 hover:bg-[#eeebe4]"
                       >
-                        <span className="h-8 w-8 rounded-full shrink-0 bg-linear-to-br from-primary-300 to-primary-600" />
+                        <span className="h-8 w-8 rounded-full shrink-0 bg-linear-to-br from-primary-300 to-primary-600 flex items-center justify-center">
+                          <User className="h-4 w-4 text-white" strokeWidth={2} />
+                        </span>
                         <span className="text-[13.5px] font-bold text-[#1c2530]">{roleLabel}</span>
                         <ChevronDown className="h-[13px] w-[13px]" strokeWidth={2} />
                       </button>

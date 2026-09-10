@@ -204,7 +204,7 @@ export default function AdminOperations() {
         <button
           onClick={load}
           disabled={loading}
-          className="inline-flex items-center gap-2 h-[42px] px-5 rounded-full border border-black/[0.12] bg-white text-[#1c2530] font-semibold text-sm cursor-pointer transition-colors duration-150 hover:bg-[#f7f5f1] disabled:opacity-60"
+          className="inline-flex items-center gap-2 h-[42px] px-5 rounded-full border border-black/[0.12] text-[#1c2530] font-semibold text-sm cursor-pointer transition-colors duration-150 hover:bg-[#f7f5f1] disabled:opacity-60"
         >
           <RefreshCw className={`w-[15px] h-[15px] ${loading ? 'animate-spin' : ''}`} aria-hidden />
           Atualizar
