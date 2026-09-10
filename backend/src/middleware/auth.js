@@ -51,37 +51,38 @@ export async function requireAuth(req, res, next) {
   next()
 }
 
-export async function requireAdmin(req, res, next) {
-  await requireAuth(req, res, () => {
-    const role = req.userModel && req.userModel.role
-    if (role !== 'ADMIN' && role !== 'SUPERADMIN') return res.status(403).json({ error: 'Forbidden' })
-    next()
-  })
+/**
+ * Generic role-gate factory. Every specific `requireX` below is a thin
+ * wrapper over this — added so new roles (STAFF, TECHNICIAN) don't need a
+ * hand-written comparison function each, the way the original four did.
+ */
+export function requireRole(...allowed) {
+  return async (req, res, next) => {
+    await requireAuth(req, res, () => {
+      const role = req.userModel && req.userModel.role
+      if (!allowed.includes(role)) return res.status(403).json({ error: 'Forbidden' })
+      next()
+    })
+  }
 }
 
-export async function requireSuperAdmin(req, res, next) {
-  await requireAuth(req, res, () => {
-    if (!req.userModel || req.userModel.role !== 'SUPERADMIN') return res.status(403).json({ error: 'Forbidden' })
-    next()
-  })
-}
-
-export async function requireKiosk(req, res, next) {
-  await requireAuth(req, res, () => {
-    if (!req.userModel || req.userModel.role !== 'KIOSK') return res.status(403).json({ error: 'Forbidden' })
-    next()
-  })
-}
+export const requireAdmin = requireRole('ADMIN', 'SUPERADMIN')
+export const requireSuperAdmin = requireRole('SUPERADMIN')
+export const requireKiosk = requireRole('KIOSK')
 
 /** Kiosk terminals AND staff both drive the coin-machine/middleware endpoints,
  *  so those need a guard that accepts either — requireKiosk rejects admins and
  *  requireAdmin rejects kiosks. */
-export async function requireKioskOrAdmin(req, res, next) {
-  await requireAuth(req, res, () => {
-    const role = req.userModel && req.userModel.role
-    if (role !== 'KIOSK' && role !== 'ADMIN' && role !== 'SUPERADMIN') {
-      return res.status(403).json({ error: 'Forbidden' })
-    }
-    next()
-  })
-}
+export const requireKioskOrAdmin = requireRole('KIOSK', 'ADMIN', 'SUPERADMIN')
+
+/** Read-only dashboard access: Overview, Transactions, Day-close history,
+ *  Cards, Machines — no money/config mutations. */
+export const requireStaffRead = requireRole('ADMIN', 'SUPERADMIN', 'STAFF')
+
+/** Machines + Maintenance tickets + kiosk day-close — no prices/users/
+ *  settings/refunds/coupons/audit-log/WhatsApp. */
+export const requireTechnician = requireRole('ADMIN', 'SUPERADMIN', 'TECHNICIAN')
+
+/** Any authenticated dashboard role — the blanket gate for the admin router,
+ *  with individual routes narrowing further via the guards above. */
+export const requireAnyStaff = requireRole('ADMIN', 'SUPERADMIN', 'STAFF', 'TECHNICIAN')

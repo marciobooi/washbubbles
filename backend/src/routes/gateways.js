@@ -11,6 +11,7 @@ import { roundMoney, parseAmount } from '../utils/money.js'
 import { creditCard, applyCardDelta } from '../services/cardBalance.js'
 import { cardLookupLimiter } from '../middleware/rateLimits.js'
 import coinMachine from '../services/coinMachine.js'
+import { findUsableCoupon, applyCouponDiscount, redeemCoupon } from '../services/coupons.js'
 
 const router = express.Router()
 
@@ -48,9 +49,13 @@ function promoIsActive(price, now = new Date()) {
  * keyed by {type, weight}, with separate cash and card columns.
  *
  * @param method 'cash' or 'card'.
+ * @param coupon An already-validated coupon (services/coupons.js#findUsableCoupon),
+ *   or null. Applied per eligible line here so the discount is part of the
+ *   same server-side pricing everything else already goes through — never
+ *   computed by the kiosk itself for a network-settled sale.
  * @returns {{ok: true, lines: Array, total: number} | {ok: false, status: number, error: object}}
  */
-async function resolveMachineLines(items, MachineT, PriceT, method) {
+async function resolveMachineLines(items, MachineT, PriceT, method, coupon = null) {
   const lines = []
   for (const it of items) {
     const ref = it._id || it.id
@@ -72,9 +77,12 @@ async function resolveMachineLines(items, MachineT, PriceT, method) {
     const raw = method === 'card'
       ? (promo && priceRow.promoCardPrice != null ? priceRow.promoCardPrice : priceRow.cardPrice)
       : (promo && priceRow.promoCashPrice != null ? priceRow.promoCashPrice : priceRow.cashPrice)
-    const price = roundMoney(raw)
+    let price = roundMoney(raw)
     if (!(price > 0)) {
       return { ok: false, status: 409, error: { error: 'Machine has no price configured', machineId: machine._id } }
+    }
+    if (coupon && (coupon.appliesTo === 'both' || coupon.appliesTo === (machine.type || 'wash'))) {
+      price = applyCouponDiscount(price, coupon)
     }
     lines.push({ machine, price, item: it })
   }
@@ -117,12 +125,13 @@ router.post('/cards/:code/topup', requireKiosk, async (req, res) => {
 
 // POST /api/gateways/card/pay - charge card for items (machines + optional recharges in same batch)
 router.post('/card/pay', requireKiosk, async (req, res) => {
-  const { items = [], cardCode, batchId } = req.body
+  const { items = [], cardCode, batchId, couponCode } = req.body
   if (!Array.isArray(items) || !cardCode) return res.status(400).json({ error: 'Missing parameters' })
 
   const CardT = withTenant(Card, req)
   const SaleT = withTenant(Sale, req)
   const MachineT = withTenant(Machine, req)
+  const coupon = couponCode ? await findUsableCoupon(req.tenantId, couponCode) : null
 
   // Fetch card
   let card = await CardT.findOne({ code: cardCode })
@@ -143,7 +152,7 @@ router.post('/card/pay', requireKiosk, async (req, res) => {
     rechargeLines.push({ amount: parsed.value, item: r })
   }
 
-  const resolved = await resolveMachineLines(items.filter((i) => !isRecharge(i)), MachineT, withTenant(Price, req), 'card')
+  const resolved = await resolveMachineLines(items.filter((i) => !isRecharge(i)), MachineT, withTenant(Price, req), 'card', coupon)
   if (!resolved.ok) return res.status(resolved.status).json(resolved.error)
 
   const rechargeTotal = roundMoney(rechargeLines.reduce((s, l) => s + l.amount, 0))
@@ -185,13 +194,20 @@ router.post('/card/pay', requireKiosk, async (req, res) => {
     try { await broadcastMachine(updated) } catch (e) { console.error('[gateways] broadcastMachine error', e) }
   }
 
+  if (coupon && resolved.lines.length) {
+    // One redemption per transaction, not per line — a cart of 3 machines on
+    // one coupon still only counts once against maxRedemptions.
+    await redeemCoupon(req.tenantId, coupon.code).catch((e) => console.error('[gateways] Failed to redeem coupon:', e.message))
+  }
+
   res.json({ success: true, sales, card })
 })
 
 // POST /api/gateways/cash/pay - charge by cash (inserted/change) and create sales
 router.post('/cash/pay', requireKiosk, async (req, res) => {
-  const { items = [], inserted, batchId } = req.body
+  const { items = [], inserted, batchId, couponCode } = req.body
   if (!Array.isArray(items)) return res.status(400).json({ error: 'Missing parameters' })
+  const coupon = couponCode ? await findUsableCoupon(req.tenantId, couponCode) : null
 
   // `inserted` MUST be coerced before it is compared. The old check was
   // `inserted + 0.0001 < total` on the raw body value: for the string "5" that is
@@ -212,7 +228,7 @@ router.post('/cash/pay', requireKiosk, async (req, res) => {
     rechargeLines.push({ amount: parsed.value, item: r })
   }
 
-  const resolved = await resolveMachineLines(items.filter((i) => !isRecharge(i)), MachineT, withTenant(Price, req), 'cash')
+  const resolved = await resolveMachineLines(items.filter((i) => !isRecharge(i)), MachineT, withTenant(Price, req), 'cash', coupon)
   if (!resolved.ok) return res.status(resolved.status).json(resolved.error)
 
   const total = roundMoney(resolved.total + rechargeLines.reduce((s, l) => s + l.amount, 0))
@@ -274,6 +290,10 @@ router.post('/cash/pay', requireKiosk, async (req, res) => {
       // can act on.
       console.error(`[gateways] Change of €${change.toFixed(2)} owed on batch ${batchId}: ${changeError}`)
     }
+  }
+
+  if (coupon && resolved.lines.length) {
+    await redeemCoupon(req.tenantId, coupon.code).catch((e) => console.error('[gateways] Failed to redeem coupon:', e.message))
   }
 
   res.json({ success: true, sales, total, inserted: insertedNum, change, changeDispensed, changeError })

@@ -25,7 +25,8 @@ export default function BuyCardModal({ open, onClose }) {
     name: '',
     email: '',
     phone: '',
-    contribuinte: ''
+    contribuinte: '',
+    marketingOptIn: false
   })
 
   // Input refs for sequential navigation
@@ -93,7 +94,7 @@ export default function BuyCardModal({ open, onClose }) {
 
   function resetForm() {
     setStep(STEPS.FORM)
-    setFormData({ name: '', email: '', phone: '', contribuinte: '' })
+    setFormData({ name: '', email: '', phone: '', contribuinte: '', marketingOptIn: false })
     setInsertedAmount(0)
     setChangeAmount(0)
     setPurchasedCard(null)
@@ -145,6 +146,7 @@ export default function BuyCardModal({ open, onClose }) {
             customerEmail: formData.email,
             customerPhone: formData.phone,
             customerContribuinte: formData.contribuinte,
+            customerMarketingOptIn: formData.marketingOptIn,
             batchId: `BATCH-${Date.now()}`
           })
           setPurchasedCard(local.card)
@@ -178,6 +180,7 @@ export default function BuyCardModal({ open, onClose }) {
           customerEmail: formData.email,
           customerPhone: formData.phone,
           customerContribuinte: formData.contribuinte,
+          customerMarketingOptIn: formData.marketingOptIn,
           batchId: `BATCH-${Date.now()}`
         },
         headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined,
@@ -432,6 +435,19 @@ export default function BuyCardModal({ open, onClose }) {
                   />
                 </div>
               </div>
+
+              <div className="flex items-start gap-2 pt-1">
+                <input
+                  id="marketingOptIn"
+                  type="checkbox"
+                  className="mt-1"
+                  checked={formData.marketingOptIn}
+                  onChange={(e) => handleInputChange('marketingOptIn', e.target.checked)}
+                />
+                <Label htmlFor="marketingOptIn" className="font-normal text-sm">
+                  Aceito receber promoções e novidades por email
+                </Label>
+              </div>
             </div>
 
             <div className="flex gap-3 pt-4">
@@ -597,10 +613,20 @@ export default function BuyCardModal({ open, onClose }) {
     }
   }
 
+  // Closeable before anything has actually happened (FORM: just data entry;
+  // PAYMENT: only amount buttons, nothing charged until one is tapped) and
+  // once the transaction is fully done (COMPLETE). Locked during
+  // DISPENSING/INSERT_CARD — a card is physically out and/or the customer has
+  // already been charged, so the flow must be seen through rather than
+  // silently abandoned. `hideClose` matches: no point showing an X that
+  // can't do anything.
+  const canClose = step === STEPS.FORM || step === STEPS.PAYMENT || step === STEPS.COMPLETE
+
   return (
-    <Modal 
-      open={open} 
-      onClose={step === STEPS.COMPLETE ? handleClose : undefined}
+    <Modal
+      open={open}
+      onClose={canClose ? handleClose : undefined}
+      hideClose={!canClose}
       className="max-w-md"
     >
       <div className="p-6">

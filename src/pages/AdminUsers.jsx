@@ -183,6 +183,8 @@ export default function AdminUsers(){
                 <option value="USER">user</option>
                 <option value="ADMIN">admin</option>
                 <option value="KIOSK">kiosk</option>
+                <option value="STAFF">staff (só leitura)</option>
+                <option value="TECHNICIAN">técnico (máquinas/manutenção)</option>
                 {myRole === 'SUPERADMIN' && <option value="SUPERADMIN">superadmin</option>}
               </select>
             </div>

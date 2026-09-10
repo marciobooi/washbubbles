@@ -4,13 +4,18 @@ import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
 import * as ws from '@/services/websocket'
 import Modal from '@/components/ui/Modal'
-import { Pencil, Trash2, Plus, Check, X } from 'lucide-react'
+import { Pencil, Trash2, Plus, Check, X, Wrench } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import washL1 from '@/assets/washingmashine/L1.png'
 import dryS1 from '@/assets/drymachine/S1.png'
+import { useAuth } from '@/context/AuthContext'
 
 export default function AdminMachines(){
   const navigate = useNavigate()
+  const { role } = useAuth()
+  const canEdit = role === 'ADMIN' || role === 'SUPERADMIN'
+  const canService = canEdit || role === 'TECHNICIAN'
+  const [servicingId, setServicingId] = useState(null)
   const [machines, setMachines] = useState([])
   const [interfaces, setInterfaces] = useState([])
   const [loading, setLoading] = useState(false)
@@ -244,6 +249,20 @@ export default function AdminMachines(){
     }
   }
 
+  async function logService(id) {
+    setServicingId(id)
+    try {
+      await api.logMachineService(id)
+      toast({ title: 'Manutenção registada', variant: 'success' })
+      load()
+    } catch (e) {
+      console.error(e)
+      toast({ title: 'Erro ao registar manutenção', variant: 'destructive' })
+    } finally {
+      setServicingId(null)
+    }
+  }
+
   async function remove(id) {
     if (!confirm('Remover esta máquina?')) return
     try {
@@ -265,9 +284,11 @@ export default function AdminMachines(){
     <div className="p-4">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold">Máquinas</h2>
-        <div>
-          <Button onClick={openNew}><Plus className="h-4 w-4 mr-2" /> Nova Máquina</Button>
-        </div>
+        {canEdit && (
+          <div>
+            <Button onClick={openNew}><Plus className="h-4 w-4 mr-2" /> Nova Máquina</Button>
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded shadow overflow-auto">
@@ -280,24 +301,30 @@ export default function AdminMachines(){
               <th className="px-4 py-2 text-left">Peso</th>
               <th className="px-4 py-2 text-left">Porto</th>
               <th className="px-4 py-2 text-left">Estado</th>
+              <th className="px-4 py-2 text-left">Ciclos</th>
+              <th className="px-4 py-2 text-left">Última manutenção</th>
               <th className="px-4 py-2 text-left">Ações</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {loading ? (
               <tr>
-                <td colSpan={7} className="p-4">Loading...</td>
+                <td colSpan={9} className="p-4">Loading...</td>
               </tr>
             ) : machines.length === 0 ? (
               <tr>
-                <td colSpan={7} className="p-4">Nenhuma máquina</td>
+                <td colSpan={9} className="p-4">Nenhuma máquina</td>
               </tr>
             ) : (
               machines.map((m) => (
                 <tr key={m._id} className="hover:bg-muted/30">
                   <td className="px-4 py-3 text-center font-semibold">{m.number || '—'}</td>
                   <td className="px-4 py-3 flex items-center gap-2">
-                    {m.icon && <img src={m.icon} alt="icon" className="h-8 w-8 object-contain" />}
+                    {/* Machine.icon stores a public/-relative path from before Round 9
+                        moved these assets into src/assets/ for bundling — that path
+                        404s now. Kiosk pages already ignore the stored value entirely
+                        and pick by type; do the same here instead of trusting it. */}
+                    <img src={m.type === 'dry' ? dryS1 : washL1} alt="" className="h-8 w-8 object-contain" />
                     <div>{m.name}</div>
                   </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{m.type === 'wash' ? 'Lavagem' : 'Secagem'}</td>
@@ -310,14 +337,27 @@ export default function AdminMachines(){
                   <td className="px-4 py-3">
                     <span className={`text-xs px-2 py-1 rounded ${m.status === 'working' ? 'bg-yellow-100 text-yellow-800' : m.status === 'offline' ? 'bg-gray-100 text-gray-800' : 'bg-green-100 text-green-800'}`}>{m.statusText || (m.status === 'working' ? 'Ocupado' : m.status === 'offline' ? 'Offline' : 'Livre')}</span>
                   </td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">{m.cycle || 0}</td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">
+                    {m.lastServicedAt ? new Date(m.lastServicedAt).toLocaleDateString('pt-PT') : '—'}
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2">
-                      <button className="btn p-2" title="Editar" aria-label="Editar" onClick={() => openEdit(m)}>
-                        <Pencil className="h-6 w-6" />
-                      </button>
-                      <button className="btn btn-destructive p-2" title="Remover" aria-label="Remover" onClick={() => remove(m._id)}>
-                        <Trash2 className="h-6 w-6" />
-                      </button>
+                      {canService && (
+                        <button className="btn p-2" title="Registar manutenção" aria-label="Registar manutenção" onClick={() => logService(m._id)} disabled={servicingId === m._id}>
+                          <Wrench className="h-6 w-6" />
+                        </button>
+                      )}
+                      {canEdit && (
+                        <>
+                          <button className="btn p-2" title="Editar" aria-label="Editar" onClick={() => openEdit(m)}>
+                            <Pencil className="h-6 w-6" />
+                          </button>
+                          <button className="btn btn-destructive p-2" title="Remover" aria-label="Remover" onClick={() => remove(m._id)}>
+                            <Trash2 className="h-6 w-6" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -418,7 +458,9 @@ export default function AdminMachines(){
                 </div>
 
                 <div className="flex justify-center">
-                  <img src={(editing && editing.icon) || (type === 'dry' ? dryS1 : washL1)} alt="preview" className={`h-12 w-12 object-contain rounded transition-transform duration-300 ${animating ? 'scale-95 opacity-60' : 'scale-100 opacity-100'} tealFilter`} aria-hidden />
+                  {/* Same stale-path issue as the table row above — always derive
+                      from the form's own `type`, never the stored `editing.icon`. */}
+                  <img src={type === 'dry' ? dryS1 : washL1} alt="preview" className={`h-12 w-12 object-contain rounded transition-transform duration-300 ${animating ? 'scale-95 opacity-60' : 'scale-100 opacity-100'} tealFilter`} aria-hidden />
                 </div>
               </div>
             </div>

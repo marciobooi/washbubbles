@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import api from '@/services/api'
 import { toast } from '@/components/ui/Toast'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 
 function fmtEuro(n) {
   return `${(Number(n) || 0).toFixed(2)}€`
@@ -53,10 +54,20 @@ export default function AdminOverview() {
   const todayRevenue = revenue.find((r) => r._id === todayKey)?.total || 0
   const maxDay = Math.max(1, ...revenue.map((r) => r.total || 0))
 
+  async function exportRevenueCsv() {
+    try {
+      const blob = await api.exportRevenueCsv()
+      api.downloadBlob(blob, `receita-${new Date().toISOString().slice(0, 10)}.csv`)
+    } catch (e) {
+      console.error(e)
+      toast({ title: 'Erro ao exportar CSV', variant: 'destructive' })
+    }
+  }
+
   if (loading) return <div className="p-6 text-neutral-500">A carregar…</div>
 
   return (
-    <div className="flex flex-col gap-4 max-w-6xl">
+    <div className="flex flex-col gap-4 max-w-6xl print:max-w-full">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="pb-2"><CardDescription>Hoje</CardDescription></CardHeader>
@@ -75,9 +86,12 @@ export default function AdminOverview() {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Receita — últimos 30 dias</CardTitle>
-          <CardDescription>Dinheiro vs. cartão, por dia</CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>Receita — últimos 30 dias</CardTitle>
+            <CardDescription>Dinheiro vs. cartão, por dia</CardDescription>
+          </div>
+          <Button variant="outline" size="sm" className="print:hidden" onClick={exportRevenueCsv}>Exportar CSV</Button>
         </CardHeader>
         <CardContent>
           {revenue.length === 0 ? (

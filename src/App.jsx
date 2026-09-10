@@ -31,6 +31,9 @@ import AdminPeripherals from './pages/AdminPeripherals'
 import AdminPrices from './pages/AdminPrices'
 import AdminCards from './pages/AdminCards'
 import AdminDayClose from './pages/AdminDayClose'
+import AdminAuditLog from './pages/AdminAuditLog'
+import AdminMaintenance from './pages/AdminMaintenance'
+import AdminCoupons from './pages/AdminCoupons'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import RequireAdmin from './components/RequireAdmin'
@@ -270,7 +273,11 @@ function AppInner() {
         // existing network path below, exactly as before.
         const machineItems = items.filter(i => !(i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge'))))
         const hasRecharge = machineItems.length !== items.length
-        if (localApi.isElectron && !hasRecharge && machineItems.length === 1) {
+        // A coupon can only be validated and redeemed server-side (see
+        // services/coupons.js) — the local/offline engine has no idea a
+        // coupon exists, so a cart carrying one must always go over the
+        // network, never settle silently at full price through a fast path.
+        if (localApi.isElectron && !opts.couponCode && !hasRecharge && machineItems.length === 1) {
           const only = machineItems[0]
           const price = Number(only.price || only.amount || 0)
           try {
@@ -295,7 +302,7 @@ function AppInner() {
         // Offline-first, multi-item: several machines and/or recharges in
         // this same cart. Same idea as above, one step broader — settles the
         // whole batch locally when the session already holds enough credit.
-        if (localApi.isElectron && (hasRecharge || machineItems.length > 1)) {
+        if (localApi.isElectron && !opts.couponCode && (hasRecharge || machineItems.length > 1)) {
           const total = items.reduce((s, i) => s + Number(i.price || i.amount || 0), 0)
           try {
             const session = await localApi.getSession()
@@ -317,7 +324,7 @@ function AppInner() {
         }
 
         // Validate cash via CashGateway (server-side gateway will persist sales atomically)
-        const res = await processPayment(items, { method: 'cash', inserted: opts.inserted })
+        const res = await processPayment(items, { method: 'cash', inserted: opts.inserted, couponCode: opts.couponCode })
         if (!res.success) {
           // Forward meaningful errors to the user
           const msg = res.error?.message || (res.error && res.error.body && res.error.body.error) || 'Erro no pagamento com dinheiro'
@@ -361,7 +368,7 @@ function AppInner() {
       // recharges, several machines, an unknown/not-yet-synced card, or not
       // enough local balance) falls straight through to the existing network
       // path below, unchanged.
-      if (localApi.isElectron && cardCode) {
+      if (localApi.isElectron && cardCode && !opts.couponCode) {
         const rechargeItems = items.filter(i => (i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge'))))
         const machineItemsOnly = items.filter(i => !(i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge'))))
         if (rechargeItems.length === 0 && machineItemsOnly.length === 1) {
@@ -422,7 +429,7 @@ function AppInner() {
 
         if (cardCode && machineItems.length) {
           // Charge via CardGateway (calls /pos/cards/:code/spend per item)
-          const res = await processPayment(machineItems, { method: 'card', cardCode, batchId, kioskKey })
+          const res = await processPayment(machineItems, { method: 'card', cardCode, batchId, kioskKey, couponCode: opts.couponCode })
           if (!res.success) {
             const status = res.error?.status || res.error?.response?.status
             const msg = res.error?.message || (res.error && res.error.body && res.error.body.error) || res.error || 'Erro desconhecido'
@@ -551,23 +558,31 @@ function AppInner() {
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
 
-          {/* Protected admin area */}
-          <Route path="/admin" element={<RequireAdmin><AdminDashboard /></RequireAdmin>}>
+          {/* Protected admin area. Widened to every dashboard role — STAFF and
+              TECHNICIAN (Round 14) need to enter the shell too; individual
+              admin-only pages below re-wrap themselves more tightly. The
+              backend's requireAdmin/requireStaffRead/requireTechnician guards
+              are the real enforcement — this is just so the wrong role lands
+              on an explicit "not allowed" redirect instead of a broken page. */}
+          <Route path="/admin" element={<RequireAdmin roles={['ADMIN', 'SUPERADMIN', 'STAFF', 'TECHNICIAN']}><AdminDashboard /></RequireAdmin>}>
             <Route index element={<Navigate to="overview" replace />} />
             {/* Backwards-compat: support legacy /admin/dashboard URLs */}
             <Route path="dashboard" element={<Navigate to="overview" replace />} />
             <Route path="overview" element={<AdminOverview />} />
-            <Route path="users" element={<AdminUsers />} />
-            <Route path="tenants" element={<AdminTenants />} />
+            <Route path="users" element={<RequireAdmin><AdminUsers /></RequireAdmin>} />
+            <Route path="tenants" element={<RequireAdmin roles={['SUPERADMIN']}><AdminTenants /></RequireAdmin>} />
             <Route path="machines" element={<AdminMachines />} />
-            <Route path="interfaces" element={<AdminInterfaces />} />
-            <Route path="peripherals" element={<AdminPeripherals />} />
-            <Route path="prices" element={<AdminPrices />} />
+            <Route path="maintenance" element={<RequireAdmin roles={['ADMIN', 'SUPERADMIN', 'TECHNICIAN']}><AdminMaintenance /></RequireAdmin>} />
+            <Route path="interfaces" element={<RequireAdmin><AdminInterfaces /></RequireAdmin>} />
+            <Route path="peripherals" element={<RequireAdmin><AdminPeripherals /></RequireAdmin>} />
+            <Route path="prices" element={<RequireAdmin><AdminPrices /></RequireAdmin>} />
+            <Route path="coupons" element={<RequireAdmin><AdminCoupons /></RequireAdmin>} />
             <Route path="cards" element={<AdminCards />} />
             <Route path="transactions" element={<AdminTransactions />} />
             <Route path="day-close" element={<AdminDayClose />} />
-            <Route path="operations" element={<AdminOperations />} />
-            <Route path="settings" element={<AdminSettings />} />
+            <Route path="operations" element={<RequireAdmin><AdminOperations /></RequireAdmin>} />
+            <Route path="settings" element={<RequireAdmin><AdminSettings /></RequireAdmin>} />
+            <Route path="audit-log" element={<RequireAdmin><AdminAuditLog /></RequireAdmin>} />
             <Route path="profile" element={<AdminProfile />} />
           </Route>
           <Route path="/" element={<Navigate to="/pos" replace />} />

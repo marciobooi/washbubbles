@@ -17,30 +17,26 @@ function defaultWsUrl() {
 export function connect(url = import.meta.env.VITE_HW_BRIDGE_URL || defaultWsUrl()) {
   if (socket && socket.readyState === WebSocket.OPEN) return socket
 
-  // Attach auth token or kiosk api key as query params when available
-  try {
-    const token = localStorage.getItem('ws_token')
-    const kioskKey = window?.electronAPI?.kioskKey?.() || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
-    const parsed = new URL(url)
-    if (token) {
-      parsed.searchParams.set('token', token)
-      console.info('[ws] connecting with token')
-    } else if (kioskKey) {
-      parsed.searchParams.set('apiKey', kioskKey)
-      console.info('[ws] connecting with kioskApiKey')
-    } else {
-      console.info('[ws] connecting without auth')
-    }
-    url = parsed.toString()
-  } catch (e) {
-    // ignore URL parsing errors
-    console.error('[ws] connect build url failed', e)
-  }
+  // Credentials are no longer put in the URL — a JWT or apiKey there ends up
+  // in server/proxy access logs and anywhere the URL gets copied (browser
+  // devtools included). Instead, connect anonymously and send them as the
+  // first WS message; see wsServer.js's matching auth-timeout handshake.
+  const token = localStorage.getItem('ws_token')
+  const kioskKey = window?.electronAPI?.kioskKey?.() || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
 
   socket = new WebSocket(url)
 
   socket.addEventListener('open', () => {
     console.info('[ws] connected to', url)
+    if (token) {
+      console.info('[ws] authenticating with token')
+      socket.send(JSON.stringify({ type: 'auth', token }))
+    } else if (kioskKey) {
+      console.info('[ws] authenticating with kioskApiKey')
+      socket.send(JSON.stringify({ type: 'auth', apiKey: kioskKey }))
+    } else {
+      console.info('[ws] no credentials available — connection will be closed by the server')
+    }
   })
 
   socket.addEventListener('message', (evt) => {

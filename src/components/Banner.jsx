@@ -1,19 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import dryBanner from '@/assets/banner/dry.png'
-import carpetBanner from '@/assets/banner/carpet.png'
-
-const banners = [
-    { id: 'banner1',
-        title: 'Limpeza a seco',
-        text: 'Entre em contacto mail@mail.com',
-        image: dryBanner
-    },
-    { id: 'banner2',
-        title: 'Lavagem de carpetes',
-        text: 'Entre em contacto mail@mail.com',
-        image: carpetBanner
-    },
-]
+import api from '@/services/api'
+import { DEFAULT_BANNERS } from '@/lib/defaultBanners'
 
 const AUTOPLAY_INTERVAL_MS = 10000
 // Minimum horizontal drag before it counts as a swipe rather than a stray tap
@@ -21,22 +8,42 @@ const AUTOPLAY_INTERVAL_MS = 10000
 const SWIPE_THRESHOLD_PX = 50
 
 export default function Banner() {
+  // Admin-configurable (Definições > Banner), publicly readable since this
+  // renders before any customer session exists. Falls back to the built-in
+  // defaults when the setting has never been saved, so an upgraded kiosk
+  // doesn't go blank — see lib/defaultBanners.js.
+  const [banners, setBanners] = useState(DEFAULT_BANNERS)
   const [currentIndex, setCurrentIndex] = useState(0)
   const timerRef = useRef(null)
   const dragStartX = useRef(null)
   const dragDeltaX = useRef(0)
 
-  // Restarting the timer (rather than letting a fixed setInterval run
-  // untouched) means a manual swipe or dot tap doesn't get overridden a moment
-  // later by an autoplay tick someone didn't ask for.
-  const restartAutoplay = useCallback(() => {
-    if (timerRef.current) clearInterval(timerRef.current)
-    timerRef.current = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % banners.length)
-    }, AUTOPLAY_INTERVAL_MS)
+  useEffect(() => {
+    let cancelled = false
+    api.getPublicSetting('banners').then((resp) => {
+      if (cancelled) return
+      const saved = resp && Array.isArray(resp.value) ? resp.value : null
+      if (saved && saved.length > 0) setBanners(saved)
+    }).catch(() => { /* keep the defaults already in state */ })
+    return () => { cancelled = true }
   }, [])
 
+  // Restarting the timer (rather than letting a fixed setInterval run
+  // untouched) means a manual swipe or dot tap doesn't get overridden a moment
+  // later by an autoplay tick someone didn't ask for. Depends on the slide
+  // count so it re-syncs once the real (possibly admin-edited) list loads in
+  // place of the initial defaults.
+  const slideCount = banners.length
+  const restartAutoplay = useCallback(() => {
+    if (timerRef.current) clearInterval(timerRef.current)
+    if (slideCount < 2) return // nothing to autoplay through
+    timerRef.current = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % slideCount)
+    }, AUTOPLAY_INTERVAL_MS)
+  }, [slideCount])
+
   useEffect(() => {
+    setCurrentIndex(0) // the loaded list can be a different length/order than the defaults
     restartAutoplay()
     return () => { if (timerRef.current) clearInterval(timerRef.current) }
   }, [restartAutoplay])

@@ -117,7 +117,7 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
         <div className="h-full flex flex-col lg:grid lg:grid-cols-12 gap-4 lg:gap-8 max-w-7xl mx-auto">
           
           {/* Left Column: Balance & Actions */}
-          <div className="shrink-0 ">
+          <div className="shrink-0 lg:col-span-5">
             <div className="bg-white rounded-3xl p-6 lg:p-8 shadow-xl border border-neutral-100 relative overflow-hidden group shrink-0 flex flex-col justify-between gap-6 h-full">
               <div className="absolute top-0 right-0 -mt-10 -mr-10 w-40 h-40 bg-primary-50 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-700"></div>
               

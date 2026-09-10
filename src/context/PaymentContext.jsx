@@ -23,7 +23,7 @@ export function PaymentProvider({ children }) {
     if (method === 'cash') {
       // Use server-side gateway for cash
       try {
-        const payload = { items, inserted: opts.inserted, batchId: opts.batchId }
+        const payload = { items, inserted: opts.inserted, batchId: opts.batchId, couponCode: opts.couponCode }
         const resp = await api.gatewayCashPay(payload, { apiKey: kioskKeyFinal })
         // `changeDispensed` / `changeError` tell us whether the hopper actually
         // paid out. Dropping them here is how a jam became a silent short-change.
@@ -41,7 +41,7 @@ export function PaymentProvider({ children }) {
       // If cardCode provided, call server-side gateway which persists recharges and spends atomically
       if (opts.cardCode) {
         try {
-          const payload = { items, cardCode: opts.cardCode, batchId: opts.batchId }
+          const payload = { items, cardCode: opts.cardCode, batchId: opts.batchId, couponCode: opts.couponCode }
           const resp = await api.gatewayCardPay(payload, { apiKey: kioskKeyFinal })
           return { success: true, method: 'card', total: items.reduce((s,i)=>s+(i.price||i.amount||0),0), results: resp.sales, card: resp.card }
         } catch (e) {

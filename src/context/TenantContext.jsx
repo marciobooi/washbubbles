@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import api from '../services/api'
 
 const TenantContext = createContext()
@@ -23,7 +24,17 @@ export function TenantProvider({ children }) {
     } finally { setLoading(false) }
   }
 
-  useEffect(() => { refreshTenants() }, [])
+  // GET /admin/tenants is SUPERADMIN-only. TenantProvider wraps the whole
+  // app (kiosk POS included), so an unconditional fetch here 401'd on every
+  // single kiosk page load — an unauthenticated request that could never
+  // succeed there. Only admin routes have any use for the tenant list.
+  // Keyed on the route (not just mount) so it still fires correctly if the
+  // app navigates from /pos to /admin without a full page reload.
+  const { pathname } = useLocation()
+  const isAdminRoute = pathname.startsWith('/admin')
+  useEffect(() => {
+    if (isAdminRoute) refreshTenants()
+  }, [isAdminRoute])
 
   const selectTenant = (id) => setTenantId(id || null)
 

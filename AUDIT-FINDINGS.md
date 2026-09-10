@@ -1155,6 +1155,139 @@ against.
 
 ---
 
+## Round 14 — refunds, audit log, roles, maintenance, CSV export, coupons/marketing, WhatsApp
+
+Requested directly: what's still missing for full A-to-Z business control.
+Scoped down per explicit decisions: no MB Way/Multibanco (cash + card only,
+by choice), no customer-facing app (balance is checked on the kiosk
+in-store), no subscription/membership plans. Customer notifications go over
+WhatsApp instead of SMS/push — the unofficial `Baileys` library (a real
+number paired by QR code, like WhatsApp Web), not the official Meta Cloud
+API, a deliberate choice traded off against Meta's business-verification
+overhead.
+
+### Refunds replace a hard-delete
+
+- [x] `DELETE /admin/transactions/:id` used to be a bare
+  `findByIdAndDelete` — no card credit-back, no trace. Replaced with
+  `POST /admin/transactions/:id/refund`: credits the card back atomically
+  via the existing `cardBalance.js` (works even on a blocked card), records
+  the reversal as a **new** `type: 'refund'` Sale rather than mutating the
+  original, and marks the original `status: 'refunded'`. The reversal's
+  `dayCloseId` stays null so it rolls into the next open period the same way
+  every other sale does — an already-closed report's frozen totals are never
+  touched retroactively. Cash refunds are recorded but not automated (the
+  till, not a card, holds that money).
+
+### Admin action audit log
+
+- [x] New `AuditLog` model + `logAction()` helper (same fire-and-forget,
+  never-throws shape as `alerts.js`). Wired into every money/security-
+  sensitive mutation in `admin.js`: prices, the direct card-balance override
+  (`PUT /admin/cards/:id` — flagged distinctly since it bypasses
+  `cardBalance.js`'s atomic `$inc` entirely), users (especially role
+  changes), machines, interfaces, peripherals, settings, refunds, coupons,
+  maintenance resolutions, marketing broadcasts. New `AdminAuditLog.jsx`
+  page, ADMIN/SUPERADMIN only.
+
+### Two more staff roles
+
+- [x] `STAFF` (read-only: Overview, Transactions, Day-close, Cards,
+  Machines) and `TECHNICIAN` (Machines, Maintenance tickets, kiosk
+  day-close) added to `User.role`. `middleware/auth.js`'s four hand-written
+  `requireX` guards became thin wrappers over one `requireRole(...allowed)`
+  factory; `admin.js`'s blanket `requireAdmin` became
+  `requireAnyStaff` at the router level with `requireAdmin`/
+  `requireStaffRead`/`requireTechnician` narrowing individual routes.
+  Frontend mirrors this at both the sidebar (per-item `roles` array,
+  replacing the old single `superOnly` boolean) and the router (`/admin`'s
+  `RequireAdmin` widened to all four roles; individual admin-only pages
+  re-wrap themselves tighter) — defense in depth only, the backend guard is
+  the real enforcement.
+
+### Preventive maintenance
+
+- [x] `Machine.cycle` (existing field, never actually incremented) now
+  increments for real on every completed cycle, in the same
+  `coinMachine.js:handleMachineStatusUpdate` block that already detects a
+  machine going `working → free`. New `MaintenanceTicket` model +
+  `reportFault()` service, hooked into all four existing fault call sites in
+  `coinMachine.js` — creates a ticket (deduped against any already-open one
+  for that machine, so a flapping fault doesn't spam) *in addition to* the
+  existing operator email, not instead of it. New `AdminMaintenance.jsx`
+  page and a manual "Registar manutenção" action on `AdminMachines.jsx`
+  (sets `lastServicedAt`, resolves any open ticket).
+
+### Exportable CSV reports
+
+- [x] `GET /admin/transactions/export.csv` (with `from`/`to`/`type`
+  filters — new, the list route never had them) and
+  `GET /admin/analytics/revenue.csv`, hand-built CSV (no library — the shape
+  is too simple to justify one). No server-side PDF generation, which would
+  be a first dependency of its kind in this codebase; a `@media print`
+  stylesheet on the report pages covers "Print → Save as PDF" instead, zero
+  new dependencies. Frontend finally gives the `expect: 'blob'` mode in
+  `api.js` (present but never called by anything) its first real callers.
+
+### Coupon codes + opt-in email marketing
+
+- [x] New `Coupon` model (code, percent/fixed discount, applies-to
+  wash/dry/both, max redemptions, expiry). Validated and applied from the
+  exact spot `gateways.js` already re-prices every line from the tenant's
+  own `Price` table — a coupon is one more step in server-side pricing,
+  never something the kiosk computes itself. Redemption is one atomic
+  guarded `$inc` per transaction (mirrors `cardBalance.js`'s `debitCard`
+  shape), not per line. **Coupons only work over the network** — CartModal's
+  new coupon-code field forces `handlePay` past every local/offline
+  fast-path (a coupon can only be validated server-side, so settling
+  locally would silently charge full price and never redeem it). The kiosk
+  offline path was deliberately not extended to sync/validate coupons
+  locally — same complexity class as Round 11's cart work, left for a
+  dedicated round if it's needed.
+- [x] `card.marketingOptIn` (default **false** — opt-in, not opt-out, the
+  safer default under GDPR), a checkbox at `BuyCardModal` purchase time.
+  `POST /admin/marketing/broadcast` emails every opted-in card with an email
+  on file, reusing `mailer.js`'s `sendMail` directly. New
+  `AdminCoupons.jsx` page covers both coupon CRUD and the broadcast form.
+  **Known gap**: the opt-in checkbox has no effect for a card purchased
+  fully offline through the kiosk's local engine — `pos-engine.cjs`'s
+  `purchaseCard` doesn't yet carry the flag through to local storage or the
+  sync-up path. Only the network purchase route
+  (`POST /pos/card/purchase`) honours it today.
+
+### WhatsApp cycle-complete notifications (Baileys)
+
+- [x] New `services/whatsapp.js` — one Baileys socket per tenant, started
+  lazily only once a tenant enables `whatsapp.enabled`, auth state persisted
+  to `backend/.baileys-auth/<tenantId>/` (gitignored — **back this up like
+  the kiosk SQLite file**, losing it means re-pairing the QR). Triggered
+  from the same `coinMachine.js` free-transition block as the cycle
+  counter above: resolves which card ran the cycle via the most recent
+  matching `Sale` (`Machine.reservedBy` is confirmed dead — never populated
+  by the real payment flow), and messages the card's phone if one is on
+  file. New "WhatsApp" card in `AdminSettings.jsx` — toggle, live connection
+  status, and a QR code to scan, polling `GET /admin/whatsapp/status`.
+  **Verified live in this environment**: toggling the setting actually
+  starts a Baileys session, connects to WhatsApp's servers, and renders a
+  real scannable QR end-to-end. **Not verified**: an actual phone scanning
+  it and a message arriving — no test device here. **Structural caveat,
+  same class as the RFID/WiFi confidence notes elsewhere in this doc**: this
+  only fires through the backend's `coinMachine.js` status path (the same
+  one Rounds 1-3 hardened) — if a specific shop's machine-interface boards
+  report status only to the kiosk's local `hardware-agent.cjs` (which has no
+  interface/door-status parser at all today), this won't fire until that
+  gap is closed separately.
+
+15 new backend tests (refund credit-back/cash/double-refund/refund-of-refund/
+day-close isolation, audit log writes, STAFF/TECHNICIAN role gating, coupon
+discount/cap/expiry). 103 backend tests total. Both `npm run build` and
+`npm run build:electron` verified clean. Live-verified in a real browser
+against a local MongoDB: coupon create → apply → redemption count, audit
+log entries with expandable details, manual maintenance service log,
+STAFF/TECHNICIAN 403s, and the WhatsApp QR pairing flow end-to-end.
+
+---
+
 ## Deploy notes (do these on the Hetzner box)
 
 1. **Drop the old user email index once**, or the new `partialFilterExpression` will not be created
@@ -1225,6 +1358,12 @@ against.
     just gets logged to the server console instead of delivered. Then set
     `alerts.email` in Admin > Definições > Alertas to whoever should receive
     hardware-fault and kiosk-offline notices.
+15. **Back up `backend/.baileys-auth/` once WhatsApp is paired**, the same
+    way you'd back up the kiosk's SQLite file — it holds the live session
+    credentials for the paired WhatsApp number. Deleting it (or losing the
+    box) means scanning the QR again in Admin > Definições > WhatsApp.
+    Nothing needs configuring in `.env` for this one; the toggle in
+    Definições is the whole setup.
 
 ---
 

@@ -334,7 +334,7 @@ router.post('/recharge', requireKiosk, async (req, res) => {
  * and told "Card dispensed. Please insert card into reader to activate."
  */
 router.post('/card/purchase', requireKiosk, async (req, res) => {
-  const { inserted, customerName, customerEmail, customerPhone, customerContribuinte, batchId, localId } = req.body
+  const { inserted, customerName, customerEmail, customerPhone, customerContribuinte, customerMarketingOptIn, batchId, localId } = req.body
 
   const parsedInserted = parseAmount(inserted)
   if (!parsedInserted.ok) return res.status(400).json({ error: parsedInserted.error })
@@ -412,6 +412,7 @@ router.post('/card/purchase', requireKiosk, async (req, res) => {
       email: customerEmail || '',
       phone: customerPhone || '',
       contribuinte: customerContribuinte || '',
+      marketingOptIn: Boolean(customerMarketingOptIn),
     })
 
     const sale = await SaleT.create({
@@ -672,17 +673,22 @@ router.get('/cards/:code', cardLookupLimiter, requireKiosk, async (req, res) => 
 // Public: lightweight settings lookup for branding and card purchase keys (no auth)
 router.get('/settings/:key', async (req, res) => {
   const key = String(req.params.key || '')
-  // Allow branding, cardPurchase, loyaltyCard and the kiosk-lock toggle to be
-  // read publicly. None of these leak anything sensitive — knowing whether the
-  // maintenance-lock feature is turned on isn't meaningful information, and the
-  // kiosk needs it before a customer session even authenticates as anything.
-  if (!key.startsWith('branding.') && !key.startsWith('cardPurchase.') && !key.startsWith('loyaltyCard.') && !key.startsWith('wifi.') && key !== 'kioskLockEnabled') {
+  // Allow branding, cardPurchase, loyaltyCard, the kiosk-lock toggle and the
+  // homepage banner slides to be read publicly. None of these leak anything
+  // sensitive — knowing whether the maintenance-lock feature is turned on
+  // isn't meaningful information, and the kiosk needs all of this before a
+  // customer session even authenticates as anything (the banner carousel is
+  // the very first thing rendered on the homepage).
+  if (!key.startsWith('branding.') && !key.startsWith('cardPurchase.') && !key.startsWith('loyaltyCard.') && !key.startsWith('wifi.') && key !== 'kioskLockEnabled' && key !== 'banners') {
     return res.status(404).json({ error: 'Not found' })
   }
   const SettingT = withTenant(Setting, req)
   const s = await SettingT.findOne({ key }).lean()
-  if (!s) return res.status(404).json({ error: 'Setting not found' })
-  res.json(s)
+  // A key on the allowlist above that simply has no row yet is a normal,
+  // successful "not configured" answer — not a 404. Every caller already
+  // reads `.value` off the response, so `{key, value: null}` is a drop-in
+  // replacement; it just stops looking like a failed request in devtools.
+  res.json(s || { key, value: null })
 })
 
 // Spending using card: deduct amount from card balance and create Sale

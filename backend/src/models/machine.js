@@ -39,7 +39,12 @@ const machineSchema = new Schema({
   activation: { type: String, enum: ['high', 'low'], default: 'high' },
   // Dry machine specific
   tImp: { type: Number, default: null }, // time per impulse in minutes (only for dry machines)
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now },
+
+  // Preventive maintenance — set manually by admin.js's POST /machines/:id/service,
+  // separate from `cycle` (a running total, incremented in coinMachine.js on
+  // every completed wash/dry cycle).
+  lastServicedAt: { type: Date, default: null }
 })
 
 // Machine numbers should be unique per tenant when provided.

@@ -4,8 +4,12 @@ import Client from './client.js'
 import Setting from '../models/setting.js'
 import Machine from '../models/machine.js'
 import Interface from '../models/interface.js'
+import Sale from '../models/sale.js'
+import Card from '../models/card.js'
 import { broadcastMachine, broadcastHardwareEvent } from '../wsServer.js'
 import { roundMoney } from '../utils/money.js'
+import { reportFault } from './maintenance.js'
+import { sendCycleCompleteMessage } from './whatsapp.js'
 
 /** Consecutive idle readings required before a running machine is freed. */
 const IDLE_READINGS_TO_FREE = 3
@@ -787,7 +791,8 @@ class CoinMachine extends EventEmitter {
         machine.status = 'fault'
         machine.statusText = issue || 'Unknown fault'
         await machine.save()
-        
+        reportFault(machine.tenantId, machine._id, issue || 'Unknown fault')
+
         this.machines.set(id, machine.toObject())
         this.emit('machine-issue', { machine: machine.toObject(), issue })
         
@@ -824,7 +829,10 @@ class CoinMachine extends EventEmitter {
             
             machine.status = statusMap[machineData.status] || 'offline'
             await machine.save()
-            
+            if (machine.status === 'fault') {
+              reportFault(machine.tenantId, machine._id, 'Fault reported by low-level status', machineData.status)
+            }
+
             this.machines.set(machineData.id, machine.toObject())
             
             // Broadcast individual machine update
@@ -898,10 +906,12 @@ class CoinMachine extends EventEmitter {
       // Update machine status based on hardware signals
       let machineStatus = machine.status
       let statusText = ''
+      let cycleStartedAt = null
 
       if (status.fault) {
         machineStatus = 'fault'
         statusText = 'Hardware fault detected'
+        reportFault(machine.tenantId, machine._id, statusText)
       } else if (status.occupied || status.doorLocked) {
         machineStatus = 'working'
         statusText = status.doorClosed ? 'Running - Door closed' : 'Running - Door open'
@@ -928,10 +938,19 @@ class CoinMachine extends EventEmitter {
           this.idleReadings.delete(key)
           machineStatus = 'free'
           statusText = 'Available'
+          // Captured before startedAt is cleared below — this is the only
+          // window in which we can bound the Sale lookup used for the
+          // WhatsApp cycle-complete notification (reservedBy is never
+          // actually populated by the real payment flow, so the card link
+          // only ever exists on the Sale row, not here).
+          cycleStartedAt = machine.startedAt
           machine.currentProgram = null
           machine.reserved = false
           machine.reservedBy = null
           machine.startedAt = null
+          // Turns the existing-but-otherwise-dead `cycle` counter into a
+          // real running total (see maintenance.js / Round D).
+          machine.cycle = (machine.cycle || 0) + 1
         }
       } else if (status.occupied) {
         // Still running — any earlier idle reading was a blip.
@@ -953,9 +972,36 @@ class CoinMachine extends EventEmitter {
         machine: machine.toObject(),
         hardwareStatus: status
       })
+
+      // WhatsApp cycle-complete notification — fire-and-forget, never blocks
+      // or throws into this handler. Only runs on the free transition above
+      // (cycleStartedAt is only set there). See services/whatsapp.js.
+      if (cycleStartedAt) {
+        this.notifyCycleComplete(machine, cycleStartedAt).catch(() => {})
+      }
     } catch (err) {
       console.error('Error handling machine status update:', err)
     }
+  }
+
+  /**
+   * Look up which card ran the just-finished cycle and, if it has a phone
+   * number and WhatsApp is enabled for the tenant, send a "cycle complete"
+   * message. The card link only ever exists on the Sale row — `reservedBy`
+   * on Machine is never populated by the real payment flow (pos.js/
+   * gateways.js write status+cycle directly, not reservedBy).
+   */
+  async notifyCycleComplete(machine, cycleStartedAt) {
+    const sale = await Sale.findOne({
+      tenantId: machine.tenantId,
+      machineId: machine._id,
+      type: 'payment',
+      createdAt: { $gte: cycleStartedAt }
+    }).sort({ createdAt: -1 })
+    if (!sale?.cardCode) return
+    const card = await Card.findOne({ tenantId: machine.tenantId, code: sale.cardCode })
+    if (!card?.phone) return
+    await sendCycleCompleteMessage(machine.tenantId, card.phone, machine.name)
   }
 
   /**
@@ -982,6 +1028,7 @@ class CoinMachine extends EventEmitter {
       machine.status = 'fault'
       machine.statusText = `Error ${errorCode}`
       await machine.save()
+      reportFault(machine.tenantId, machine._id, `Error ${errorCode}`, String(errorCode))
 
       // Update cache
       this.machines.set(machine.intId || machine._id, machine.toObject())

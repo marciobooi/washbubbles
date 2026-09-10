@@ -9,9 +9,16 @@ const saleSchema = new Schema({
   amount: { type: Number, required: true },
   items: { type: Schema.Types.Mixed },
   // Transaction type: payment, recharge, card_purchase, admin_start, etc.
-  type: { type: String, enum: ['payment', 'recharge', 'card_purchase', 'admin_start', 'other'], default: 'payment' },
+  type: { type: String, enum: ['payment', 'recharge', 'card_purchase', 'admin_start', 'other', 'refund'], default: 'payment' },
   // Payment method (card, cash, kiosk)
   method: { type: String },
+  // 'refunded' is set on the ORIGINAL sale once a refund has been issued for
+  // it — informational only, never mutated on an already-closed sale (see
+  // dayCloseId below). The reversal itself is a separate `type: 'refund'` row.
+  status: { type: String, enum: ['completed', 'refunded'], default: 'completed' },
+  // Set on a `type: 'refund'` row to point back at the sale it reverses.
+  refundOf: { type: Schema.Types.ObjectId, ref: 'Sale', default: null },
+  refundReason: { type: String, default: '' },
   // Optional batch id to group multi-sale payments into one logical transaction
   batchId: { type: String },
   // Loyalty card reference (if any)

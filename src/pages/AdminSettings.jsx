@@ -5,8 +5,22 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Palette, ShieldCheck, Wifi as WifiIcon, Bell, MessageCircle, SlidersHorizontal, Image as ImageIcon, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react'
+import { DEFAULT_BANNERS } from '@/lib/defaultBanners'
+
+const TABS = [
+  { id: 'branding', label: 'Branding', Icon: Palette },
+  { id: 'banner', label: 'Banner', Icon: ImageIcon },
+  { id: 'staff', label: 'Staff & Manutenção', Icon: ShieldCheck },
+  { id: 'wifi', label: 'WiFi', Icon: WifiIcon },
+  { id: 'alerts', label: 'Alertas', Icon: Bell },
+  { id: 'whatsapp', label: 'WhatsApp', Icon: MessageCircle },
+  { id: 'advanced', label: 'Avançado', Icon: SlidersHorizontal },
+]
 
 export default function AdminSettings(){
+  const [activeTab, setActiveTab] = useState('branding')
+
   const [list, setList] = useState([])
   const [key, setKey] = useState('')
   const [value, setValue] = useState('')
@@ -17,6 +31,11 @@ export default function AdminSettings(){
   const [uploading, setUploading] = useState(false)
   const [primaryColor, setPrimaryColor] = useState('')
   const [accentColor, setAccentColor] = useState('')
+
+  // Homepage banner carousel helper state
+  const [bannerSlides, setBannerSlides] = useState(DEFAULT_BANNERS)
+  const [savingBanners, setSavingBanners] = useState(false)
+  const [uploadingBannerIdx, setUploadingBannerIdx] = useState(null)
 
   // Staff & maintenance helper state
   const [adminPin, setAdminPin] = useState('')
@@ -35,6 +54,12 @@ export default function AdminSettings(){
   const [alertsEmail, setAlertsEmail] = useState('')
   const [savingAlertsEmail, setSavingAlertsEmail] = useState(false)
 
+  // WhatsApp (Round 14) helper state
+  const [whatsappEnabled, setWhatsappEnabled] = useState(false)
+  const [savingWhatsappToggle, setSavingWhatsappToggle] = useState(false)
+  const [whatsappStatus, setWhatsappStatus] = useState({ connected: false, qr: null })
+  const [disconnectingWhatsapp, setDisconnectingWhatsapp] = useState(false)
+
   async function loadBranding() {
     try {
       const name = await api.getSetting('branding.companyName').catch(() => null)
@@ -46,6 +71,14 @@ export default function AdminSettings(){
       setPrimaryColor(primary && primary.value ? String(primary.value) : '')
       setAccentColor(accent && accent.value ? String(accent.value) : '')
     } catch (e) { console.warn('loadBranding failed', e) }
+  }
+
+  async function loadBannerSettings() {
+    try {
+      const saved = await api.getSetting('banners').catch(() => null)
+      const value = saved && Array.isArray(saved.value) ? saved.value : null
+      setBannerSlides(value && value.length > 0 ? value : DEFAULT_BANNERS)
+    } catch (e) { console.warn('loadBannerSettings failed', e) }
   }
 
   async function load() {
@@ -85,7 +118,34 @@ export default function AdminSettings(){
     } catch (e) { console.warn('loadAlertsSettings failed', e) }
   }
 
-  useEffect(() => { load(); loadBranding(); loadStaffSettings(); loadWifiSettings(); loadAlertsSettings() }, [])
+  async function loadWhatsappSettings() {
+    try {
+      const enabled = await api.getSetting('whatsapp.enabled').catch(() => null)
+      setWhatsappEnabled(Boolean(enabled && enabled.value))
+    } catch (e) { console.warn('loadWhatsappSettings failed', e) }
+  }
+
+  useEffect(() => { load(); loadBranding(); loadBannerSettings(); loadStaffSettings(); loadWifiSettings(); loadAlertsSettings(); loadWhatsappSettings() }, [])
+
+  // While WhatsApp is enabled but not yet connected, poll for the QR code /
+  // connection state — same "poll a status endpoint while pairing" idea the
+  // toggle itself relies on to reflect what the backend's Baileys socket is
+  // actually doing (a live connection, not something this page controls
+  // directly). Runs regardless of which tab is active, so switching back to
+  // WhatsApp shows fresh status immediately instead of a blank re-fetch.
+  useEffect(() => {
+    if (!whatsappEnabled) return
+    let cancelled = false
+    async function poll() {
+      try {
+        const s = await api.getWhatsappStatus()
+        if (!cancelled) setWhatsappStatus(s)
+      } catch (e) { /* transient — next poll retries */ }
+    }
+    poll()
+    const id = setInterval(poll, 4000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [whatsappEnabled])
 
   // Live preview: dispatch branding:update when fields change so app updates immediately
   useEffect(() => {
@@ -158,6 +218,59 @@ export default function AdminSettings(){
     } catch (e) {
       console.error(e)
       toast({ title: 'Failed to update branding', variant: 'destructive' })
+    }
+  }
+
+  function addBannerSlide() {
+    setBannerSlides((prev) => [...prev, { id: `banner-${Date.now()}`, title: '', text: '', image: '' }])
+  }
+
+  function removeBannerSlide(idx) {
+    setBannerSlides((prev) => prev.filter((_, i) => i !== idx))
+  }
+
+  function updateBannerSlide(idx, field, val) {
+    setBannerSlides((prev) => prev.map((s, i) => (i === idx ? { ...s, [field]: val } : s)))
+  }
+
+  function moveBannerSlide(idx, dir) {
+    setBannerSlides((prev) => {
+      const next = [...prev]
+      const target = idx + dir
+      if (target < 0 || target >= next.length) return prev
+      ;[next[idx], next[target]] = [next[target], next[idx]]
+      return next
+    })
+  }
+
+  async function uploadBannerSlideImage(idx, file) {
+    if (!file) return
+    setUploadingBannerIdx(idx)
+    try {
+      const { url } = await api.uploadBannerImage(file)
+      updateBannerSlide(idx, 'image', url)
+      toast({ title: 'Imagem carregada', variant: 'success' })
+    } catch (e) {
+      console.error(e)
+      toast({ title: 'Erro ao carregar imagem', variant: 'destructive' })
+    } finally {
+      setUploadingBannerIdx(null)
+    }
+  }
+
+  async function saveBanners() {
+    if (bannerSlides.some((s) => !s.image)) {
+      return toast({ title: 'Cada slide precisa de uma imagem', variant: 'destructive' })
+    }
+    setSavingBanners(true)
+    try {
+      await api.setSetting({ key: 'banners', value: bannerSlides })
+      toast({ title: 'Banners guardados', variant: 'success' })
+    } catch (e) {
+      console.error(e)
+      toast({ title: 'Erro ao guardar banners', variant: 'destructive' })
+    } finally {
+      setSavingBanners(false)
     }
   }
 
@@ -244,11 +357,66 @@ export default function AdminSettings(){
     }
   }
 
+  async function toggleWhatsappEnabled(nextEnabled) {
+    setSavingWhatsappToggle(true)
+    setWhatsappEnabled(nextEnabled)
+    try {
+      await api.setSetting({ key: 'whatsapp.enabled', value: nextEnabled })
+      toast({ title: nextEnabled ? 'WhatsApp ativado' : 'WhatsApp desativado', variant: 'success' })
+      if (!nextEnabled) setWhatsappStatus({ connected: false, qr: null })
+    } catch (e) {
+      console.error(e)
+      setWhatsappEnabled(!nextEnabled)
+      toast({ title: 'Erro ao guardar', variant: 'destructive' })
+    } finally {
+      setSavingWhatsappToggle(false)
+    }
+  }
+
+  async function disconnectWhatsapp() {
+    if (!confirm('Desligar o WhatsApp? Vai precisar de ler o QR novamente para reativar.')) return
+    setDisconnectingWhatsapp(true)
+    try {
+      await api.disconnectWhatsapp()
+      setWhatsappStatus({ connected: false, qr: null })
+      toast({ title: 'WhatsApp desligado', variant: 'success' })
+    } catch (e) {
+      console.error(e)
+      toast({ title: 'Erro ao desligar', variant: 'destructive' })
+    } finally {
+      setDisconnectingWhatsapp(false)
+    }
+  }
+
   return (
     <div className="p-4 space-y-4">
       <h2 className="text-2xl font-bold">Settings</h2>
 
-      {/* Branding Section */}
+      {/* Tab bar — one section visible at a time instead of every Card
+          stacked and expanded. Sections keep their own state/effects at the
+          component's top level regardless of which tab is showing (the
+          WhatsApp status poll above, for instance), so switching tabs never
+          loses in-flight state. */}
+      <div className="border-b flex gap-1 overflow-x-auto">
+        {TABS.map((t) => {
+          const active = activeTab === t.id
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setActiveTab(t.id)}
+              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors
+                ${active ? 'border-primary-600 text-primary-700' : 'border-transparent text-neutral-500 hover:text-neutral-800 hover:border-neutral-200'}`}
+            >
+              <t.Icon className="h-4 w-4" />
+              {t.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Branding */}
+      {activeTab === 'branding' && (
       <Card>
         <CardHeader>
           <CardTitle>Branding</CardTitle>
@@ -383,8 +551,92 @@ export default function AdminSettings(){
           </form>
         </CardContent>
       </Card>
+      )}
+
+      {/* Homepage banner carousel */}
+      {activeTab === 'banner' && (
+      <Card>
+        <CardHeader>
+          <CardTitle>Banner da página inicial</CardTitle>
+          <CardDescription>Imagens e texto do carrossel que os clientes veem ao chegar ao quiosque</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {bannerSlides.map((slide, idx) => (
+            <div key={slide.id} className="border rounded-lg p-4 flex flex-col md:flex-row gap-4">
+              <div className="shrink-0">
+                <div className="w-40 h-24 rounded-lg overflow-hidden bg-muted border flex items-center justify-center">
+                  {slide.image ? (
+                    <img src={slide.image} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <ImageIcon className="h-6 w-6 text-muted-foreground" />
+                  )}
+                </div>
+                <label className="mt-2 block">
+                  <span className="sr-only">Carregar imagem</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="text-xs w-40"
+                    onChange={(e) => uploadBannerSlideImage(idx, e.target.files && e.target.files[0])}
+                    disabled={uploadingBannerIdx === idx}
+                  />
+                </label>
+                {uploadingBannerIdx === idx && <p className="text-xs text-muted-foreground mt-1">A carregar…</p>}
+              </div>
+
+              <div className="flex-1 space-y-2">
+                <div>
+                  <Label htmlFor={`banner-title-${idx}`}>Título</Label>
+                  <Input
+                    id={`banner-title-${idx}`}
+                    value={slide.title}
+                    onChange={(e) => updateBannerSlide(idx, 'title', e.target.value)}
+                    placeholder="Ex: Lavagem de carpetes"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor={`banner-text-${idx}`}>Texto</Label>
+                  <Input
+                    id={`banner-text-${idx}`}
+                    value={slide.text}
+                    onChange={(e) => updateBannerSlide(idx, 'text', e.target.value)}
+                    placeholder="Ex: Entre em contacto..."
+                  />
+                </div>
+              </div>
+
+              <div className="flex md:flex-col gap-2 shrink-0 justify-end">
+                <Button type="button" variant="outline" size="sm" onClick={() => moveBannerSlide(idx, -1)} disabled={idx === 0} aria-label="Mover para cima">
+                  <ArrowUp className="h-4 w-4" />
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => moveBannerSlide(idx, 1)} disabled={idx === bannerSlides.length - 1} aria-label="Mover para baixo">
+                  <ArrowDown className="h-4 w-4" />
+                </Button>
+                <Button type="button" variant="destructive" size="sm" onClick={() => removeBannerSlide(idx)} aria-label="Remover slide">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          ))}
+
+          {bannerSlides.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-6">Sem slides — adicione pelo menos um.</p>
+          )}
+
+          <div className="flex items-center gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={addBannerSlide}>
+              <Plus className="h-4 w-4 mr-2" /> Adicionar slide
+            </Button>
+            <Button type="button" onClick={saveBanners} disabled={savingBanners}>
+              {savingBanners ? 'A guardar…' : 'Guardar Banners'}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+      )}
 
       {/* Staff & Maintenance */}
+      {activeTab === 'staff' && (
       <Card>
         <CardHeader>
           <CardTitle>Staff &amp; Manutenção</CardTitle>
@@ -436,8 +688,10 @@ export default function AdminSettings(){
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* WiFi Voucher */}
+      {activeTab === 'wifi' && (
       <Card>
         <CardHeader>
           <CardTitle>WiFi grátis</CardTitle>
@@ -503,8 +757,10 @@ export default function AdminSettings(){
           </form>
         </CardContent>
       </Card>
+      )}
 
       {/* Operator Alerts */}
+      {activeTab === 'alerts' && (
       <Card>
         <CardHeader>
           <CardTitle>Alertas por email</CardTitle>
@@ -533,8 +789,67 @@ export default function AdminSettings(){
           </form>
         </CardContent>
       </Card>
+      )}
+
+      {/* WhatsApp cycle-complete notifications */}
+      {activeTab === 'whatsapp' && (
+      <Card>
+        <CardHeader>
+          <CardTitle>WhatsApp</CardTitle>
+          <CardDescription>Avisa o cliente por WhatsApp quando a lavagem/secagem termina</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-start justify-between gap-4 max-w-xl">
+            <div>
+              <div className="font-medium text-sm">Ativar notificações por WhatsApp</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Usa um número de WhatsApp real, ligado por QR code (como o WhatsApp
+                Web) — sem custos, mas não é a API oficial: em uso muito intenso o
+                número pode ser sinalizado pelo WhatsApp. Requer que o cartão do
+                cliente tenha um número de telemóvel guardado.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={whatsappEnabled}
+              onClick={() => toggleWhatsappEnabled(!whatsappEnabled)}
+              disabled={savingWhatsappToggle}
+              className={`shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50
+                ${whatsappEnabled ? 'bg-primary-600' : 'bg-neutral-300'}`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform
+                  ${whatsappEnabled ? 'translate-x-6' : 'translate-x-1'}`}
+              />
+            </button>
+          </div>
+
+          {whatsappEnabled && (
+            <div className="border-t pt-4 max-w-xs">
+              {whatsappStatus.connected ? (
+                <div className="space-y-2">
+                  <p className="text-sm text-green-700 font-medium">Ligado ✓</p>
+                  <Button type="button" variant="outline" size="sm" onClick={disconnectWhatsapp} disabled={disconnectingWhatsapp}>
+                    {disconnectingWhatsapp ? 'A desligar…' : 'Desligar'}
+                  </Button>
+                </div>
+              ) : whatsappStatus.qr ? (
+                <div className="space-y-2">
+                  <p className="text-sm">Leia este código com o WhatsApp do número que quer usar:</p>
+                  <img src={whatsappStatus.qr} alt="QR code do WhatsApp" className="w-48 h-48 border rounded" />
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">A gerar QR code…</p>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      )}
 
       {/* Advanced/Raw Settings */}
+      {activeTab === 'advanced' && (
       <Card>
         <CardHeader>
           <CardTitle>Advanced Settings</CardTitle>
@@ -584,6 +899,7 @@ export default function AdminSettings(){
           </div>
         </CardContent>
       </Card>
+      )}
     </div>
   )
 }

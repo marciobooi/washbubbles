@@ -311,3 +311,15 @@
         height: calc(var(--spacing) * 6);
     }
 }
+
+/* Print stylesheet for admin reports (Overview, Transactions) — "Print →
+   Save as PDF" instead of a server-generated PDF, which this project has no
+   dependency for yet. Hides the app chrome, keeps just the report content. */
+@media print {
+  [data-sidebar], header, nav, .print\:hidden {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+  }
+}

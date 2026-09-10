@@ -38,6 +38,9 @@ const cardSchema = new Schema({
   email: { type: String, default: '' },
   phone: { type: String, default: '' },
   contribuinte: { type: String, default: '' }, // Tax ID number
+  // Opt-in, not opt-out, per GDPR — unchecked by default at purchase time.
+  // Only cards with this true are ever included in a marketing broadcast.
+  marketingOptIn: { type: Boolean, default: false },
   
   metadata: { type: Schema.Types.Mixed },
   createdAt: { type: Date, default: Date.now },

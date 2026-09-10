@@ -225,6 +225,18 @@ export function createApi(config) {
     return request(`/admin/machines/${id}`, { method: 'DELETE', expect: 'json' });
   }
 
+  function logMachineService(id) {
+    return request(`/admin/machines/${id}/service`, { method: 'POST', expect: 'json' });
+  }
+
+  // Maintenance tickets
+  function getMaintenanceTickets(status) {
+    return request('/admin/maintenance', { method: 'GET', query: status ? { status } : undefined, expect: 'json' });
+  }
+  function resolveMaintenanceTicket(id) {
+    return request(`/admin/maintenance/${id}`, { method: 'PUT', expect: 'json' });
+  }
+
   function getUsers() {
     return request('/admin/users', { method: 'GET', expect: 'json' });
   }
@@ -248,9 +260,44 @@ export function createApi(config) {
     return request('/admin/transactions', { method: 'GET', expect: 'json' });
   }
 
+  // CSV exports. `expect: 'blob'` already existed in the fetch helper above
+  // but had no caller until this — see backend routes/admin.js for the
+  // hand-built CSV (no library needed for a shape this simple).
+  function exportTransactionsCsv(query) {
+    return request('/admin/transactions/export.csv', { method: 'GET', query, expect: 'blob' });
+  }
+
+  function exportRevenueCsv() {
+    return request('/admin/analytics/revenue.csv', { method: 'GET', expect: 'blob' });
+  }
+
+  // Triggers a browser download for a Blob returned by one of the exports
+  // above — no <a download> link exists anywhere in this app yet to reuse.
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
 
   function createTransaction(payload) {
     return request('/admin/transactions', { method: 'POST', json: payload, expect: 'json' });
+  }
+
+  // Reverses a sale: credits the card back (if any) and records a new
+  // `refund`-type Sale rather than deleting anything. See routes/admin.js.
+  function refundTransaction(id, reason) {
+    return request(`/admin/transactions/${id}/refund`, { method: 'POST', json: { reason }, expect: 'json' });
+  }
+
+  // Audit log
+  function getAuditLog(query) {
+    return request('/admin/audit-log', { method: 'GET', query, expect: 'json' });
   }
 
   // Gateways (kiosk)
@@ -362,6 +409,15 @@ export function createApi(config) {
     return request(`/admin/settings/${encodeURIComponent(key)}`, { method: 'DELETE', expect: 'json' });
   }
 
+  // Uploads one banner image, returns { url }. Saving it onto a slide (and
+  // persisting the `banners` setting array) is a separate setSetting call —
+  // see AdminSettings.jsx's Banner tab.
+  function uploadBannerImage(file) {
+    const fd = new FormData();
+    fd.append('image', file);
+    return request('/admin/settings/banner-image', { method: 'POST', body: fd, expect: 'json' });
+  }
+
   // Interfaces
   function getInterfaces() {
     return request('/admin/interfaces', { method: 'GET', expect: 'json' });
@@ -414,6 +470,28 @@ export function createApi(config) {
     return request(`/admin/prices/${id}`, { method: 'DELETE', expect: 'json' });
   }
 
+  // Coupons
+  function getCoupons() {
+    return request('/admin/coupons', { method: 'GET', expect: 'json' });
+  }
+  function createCoupon(payload) {
+    return request('/admin/coupons', { method: 'POST', json: payload, expect: 'json' });
+  }
+  function updateCoupon(id, payload) {
+    return request(`/admin/coupons/${id}`, { method: 'PUT', json: payload, expect: 'json' });
+  }
+  function deleteCoupon(id) {
+    return request(`/admin/coupons/${id}`, { method: 'DELETE', expect: 'json' });
+  }
+
+  // Marketing
+  function getMarketingOptInCount() {
+    return request('/admin/marketing/opt-in-count', { method: 'GET', expect: 'json' });
+  }
+  function sendMarketingBroadcast(payload) {
+    return request('/admin/marketing/broadcast', { method: 'POST', json: payload, expect: 'json' });
+  }
+
   // Peripherals
   function getPeripherals() {
     return request('/admin/peripherals', { method: 'GET', expect: 'json' });
@@ -428,6 +506,14 @@ export function createApi(config) {
     return request(`/admin/peripherals/${id}`, { method: 'PUT', json: payload, expect: 'json' });
   }
 
+
+  // WhatsApp (Round 14 — Baileys)
+  function getWhatsappStatus() {
+    return request('/admin/whatsapp/status', { method: 'GET', expect: 'json' });
+  }
+  function disconnectWhatsapp() {
+    return request('/admin/whatsapp/disconnect', { method: 'POST', expect: 'json' });
+  }
 
   // Middleware / CoinMachine
   function activateMachine(machineData) {
@@ -468,6 +554,9 @@ export function createApi(config) {
     createMachine,
     updateMachine,
     deleteMachine,
+    logMachineService,
+    getMaintenanceTickets,
+    resolveMaintenanceTicket,
 
     // Users
     getUsers,
@@ -478,6 +567,11 @@ export function createApi(config) {
     // Transactions
     getTransactions,
     createTransaction,
+    refundTransaction,
+    getAuditLog,
+    exportTransactionsCsv,
+    exportRevenueCsv,
+    downloadBlob,
 
     // Settings
     getAnalyticsRevenue,
@@ -488,6 +582,7 @@ export function createApi(config) {
     getPublicSetting,
     setSetting,
     deleteSetting,
+    uploadBannerImage,
 
     // Gateways
     gatewayGetCard,
@@ -518,10 +613,24 @@ export function createApi(config) {
     updatePrice,
     deletePrice,
 
+    // Coupons
+    getCoupons,
+    createCoupon,
+    updateCoupon,
+    deleteCoupon,
+
+    // Marketing
+    getMarketingOptInCount,
+    sendMarketingBroadcast,
+
     // Peripherals
     getPeripherals,
     createPeripheral,
     updatePeripheral,
+
+    // WhatsApp
+    getWhatsappStatus,
+    disconnectWhatsapp,
 
     // Middleware
     activateMachine,

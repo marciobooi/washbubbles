@@ -15,6 +15,33 @@ let _wss = null
 let _clientCounter = 0
 let _heartbeatInterval = null
 
+/**
+ * How long an unauthenticated connection is kept open waiting for its first
+ * (auth) message before being dropped.
+ */
+const AUTH_TIMEOUT_MS = 5000
+
+/**
+ * Runs the same credential lookup the old query-string auth used —
+ * JWT bearer token or kiosk apiKey — just fed from a message payload now
+ * instead of the URL. Returns the matching User doc, or null.
+ */
+async function resolveUser({ token, apiKey }) {
+  const JWT_SECRET = process.env.JWT_SECRET
+  if (apiKey) {
+    return User.findOne({ apiKey })
+  }
+  if (token && JWT_SECRET) {
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET)
+      return await User.findById(decoded.sub)
+    } catch (e) {
+      return null
+    }
+  }
+  return null
+}
+
 /** Broadcast update to a specific tenant only */
 export async function broadcastMachine(machine) {
   if (!_wss || !machine || !machine.tenantId) return
@@ -101,70 +128,82 @@ export function initWebSocket(server) {
     }
   })
 
-  wss.on('connection', async (socket, request) => {
+  wss.on('connection', (socket, request) => {
     socket._id = ++_clientCounter
     socket.isAlive = true
+    socket.authenticated = false
     socket.on('pong', () => { socket.isAlive = true })
 
-    try {
-      const JWT_SECRET = process.env.JWT_SECRET
-      const url = request.url || ''
-      const parsed = new URL(url, 'http://localhost')
-      const token = parsed.searchParams.get('token')
-      const apiKeyQuery = parsed.searchParams.get('apiKey')
-      const apiKeyHeader = request.headers['x-api-key'] || 
-                         (request.headers['authorization']?.startsWith('ApiKey ') 
-                           ? request.headers['authorization'].split(' ')[1] : null)
-
-      let userModel = null
-      
-      // 1. Authenticate
-      if (apiKeyQuery || apiKeyHeader) {
-        userModel = await User.findOne({ apiKey: apiKeyQuery || apiKeyHeader })
-      } else if (token && JWT_SECRET) {
-        try {
-          const decoded = jwt.verify(token, JWT_SECRET)
-          userModel = await User.findById(decoded.sub)
-        } catch (e) { /* ignore */ }
+    // Credentials no longer travel in the URL (they used to — a JWT or kiosk
+    // apiKey in a query string ends up in nginx/proxy access logs, browser
+    // devtools, and anywhere the URL gets copied, exactly the way one did in
+    // a bug report during this session). The connection opens unauthenticated
+    // and has AUTH_TIMEOUT_MS to send `{type:'auth', token|apiKey}` as its
+    // first message, the same credentials as before — just out of the URL.
+    const authTimer = setTimeout(() => {
+      if (!socket.authenticated) {
+        console.warn(`[ws] Auth timeout, closing connection (ID: ${socket._id})`)
+        socket.close(1008, 'Auth timeout')
       }
+    }, AUTH_TIMEOUT_MS)
 
-      // Bulletproof: Force Auth
+    async function handleAuth(data) {
+      const userModel = await resolveUser({ token: data.token, apiKey: data.apiKey })
       if (!userModel) {
         console.warn(`[ws] Unauthorized connection attempt blocked (ID: ${socket._id})`)
         socket.close(1008, 'Unauthorized')
         return
       }
 
-      // Store identity and tenant
+      clearTimeout(authTimer)
+      socket.authenticated = true
       socket.userModel = userModel
       socket.tenantId = userModel.tenantId ? userModel.tenantId.toString() : null
-      
+
       console.log(`[ws] client ${socket._id} authenticated for tenant: ${socket.tenantId}`)
 
-      // 2. Send initial state for this tenant ONLY
+      socket.send(JSON.stringify({ type: 'auth-ok' }))
+      // Initial state for this tenant ONLY.
       const machines = await Machine.find({ tenantId: userModel.tenantId }).sort({ number: 1 })
       socket.send(JSON.stringify({ type: 'machine-status', payload: machines }))
-
-    } catch (err) {
-      console.error('[ws] connection error', err)
-      socket.close(1011, 'Internal error')
-      return
     }
 
     socket.on('message', (msg) => {
+      let data
+      try {
+        data = JSON.parse(msg)
+      } catch (err) {
+        return // ignore non-JSON
+      }
+
+      if (!socket.authenticated) {
+        if (data && data.type === 'auth') {
+          handleAuth(data).catch((err) => {
+            console.error('[ws] auth error', err)
+            socket.close(1011, 'Internal error')
+          })
+        } else {
+          // Anything before a successful auth message is refused outright —
+          // no other message type is meaningful pre-auth.
+          console.warn(`[ws] Message before auth, closing connection (ID: ${socket._id})`)
+          socket.close(1008, 'Unauthorized')
+        }
+        return
+      }
+
       // Inbound messages are only allowed for admins/kiosks
       // For security, only broadcast to the SAME tenant
-      try {
-        const data = JSON.parse(msg)
-        wss.clients.forEach((client) => {
-          if (client.readyState === 1 && client.tenantId === socket.tenantId) {
-            client.send(JSON.stringify(data))
-          }
-        })
-      } catch (err) { /* ignore */ }
+      wss.clients.forEach((client) => {
+        if (client.readyState === 1 && client.tenantId === socket.tenantId) {
+          client.send(JSON.stringify(data))
+        }
+      })
     })
 
-    socket.on('close', () => console.log(`[ws] client ${socket._id} disconnected`))
+    socket.on('close', () => {
+      clearTimeout(authTimer)
+      console.log(`[ws] client ${socket._id} disconnected`)
+    })
   })
 
   // Heartbeat monitor

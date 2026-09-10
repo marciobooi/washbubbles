@@ -4,6 +4,8 @@ import api from '@/services/api'
 import { Button } from '@/components/ui/button'
 import { Play, Square, X, Power, Wrench, CheckCircle2, RefreshCw } from 'lucide-react'
 import { connect, subscribe } from '@/services/websocket'
+import washL1 from '@/assets/washingmashine/L1.png'
+import dryS1 from '@/assets/drymachine/S1.png'
 
 export default function AdminOperations() {
   const [machines, setMachines] = React.useState([])
@@ -128,7 +130,10 @@ export default function AdminOperations() {
     return (
       <div className={`flex flex-col p-4 rounded-lg border transition ${style.card}`}>
         <div className="flex items-center gap-3">
-          {m.icon && <img src={m.icon} alt="" className="h-12 w-12 object-contain tealFilter shrink-0" />}
+          {/* m.icon is a stale public/-relative path from before Round 9 moved
+              these assets into src/assets/ for bundling — 404s now. Derive
+              from type instead, same as the kiosk pages already do. */}
+          <img src={m.type === 'dry' ? dryS1 : washL1} alt="" className="h-12 w-12 object-contain tealFilter shrink-0" />
           <div className="min-w-0 flex-1">
             <div className="font-semibold truncate">{m.name}</div>
             <div className="text-xs text-muted-foreground">{m.weight ? `${m.weight} kg` : ''}</div>

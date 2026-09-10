@@ -3,7 +3,11 @@ import { useAuth } from '../context/AuthContext'
 import { Navigate } from 'react-router-dom'
 import Loading from './ui/loading'
 
-export default function RequireAdmin({ children }) {
+// `roles` defaults to full-admin-only. Pass e.g. roles={['ADMIN','SUPERADMIN','STAFF']}
+// to also let a read-only or technician role through a specific route — the
+// server-side guard (requireAdmin/requireStaffRead/requireTechnician) is the
+// real enforcement, this is just so the wrong role doesn't land on a blank page.
+export default function RequireAdmin({ children, roles = ['ADMIN', 'SUPERADMIN'] }) {
   const { role, token } = useAuth()
 
   // If an auth token exists but role is not yet determined, show a loading spinner
@@ -15,8 +19,8 @@ export default function RequireAdmin({ children }) {
     )
   }
 
-  // If no token or not admin, redirect to login (SUPERADMIN also has admin access)
-  if (role !== 'ADMIN' && role !== 'SUPERADMIN') return <Navigate to="/admin/login" replace />
+  // No token, or a role not on this route's allow-list.
+  if (!roles.includes(role)) return <Navigate to="/admin/login" replace />
 
   return children
 }

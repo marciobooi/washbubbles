@@ -36,6 +36,12 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
   const [localSession, setLocalSession] = React.useState(null)
   const [cashingOut, setCashingOut] = React.useState(false)
 
+  // Coupon code — validated server-side at checkout (services/coupons.js),
+  // never computed here. A non-empty code forces the payment through the
+  // network gateway even when local/offline credit would otherwise cover
+  // it, since only the server can check and redeem it.
+  const [couponCode, setCouponCode] = React.useState('')
+
   // Separate purchase items (machines/services) from recharge items
   const purchaseTotal = cart.reduce((s, i) => (i.type === 'Recarga de Cartão' ? s : s + (i.price || i.amount || 0)), 0)
   const rechargeTotal = cart.reduce((s, i) => (i.type === 'Recarga de Cartão' ? s + (i.price || i.amount || 0) : s), 0)
@@ -51,6 +57,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
       setCashInserted(0)
       setDetectedCardCode(null)
       setLocalSession(null)
+      setCouponCode('')
       return
     }
 
@@ -204,7 +211,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
     setCheckingCard(true)
     setCardError(null)
     try {
-      await onPay(cart, { method: 'card', cardCode: code })
+      await onPay(cart, { method: 'card', cardCode: code, couponCode: couponCode || undefined })
       onClose()
     } catch (e) {
       console.error('Auto card payment failed', e)
@@ -220,7 +227,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
     const short = Math.max(0, Math.round((purchaseTotal - rechargeTotal) * 100) / 100)
     if (short <= 0) {
       // proceed with card payment using cart recharges
-      onPay(cart, { method: 'card' })
+      onPay(cart, { method: 'card', couponCode: couponCode || undefined })
       onClose()
       return
     }
@@ -246,7 +253,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
       }
 
       // Delegate payment to the main handler — it will persist recharges and charge machines using cardCode
-      await onPay(cart, { method: 'card', cardCode })
+      await onPay(cart, { method: 'card', cardCode, couponCode: couponCode || undefined })
       setShowCardPrompt(false)
       onClose()
     } catch (e) {
@@ -330,7 +337,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
 
   async function handleCashConfirm(inserted) {
     // Call onPay with cash method and inserted amount
-    onPay(cart, { method: 'cash', inserted })
+    onPay(cart, { method: 'cash', inserted, couponCode: couponCode || undefined })
     setShowCash(false)
     onClose()
   }
@@ -384,6 +391,19 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
             </div>
 
 
+
+            {/* Coupon code */}
+            <div className="pt-3">
+              <label htmlFor="cart-coupon-code" className="text-xs text-neutral-500">Código promocional</label>
+              <input
+                id="cart-coupon-code"
+                type="text"
+                value={couponCode}
+                onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                placeholder="Opcional"
+                className="mt-1 w-full border rounded px-3 py-2 text-sm uppercase"
+              />
+            </div>
 
             {/* Total */}
             <div className="flex items-center justify-between pt-4 border-t-2 border-neutral-200">
