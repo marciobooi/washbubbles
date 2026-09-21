@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "prepare:dev": "npm --prefix backend install --no-audit --no-fund && node -e \"const fs=require('fs'); const src='backend/.env.example'; const dst='backend/.env'; if(!fs.existsSync(dst) && fs.existsSync(src)){let s=fs.readFileSync(src,'utf8'); s=s.replace(/@db:/g,'@localhost:'); fs.writeFileSync(dst,s); console.log('Created backend/.env from example (db -> localhost)');}\"",
+    "predev": "bash scripts/free-port-3000.sh",
     "dev": "concurrently \"npm --prefix backend run dev\" \"vite\"",
+    "predev:no-db": "bash scripts/free-port-3000.sh",
     "dev:no-db": "npm run prepare:dev && concurrently \"npm --prefix backend run dev\" \"vite\"",
     "dev:db:setup": "npm --prefix backend run seed",
     "dev:backend": "npm --prefix backend run dev",

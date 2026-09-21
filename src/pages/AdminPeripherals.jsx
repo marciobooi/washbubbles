@@ -1,9 +1,8 @@
 import React from 'react'
-import { Cpu, AlertCircle, CheckCircle, WifiOff, HelpCircle, Trash2, Plus } from 'lucide-react'
+import { Cpu, Trash2, Plus, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Card } from '@/components/ui/card'
 import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
 import billAcceptorImg from '@/assets/geral/bill_acceptor.jpg'
@@ -44,15 +43,6 @@ export default function AdminPeripherals() {
 
   React.useEffect(() => {
     loadPeripherals()
-    // Add custom style to disable hover on this page
-    const style = document.createElement('style')
-    style.textContent = `
-      .no-hover-transform .glass-card:hover {
-        transform: none !important;
-      }
-    `
-    document.head.appendChild(style)
-    return () => document.head.removeChild(style)
   }, [])
 
   async function loadPeripherals() {
@@ -141,15 +131,6 @@ export default function AdminPeripherals() {
     }
   }
 
-  function getStatusIcon(status) {
-    switch (status) {
-      case 'ok': return <CheckCircle className="h-5 w-5 text-green-600" />
-      case 'fault': return <AlertCircle className="h-5 w-5 text-red-600" />
-      case 'offline': return <WifiOff className="h-5 w-5 text-gray-600" />
-      default: return <HelpCircle className="h-5 w-5 text-yellow-600" />
-    }
-  }
-
   function getStatusText(status) {
     switch (status) {
       case 'ok': return 'OK'
@@ -159,12 +140,12 @@ export default function AdminPeripherals() {
     }
   }
 
-  function getStatusColor(status) {
+  function getStatusDotColor(status) {
     switch (status) {
-      case 'ok': return 'bg-green-100 text-green-800 border-green-300'
-      case 'fault': return 'bg-red-100 text-red-800 border-red-300'
-      case 'offline': return 'bg-gray-100 text-gray-800 border-gray-300'
-      default: return 'bg-yellow-100 text-yellow-800 border-yellow-300'
+      case 'ok': return 'bg-green-500'
+      case 'fault': return 'bg-red-500'
+      case 'offline': return 'bg-neutral-400'
+      default: return 'bg-yellow-400'
     }
   }
 
@@ -175,66 +156,56 @@ export default function AdminPeripherals() {
   }
 
   return (
-    <div className="p-8 no-hover-transform">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">Configuração de Periféricos</h1>
-        <p className="text-neutral-600 mt-1">Gerir dispositivos conectados ao POS</p>
-      </div>
+    <div className="p-8">
+      <h1 className="text-[28px] font-extrabold tracking-tight text-[#1c2530] mb-6">Periféricos</h1>
 
-      {/* Enable/Disable Checkboxes */}
-      <div className="glass-card p-6 mb-6">
-        <h2 className="text-lg font-semibold mb-4">Dispositivos Ativos</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {peripherals.map(peripheral => (
-            <div key={peripheral._id} className="flex items-center justify-between p-3 border rounded-lg">
-              <div className="flex items-center gap-3 flex-1">
-                <input
-                  type="checkbox"
-                  checked={peripheral.enabled}
-                  onChange={() => handleToggle(peripheral)}
-                  className="w-5 h-5 rounded border-gray-300 cursor-pointer"
-                />
-                <span className="font-medium">{peripheral.name}</span>
-              </div>
-              {getStatusIcon(peripheral.status)}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Status Cards */}
-      <div className="glass-card p-6">
-        <h2 className="text-lg font-semibold mb-4">Estado dos Periféricos</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {peripherals.filter(p => p.enabled).map(peripheral => {
-            const typeInfo = peripheralTypes.find(pt => pt.type === peripheral.type)
-            return (
-              <Card key={peripheral._id} className={`border-2 ${getStatusColor(peripheral.status)}`}>
-                <div className="p-4">
-                  <div className="flex items-center justify-center mb-3">
-                    {typeInfo?.image ? (
-                      <img src={typeInfo.image} alt={peripheral.name} className="h-32 w-32 object-contain" />
-                    ) : (
-                      <Cpu className="h-16 w-16 text-neutral-600" />
-                    )}
-                  </div>
-                  <h3 className="text-lg font-semibold text-center mb-2">{peripheral.name}</h3>
-                  <div className="flex items-center justify-center gap-2 mb-3">
-                    {getStatusIcon(peripheral.status)}
-                    <span className="font-medium">{getStatusText(peripheral.status)}</span>
-                  </div>
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => handleConfigClick(peripheral)}
-                  >
-                    Configurar
-                  </Button>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        {peripherals.map(peripheral => {
+          const typeInfo = peripheralTypes.find(pt => pt.type === peripheral.type)
+          return (
+            <div key={peripheral._id} className="bg-white rounded-[20px] p-6 shadow-[0_1px_2px_rgba(20,25,30,0.04),0_8px_20px_-12px_rgba(20,25,30,0.08)]">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-11 h-11 rounded-xl bg-[#eef2f5] flex items-center justify-center shrink-0">
+                  <Cpu className="h-5 w-5 text-[#4b5573]" strokeWidth={1.8} />
                 </div>
-              </Card>
-            )
-          })}
-        </div>
+                <div className="font-extrabold text-lg text-[#1c2530] truncate">{peripheral.name}</div>
+              </div>
+
+              <div className="bg-[#f7f5f1] rounded-2xl h-40 flex items-center justify-center mb-4 overflow-hidden">
+                {typeInfo?.image ? (
+                  <img src={typeInfo.image} alt="" className="h-full w-full object-contain p-4" />
+                ) : (
+                  <Cpu className="h-12 w-12 text-neutral-400" />
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 pb-4 mb-4 border-b border-black/[0.06]">
+                <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${getStatusDotColor(peripheral.status)}`} />
+                <span className="text-sm font-medium text-[#1c2530]">{getStatusText(peripheral.status)}</span>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={peripheral.enabled}
+                  onClick={() => handleToggle(peripheral)}
+                  className={`shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${peripheral.enabled ? 'bg-[#a9e0bc]' : 'bg-neutral-300'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${peripheral.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+
+                <button
+                  onClick={() => handleConfigClick(peripheral)}
+                  className="inline-flex items-center gap-2 h-10 px-4 rounded-full bg-[#f7f5f1] hover:bg-[#eeebe4] text-sm font-semibold text-[#1c2530] transition-colors duration-150"
+                >
+                  <Settings className="h-4 w-4" strokeWidth={1.8} />
+                  Configurar
+                </button>
+              </div>
+            </div>
+          )
+        })}
       </div>
 
       {/* Configuration Modal */}

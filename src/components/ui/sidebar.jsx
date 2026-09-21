@@ -86,10 +86,14 @@ export function Sidebar({ children, className = '', ...props }) {
     )
   }
 
-  // Desktop: an inline column, narrower when collapsed.
+  // Desktop: an inline column, narrower when collapsed. Sticky + capped to
+  // the viewport height so it stays in place while the page content scrolls,
+  // with its own internal scroll for the (rare) case its own nav list is
+  // taller than the screen — previously `min-h-screen` on a `relative`
+  // element just grew with the page and scrolled away with everything else.
   return (
     <aside
-      className={`relative transition-all duration-150 flex-shrink-0 ${collapsed ? 'w-20' : 'w-64'} min-h-screen bg-[#152535] p-3.5 overflow-y-auto overflow-x-hidden ${className}`}
+      className={`sticky top-0 transition-all duration-150 flex-shrink-0 ${collapsed ? 'w-20' : 'w-64'} h-screen bg-[#152535] p-3.5 overflow-y-auto overflow-x-hidden ${className}`}
       data-collapsed={collapsed}
       {...props}
     >
@@ -150,23 +154,21 @@ export function SidebarMenuButton({ children, isActive, asChild = false, classNa
   // Icon-only mode is a desktop space-saving affordance; the mobile drawer is
   // always full width and has room for labels, so never collapse there.
   const collapsed = collapsedDesktop && !isMobile
-  const base = `flex items-center gap-2.5 w-full text-left px-3 py-2.5 rounded-xl text-sm transition-colors duration-150 ${isActive ? 'bg-primary-300 text-[#0f2a2c] font-bold' : 'text-white/60 font-medium hover:bg-white/[0.06] hover:text-white/85'}`
+  const base = `flex items-center gap-2.5 w-full text-left px-3 py-2.5 rounded-xl text-sm transition-colors duration-150 ${isActive ? 'bg-[#a9e0bc] text-[#0f2a2c] font-bold' : 'text-white/60 font-medium hover:bg-white/[0.06] hover:text-white/85'}`
   // set title attribute so tooltips work when collapsed
   const mergedTitle = title || (typeof children === 'string' ? children : undefined)
   // Tapping a nav item on mobile should close the drawer over the page it just
   // navigated to, rather than leaving it covering the new screen.
   const mobileProps = isMobile ? { onClick: closeMobile } : {}
 
-  const content = (
-    <div className={`${base} ${className}`} {...mobileProps} {...props}>
-      {Icon && <Icon className="!h-[18px] !w-[18px] shrink-0" strokeWidth={1.7} aria-hidden />}
-      <span className={`${collapsed ? 'hidden' : ''}`}>{children}</span>
-    </div>
-  )
-
+  // Build the trigger element first — either the cloned `asChild` element
+  // (e.g. a NavLink) or the plain div — then wrap whichever one it is with
+  // the same Tooltip step below. Previously the `asChild` branch returned
+  // early with just a native `title` attribute, so the styled Tooltip never
+  // wrapped it at all — the actual usage in app-sidebar.jsx always passes
+  // `asChild`, so collapsed nav items never got the intended tooltip.
+  let content
   if (asChild && React.isValidElement(children)) {
-    // When using `asChild` (e.g., anchor), replace its children to include the Icon and
-    // wrap the text in a span so we can hide it when collapsed.
     const childText = children.props.children
     const newChildren = (
       <>
@@ -175,13 +177,22 @@ export function SidebarMenuButton({ children, isActive, asChild = false, classNa
       </>
     )
 
-    return React.cloneElement(children, {
+    content = React.cloneElement(children, {
       className: `${children.props.className || ''} ${base} ${className}`,
-      title: mergedTitle,
+      // Only set the native title as a fallback when we're not also wrapping
+      // with the styled Tooltip below — otherwise hovering shows both.
+      title: collapsed && mergedTitle ? undefined : mergedTitle,
       children: newChildren,
       ...mobileProps,
       ...props,
     })
+  } else {
+    content = (
+      <div className={`${base} ${className}`} {...mobileProps} {...props}>
+        {Icon && <Icon className="!h-[18px] !w-[18px] shrink-0" strokeWidth={1.7} aria-hidden />}
+        <span className={`${collapsed ? 'hidden' : ''}`}>{children}</span>
+      </div>
+    )
   }
 
   // Wrap with Tooltip when collapsed

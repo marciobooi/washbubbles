@@ -5,6 +5,7 @@ import Fuse from 'fuse.js'
 import Highlight from './Highlight'
 import { Cpu, Users, CreditCard, Settings, Activity, PlugZap, Coins, Cable, Wallet, Banknote, LayoutDashboard, Wrench, Tag, ScrollText } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { useBranding } from '../context/BrandingContext'
 import {
   Sidebar,
   SidebarContent,
@@ -46,6 +47,7 @@ export function AppSidebar(props) {
   const location = useLocation()
 
   const { role } = useAuth()
+  const { branding } = useBranding() || {}
   let itemsToRender = navItems
     .filter(i => (i.roles || ['ADMIN', 'SUPERADMIN']).includes(role))
     .map((i) => ({ ...i, matchIndices: [] }))
@@ -61,9 +63,16 @@ export function AppSidebar(props) {
   return (
     <Sidebar {...props}>
       <SidebarHeader>
-        <div className="flex items-center gap-2.5 px-2 pt-1 pb-3.5">
-          <div className="h-8 w-8 shrink-0 rounded-[10px] bg-linear-to-br from-primary-300 to-primary-600" />
-          <span className="font-extrabold text-[17px] tracking-tight text-white">Admin</span>
+        {/* Real company branding from Definições > Branding, same source
+            App.jsx's topbar already reads — falls back to the plain
+            gradient mark + "Admin" when nothing's been configured yet. */}
+        <div className="flex items-center gap-2.5 px-2 pt-1 pb-3.5 min-w-0">
+          {branding?.logo ? (
+            <img src={branding.logo} alt="" className="h-8 w-8 shrink-0 rounded-[10px] object-cover" />
+          ) : (
+            <div className="h-8 w-8 shrink-0 rounded-[10px] bg-linear-to-br from-primary-300 to-primary-600" />
+          )}
+          <span className="font-extrabold text-[17px] tracking-tight text-white truncate">{branding?.companyName || 'Admin'}</span>
         </div>
       </SidebarHeader>
       <SidebarContent>

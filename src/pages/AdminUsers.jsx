@@ -121,7 +121,12 @@ export default function AdminUsers(){
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold">Utilizadores</h2>
         <div>
-          <Button onClick={openNew}><Plus className="h-4 w-4 mr-2" /> Novo Utilizador</Button>
+          <button
+            onClick={openNew}
+            className="inline-flex items-center gap-2 h-[42px] px-5 rounded-full border border-black/[0.12] text-[#1c2530] font-semibold text-sm cursor-pointer transition-colors duration-150 hover:bg-[#f7f5f1] disabled:opacity-60"
+          >
+            <Plus className="w-[15px] h-[15px]" aria-hidden /> Novo Utilizador
+          </button>
         </div>
       </div>
 

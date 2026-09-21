@@ -4,7 +4,7 @@ import api from '@/services/api'
 import { toast } from '@/components/ui/Toast'
 import Modal from '@/components/ui/Modal'
 import { Button } from '@/components/ui/button'
-import { Plus, Pencil, Trash2, Check, X } from 'lucide-react'
+import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 
 const EMPTY_FORM = {
@@ -122,8 +122,8 @@ export default function AdminInterfaces() {
   }
 
   const statusColors = {
-    active: 'bg-green-100 text-green-800',
-    inactive: 'bg-neutral-100 text-neutral-700',
+    active: 'bg-[#a9e0bc] text-[#0f2a2c]',
+    inactive: 'bg-[#e4e7f0] text-[#4b5573]',
   }
 
   const statusLabels = {
@@ -135,7 +135,12 @@ export default function AdminInterfaces() {
     <div className="p-4">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold">Interfaces</h2>
-        <Button onClick={openCreate}><Plus className="h-4 w-4 mr-2" /> Nova Interface</Button>
+        <button
+          onClick={openCreate}
+          className="inline-flex items-center gap-2 h-[42px] px-5 rounded-full border border-black/[0.12] text-[#1c2530] font-semibold text-sm cursor-pointer transition-colors duration-150 hover:bg-[#f7f5f1] disabled:opacity-60"
+        >
+          <Plus className="w-[15px] h-[15px]" aria-hidden /> Nova Interface
+        </button>
       </div>
 
       {loading ? (
@@ -144,92 +149,83 @@ export default function AdminInterfaces() {
         <div className="text-neutral-500">Nenhuma interface registada.</div>
       ) : (
         <TooltipProvider>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {interfaces.map((iface) => (
-              <div key={iface._id} className="bg-white rounded-lg shadow hover:shadow-md transition-shadow">
+              <div key={iface._id} className="bg-white rounded-[20px] p-6 shadow-[0_1px_2px_rgba(20,25,30,0.04),0_8px_20px_-12px_rgba(20,25,30,0.08)] transition-shadow hover:shadow-[0_1px_2px_rgba(20,25,30,0.04),0_12px_28px_-12px_rgba(20,25,30,0.14)]">
                 {/* Header */}
-                <div className="p-4 border-b">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-semibold text-lg">{iface.name}</h3>
-                    <span className={`text-xs px-3 py-1 rounded-full font-medium ${statusColors[iface.status] || statusColors.inactive}`}>
-                      {statusLabels[iface.status] || iface.status}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <img src={interfaceIcon} alt="Interface" className="w-12 h-12 object-contain rounded" />
-                    <div className="flex-1 text-sm text-neutral-600">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">S/N:</span>
-                        <span className="text-neutral-800">{iface.serialNumber}</span>
+                <div className="flex items-start justify-between gap-3 mb-5">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-14 h-14 rounded-2xl bg-[#f0f4f2] flex items-center justify-center shrink-0 overflow-hidden">
+                      <img src={interfaceIcon} alt="" className="w-full h-full object-cover" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-extrabold text-xl text-[#1c2530] truncate">{iface.name}</div>
+                      <div className="text-xs text-[#8a8478] mt-0.5 truncate">
+                        S/N {iface.serialNumber}
+                        {(iface.brand || iface.model) ? ` · ${[iface.brand, iface.model].filter(Boolean).join(' ')}` : ''}
                       </div>
-                      {iface.brand && (
-                        <div className="text-neutral-500 text-xs mt-0.5">
-                          {iface.brand} {iface.model}
-                        </div>
-                      )}
                     </div>
                   </div>
+                  <span className={`text-xs px-3 py-1.5 rounded-full font-bold shrink-0 ${statusColors[iface.status] || statusColors.inactive}`}>
+                    {statusLabels[iface.status] || iface.status}
+                  </span>
                 </div>
 
                 {/* Specs Grid */}
-                <div className="p-4 p-4 border-b">
-                  <div className="grid grid-cols-2 gap-3 text-sm">
-                    <div className="bg-white rounded px-3 py-2">
-                      <div className="text-xs text-neutral-500 mb-0.5">Endereço</div>
-                      <div className="font-semibold text-neutral-800">{iface.address}</div>
-                    </div>
-                    <div className="bg-white rounded px-3 py-2">
-                      <div className="text-xs text-neutral-500 mb-0.5">Portos</div>
-                      <div className="font-semibold text-neutral-800">{iface.ports || 2}</div>
-                    </div>
-                    <div className="bg-white rounded px-3 py-2">
-                      <div className="text-xs text-neutral-500 mb-0.5">t_on</div>
-                      <div className="font-semibold text-neutral-800">{iface.tOn} ms</div>
-                    </div>
-                    <div className="bg-white rounded px-3 py-2">
-                      <div className="text-xs text-neutral-500 mb-0.5">t_off</div>
-                      <div className="font-semibold text-neutral-800">{iface.tOff} ms</div>
-                    </div>
+                <div className="bg-[#f7f5f1] rounded-2xl grid grid-cols-4 divide-x divide-black/[0.06] mb-5">
+                  <div className="px-2 py-3 text-center">
+                    <div className="text-[10px] uppercase tracking-wide text-[#8a8478] font-bold mb-1">Endereço</div>
+                    <div className="font-extrabold text-[#1c2530]">{iface.address}</div>
+                  </div>
+                  <div className="px-2 py-3 text-center">
+                    <div className="text-[10px] uppercase tracking-wide text-[#8a8478] font-bold mb-1">Portos</div>
+                    <div className="font-extrabold text-[#1c2530]">{iface.ports || 2}</div>
+                  </div>
+                  <div className="px-2 py-3 text-center">
+                    <div className="text-[10px] uppercase tracking-wide text-[#8a8478] font-bold mb-1">T_ON</div>
+                    <div className="font-extrabold text-[#1c2530]">{iface.tOn}ms</div>
+                  </div>
+                  <div className="px-2 py-3 text-center">
+                    <div className="text-[10px] uppercase tracking-wide text-[#8a8478] font-bold mb-1">T_OFF</div>
+                    <div className="font-extrabold text-[#1c2530]">{iface.tOff}ms</div>
                   </div>
                 </div>
 
                 {/* Actions */}
-                <div className="p-4 flex gap-2">
-                  {iface.status === 'active' ? (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button className="btn p-2 bg-green-600 text-white hover:bg-green-700 transition-colors" onClick={() => handleStatus(iface._id, 'inactive')}>
-                          <Check className="h-5 w-5" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent sideOffset={6}>Activo - Clique para desactivar</TooltipContent>
-                    </Tooltip>
-                  ) : (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button className="btn p-2 bg-neutral-200 text-neutral-800 hover:bg-neutral-300 transition-colors" onClick={() => handleStatus(iface._id, 'active')}>
-                          <X className="h-5 w-5" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent sideOffset={6}>Inactivo - Clique para activar</TooltipContent>
-                    </Tooltip>
-                  )}
+                <div className="flex items-center justify-between">
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <button className="btn p-2 hover:bg-neutral-100 transition-colors" onClick={() => openEdit(iface)}>
-                        <Pencil className="h-5 w-5" />
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={iface.status === 'active'}
+                        onClick={() => handleStatus(iface._id, iface.status === 'active' ? 'inactive' : 'active')}
+                        className={`shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${iface.status === 'active' ? 'bg-[#a9e0bc]' : 'bg-neutral-300'}`}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${iface.status === 'active' ? 'translate-x-6' : 'translate-x-1'}`} />
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent sideOffset={6}>Editar</TooltipContent>
+                    <TooltipContent sideOffset={6}>{iface.status === 'active' ? 'Activo - Clique para desactivar' : 'Inactivo - Clique para activar'}</TooltipContent>
                   </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button className="btn btn-destructive p-2 ml-auto hover:bg-red-700 transition-colors" onClick={() => handleDelete(iface._id)}>
-                        <Trash2 className="h-5 w-5" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent sideOffset={6}>Eliminar</TooltipContent>
-                  </Tooltip>
+
+                  <div className="flex items-center gap-2">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button className="h-10 w-10 rounded-full bg-[#f7f5f1] hover:bg-[#eeebe4] flex items-center justify-center transition-colors" onClick={() => openEdit(iface)}>
+                          <Pencil className="h-4 w-4 text-[#1c2530]" strokeWidth={1.7} />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent sideOffset={6}>Editar</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button className="h-10 w-10 rounded-full bg-[#f7f5f1] hover:bg-red-50 hover:text-red-600 flex items-center justify-center transition-colors" onClick={() => handleDelete(iface._id)}>
+                          <Trash2 className="h-4 w-4" strokeWidth={1.7} />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent sideOffset={6}>Eliminar</TooltipContent>
+                    </Tooltip>
+                  </div>
                 </div>
               </div>
             ))}
