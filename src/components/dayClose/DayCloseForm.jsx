@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
+import DayCloseReceiptModal from './DayCloseReceiptModal'
 import {
   COIN_DENOMS, ALL_CASH_DENOMS,
   fmt, denomSum, buildDenomState, fmtDenomLabel, buildDenomFromSaved, computeGap,
@@ -19,7 +20,7 @@ import {
  * the kiosk itself). `onSubmit` is the only thing that differs between them —
  * which endpoint gets called, and whether a PIN rides along with it.
  */
-export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClosed }) {
+export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClosed, onEmail, onDone }) {
   const [countedDenoms, setCountedDenoms]   = useState(buildDenomState(ALL_CASH_DENOMS))
   const [mechanismDenoms, setMechanismDenoms]     = useState(buildDenomState(COIN_DENOMS))
   const [hopperActualDenoms, setHopperActualDenoms] = useState(buildDenomState(COIN_DENOMS))
@@ -30,6 +31,7 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
   const [notes, setNotes]               = useState('')
   const [saving, setSaving]             = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [closedRecord, setClosedRecord] = useState(null)
 
   const countedCash       = denomSum(countedDenoms)
   const mechanismTotal    = denomSum(mechanismDenoms)
@@ -45,6 +47,32 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
   useEffect(() => {
     if (summary?.openingMechanismCoins?.length) {
       setMechanismDenoms(buildDenomFromSaved(COIN_DENOMS, summary.openingMechanismCoins))
+    }
+  }, [summary])
+
+  // Hardware has already reported every coin/bill accepted since the last
+  // close (services/cashDrawer.js — reset to zero on each real close), so
+  // Step 1 starts from that instead of an all-zero grid. Only applied once:
+  // re-fetching `summary` later (e.g. after adding a float) must not stomp on
+  // counting the operator has already started entering by hand.
+  const countedLoadedRef = useRef(false)
+  useEffect(() => {
+    if (countedLoadedRef.current) return
+    if (summary?.acceptedDenominations?.length) {
+      setCountedDenoms(buildDenomFromSaved(ALL_CASH_DENOMS, summary.acceptedDenominations))
+      countedLoadedRef.current = true
+    }
+  }, [summary])
+
+  // Common case: bank today's cash sales, keep the float unchanged — prefilled
+  // as an editable default, not forced. Same once-only guard as above.
+  const splitLoadedRef = useRef(false)
+  useEffect(() => {
+    if (splitLoadedRef.current) return
+    if (summary && (summary.totalCash > 0 || summary.openingFloat > 0)) {
+      setAmountToBank(Number(summary.totalCash || 0).toFixed(2))
+      setFloatLeft(Number(summary.openingFloat || 0).toFixed(2))
+      splitLoadedRef.current = true
     }
   }, [summary])
 
@@ -111,7 +139,7 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
         return { value: v, count: d?.count || 0 }
       }).filter(d => d.count > 0)
       await api.setSetting({ key: 'hopperTarget', value: targetPayload }).catch(() => { /* best-effort — a kiosk token may not have admin rights to write raw settings; the close itself is what matters */ })
-      await onSubmit({
+      const dc = await onSubmit({
         amountToBank: atb, floatLeft: fl, countedCash,
         countedDenominations: countedDenoms.filter(d => d.count > 0).map(d => ({ value: d.value, count: d.count })),
         coinMechanismInventory: mechanismDenoms.filter(d => d.count > 0).map(d => ({ value: d.value, count: d.count })),
@@ -124,7 +152,10 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
       setCountedDenoms(buildDenomState(ALL_CASH_DENOMS))
       setMechanismDenoms(buildDenomState(COIN_DENOMS))
       setHopperActualDenoms(buildDenomState(COIN_DENOMS))
-      if (onClosed) onClosed()
+      countedLoadedRef.current = false
+      splitLoadedRef.current = false
+      setClosedRecord(dc)
+      if (onClosed) onClosed(dc)
     } catch (err) {
       console.error(err)
       toast({ title: err?.body?.error || 'Erro ao guardar', variant: 'destructive' })
@@ -133,6 +164,12 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
 
   return (
     <div className="space-y-5">
+      <DayCloseReceiptModal
+        dc={closedRecord}
+        onEmail={onEmail}
+        onClose={() => { setClosedRecord(null); if (onDone) onDone() }}
+      />
+
       {/* Session summary */}
       {summaryLoading ? (
         <div className="bg-white rounded-2xl border border-neutral-200 p-6 flex items-center gap-3 text-neutral-400 text-sm">
@@ -176,7 +213,14 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
       ) : null}
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <Step number="1" title="Contagem de caixa" subtitle="Conte todas as moedas e notas na maquina/caixa registadora" accent="teal">
+        <Step number="1" title="Contagem de caixa" subtitle="Confirme o que já sabemos que entrou — só precisa de corrigir o que faltar ou sobrar" accent="teal">
+          {summary?.acceptedTotal > 0 && (
+            <div className="text-xs text-neutral-400 -mt-1">
+              Pré-preenchido com o aceite desde o último fecho ({fmt(summary.acceptedTotal)}&euro;).
+              {summary.openingFloat > 0 && <> Se o fundo inicial de {fmt(summary.openingFloat)}&euro; ainda lá estiver, adicione-o também.</>}
+              {' '}Corrija o que não bater certo.
+            </div>
+          )}
           <CoinChipGrid denoms={countedDenoms} onChange={makeUpdater(setCountedDenoms)} />
           <div className="flex flex-wrap items-center gap-3 rounded-xl bg-neutral-50 border border-neutral-100 px-4 py-3 text-sm">
             <div className="flex-1 min-w-0">
