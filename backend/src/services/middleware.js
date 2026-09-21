@@ -603,20 +603,29 @@ class Middleware extends EventEmitter {
    */
   handleCcTalkCredit(peripheral, { code, isBill }) {
     const table = isBill ? this.billEqTable : this.coinEqTable
-    const value = table ? Number(table[String(code)]) : NaN
+    // `code` off the wire is always a plain byte (1, 2, 3…), but the
+    // equivalence table's keys are typed/stored as "0x01"-style hex strings
+    // (see the admin UI's own placeholder text and "Carregar Padrões"
+    // defaults) — table[String(code)] against those never matched, so no
+    // coin/bill could ever actually be credited through this path. Accept
+    // either form so both the documented "0x01" convention and a plain
+    // decimal key work.
+    const hexKey = `0x${Number(code).toString(16).padStart(2, '0')}`
+    const rawKey = String(code)
+    const value = table ? Number(table[hexKey] ?? table[rawKey]) : NaN
 
     if (!Number.isFinite(value) || value <= 0) {
       // An unmapped code is NOT money. Crediting a guess is how phantom notes
       // got accepted; refuse and make it visible so the operator maps it.
       console.warn(`[HW] ${peripheral.name}: unmapped ${isBill ? 'bill' : 'coin'} code ${code} — no credit given`)
       this.emit(isBill ? 'bill-rejected' : 'coin-rejected', {
-        peripheral, reason: `unmapped code ${code}`, fraud: false,
+        peripheral, reason: `unmapped code ${code}`, fraud: false, code,
       })
       return
     }
 
     const rounded = roundMoney(value)
-    this.emit(isBill ? 'bill-inserted' : 'coin-inserted', { peripheral, value: rounded })
+    this.emit(isBill ? 'bill-inserted' : 'coin-inserted', { peripheral, value: rounded, code })
     console.log(`${isBill ? 'Bill' : 'Coin'} accepted: €${rounded.toFixed(2)} from ${peripheral.name}`)
   }
 

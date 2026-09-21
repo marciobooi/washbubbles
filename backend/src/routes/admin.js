@@ -473,6 +473,13 @@ router.post('/settings', requireAdmin, async (req, res) => {
   const SettingT = withTenant(Setting, req)
   const s = await SettingT.findOneAndUpdate({ key }, { value }, { upsert: true, new: true })
   logAction(req, 'setting.update', 'Setting', key, { value })
+  // The hardware middleware caches these two at boot (a live coin/bill event
+  // is on the hot path — not worth a DB round-trip per insert) — without this,
+  // an edited mapping wouldn't take effect until the backend restarted.
+  if (key === 'coinEqTable' || key === 'billEqTable') {
+    const middleware = (await import('../services/middleware.js')).default
+    middleware.loadEquivalenceTables().catch(() => { /* best-effort — falls back to taking effect on next restart */ })
+  }
   res.json(s)
 })
 

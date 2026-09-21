@@ -1,11 +1,12 @@
 import React from 'react'
-import { Cpu, Trash2, Plus, Settings } from 'lucide-react'
+import { Cpu, Trash2, Plus, Settings, Sparkles, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
+import * as ws from '@/services/websocket'
 import billAcceptorImg from '@/assets/geral/bill_acceptor.jpg'
 import cardDispenserImg from '@/assets/geral/card_dispenser.jpg'
 import coinAcceptorImg from '@/assets/geral/coin_acceptor.jpg'
@@ -31,6 +32,79 @@ export default function AdminPeripherals() {
   const [autoCharge, setAutoCharge] = React.useState(false)
   const [hopperCoinValue, setHopperCoinValue] = React.useState(1)
   const [hopperMaxDispenseCoins, setHopperMaxDispenseCoins] = React.useState(50)
+
+  // Guided calibration: instead of typing hex codes by hand, insert one coin/
+  // note of each denomination and let the hardware tell us which channel code
+  // it actually is. `calibrating` is null when idle, otherwise
+  // { type: 'coin'|'bill', denoms, index, lastLearned }.
+  const [calibrating, setCalibrating] = React.useState(null)
+  const calibratingRef = React.useRef(null)
+  const unsubscribeWsRef = React.useRef(null)
+
+  React.useEffect(() => { calibratingRef.current = calibrating }, [calibrating])
+
+  React.useEffect(() => () => {
+    // Leave no dangling WS subscription/connection if the admin navigates
+    // away mid-calibration.
+    if (unsubscribeWsRef.current) unsubscribeWsRef.current()
+    ws.disconnect()
+  }, [])
+
+  function startCalibration(type) {
+    const denoms = type === 'coin' ? [0.05, 0.10, 0.20, 0.50, 1.00, 2.00] : [5, 10, 20]
+    ws.connect()
+    unsubscribeWsRef.current = ws.subscribe(handleCalibrationMessage)
+    setCalibrating({ type, denoms, index: 0, lastLearned: null })
+  }
+
+  function stopCalibration() {
+    if (unsubscribeWsRef.current) { unsubscribeWsRef.current(); unsubscribeWsRef.current = null }
+    ws.disconnect()
+    setCalibrating(null)
+  }
+
+  function handleCalibrationMessage(data) {
+    const state = calibratingRef.current
+    if (!state) return
+    if (!data || typeof data !== 'object') return
+    // Both an unmapped code (peripheral:rejected — the common first-time case)
+    // and an already-mapped one (peripheral:accepted — recalibrating a code
+    // that already has a value) tell us what we need: which channel just
+    // fired. A fraud flag is excluded — that's a hardware fault signal, not a
+    // real coin/note to learn from.
+    if (data.type !== 'peripheral:rejected' && data.type !== 'peripheral:accepted') return
+    const payload = data.payload || {}
+    if (payload.type !== state.type || payload.code == null) return
+
+    const denomValue = state.denoms[state.index]
+    const hexKey = `0x${Number(payload.code).toString(16).padStart(2, '0')}`
+    const setTable = state.type === 'coin' ? setCoinEqTable : setBillEqTable
+    setTable(prev => {
+      const idx = prev.findIndex(e => String(e.key) === hexKey)
+      const entry = { key: hexKey, value: denomValue }
+      if (idx === -1) return [...prev, entry]
+      const next = [...prev]
+      next[idx] = entry
+      return next
+    })
+
+    const nextIndex = state.index + 1
+    if (nextIndex >= state.denoms.length) {
+      toast({ title: `${hexKey} → ${denomValue}€ detetado — calibração concluída`, variant: 'success' })
+      stopCalibration()
+    } else {
+      toast({ title: `${hexKey} → ${denomValue}€ detetado`, variant: 'success' })
+      setCalibrating({ ...state, index: nextIndex, lastLearned: { hexKey, denomValue } })
+    }
+  }
+
+  function skipCalibrationStep() {
+    const state = calibratingRef.current
+    if (!state) return
+    const nextIndex = state.index + 1
+    if (nextIndex >= state.denoms.length) { stopCalibration(); return }
+    setCalibrating({ ...state, index: nextIndex })
+  }
 
   const peripheralTypes = [
     { type: 'bill_acceptor', name: 'Leitor de Notas', protocols: ['cctalk', 'MDB'], image: billAcceptorImg },
@@ -269,6 +343,46 @@ export default function AdminPeripherals() {
     <div className="p-8">
       <h1 className="text-[28px] font-extrabold tracking-tight text-[#1c2530] mb-6">Periféricos</h1>
 
+      {/* Calibration overlay — guides inserting one coin/note per denomination
+          instead of typing hex codes by hand. */}
+      {calibrating && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 text-center">
+            <div className="text-xs font-semibold text-[#8a8478] uppercase tracking-wide mb-1">
+              Calibração de {calibrating.type === 'coin' ? 'moedas' : 'notas'} — passo {calibrating.index + 1} de {calibrating.denoms.length}
+            </div>
+            <div className="w-16 h-16 rounded-full bg-[#a9e0bc] mx-auto my-4 flex items-center justify-center">
+              <Sparkles className="h-7 w-7 text-[#0f2a2c]" />
+            </div>
+            <div className="text-2xl font-extrabold text-[#1c2530] mb-1">
+              Insira {calibrating.type === 'coin' ? 'uma moeda de' : 'uma nota de'} {calibrating.denoms[calibrating.index]}€
+            </div>
+            <p className="text-sm text-[#8a8478] mb-1">A aguardar o aceitador detetar…</p>
+            {calibrating.lastLearned && (
+              <p className="text-xs text-emerald-600 font-medium mb-4">
+                ✓ Último detetado: {calibrating.lastLearned.hexKey} → {calibrating.lastLearned.denomValue}€
+              </p>
+            )}
+            <div className="flex gap-2 mt-5">
+              <button
+                type="button"
+                onClick={skipCalibrationStep}
+                className="flex-1 h-10 rounded-full border border-black/[0.12] text-sm font-semibold text-[#1c2530] hover:bg-[#f7f5f1] transition"
+              >
+                Saltar esta {calibrating.type === 'coin' ? 'moeda' : 'nota'}
+              </button>
+              <button
+                type="button"
+                onClick={stopCalibration}
+                className="flex-1 h-10 rounded-full bg-[#f7f5f1] hover:bg-[#eeebe4] text-sm font-semibold text-[#1c2530] transition inline-flex items-center justify-center gap-1.5"
+              >
+                <X className="h-3.5 w-3.5" /> Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {peripherals.map(peripheral => {
           const typeInfo = peripheralTypes.find(pt => pt.type === peripheral.type)
@@ -351,6 +465,9 @@ export default function AdminPeripherals() {
                       Carregar Padrões
                     </Button>
                   )}
+                  <Button type="button" variant="outline" size="sm" onClick={() => startCalibration('coin')} disabled={!!calibrating}>
+                    <Sparkles className="h-3.5 w-3.5 mr-1.5" /> Calibrar automaticamente
+                  </Button>
                   <Button type="button" variant="outline" size="sm" onClick={addCoinMapping}>
                     + Adicionar Moeda
                   </Button>
@@ -409,6 +526,9 @@ export default function AdminPeripherals() {
                       Carregar Padrões
                     </Button>
                   )}
+                  <Button type="button" variant="outline" size="sm" onClick={() => startCalibration('bill')} disabled={!!calibrating}>
+                    <Sparkles className="h-3.5 w-3.5 mr-1.5" /> Calibrar automaticamente
+                  </Button>
                   <Button type="button" variant="outline" size="sm" onClick={addBillMapping}>
                     + Adicionar Nota
                   </Button>

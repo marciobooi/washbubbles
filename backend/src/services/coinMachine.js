@@ -284,24 +284,24 @@ class CoinMachine extends EventEmitter {
    * Handle coin rejected (bad coin, foreign, slug)
    */
   handleCoinRejected(data) {
-    const { peripheral, reason } = data
-    this.emit('coin-rejected', { peripheral, reason })
+    const { peripheral, reason, code } = data
+    this.emit('coin-rejected', { peripheral, reason, code })
     console.warn(`Coin rejected: ${reason || 'unknown reason'}`)
     // Signature is (tenantId, type, payload). Called with two args the tenant
     // became the event name and the payload the type, so these alerts — fraud
     // included — reached nobody.
-    broadcastHardwareEvent(this.tenantId, 'peripheral:rejected', { type: 'coin', reason: reason || 'rejected' })
+    broadcastHardwareEvent(this.tenantId, 'peripheral:rejected', { type: 'coin', reason: reason || 'rejected', code })
   }
 
   /**
    * Handle bill rejected (bad bill, unrecognised, fraud/fake, jammed)
    */
   handleBillRejected(data) {
-    const { peripheral, reason, fraud } = data
+    const { peripheral, reason, fraud, code } = data
     const eventType = fraud ? 'peripheral:fraud' : 'peripheral:rejected'
-    this.emit('bill-rejected', { peripheral, reason, fraud })
+    this.emit('bill-rejected', { peripheral, reason, fraud, code })
     console.warn(`Bill ${fraud ? 'FRAUD' : 'rejected'}: ${reason || 'unknown reason'}`)
-    broadcastHardwareEvent(this.tenantId, eventType, { type: 'bill', reason: reason || 'rejected', fraud: !!fraud })
+    broadcastHardwareEvent(this.tenantId, eventType, { type: 'bill', reason: reason || 'rejected', fraud: !!fraud, code })
   }
 
   /**
@@ -326,8 +326,8 @@ class CoinMachine extends EventEmitter {
    * Handle coin insertion
    */
   handleCoinInserted(data) {
-    const { value } = data
-    
+    const { value, code } = data
+
     // Apply equivalence table mapping if configured
     const mappedValue = this.applyCoinEquivalence(value)
     
@@ -355,6 +355,9 @@ class CoinMachine extends EventEmitter {
       bonus: bonusValue,
       balance: this.client.getState().balance
     })
+    // Lets the coin-calibration wizard learn/confirm a channel code even when
+    // it's already mapped (re-inserting an accepted coin), not just unmapped ones.
+    broadcastHardwareEvent(this.tenantId, 'peripheral:accepted', { type: 'coin', value: mappedValue, code })
 
     console.log(`Coin inserted: €${mappedValue.toFixed(2)}${bonusValue > 0 ? ` + €${bonusValue.toFixed(2)} bonus` : ''}, Total: €${this.client.getState().credits.toFixed(2)}`)
   }
@@ -363,8 +366,8 @@ class CoinMachine extends EventEmitter {
    * Handle bill insertion
    */
   handleBillInserted(data) {
-    const { value } = data
-    
+    const { value, code } = data
+
     // Apply equivalence table mapping if configured
     const mappedValue = this.applyBillEquivalence(value)
     
@@ -389,6 +392,7 @@ class CoinMachine extends EventEmitter {
       bonus: bonusValue,
       balance: this.client.getState().balance
     })
+    broadcastHardwareEvent(this.tenantId, 'peripheral:accepted', { type: 'bill', value: mappedValue, code })
 
     console.log(`Bill inserted: €${mappedValue.toFixed(2)}${bonusValue > 0 ? ` + €${bonusValue.toFixed(2)} bonus` : ''}, Total: €${this.client.getState().credits.toFixed(2)}`)
   }
