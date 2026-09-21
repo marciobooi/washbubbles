@@ -3,6 +3,7 @@ import { Cpu, Trash2, Plus, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
 import billAcceptorImg from '@/assets/geral/bill_acceptor.jpg'
@@ -17,6 +18,19 @@ export default function AdminPeripherals() {
   const [loading, setLoading] = React.useState(true)
   const [selectedPeripheral, setSelectedPeripheral] = React.useState(null)
   const [showConfig, setShowConfig] = React.useState(false)
+  const [showHardware, setShowHardware] = React.useState(false)
+
+  // Coin/Bill acceptor equivalence tables + related hardware settings — moved
+  // here from Preços (it's peripheral config, not pricing) and tucked behind
+  // "Avançado" since it's raw hardware codes, not something to greet a
+  // non-technical admin with.
+  const [coinEqTable, setCoinEqTable] = React.useState([])
+  const [billEqTable, setBillEqTable] = React.useState([])
+  const [rechargeCoinBonus, setRechargeCoinBonus] = React.useState(0)
+  const [rechargeBillBonus, setRechargeBillBonus] = React.useState(0)
+  const [autoCharge, setAutoCharge] = React.useState(false)
+  const [hopperCoinValue, setHopperCoinValue] = React.useState(1)
+  const [hopperMaxDispenseCoins, setHopperMaxDispenseCoins] = React.useState(50)
 
   const peripheralTypes = [
     { type: 'bill_acceptor', name: 'Leitor de Notas', protocols: ['cctalk', 'MDB'], image: billAcceptorImg },
@@ -43,7 +57,103 @@ export default function AdminPeripherals() {
 
   React.useEffect(() => {
     loadPeripherals()
+    loadCoinMachineSettings()
   }, [])
+
+  async function loadCoinMachineSettings() {
+    try {
+      const coinEq = await api.getSetting('coinEqTable').catch(() => null)
+      const billEq = await api.getSetting('billEqTable').catch(() => null)
+      const coinBonus = await api.getSetting('rechargeCoinBonus').catch(() => null)
+      const billBonus = await api.getSetting('rechargeBillBonus').catch(() => null)
+      const autoChargeVal = await api.getSetting('autoCharge').catch(() => null)
+      const hopperVal = await api.getSetting('hopperCoinValue').catch(() => null)
+      const hopperMax = await api.getSetting('hopperMaxDispenseCoins').catch(() => null)
+
+      setCoinEqTable(coinEq && Array.isArray(coinEq.value) ? coinEq.value : [])
+      setBillEqTable(billEq && Array.isArray(billEq.value) ? billEq.value : [])
+      setRechargeCoinBonus(coinBonus && coinBonus.value !== undefined ? Number(coinBonus.value) : 0)
+      setRechargeBillBonus(billBonus && billBonus.value !== undefined ? Number(billBonus.value) : 0)
+      setAutoCharge(autoChargeVal && autoChargeVal.value ? Boolean(autoChargeVal.value) : false)
+      setHopperCoinValue(hopperVal && hopperVal.value != null ? Number(hopperVal.value) : 1)
+      setHopperMaxDispenseCoins(hopperMax && hopperMax.value != null ? Number(hopperMax.value) : 50)
+    } catch (e) {
+      console.warn('loadCoinMachineSettings failed', e)
+    }
+  }
+
+  async function saveCoinMachineSettings(e) {
+    e.preventDefault()
+    if (hopperMaxDispenseCoins > 200) {
+      toast({ title: 'Máximo de moedas a dispensar parece muito alto (>200) — confirme antes de guardar', variant: 'destructive' })
+      return
+    }
+    try {
+      await api.setSetting({ key: 'coinEqTable', value: coinEqTable })
+      await api.setSetting({ key: 'billEqTable', value: billEqTable })
+      await api.setSetting({ key: 'rechargeCoinBonus', value: rechargeCoinBonus })
+      await api.setSetting({ key: 'rechargeBillBonus', value: rechargeBillBonus })
+      await api.setSetting({ key: 'autoCharge', value: autoCharge })
+      await api.setSetting({ key: 'hopperCoinValue', value: hopperCoinValue })
+      await api.setSetting({ key: 'hopperMaxDispenseCoins', value: hopperMaxDispenseCoins })
+      toast({ title: 'Configurações de moedas/notas guardadas', variant: 'success' })
+      loadCoinMachineSettings()
+    } catch (e) {
+      console.error(e)
+      toast({ title: 'Erro ao guardar configurações', variant: 'destructive' })
+    }
+  }
+
+  function addCoinMapping() {
+    setCoinEqTable([...coinEqTable, { key: '', value: 0 }])
+  }
+
+  function updateCoinMapping(index, field, val) {
+    const updated = [...coinEqTable]
+    updated[index][field] = field === 'value' ? Number(val) : val
+    setCoinEqTable(updated)
+  }
+
+  function removeCoinMapping(index) {
+    setCoinEqTable(coinEqTable.filter((_, i) => i !== index))
+  }
+
+  function addBillMapping() {
+    setBillEqTable([...billEqTable, { key: '', value: 0 }])
+  }
+
+  function updateBillMapping(index, field, val) {
+    const updated = [...billEqTable]
+    updated[index][field] = field === 'value' ? Number(val) : val
+    setBillEqTable(updated)
+  }
+
+  function removeBillMapping(index) {
+    setBillEqTable(billEqTable.filter((_, i) => i !== index))
+  }
+
+  function loadDefaultCoinMappings() {
+    const defaults = [
+      { key: '0x01', value: 0.05 },
+      { key: '0x02', value: 0.10 },
+      { key: '0x03', value: 0.20 },
+      { key: '0x04', value: 0.50 },
+      { key: '0x05', value: 1.00 },
+      { key: '0x06', value: 2.00 }
+    ]
+    setCoinEqTable(defaults)
+    toast({ title: 'Mapeamentos padrão de moedas carregados', variant: 'success' })
+  }
+
+  function loadDefaultBillMappings() {
+    const defaults = [
+      { key: '0x10', value: 5 },
+      { key: '0x11', value: 10 },
+      { key: '0x12', value: 20 }
+    ]
+    setBillEqTable(defaults)
+    toast({ title: 'Mapeamentos padrão de notas carregados', variant: 'success' })
+  }
 
   async function loadPeripherals() {
     try {
@@ -207,6 +317,232 @@ export default function AdminPeripherals() {
           )
         })}
       </div>
+
+      {/* Coin/Bill Machine Settings — hardware-facing config (raw denomination
+          codes, hopper limits): not something a non-technical admin should be
+          confronted with by default, so it's tucked behind this toggle. */}
+      <button
+        type="button"
+        onClick={() => setShowHardware(s => !s)}
+        className="w-full flex items-center justify-between gap-2 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 hover:bg-neutral-100 px-4 py-2.5 text-left transition mt-6"
+      >
+        <span className="text-xs font-semibold text-neutral-600">
+          Avançado — configuração de aceitador de moedas e notas
+          <span className="font-normal text-neutral-400 ml-1.5">(só para quem instala/configura o equipamento)</span>
+        </span>
+        <span className={`text-neutral-400 transition-transform ${showHardware ? 'rotate-180' : ''}`}>&#9660;</span>
+      </button>
+
+      {showHardware && (
+      <Card className="mt-3">
+        <CardHeader>
+          <CardTitle>Configurações de Aceitador de Moedas e Notas</CardTitle>
+          <CardDescription>Configure mapeamentos de valores de moedas/notas e bónus de recarga</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={saveCoinMachineSettings} className="space-y-6">
+            {/* Coin Equivalence Table */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-base font-semibold">Tabela de Equivalência de Moedas</Label>
+                <div className="flex gap-2">
+                  {coinEqTable.length === 0 && (
+                    <Button type="button" variant="secondary" size="sm" onClick={loadDefaultCoinMappings}>
+                      Carregar Padrões
+                    </Button>
+                  )}
+                  <Button type="button" variant="outline" size="sm" onClick={addCoinMapping}>
+                    + Adicionar Moeda
+                  </Button>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Mapear códigos de moedas do hardware (ex: 0x01, 0x02) para valores em euros
+              </p>
+              <div className="space-y-2">
+                {coinEqTable.map((entry, idx) => (
+                  <div key={idx} className="flex gap-2 items-center">
+                    <Input
+                      placeholder="Código moeda (0x01)"
+                      value={entry.key}
+                      onChange={(e) => updateCoinMapping(idx, 'key', e.target.value)}
+                      className="w-40"
+                    />
+                    <span className="text-muted-foreground">→</span>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="Valor €"
+                      value={entry.value}
+                      onChange={(e) => updateCoinMapping(idx, 'value', e.target.value)}
+                      className="w-32"
+                    />
+                    <span className="text-sm">€</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeCoinMapping(idx)}
+                    >
+                      ✕
+                    </Button>
+                  </div>
+                ))}
+                {coinEqTable.length === 0 && (
+                  <div className="border-2 border-dashed rounded-lg p-4 text-center">
+                    <p className="text-sm text-muted-foreground mb-2">Nenhum mapeamento de moedas configurado</p>
+                    <Button type="button" variant="secondary" size="sm" onClick={loadDefaultCoinMappings}>
+                      Carregar Mapeamentos Padrão
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Bill Equivalence Table */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-base font-semibold">Tabela de Equivalência de Notas</Label>
+                <div className="flex gap-2">
+                  {billEqTable.length === 0 && (
+                    <Button type="button" variant="secondary" size="sm" onClick={loadDefaultBillMappings}>
+                      Carregar Padrões
+                    </Button>
+                  )}
+                  <Button type="button" variant="outline" size="sm" onClick={addBillMapping}>
+                    + Adicionar Nota
+                  </Button>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Mapear códigos de notas do hardware (ex: 0x10, 0x11) para valores em euros
+              </p>
+              <div className="space-y-2">
+                {billEqTable.map((entry, idx) => (
+                  <div key={idx} className="flex gap-2 items-center">
+                    <Input
+                      placeholder="Código nota (0x10)"
+                      value={entry.key}
+                      onChange={(e) => updateBillMapping(idx, 'key', e.target.value)}
+                      className="w-40"
+                    />
+                    <span className="text-muted-foreground">→</span>
+                    <Input
+                      type="number"
+                      step="1"
+                      placeholder="Valor €"
+                      value={entry.value}
+                      onChange={(e) => updateBillMapping(idx, 'value', e.target.value)}
+                      className="w-32"
+                    />
+                    <span className="text-sm">€</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeBillMapping(idx)}
+                    >
+                      ✕
+                    </Button>
+                  </div>
+                ))}
+                {billEqTable.length === 0 && (
+                  <div className="border-2 border-dashed rounded-lg p-4 text-center">
+                    <p className="text-sm text-muted-foreground mb-2">Nenhum mapeamento de notas configurado</p>
+                    <Button type="button" variant="secondary" size="sm" onClick={loadDefaultBillMappings}>
+                      Carregar Mapeamentos Padrão
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Bonus Settings */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
+              <div className="space-y-2">
+                <Label htmlFor="rechargeCoinBonus">Bónus de Recarga com Moedas (%)</Label>
+                <Input
+                  id="rechargeCoinBonus"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={rechargeCoinBonus}
+                  onChange={(e) => setRechargeCoinBonus(Number(e.target.value))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Percentagem de bónus adicionada às recargas com moedas (ex: 10% significa €1.00 → €1.10)
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="rechargeBillBonus">Bónus de Recarga com Notas (%)</Label>
+                <Input
+                  id="rechargeBillBonus"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={rechargeBillBonus}
+                  onChange={(e) => setRechargeBillBonus(Number(e.target.value))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Percentagem de bónus adicionada às recargas com notas
+                </p>
+              </div>
+
+              <div className="space-y-2 md:col-span-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    id="autoCharge"
+                    type="checkbox"
+                    checked={autoCharge}
+                    onChange={(e) => setAutoCharge(e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                  <Label htmlFor="autoCharge" className="cursor-pointer">
+                    Carregar cartão automaticamente ao remover
+                  </Label>
+                </div>
+                <p className="text-xs text-muted-foreground ml-6">
+                  Guardar automaticamente o saldo em dinheiro no cartão quando este é removido
+                </p>
+              </div>
+            </div>
+
+            <div className="border-t pt-4">
+              <Label className="mb-2 block">Hopper (dispensador de troco)</Label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="hopperCoinValue">Valor da moeda no hopper (€)</Label>
+                  <Input id="hopperCoinValue" type="number" step="0.01" min="0.01" value={hopperCoinValue} onChange={(e) => setHopperCoinValue(Number(e.target.value))} />
+                  <p className="text-xs text-muted-foreground">A maioria dos hoppers guarda uma única denominação de moeda.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="hopperMaxDispenseCoins">Máximo de moedas por dispensa</Label>
+                  <Input id="hopperMaxDispenseCoins" type="number" step="1" min="1" value={hopperMaxDispenseCoins} onChange={(e) => setHopperMaxDispenseCoins(Number(e.target.value))} />
+                  <p className="text-xs text-muted-foreground">Limite de segurança — um pedido acima disto é recusado em vez de arriscar esvaziar o hopper por um erro de cálculo.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button type="submit">Guardar Configurações de Moedas/Notas</Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  loadCoinMachineSettings();
+                  toast({ title: 'Revertido', variant: 'success' })
+                }}
+              >
+                Reverter
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+      )}
 
       {/* Configuration Modal */}
       {showConfig && selectedPeripheral && (

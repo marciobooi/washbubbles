@@ -8,6 +8,29 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Palette, ShieldCheck, Wifi as WifiIcon, Bell, MessageCircle, SlidersHorizontal, Image as ImageIcon, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react'
 import { DEFAULT_BANNERS } from '@/lib/defaultBanners'
 
+// Settings hidden from the raw "Avançado" list below — either because they
+// already have a dedicated, friendlier UI elsewhere (so a second raw/rawer
+// editor for the same value just invites confusing drift between the two),
+// because they're a credential that shouldn't sit in a scrollable list next
+// to unrelated config (adminPin), or because they're internal state the app
+// maintains itself and was never meant to be hand-edited (cashDrawerLedger,
+// hopperTarget — corrupting either just silently breaks an auto-fill, with
+// no obvious symptom pointing back at "someone edited a raw setting").
+// Still settable directly by typing the exact key into the Add form above —
+// that's a deliberate technical action, unlike stumbling across it in a list.
+const HIDDEN_ADVANCED_KEYS = new Set([
+  'adminPin',
+  'cashDrawerLedger',
+  'hopperTarget',
+  'coinEqTable', 'billEqTable', 'rechargeCoinBonus', 'rechargeBillBonus', 'autoCharge',
+  'hopperCoinValue', 'hopperMaxDispenseCoins',
+  'branding.companyName', 'branding.logo', 'branding.primaryColor', 'branding.accentColor',
+  'banners',
+  'wifi.enabled',
+  'whatsapp.enabled',
+  'loyaltyCard.cost', 'loyaltyCard.credit', 'loyaltyCard.minRecharge',
+])
+
 const TABS = [
   { id: 'branding', label: 'Branding', Icon: Palette },
   { id: 'banner', label: 'Banner', Icon: ImageIcon },
@@ -157,7 +180,13 @@ export default function AdminSettings(){
   async function save(e) {
     e.preventDefault()
     try {
-      await api.setSetting({ key, value })
+      // The field is labelled "aceita JSON" — parse it as JSON when possible
+      // (numbers, booleans, arrays, objects) so e.g. `123` or `["a","b"]`
+      // land as real typed values, not the literal string. Falls back to the
+      // raw text for anything that isn't valid JSON, like a plain word.
+      let parsedValue = value
+      try { parsedValue = JSON.parse(value) } catch { /* not JSON — store as plain text */ }
+      await api.setSetting({ key, value: parsedValue })
       toast({ title: 'Definição salva', variant: 'success' })
       setKey('')
       setValue('')
@@ -852,32 +881,34 @@ export default function AdminSettings(){
       {activeTab === 'advanced' && (
       <Card>
         <CardHeader>
-          <CardTitle>Advanced Settings</CardTitle>
-          <CardDescription>Add or modify raw configuration values</CardDescription>
+          <CardTitle>Configurações Avançadas</CardTitle>
+          <CardDescription>Só para chaves de configuração pontuais, fora do que já é gerido nos outros separadores.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <form onSubmit={save} className="flex gap-2">
             <Input
-              placeholder="Setting key"
+              placeholder="Nome da chave"
               value={key}
               onChange={(e) => setKey(e.target.value)}
               className="w-64"
             />
             <Input
-              placeholder="Value (JSON supported)"
+              placeholder="Valor (aceita JSON)"
               value={value}
               onChange={(e) => setValue(e.target.value)}
               className="flex-1"
             />
-            <Button type="submit">Add</Button>
+            <Button type="submit">Adicionar</Button>
           </form>
 
           <div className="border rounded-lg">
-            {list.length === 0 ? (
-              <p className="p-4 text-sm text-muted-foreground text-center">No settings found</p>
+            {list.filter(s => !HIDDEN_ADVANCED_KEYS.has(s.key)).length === 0 ? (
+              <p className="p-4 text-sm text-muted-foreground text-center">
+                Nenhuma configuração avulsa — as definições comuns têm o seu próprio separador acima.
+              </p>
             ) : (
               <ul className="divide-y">
-                {list.map((s) => (
+                {list.filter(s => !HIDDEN_ADVANCED_KEYS.has(s.key)).map((s) => (
                   <li key={s._id} className="p-3 flex justify-between items-center hover:bg-muted/50">
                     <div className="flex-1">
                       <div className="font-medium text-sm">{s.key}</div>
@@ -890,7 +921,7 @@ export default function AdminSettings(){
                       size="sm"
                       onClick={() => remove(s.key)}
                     >
-                      Delete
+                      Eliminar
                     </Button>
                   </li>
                 ))}
