@@ -8,8 +8,11 @@ import {
 } from './shared'
 
 /**
- * The cash-reconciliation wizard itself — 5 steps (count, mechanism, hopper,
- * bank/float split, notes) — with none of the surrounding page chrome.
+ * The cash-reconciliation wizard itself — with none of the surrounding page
+ * chrome. Only 3 steps are shown by default (count, bank/float split, notes);
+ * mechanism + hopper counting is real but optional bookkeeping most closes
+ * don't need, so it's tucked behind a collapsed "Avançado" disclosure instead
+ * of forcing everyone through two more full coin-by-coin grids every time.
  *
  * Used by both `AdminDayClose.jsx` (which also renders history below it) and
  * `KioskDayCloseModal.jsx` (which renders it inside a staff-PIN-gated modal on
@@ -26,6 +29,7 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
   const [floatLeft, setFloatLeft]       = useState('')
   const [notes, setNotes]               = useState('')
   const [saving, setSaving]             = useState(false)
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
   const countedCash       = denomSum(countedDenoms)
   const mechanismTotal    = denomSum(mechanismDenoms)
@@ -43,6 +47,28 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
       setMechanismDenoms(buildDenomFromSaved(COIN_DENOMS, summary.openingMechanismCoins))
     }
   }, [summary])
+
+  // Each hopper peripheral tracks its own live coin count (`hopperConfig.currentCount`,
+  // decremented in real time as change is paid out — see services/middleware.js).
+  // A hopper only ever holds one denomination, so summing currentCount per
+  // coinValue across all enabled hoppers gives the actual coin count without
+  // anyone physically counting it. Still fully editable afterwards — this is a
+  // prefill, not a replacement for catching real-world drift (jams, manual top-ups).
+  const actualLoadedRef = useRef(false)
+  useEffect(() => {
+    if (actualLoadedRef.current) return
+    actualLoadedRef.current = true
+    api.getPeripherals().then((list) => {
+      const hoppers = (list || []).filter(p => p.type === 'hopper' && p.enabled && p.hopperConfig?.coinValue)
+      if (!hoppers.length) return
+      const byValue = {}
+      for (const h of hoppers) {
+        const v = Number(h.hopperConfig.coinValue)
+        byValue[v] = (byValue[v] || 0) + Number(h.hopperConfig.currentCount || 0)
+      }
+      setHopperActualDenoms(prev => prev.map(d => byValue[d.value] != null ? { ...d, count: byValue[d.value] } : d))
+    }).catch(() => { /* live hopper stock is just a convenience prefill — manual count still works if this fails */ })
+  }, [])
 
   useEffect(() => {
     if (targetLoadedRef.current) return
@@ -166,22 +192,37 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
           </div>
         </Step>
 
-        <Step number="2" title="Mecanismo aceitador" subtitle="Moedas presentes no aceitador no momento do fecho" accent="amber">
-          {summary?.openingMechanismCoins?.length > 0 && (
-            <div className="text-xs text-neutral-400 -mt-1">
-              Inicio: {summary.openingMechanismCoins.map(d => `${fmtDenomLabel(d.value)}×${d.count}`).join('  ')}{' '}
-              &mdash; {fmt(summary.openingMechanismTotal)}&euro;
-            </div>
-          )}
-          <CoinChipGrid denoms={mechanismDenoms} onChange={makeUpdater(setMechanismDenoms)} />
-          {mechanismTotal > 0 && (
-            <div className="text-xs font-semibold text-amber-700">Total no mecanismo: {fmt(mechanismTotal)}&euro;</div>
-          )}
-        </Step>
+        <button
+          type="button"
+          onClick={() => setShowAdvanced(s => !s)}
+          className="w-full flex items-center justify-between gap-2 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 hover:bg-neutral-100 px-4 py-2.5 text-left transition"
+        >
+          <span className="text-xs font-semibold text-neutral-600">
+            Avançado — mecanismo aceitador e hopper
+            <span className="font-normal text-neutral-400 ml-1.5">(opcional, para reposição de troco)</span>
+          </span>
+          <span className={`text-neutral-400 transition-transform ${showAdvanced ? 'rotate-180' : ''}`}>&#9660;</span>
+        </button>
 
-        <Step number="3" title="Hopper (dispensador de troco)" subtitle="Registe o estado atual, defina o objetivo e veja o que repor" accent="blue">
+        {showAdvanced && (
+          <>
+            <Step title="Mecanismo aceitador" subtitle="Moedas presentes no aceitador no momento do fecho" accent="amber">
+              {summary?.openingMechanismCoins?.length > 0 && (
+                <div className="text-xs text-neutral-400 -mt-1">
+                  Inicio: {summary.openingMechanismCoins.map(d => `${fmtDenomLabel(d.value)}×${d.count}`).join('  ')}{' '}
+                  &mdash; {fmt(summary.openingMechanismTotal)}&euro;
+                </div>
+              )}
+              <CoinChipGrid denoms={mechanismDenoms} onChange={makeUpdater(setMechanismDenoms)} />
+              {mechanismTotal > 0 && (
+                <div className="text-xs font-semibold text-amber-700">Total no mecanismo: {fmt(mechanismTotal)}&euro;</div>
+              )}
+            </Step>
+
+            <Step title="Hopper (dispensador de troco)" subtitle="Registe o estado atual, defina o objetivo e veja o que repor" accent="blue">
           <div>
-            <div className="text-xs font-semibold text-neutral-600 mb-2 uppercase tracking-wide">Moedas restantes agora</div>
+            <div className="text-xs font-semibold text-neutral-600 mb-1 uppercase tracking-wide">Moedas restantes agora</div>
+            <div className="text-xs text-neutral-400 mb-2">Pré-preenchido com o stock atual dos hoppers — corrija se não bater certo.</div>
             {summary?.openingHopperCoins?.length > 0 && summary.totalChangeDispensed > 0 && (
               <div className="text-xs text-neutral-400 mb-2">
                 Inicio: {fmt(summary.openingHopperTotal)}&euro; &mdash; troco dispensado: {fmt(summary.totalChangeDispensed)}&euro;
@@ -222,9 +263,11 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
               )}
             </div>
           )}
-        </Step>
+            </Step>
+          </>
+        )}
 
-        <Step number="4" title="Distribuicao do dinheiro" subtitle="Quanto vai para o banco e quanto fica como fundo" accent="emerald">
+        <Step number="2" title="Distribuicao do dinheiro" subtitle="Quanto vai para o banco e quanto fica como fundo" accent="emerald">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <MoneyInput
               label="Para o banco"
@@ -251,7 +294,7 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
           )}
         </Step>
 
-        <Step number="5" title="Notas e confirmacao" accent="violet">
+        <Step number="3" title="Notas e confirmacao" accent="violet">
           <textarea
             className="w-full rounded-xl border border-neutral-200 px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-400 text-neutral-700 placeholder-neutral-300"
             rows={3}

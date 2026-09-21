@@ -10,6 +10,7 @@ import { broadcastMachine, broadcastHardwareEvent } from '../wsServer.js'
 import { roundMoney } from '../utils/money.js'
 import { reportFault } from './maintenance.js'
 import { sendCycleCompleteMessage } from './whatsapp.js'
+import { incrementCashDrawer } from './cashDrawer.js'
 
 /** Consecutive idle readings required before a running machine is freed. */
 const IDLE_READINGS_TO_FREE = 3
@@ -348,12 +349,13 @@ class CoinMachine extends EventEmitter {
     }
 
     this.client.addToBalance(mappedValue)
-    this.emit('coin-inserted', { 
-      value: mappedValue, 
+    incrementCashDrawer(this.tenantId, mappedValue)
+    this.emit('coin-inserted', {
+      value: mappedValue,
       bonus: bonusValue,
-      balance: this.client.getState().balance 
+      balance: this.client.getState().balance
     })
-    
+
     console.log(`Coin inserted: €${mappedValue.toFixed(2)}${bonusValue > 0 ? ` + €${bonusValue.toFixed(2)} bonus` : ''}, Total: €${this.client.getState().credits.toFixed(2)}`)
   }
 
@@ -381,12 +383,13 @@ class CoinMachine extends EventEmitter {
     }
     
     this.client.addToBalance(mappedValue)
-    this.emit('bill-inserted', { 
+    incrementCashDrawer(this.tenantId, mappedValue)
+    this.emit('bill-inserted', {
       value: mappedValue,
-      bonus: bonusValue, 
-      balance: this.client.getState().balance 
+      bonus: bonusValue,
+      balance: this.client.getState().balance
     })
-    
+
     console.log(`Bill inserted: €${mappedValue.toFixed(2)}${bonusValue > 0 ? ` + €${bonusValue.toFixed(2)} bonus` : ''}, Total: €${this.client.getState().credits.toFixed(2)}`)
   }
 

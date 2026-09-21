@@ -34,7 +34,11 @@ const dayCloseSchema = new Schema({
   floatLeft:    { type: Number, default: 0 },  // cash left to start next session
 
   // ── Origin ──
-  source: { type: String, enum: ['dashboard', 'kiosk'], default: 'dashboard' },
+  // 'adjustment' = a standalone cash top-up (e.g. seeding the starting float)
+  // created via createFloatAdjustment — no bank split, no physical count, so
+  // it's tagged distinctly from a real reconciliation close even though it
+  // still counts as the float chain's baseline (see findLastDashboardClose).
+  source: { type: String, enum: ['dashboard', 'kiosk', 'adjustment'], default: 'dashboard' },
   totalRecharges: { type: Number, default: 0 },
   salesCount: { type: Number, default: 0 },
   // `metadata.localId` dedupes retried kiosk pushes, same as Sale.

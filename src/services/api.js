@@ -327,6 +327,11 @@ export function createApi(config) {
     return request('/pos/day-close', { method: 'POST', json: payload, headers, skipAuth: true, expect: 'json' })
   }
 
+  function emailKioskDayCloseReceipt(id, email, opts) {
+    const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
+    return request(`/pos/day-close/${id}/email`, { method: 'POST', json: { email }, headers, skipAuth: true, expect: 'json' })
+  }
+
   function gatewayTopupCard(code, payload, opts) {
     const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
     return request(`/gateways/cards/${encodeURIComponent(code)}/topup`, { method: 'POST', json: payload, expect: 'json', headers, skipAuth: true })
@@ -366,6 +371,16 @@ export function createApi(config) {
   function createDayClose(payload) {
     // payload: { amountToBank, floatLeft, countedCash?, countedDenominations, coinMechanismInventory, hopperCoins, notes }
     return request('/admin/day-close', { method: 'POST', json: payload, expect: 'json' });
+  }
+
+  function addDayCloseFloat(payload) {
+    // payload: { denominations: [{value, count}], notes? } — top up the float
+    // directly, without it counting as bankable sales money.
+    return request('/admin/day-close/adjust-float', { method: 'POST', json: payload, expect: 'json' });
+  }
+
+  function emailDayCloseReceipt(id, email) {
+    return request(`/admin/day-close/${id}/email`, { method: 'POST', json: { email }, expect: 'json' });
   }
 
 
@@ -592,6 +607,7 @@ export function createApi(config) {
   createKioskDayClose,
     getKioskDayCloseSummary,
     createKioskDayClose,
+    emailKioskDayCloseReceipt,
     gatewayCardPay,
     gatewayCashPay,
     wifiVoucher,
@@ -639,6 +655,8 @@ export function createApi(config) {
     getDayCloseSummary,
     getDayCloses,
     createDayClose,
+    addDayCloseFloat,
+    emailDayCloseReceipt,
 
     // Tenants
     getTenants,
@@ -710,6 +728,9 @@ export const {
   getDayCloseSummary,
   getDayCloses,
   createDayClose,
+  addDayCloseFloat,
+  emailDayCloseReceipt,
+  emailKioskDayCloseReceipt,
 } = api;
 
 export default api;

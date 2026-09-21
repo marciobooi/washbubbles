@@ -218,6 +218,15 @@ router.post('/day-close', requireKioskOrAdmin, async (req, res) => {
   res.status(status).json(body)
 })
 
+// POST /day-close/:id/email — email a Z-report summary of one close. No PIN:
+// this only sends a copy of a record already readable via the summary above,
+// it can't change any figures.
+router.post('/day-close/:id/email', requireKioskOrAdmin, async (req, res) => {
+  const { emailDayCloseReceipt } = await import('../services/dayClose.js')
+  const { status, body } = await emailDayCloseReceipt(req, req.params.id, req.body?.email)
+  res.status(status).json(body)
+})
+
 // Card recharge / top-up (kiosk) — stored as a transaction without a machine reference
 // Card recharge / top-up (kiosk) — stored as a transaction and optionally attached to a loyalty card
 router.post('/recharge', requireKiosk, async (req, res) => {

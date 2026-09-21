@@ -11,6 +11,8 @@ import Sale from '../models/sale.js'
 import DayClose from '../models/dayClose.js'
 import { withTenant } from './tenant.js'
 import { acquireLock, releaseLock } from '../models/lock.js'
+import { sendMail } from './mailer.js'
+import { getCashDrawerLedger, resetCashDrawerLedger } from './cashDrawer.js'
 
 /**
  * Find the most recent *dashboard* cash-reconciliation close, ignoring any
@@ -58,6 +60,12 @@ export async function getDayCloseSummary(req) {
   const tc = Number(totalCash.toFixed(2))
   const expectedCash = Number((openingFloat + tc).toFixed(2))
 
+  // Coins/bills the hardware has actually accepted since the last close — see
+  // services/cashDrawer.js. Lets Step 1 start from what's already known
+  // instead of a full recount; the admin still confirms/corrects it.
+  const acceptedDenominations = await getCashDrawerLedger(req).catch(() => [])
+  const acceptedTotal = Number(acceptedDenominations.reduce((s, d) => s + d.value * d.count, 0).toFixed(2))
+
   return {
     periodFrom,
     periodTo: new Date(),
@@ -68,6 +76,8 @@ export async function getDayCloseSummary(req) {
     expectedCash,
     salesCount: sales.length,
     totalChangeDispensed: Number(totalChangeDispensed.toFixed(2)),
+    acceptedDenominations,
+    acceptedTotal,
     openingMechanismCoins: lastClose?.coinMechanismInventory || [],
     openingMechanismTotal: lastClose?.coinMechanismTotal || 0,
     openingHopperCoins: lastClose?.hopperCoins || [],
@@ -211,10 +221,137 @@ export async function createDayClose(req, {
       await SaleT.updateMany({ _id: { $in: sales.map(s => s._id) } }, { $set: { dayCloseId: dc._id } })
     }
 
+    // What was just physically counted is the new ground truth — the
+    // "accepted since last close" ledger starts fresh from here.
+    await resetCashDrawerLedger(req).catch(() => { /* next Step 1 just starts unprefilled — not fatal */ })
+
     return { status: 200, body: dc }
   } finally {
     await releaseLock(req.tenantId, 'day-close')
   }
 }
 
-export default { findLastDashboardClose, getDayCloseSummary, createDayClose }
+/**
+ * Add cash straight to the float — for seeding a starting till, or topping
+ * one up outside a normal count — without it ever being treated as bankable
+ * sales money and without producing a false "discrepancy" in the history.
+ *
+ * Unlike `createDayClose`, this never asks for a physical count: the counted
+ * amount is defined to equal the expected amount (opening float + any sales
+ * swept in since the last close + the top-up itself), so discrepancy is
+ * always exactly 0. `amountToBank` is always 0 — this action never banks
+ * money, only a real close (`createDayClose`) does that. Still sweeps and
+ * tags any pending sales the same way a real close does, so nothing between
+ * the last close and now silently falls out of the period chain.
+ *
+ * `denominations` is the coin/bill breakdown (e.g. 10× €2) the admin actually
+ * put in the till — the total is always derived from it server-side, the
+ * same "never trust the client's arithmetic" rule `cleanDenoms` enforces for
+ * a real close's counted denominations.
+ */
+export async function createFloatAdjustment(req, { amount, denominations = [], notes }) {
+  const denomsClean = cleanDenoms(denominations)
+  const amt = denomsClean.length ? denomsClean.reduce((s, d) => s + d.total, 0) : Number(amount)
+  if (!Number.isFinite(amt) || amt <= 0) {
+    return { status: 400, body: { error: 'amount must be a positive number' } }
+  }
+
+  const gotLock = await acquireLock(req.tenantId, 'day-close')
+  if (!gotLock) {
+    return { status: 409, body: { error: 'A cash session close is already in progress for this site. Please try again in a few seconds.' } }
+  }
+
+  try {
+    const DayCloseT = withTenant(DayClose, req)
+    const SaleT = withTenant(Sale, req)
+
+    const lastClose = await findLastDashboardClose(DayCloseT)
+    const periodFrom = lastClose ? (lastClose.periodTo || lastClose.createdAt) : new Date(0)
+    const openingFloat = lastClose ? Number(lastClose.floatLeft || 0) : 0
+    const periodTo = new Date()
+
+    const sales = await SaleT.find({ createdAt: { $gt: periodFrom, $lte: periodTo } }).lean()
+    let totalCash = 0; let totalCard = 0
+    for (const s of sales) {
+      const a = Number(s.amount || 0)
+      if (s.method === 'cash') totalCash += a
+      else totalCard += a
+    }
+    const tc = Number(totalCash.toFixed(2))
+    const tk = Number(totalCard.toFixed(2))
+    const roundedAmt = Number(amt.toFixed(2))
+    const expectedCash = Number((openingFloat + tc + roundedAmt).toFixed(2))
+
+    const dc = await DayCloseT.create({
+      source: 'adjustment',
+      openingFloat,
+      expectedCash,
+      countedCash: expectedCash,
+      discrepancy: 0,
+      countedDenominations: denomsClean,
+      amountToBank: 0,
+      floatLeft: expectedCash,
+      totalCash: tc,
+      totalCard: tk,
+      totalSales: Number((tc + tk).toFixed(2)),
+      salesCount: sales.length,
+      notes: `Fundo adicionado: +${roundedAmt.toFixed(2)}€${notes ? ` — ${String(notes).slice(0, 400)}` : ''}`,
+      closedBy: req.userModel?._id,
+      closedByUsername: req.userModel?.username || '',
+      periodFrom,
+      periodTo,
+      metadata: { adjustmentAmount: roundedAmt }
+    })
+
+    if (sales.length) {
+      await SaleT.updateMany({ _id: { $in: sales.map(s => s._id) } }, { $set: { dayCloseId: dc._id } })
+    }
+
+    return { status: 200, body: dc }
+  } finally {
+    await releaseLock(req.tenantId, 'day-close')
+  }
+}
+
+/** Plain-text Z-report body — mirrors the kiosk-printed version in src/lib/receipt.js so the two read identically. */
+function formatDayCloseReceiptText(dc) {
+  const f = (n) => Number(n || 0).toFixed(2)
+  const lines = [
+    'Fecho de Caixa', '',
+    `Fundo inicial: €${f(dc.openingFloat)}`,
+    `Vendas dinheiro: €${f(dc.totalCash)}`,
+    `Vendas cartão: €${f(dc.totalCard)}`,
+    `Esperado em caixa: €${f(dc.expectedCash)}`,
+    `Contado: €${f(dc.countedCash)}`,
+    `Diferença: €${f(dc.discrepancy)}`, '',
+    `Para o banco: €${f(dc.amountToBank)}`,
+    `Fundo para próxima sessão: €${f(dc.floatLeft)}`, '',
+  ]
+  if (dc.countedDenominations?.length) {
+    lines.push('Contagem:')
+    for (const d of dc.countedDenominations) {
+      const label = d.value < 1 ? `${Math.round(d.value * 100)}c` : `${d.value}€`
+      lines.push(`  ${label} x${d.count} = €${f(d.total)}`)
+    }
+    lines.push('')
+  }
+  if (dc.notes) lines.push(`Notas: ${dc.notes}`, '')
+  lines.push(`Fechado por: ${dc.closedByUsername || '-'}`)
+  lines.push(`Data: ${new Date(dc.periodTo || dc.createdAt).toLocaleString('pt-PT')}`)
+  return lines.join('\n')
+}
+
+/** Email a Z-report summary of one close (or float adjustment) — same record the history view already renders. */
+export async function emailDayCloseReceipt(req, id, email) {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || ''))) {
+    return { status: 400, body: { error: 'A valid email is required' } }
+  }
+  const DayCloseT = withTenant(DayClose, req)
+  const dc = await DayCloseT.findById(id).lean()
+  if (!dc) return { status: 404, body: { error: 'Cash session record not found' } }
+
+  await sendMail({ to: email, subject: 'Fecho de Caixa', text: formatDayCloseReceiptText(dc) })
+  return { status: 200, body: { success: true } }
+}
+
+export default { findLastDashboardClose, getDayCloseSummary, createDayClose, createFloatAdjustment, emailDayCloseReceipt }

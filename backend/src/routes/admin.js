@@ -1052,6 +1052,22 @@ router.post('/day-close', requireAdmin, async (req, res) => {
   res.status(status).json(body)
 })
 
+// POST /admin/day-close/adjust-float — add cash straight to the float (e.g.
+// seeding a starting till), without it counting as bankable sales money.
+router.post('/day-close/adjust-float', requireAdmin, async (req, res) => {
+  const { createFloatAdjustment } = await import('../services/dayClose.js')
+  const { status, body } = await createFloatAdjustment(req, req.body)
+  if (status === 200) logAction(req, 'daycose.float_adjustment', 'DayClose', body._id, { amount: req.body?.amount })
+  res.status(status).json(body)
+})
+
+// POST /admin/day-close/:id/email — email a Z-report summary of one close.
+router.post('/day-close/:id/email', requireStaffRead, async (req, res) => {
+  const { emailDayCloseReceipt } = await import('../services/dayClose.js')
+  const { status, body } = await emailDayCloseReceipt(req, req.params.id, req.body?.email)
+  res.status(status).json(body)
+})
+
 // =====================
 // 📊 ANALYTICS & BUSINESS INTEL
 // =====================

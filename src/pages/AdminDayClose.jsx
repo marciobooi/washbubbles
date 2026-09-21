@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
+import Modal from '@/components/ui/Modal'
+import { PiggyBank } from 'lucide-react'
 import DayCloseForm from '@/components/dayClose/DayCloseForm'
-import { fmt, fmtDenomLabel, DiscrepancyPill } from '@/components/dayClose/shared'
+import { fmt, fmtDenomLabel, DiscrepancyPill, ALL_CASH_DENOMS, CoinChipGrid, buildDenomState, denomSum } from '@/components/dayClose/shared'
 
 // ─────────────────────────────────────────────────────────────────────────────
 export default function AdminDayClose() {
@@ -11,6 +13,7 @@ export default function AdminDayClose() {
   const [history, setHistory]               = useState([])
   const [historyLoading, setHistoryLoading] = useState(true)
   const [expandedId, setExpandedId]         = useState(null)
+  const [floatModalOpen, setFloatModalOpen] = useState(false)
 
   const loadSummary = useCallback(async () => {
     setSummaryLoading(true)
@@ -42,13 +45,29 @@ export default function AdminDayClose() {
             </p>
           )}
         </div>
-        {summary && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold px-3 py-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            Sessao ativa
-          </span>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setFloatModalOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-700 text-xs font-semibold px-3 py-1.5 transition"
+          >
+            <PiggyBank className="w-3.5 h-3.5" strokeWidth={1.8} />
+            Adicionar fundo inicial
+          </button>
+          {summary && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold px-3 py-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              Sessao ativa
+            </span>
+          )}
+        </div>
       </div>
+
+      <AddFloatModal
+        open={floatModalOpen}
+        onClose={() => setFloatModalOpen(false)}
+        onAdded={() => { setFloatModalOpen(false); loadSummary(); loadHistory() }}
+      />
 
       <DayCloseForm
         summary={summary}
@@ -94,6 +113,8 @@ export default function AdminDayClose() {
                       <span className="text-neutral-400">{dc.closedByUsername || 'admin'}</span>
                       {dc.source === 'kiosk' ? (
                         <span className="rounded-full bg-blue-50 text-blue-600 font-semibold px-2 py-0.5">Quiosque (auto)</span>
+                      ) : dc.source === 'adjustment' ? (
+                        <span className="rounded-full bg-violet-50 text-violet-600 font-semibold px-2 py-0.5">Fundo adicionado</span>
                       ) : null}
                       <span className={`text-primary-500 transition-transform ${isOpen ? 'rotate-180' : ''}`}>&#9660;</span>
                     </div>
@@ -161,6 +182,75 @@ export default function AdminDayClose() {
         )}
       </div>
     </div>
+  )
+}
+
+// Seeds/tops up the float directly (e.g. "50€ as 10× 2€ coins") without it
+// ever passing through the bank split — see createFloatAdjustment on the
+// backend for why this is a distinct action from a real close.
+function AddFloatModal({ open, onClose, onAdded }) {
+  const [denoms, setDenoms] = useState(() => buildDenomState(ALL_CASH_DENOMS))
+  const [notes, setNotes]   = useState('')
+  const [saving, setSaving] = useState(false)
+  const total = denomSum(denoms)
+
+  useEffect(() => {
+    if (open) { setDenoms(buildDenomState(ALL_CASH_DENOMS)); setNotes('') }
+  }, [open])
+
+  function updateCount(i, rawVal) {
+    const count = Math.max(0, parseInt(rawVal, 10) || 0)
+    setDenoms(prev => prev.map((d, idx) => idx === i ? { ...d, count } : d))
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (total <= 0) return toast({ title: 'Indique pelo menos uma moeda ou nota', variant: 'destructive' })
+    setSaving(true)
+    try {
+      await api.addDayCloseFloat({
+        denominations: denoms.filter(d => d.count > 0).map(d => ({ value: d.value, count: d.count })),
+        notes
+      })
+      toast({ title: `Fundo de ${fmt(total)}€ adicionado` })
+      onAdded()
+    } catch (err) {
+      console.error(err)
+      toast({ title: err?.body?.error || 'Erro ao adicionar fundo', variant: 'destructive' })
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <Modal open={open} onClose={onClose} title="Adicionar fundo inicial">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <h3 className="font-semibold text-sm text-neutral-800">Adicionar fundo inicial</h3>
+          <p className="text-xs text-neutral-400 mt-0.5">
+            Conte as moedas/notas que vai colocar na caixa. Este valor entra como fundo — nunca como venda a depositar no banco.
+          </p>
+        </div>
+        <CoinChipGrid denoms={denoms} onChange={updateCount} />
+        <div className="flex items-center justify-between rounded-xl bg-neutral-50 border border-neutral-100 px-4 py-3 text-sm">
+          <span className="text-neutral-500">Total a adicionar</span>
+          <span className="text-xl font-extrabold text-neutral-800">{fmt(total)}&euro;</span>
+        </div>
+        <textarea
+          className="w-full rounded-xl border border-neutral-200 px-4 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-400 text-neutral-700 placeholder-neutral-300"
+          rows={2}
+          value={notes}
+          onChange={e => setNotes(e.target.value)}
+          placeholder="Observacoes opcionais..."
+          maxLength={400}
+        />
+        <button
+          type="submit"
+          disabled={saving || total <= 0}
+          className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary-600 hover:bg-primary-700 active:bg-primary-800 text-white font-semibold py-3 text-sm transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+        >
+          {saving ? 'A guardar...' : `Adicionar ${fmt(total)}€ ao fundo`}
+        </button>
+      </form>
+    </Modal>
   )
 }
 
