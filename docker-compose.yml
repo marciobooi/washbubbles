@@ -27,7 +27,11 @@ services:
       context: .
       dockerfile: docker/frontend.Dockerfile
       args:
-        VITE_KIOSK_API_KEY: ${KIOSK_API_KEY:?set KIOSK_API_KEY in .env.docker}
+        # No real KIOSK_API_KEY here on purpose: this build serves the public
+        # site, which no longer ships the kiosk sale UI (see VITE_PUBLIC_SITE
+        # below) — baking the real key into a publicly-servable JS bundle
+        # would leak it to anyone who opens devtools.
+        VITE_PUBLIC_SITE: "true"
     restart: unless-stopped
     depends_on:
       - backend

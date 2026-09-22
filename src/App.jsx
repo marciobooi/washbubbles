@@ -46,6 +46,11 @@ import { TenantProvider } from './context/TenantContext'
 import { useAuth } from './context/AuthContext'
 import AdminTenants from './pages/AdminTenants'
 
+// Set only for the public/cloud site build (docker-compose's frontend
+// service). Local kiosk builds (electron, or the shop PC single-process
+// install) leave this unset and keep landing on /pos as before.
+const isPublicSite = import.meta.env.VITE_PUBLIC_SITE === 'true'
+
 /**
  * A checkout id that is stable for a given cart, so a retried payment attempt is
  * recognisable as a replay rather than a new purchase.
@@ -549,9 +554,13 @@ function AppInner() {
 
       <main className="">
         <Routes>
-          <Route path="/pos" element={<Pos />} />
-          <Route path="/pos/machines" element={<Machines />} />
-          <Route path="/pos/machines/:id" element={<MachineDetail />} />
+          {/* The kiosk sale UI only ships in local kiosk builds (electron, or
+              the shop PC's single-process install). The public/cloud site
+              (VITE_PUBLIC_SITE=true) is admin-only — it has no hardware to
+              sell against, so these routes bounce to the admin login. */}
+          <Route path="/pos" element={isPublicSite ? <Navigate to="/admin/login" replace /> : <Pos />} />
+          <Route path="/pos/machines" element={isPublicSite ? <Navigate to="/admin/login" replace /> : <Machines />} />
+          <Route path="/pos/machines/:id" element={isPublicSite ? <Navigate to="/admin/login" replace /> : <MachineDetail />} />
 
           {/* Admin login (public) */}
           <Route path="/admin/login" element={<Admin />} />
@@ -585,7 +594,7 @@ function AppInner() {
             <Route path="audit-log" element={<RequireAdmin><AdminAuditLog /></RequireAdmin>} />
             <Route path="profile" element={<AdminProfile />} />
           </Route>
-          <Route path="/" element={<Navigate to="/pos" replace />} />
+          <Route path="/" element={<Navigate to={isPublicSite ? '/admin/login' : '/pos'} replace />} />
         </Routes>
       </main>
 

@@ -9,6 +9,8 @@ COPY . .
 # reverse proxy in this compose stack provides.
 ARG VITE_KIOSK_API_KEY=
 ENV VITE_KIOSK_API_KEY=$VITE_KIOSK_API_KEY
+ARG VITE_PUBLIC_SITE=
+ENV VITE_PUBLIC_SITE=$VITE_PUBLIC_SITE
 RUN npm run build
 
 FROM nginx:alpine
