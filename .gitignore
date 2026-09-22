@@ -25,3 +25,10 @@ backend/.baileys-auth/
 
 # graft's local graph cache — regenerable, not committed (run `graft build`).
 /graft/
+
+# Kiosk installer output (per machine)
+/.installed
+/logs/
+
+# Local runtime state (inserted-cash recovery file)
+/backend/data/

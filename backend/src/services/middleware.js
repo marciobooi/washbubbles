@@ -5,6 +5,10 @@ import Interface from '../models/interface.js'
 import { CcTalkLink, CC_ADDR, CC_HEADER, ROUTE } from './ccTalk.js'
 import { readKitsecFrame, parseStatusByte, kitsecFrame, KITSEC_CMD } from './kitsec.js'
 import { roundMoney } from '../utils/money.js'
+import {
+  LowLevelLink, LOWLEVEL_DEFAULT_HOST, LOWLEVEL_DEFAULT_PORT,
+  decodeInterfaceStatus, euroToCents, centsToEuro,
+} from './lowLevel.js'
 
 /** MIFARE Classic block size, in bytes. */
 const MIFARE_BLOCK_SIZE = 16
@@ -124,6 +128,15 @@ class Middleware extends EventEmitter {
     // Operator-configured maps of raw device credit codes to euro values.
     this.coinEqTable = null
     this.billEqTable = null
+    // Low-level controller gateway (TCP + JSON) — see services/lowLevel.js.
+    // When set, peripherals/interfaces whose `address` is not a local serial
+    // path are driven through it instead of a SerialPort.
+    this.lowLevel = null
+    this.statusPollTimer = null
+    this.pending = [] // in-flight request/response waits, see waitForReply()
+    this.hardwareVersion = null
+    this.cardAvailable = null
+    this.lastCard = null
   }
 
   /**
@@ -134,6 +147,10 @@ class Middleware extends EventEmitter {
       // Must load before any acceptor starts polling — an unmapped code is
       // refused, so polling without the tables would reject real money.
       await this.loadEquivalenceTables()
+
+      // Bring the low-level gateway up BEFORE the peripheral loop so that
+      // `connect()` knows to route address-less/numeric peripherals through it.
+      await this.connectLowLevel()
 
       const peripherals = await Peripheral.find({ enabled: true })
       
@@ -163,6 +180,14 @@ class Middleware extends EventEmitter {
     try {
       if (this.connections.has(peripheral._id.toString())) {
         console.log(`Peripheral ${peripheral.name} already connected`)
+        return
+      }
+
+      // Behind the low-level controller: `address` is a bus address on the
+      // controller (2, 3, 22, 40 ...), never a PC serial path, and some devices
+      // (printer, RFID writer) have no address at all.
+      if (this.isGatewayPeripheral(peripheral)) {
+        await this.connectGateway(peripheral)
         return
       }
 
@@ -375,7 +400,391 @@ class Middleware extends EventEmitter {
    * Connect to ethernet peripheral
    */
   async connectEthernet(peripheral) {
+    // Ethernet peripherals are reached through the low-level controller.
+    if (this.lowLevel) return this.connectGateway(peripheral)
     return this.registerUnimplemented(peripheral, 'ethernet')
+  }
+
+  // ---------------------------------------------------------------------------
+  // Low-level controller gateway (TCP + JSON) — see services/lowLevel.js
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Where the low-level controller lives. Environment wins over settings so an
+   * installer can pin it without touching the database.
+   *
+   *   LOWLEVEL_ENABLED  true|false   (default: on when LOWLEVEL_HOST is set)
+   *   LOWLEVEL_HOST     controller IP (shop: 192.168.2.201)
+   *   LOWLEVEL_PORT     controller TCP port (shop: 16852)
+   *   LOWLEVEL_STATUS_POLL_MS  status_per/status_int poll period, 0 = off (60000)
+   */
+  async getLowLevelConfig() {
+    const env = process.env
+    let settings = {}
+    try {
+      const Setting = (await import('../models/setting.js')).default
+      const rows = await Setting.find({
+        key: { $in: ['lowLevelEnabled', 'lowLevelHost', 'lowLevelPort'] },
+      }).lean()
+      for (const row of rows) settings[row.key] = row.value
+    } catch { /* no DB yet — env only */ }
+
+    const host = env.LOWLEVEL_HOST || settings.lowLevelHost || LOWLEVEL_DEFAULT_HOST
+    const port = Number(env.LOWLEVEL_PORT || settings.lowLevelPort || LOWLEVEL_DEFAULT_PORT)
+    const flag = env.LOWLEVEL_ENABLED ?? settings.lowLevelEnabled
+    const enabled = flag !== undefined && flag !== null && flag !== ''
+      ? String(flag).toLowerCase() === 'true'
+      : Boolean(env.LOWLEVEL_HOST)
+    const pollMs = env.LOWLEVEL_STATUS_POLL_MS !== undefined ? Number(env.LOWLEVEL_STATUS_POLL_MS) : 60000
+    return { enabled, host, port, pollMs }
+  }
+
+  /** Start the TCP link to the controller if it is configured. */
+  async connectLowLevel() {
+    const cfg = await this.getLowLevelConfig()
+    if (!cfg.enabled) return false
+    if (this.lowLevel) return true
+
+    this.lowLevel = new LowLevelLink({ host: cfg.host, port: cfg.port })
+    this.lowLevel.on('connect', () => this.onLowLevelConnected())
+    this.lowLevel.on('disconnect', () => this.onLowLevelDisconnected())
+    this.lowLevel.on('package', (pkg) => {
+      // LOWLEVEL_TRACE=true logs every inbound message — the way to learn what a
+      // real controller actually sends (coin codes, standby/keep-alive replies).
+      if (process.env.LOWLEVEL_TRACE === 'true') console.log('[HW] <- controller:', JSON.stringify(pkg))
+      this.handlePackage(pkg)
+    })
+    this.lowLevel.on('link-error', (err) => {
+      // The link retries by itself; log once per distinct failure, not per retry.
+      if (this.lastLinkError !== err.code) {
+        this.lastLinkError = err.code
+        console.warn(`[HW] Low-level link ${cfg.host}:${cfg.port}: ${err.code || err.message}`)
+      }
+    })
+    this.lowLevel.start()
+
+    if (cfg.pollMs > 0) {
+      this.statusPollTimer = setInterval(() => this.requestStatus(), cfg.pollMs)
+      this.statusPollTimer.unref?.()
+    }
+    console.log(`[HW] Low-level gateway enabled: ${cfg.host}:${cfg.port}`)
+    return true
+  }
+
+  /**
+   * Is this peripheral reached through the controller rather than a local port?
+   * True for `ethernet`, and for anything whose address is not a serial path
+   * (bus addresses like "2"/"22", or none at all).
+   */
+  isGatewayPeripheral(peripheral) {
+    if (!this.lowLevel) return false
+    if (peripheral.protocol === 'usb') return false
+    if (peripheral.protocol === 'ethernet') return true
+    return !isSerialPath(peripheral.address)
+  }
+
+  /** Register a controller-attached peripheral. Its health comes from status_per. */
+  async connectGateway(peripheral) {
+    this.connections.set(peripheral._id.toString(), { type: 'gateway', gateway: true, peripheral })
+    await this.updatePeripheralStatus(peripheral._id, this.lowLevel?.isConnected ? 'unknown' : 'offline')
+    console.log(`[HW] ${peripheral.name} (${peripheral.type}) attached via low-level controller`)
+    // One status query answers for every peripheral, so coalesce the burst that
+    // startup produces (one attach per peripheral) into a single request pair.
+    if (this.lowLevel?.isConnected && !this.statusSoonTimer) {
+      this.statusSoonTimer = setTimeout(() => { this.statusSoonTimer = null; this.requestStatus() }, 300)
+      this.statusSoonTimer.unref?.()
+    }
+  }
+
+  /** Every controller-attached peripheral of a type (or a stand-in if none is registered). */
+  gatewayPeripherals(type) {
+    const found = []
+    for (const conn of this.connections.values()) {
+      if (conn.gateway && conn.peripheral.type === type && conn.peripheral.enabled !== false) found.push(conn.peripheral)
+    }
+    return found
+  }
+
+  async onLowLevelConnected() {
+    this.lastLinkError = null
+    console.log('[HW] Low-level controller connected')
+    this.emit('low-level-connected')
+    // Same opening questions the legacy kiosk asks; all are read-only queries.
+    this.requestStatus()
+    this.sendPackage({ op: 'get-version' })
+    this.sendPackage({ op: 'has-card' })
+  }
+
+  async onLowLevelDisconnected() {
+    console.warn('[HW] Low-level controller disconnected')
+    this.emit('low-level-disconnected')
+    for (const conn of this.connections.values()) {
+      if (conn.gateway) await this.updatePeripheralStatus(conn.peripheral._id, 'offline')
+    }
+    // Nothing in flight can be answered any more.
+    for (const w of this.pending.splice(0)) {
+      clearTimeout(w.timer)
+      w.reject(new Error('Low-level controller disconnected'))
+    }
+  }
+
+  /** Ask the controller for peripheral and interface health (both read-only). */
+  requestStatus() {
+    if (!this.lowLevel?.isConnected) return false
+    this.sendPackage({ op: 'status_per' })
+    this.sendPackage({ op: 'status_int' })
+    return true
+  }
+
+  /**
+   * Wait for the next reply whose `op` is one of `ops` (and for which `accept`
+   * returns true, if given). Rejects on timeout so a lost reply can never look
+   * like success.
+   */
+  waitForReply(ops, { timeoutMs = 30000, accept = () => true } = {}) {
+    const list = Array.isArray(ops) ? ops : [ops]
+    return new Promise((resolve, reject) => {
+      const waiter = { list, accept, resolve, reject, timer: null }
+      waiter.timer = setTimeout(() => {
+        this.pending = this.pending.filter((w) => w !== waiter)
+        reject(new Error(`No reply from low-level controller for ${list.join('/')} within ${timeoutMs}ms`))
+      }, timeoutMs)
+      waiter.timer.unref?.()
+      this.pending.push(waiter)
+    })
+  }
+
+  /** Hand an incoming message to the oldest waiter that wants it. */
+  settlePending(pkg) {
+    const i = this.pending.findIndex((w) => w.list.includes(pkg.op) && w.accept(pkg))
+    if (i === -1) return false
+    const [w] = this.pending.splice(i, 1)
+    clearTimeout(w.timer)
+    w.resolve(pkg)
+    return true
+  }
+
+  /** One request at a time for ops whose replies cannot be told apart. */
+  serializeGateway(fn) {
+    const run = (this.gatewayChain || Promise.resolve()).then(fn, fn)
+    this.gatewayChain = run.catch(() => {})
+    return run
+  }
+
+  /** A coin/bill event from the controller: `data` is the raw credit code. */
+  handleGatewayCredit(pkg, isBill) {
+    const peripheral = this.gatewayPeripherals(isBill ? 'bill_acceptor' : 'coin_acceptor')[0]
+      || { name: isBill ? 'Bill acceptor (controller)' : 'Coin acceptor (controller)', type: isBill ? 'bill_acceptor' : 'coin_acceptor' }
+    // Same refusal of unmapped codes and same events as the serial path, but the
+    // code is matched exactly, as the legacy kiosk does.
+    this.handleCcTalkCredit(peripheral, { code: pkg.data, isBill, exact: true })
+  }
+
+  /** status_per: `dev: [{ type, active }]` with types like `coin-acceptor`. */
+  async applyPeripheralStatus(dev) {
+    if (!Array.isArray(dev)) return
+    const typeMap = {
+      'coin-acceptor': 'coin_acceptor', 'bill-acceptor': 'bill_acceptor', hopper: 'hopper',
+      'card-dispenser': 'card_dispenser', printer: 'printer', 'rfid-rw': 'rfid_reader',
+    }
+    for (const item of dev) {
+      const type = typeMap[item.type]
+      if (!type) continue
+      for (const p of this.gatewayPeripherals(type)) {
+        await this.updatePeripheralStatus(p._id, String(item.active) === '0' ? 'fault' : 'ok')
+      }
+    }
+    this.emit('peripheral-status', dev)
+  }
+
+  /** status_int -> one `machine-status-update` per channel, plus the raw decode. */
+  applyInterfaceStatus(dev) {
+    const interfaces = decodeInterfaceStatus(dev)
+    for (const iface of interfaces) {
+      for (const ch of iface.channels) {
+        // `level` is the raw channel bit; busy/free needs the machine's polarity,
+        // which only the machine record knows (see coinMachine).
+        this.emit('gateway-machine-status', {
+          address: Number(iface.id), port: ch.chn, connected: iface.connected, level: ch.level,
+        })
+      }
+    }
+    this.emit('status_int', { interfaces, dev })
+  }
+
+  /**
+   * Cycle end is only visible by asking again, so while any machine is busy the
+   * caller (coinMachine) asks for a quick re-poll — 3 idle readings free a machine.
+   */
+  scheduleBusyPoll() {
+    if (this.busyPollTimer || !this.lowLevel) return
+    this.busyPollTimer = setTimeout(() => {
+      this.busyPollTimer = null
+      if (this.lowLevel?.isConnected) this.sendPackage({ op: 'status_int' })
+    }, Number(process.env.LOWLEVEL_BUSY_POLL_MS) || 10000)
+    this.busyPollTimer.unref?.()
+  }
+
+  /** Activate a machine channel through the controller (`activate-machine`). */
+  async activateViaGateway(machine, iface) {
+    const item = {
+      id: String(iface.address),
+      chn: String(machine.port),
+      impulses: String(parseInt(machine.impulses, 10) || 1),
+    }
+    // `send` only proves the frame reached the socket. The legacy kiosk does not
+    // get an activation acknowledgement either — it relies on `status_int`.
+    if (!this.sendPackage({ op: 'activate-machine', data: [item] })) {
+      throw new Error(`Low-level controller is not connected — cannot activate machine ${machine.name || machine._id}`)
+    }
+    this.emit('interface-activation', { machine: machine._id, interface: iface._id, command: item, via: 'gateway' })
+    console.log(`[HW] activate-machine sent via controller: interface ${item.id}, channel ${item.chn}, impulses ${item.impulses}`)
+    return item
+  }
+
+  /** `get-change`: the controller pays from its own hoppers and answers `no-change` with the shortfall in cents. */
+  dispenseChangeViaGateway(amount) {
+    return this.serializeGateway(async () => {
+      const target = roundMoney(amount)
+      const fail = (error, extra = {}) => ({ success: false, error, dispensed: 0, remaining: target, breakdown: [], ...extra })
+
+      if (!this.lowLevel?.isConnected) return fail('Low-level controller is not connected')
+
+      // Send first, then register the waiter in the same tick: replies are only
+      // delivered on a later event-loop turn, so none can be missed.
+      if (!this.sendPackage({ op: 'get-change', data: euroToCents(target) })) {
+        return fail('Low-level controller is not connected')
+      }
+      const reply = this.waitForReply('no-change', { timeoutMs: 60000 })
+
+      let pkg
+      try {
+        pkg = await reply
+      } catch (err) {
+        // Same fallback as the legacy kiosk after 60 s: the customer is owed it.
+        this.emit('change-shortfall', { requested: target, dispensed: 0, remaining: target, breakdown: [] })
+        return fail(err.message, { unconfirmed: true })
+      }
+
+      const unavailable = roundMoney(centsToEuro(pkg.data))
+      const dispensed = roundMoney(Math.max(0, target - unavailable))
+      const success = unavailable <= 0
+      if (success) this.emit('change-dispensed', { amount: dispensed, breakdown: [] })
+      else this.emit('change-shortfall', { requested: target, dispensed, remaining: unavailable, breakdown: [] })
+      return {
+        success, dispensed, remaining: unavailable, breakdown: [],
+        error: success ? undefined : 'Controller could not pay out the full amount',
+      }
+    })
+  }
+
+  /** `card-release`: drop one blank card from the dispenser. */
+  async dispenseCardViaGateway(peripheral) {
+    if (this.cardAvailable === false) throw new Error(`Card dispenser ${peripheral.name} reports no cards available`)
+    if (!this.sendPackage({ op: 'card-release' })) throw new Error('Low-level controller is not connected — card not released')
+    this.emit('card-dispensed', { peripheral })
+    return { success: true, unconfirmed: true }
+  }
+
+  /**
+   * `write-card`: `code "201"` = written, `"200"` = accepted/in progress, any
+   * other code = failure. Resolves only on 201.
+   */
+  writeCardViaGateway(peripheral, cardData) {
+    return this.serializeGateway(async () => {
+      if (!this.lowLevel?.isConnected) throw new Error('Low-level controller is not connected — cannot write card')
+
+      // Legacy order of events for a NEW card: `card-release` -> the customer
+      // takes the card and presents it -> the controller emits `card-inserted`
+      // -> only then `write-card`. Writing before a card is at the reader fails,
+      // so wait (40 s, the kiosk's own limit) unless one is already there.
+      if (!this.lastCard) {
+        await this.waitForReply('card-inserted', { timeoutMs: 40000 })
+      }
+
+      const data = {
+        cardId: String(cardData.code || ''),
+        name: cardData.name || '',
+        nif: cardData.contribuinte || '',
+        balance: euroToCents(cardData.balance || 0),
+        new: false,
+        admin: false,
+      }
+      // Cards carry an owner (a kiosk ignores cards of another owner). When
+      // rewriting a card we did not issue, keep it rather than strip it.
+      if (cardData.ownerId) data.ownerId = String(cardData.ownerId)
+      if (!this.sendPackage({ op: 'write-card', data })) {
+        throw new Error('Low-level controller is not connected — cannot write card')
+      }
+      const pkg = await this.waitForReply('write-card', {
+        timeoutMs: 30000,
+        accept: (p) => p.code !== undefined && String(p.code) !== '200',
+      })
+      if (String(pkg.code) !== '201') throw new Error(`Card write rejected by controller (code ${pkg.code})`)
+      this.emit('card-written', { peripheral, cardData })
+      return { success: true, cardCode: data.cardId }
+    })
+  }
+
+  /** `print-receipt`: the controller formats the ticket from a structured object. */
+  async printViaGateway(peripheral, content) {
+    const blank = ' ' // the controller's printer chokes on empty strings
+    const receipt = typeof content === 'object' && content !== null
+      ? content
+      : {
+          company: { ownerName: blank, name: blank, addr: blank, nif: blank, phone: blank, email: blank },
+          orders: String(content).split('\n').filter(Boolean).map((line) => ({ serv: line, price: blank })),
+          total: blank, client: { name: blank, nif: blank, cltaddr: blank }, credit: blank,
+          date: new Date().toLocaleString('pt-PT'), counter: '0',
+        }
+    if (!this.sendPackage({ op: 'print-receipt', data: receipt })) {
+      throw new Error('Low-level controller is not connected — receipt not printed')
+    }
+    this.emit('receipt-printed', { peripheral, unconfirmed: true })
+    return { success: true, unconfirmed: true }
+  }
+
+  /** The card the controller last reported at the reader, or null. */
+  cardAtReader() {
+    return this.lastCard || null
+  }
+
+  /**
+   * Write a balance back onto the card that is CURRENTLY at the reader.
+   *
+   * Refuses (and reports why) unless that card is the one named — writing card A's
+   * balance onto card B because the customer swapped cards would be worse than not
+   * writing at all. The card's own name / tax id / owner are kept when our record
+   * has none, so a write-back never blanks data the card already carried.
+   */
+  async writeCardBalance(card) {
+    const present = this.cardAtReader()
+    if (!this.lowLevel?.isConnected) return { written: false, reason: 'controller-offline' }
+    if (!present) return { written: false, reason: 'card-not-present' }
+    if (String(present.cardId) !== String(card.code)) return { written: false, reason: 'different-card-present' }
+
+    const peripheral = this.gatewayPeripherals('rfid_reader')[0]
+      || { name: 'RFID reader (controller)', type: 'rfid_reader' }
+    await this.writeCardViaGateway(peripheral, {
+      code: card.code,
+      balance: card.balance,
+      name: card.name || present.name || '',
+      contribuinte: card.contribuinte || present.nif || '',
+      ownerId: present.ownerId,
+    })
+    return { written: true }
+  }
+
+  /**
+   * Push interface timing (`config_int`) to the controller.
+   *
+   * NEVER called automatically: it rewrites the controller's configuration. Use
+   * it from an explicit admin action, on a machine you are allowed to change.
+   */
+  async syncInterfaceConfig() {
+    const interfaces = await Interface.find({ status: 'active' }).lean()
+    const int = interfaces.map((i) => ({ id: String(i.address), ton: String(i.tOn), toff: String(i.tOff), active: '1' }))
+    return this.sendPackage({ op: 'config_int', int })
   }
 
   /**
@@ -601,31 +1010,38 @@ class Middleware extends EventEmitter {
    * chunk, and read a mid-frame byte as a credit code when a reply straddled two
    * chunks — 0x03 as €0.05, or in parseBillValue as €20.00 of free credit.
    */
-  handleCcTalkCredit(peripheral, { code, isBill }) {
+  handleCcTalkCredit(peripheral, { code, isBill, exact = false }) {
     const table = isBill ? this.billEqTable : this.coinEqTable
-    // `code` off the wire is always a plain byte (1, 2, 3…), but the
-    // equivalence table's keys are typed/stored as "0x01"-style hex strings
-    // (see the admin UI's own placeholder text and "Carregar Padrões"
-    // defaults) — table[String(code)] against those never matched, so no
-    // coin/bill could ever actually be credited through this path. Accept
-    // either form so both the documented "0x01" convention and a plain
-    // decimal key work.
-    const hexKey = `0x${Number(code).toString(16).padStart(2, '0')}`
-    const rawKey = String(code)
-    const value = table ? Number(table[hexKey] ?? table[rawKey]) : NaN
+    let value
+    if (exact) {
+      // Controller path: `code` is an opaque string the controller chose ("3",
+      // "10"), and the table must be matched EXACTLY like the legacy kiosk does
+      // (`el.key === pkg.data`). Guessing a hex form here is dangerous: with a
+      // hex-keyed table, controller code "3" would read as "0x03" and credit the
+      // wrong coin (€0.20 instead of the shop's €0.05).
+      value = table ? Number(table[String(code)]) : NaN
+    } else {
+      // Serial ccTalk path: `code` is a plain byte (1, 2, 3…), but the
+      // equivalence table's keys are stored as "0x01"-style hex strings (see the
+      // admin UI's placeholder text and "Carregar Padrões" defaults) —
+      // table[String(code)] against those never matched, so no coin/bill could
+      // ever be credited. Accept either form.
+      const hexKey = `0x${Number(code).toString(16).padStart(2, '0')}`
+      value = table ? Number(table[hexKey] ?? table[String(code)]) : NaN
+    }
 
     if (!Number.isFinite(value) || value <= 0) {
       // An unmapped code is NOT money. Crediting a guess is how phantom notes
       // got accepted; refuse and make it visible so the operator maps it.
       console.warn(`[HW] ${peripheral.name}: unmapped ${isBill ? 'bill' : 'coin'} code ${code} — no credit given`)
       this.emit(isBill ? 'bill-rejected' : 'coin-rejected', {
-        peripheral, reason: `unmapped code ${code}`, fraud: false, code,
+        peripheral, reason: `unmapped code ${code}`, fraud: false, code, exact,
       })
       return
     }
 
     const rounded = roundMoney(value)
-    this.emit(isBill ? 'bill-inserted' : 'coin-inserted', { peripheral, value: rounded, code })
+    this.emit(isBill ? 'bill-inserted' : 'coin-inserted', { peripheral, value: rounded, code, exact })
     console.log(`${isBill ? 'Bill' : 'Coin'} accepted: €${rounded.toFixed(2)} from ${peripheral.name}`)
   }
 
@@ -797,6 +1213,8 @@ class Middleware extends EventEmitter {
     const peripheral = connection.peripheral
     console.log(`Writing card data to ${peripheral.name}...`)
 
+    if (connection.gateway) return this.writeCardViaGateway(peripheral, cardData)
+
     // A write we cannot actually perform must fail loudly. This used to emit
     // `card-written` and return `{success:true}` even when there was no port and
     // nothing had been sent — so a €20 top-up was booked as written to a card
@@ -897,7 +1315,18 @@ class Middleware extends EventEmitter {
 
     const peripheral = connection.peripheral
     console.log(`Reading card data from ${peripheral.name}...`)
-    
+
+    if (connection.gateway) {
+      // The controller pushes `card-inserted`; there is no explicit read op.
+      if (!this.lastCard) throw new Error('No card present on the reader')
+      const cardData = {
+        code: this.lastCard.cardId, balance: centsToEuro(this.lastCard.balance),
+        name: this.lastCard.name || '', contribuinte: this.lastCard.nif || '',
+      }
+      this.emit('card-data-read', { peripheral, cardData })
+      return { success: true, cardData }
+    }
+
     try {
       // `readCardIdentity` is the same function the tap-detection poll uses —
       // one path for "what is on this card," so this route and a live tap can
@@ -1061,7 +1490,9 @@ class Middleware extends EventEmitter {
 
     const peripheral = connection.peripheral
     console.log(`Dispensing card from ${peripheral.name}...`)
-    
+
+    if (connection.gateway) return this.dispenseCardViaGateway(peripheral)
+
     // A dispenser we cannot drive must throw, not quietly succeed: `pos.js`
     // books a CardPurchase with `dispenserUsed: true` off the back of this, so
     // reporting success meant the customer paid for a card they never received.
@@ -1243,6 +1674,7 @@ class Middleware extends EventEmitter {
 
     const hoppers = this.getHoppersFor(peripheralId)
     if (hoppers.length === 0) {
+      if (this.gatewayPeripherals('hopper').length > 0) return this.dispenseChangeViaGateway(target)
       return { success: false, error: 'No hopper connected', dispensed: 0, remaining: target, breakdown: [] }
     }
 
@@ -1295,6 +1727,7 @@ class Middleware extends EventEmitter {
     const hoppers = []
     for (const [id, conn] of this.connections) {
       if (!conn.peripheral || conn.peripheral.type !== 'hopper') continue
+      if (conn.gateway) continue // the controller picks coins itself, see dispenseChangeViaGateway
       if (conn.peripheral.enabled === false) continue
       const coinValue = Number(conn.peripheral.hopperConfig?.coinValue)
       if (!(coinValue > 0)) {
@@ -1384,7 +1817,9 @@ class Middleware extends EventEmitter {
     }
 
     console.log('Printing receipt...')
-    
+
+    if (connection.gateway) return this.printViaGateway(connection.peripheral, content)
+
     // Build ESC/POS commands for thermal printer
     const commands = []
     
@@ -1491,6 +1926,15 @@ class Middleware extends EventEmitter {
 
     for (const timer of this.reconnectTimers.values()) clearTimeout(timer)
     this.reconnectTimers.clear()
+
+    clearInterval(this.statusPollTimer)
+    clearTimeout(this.busyPollTimer)
+    clearTimeout(this.statusSoonTimer)
+    this.statusPollTimer = this.busyPollTimer = this.statusSoonTimer = null
+    if (this.lowLevel) {
+      this.lowLevel.stop()
+      this.lowLevel = null
+    }
   }
 
   /**
@@ -1521,14 +1965,21 @@ class Middleware extends EventEmitter {
    * Based on old code: { op: 'activate-machine', data: [{id, chn, impulses}] }
    */
   async activateMachine(machineData) {
-    const pkg = {
-      op: 'activate-machine',
-      data: Array.isArray(machineData) ? machineData : [machineData]
+    // The controller's wire format is all strings ({id:"11",chn:"1",impulses:"1"}).
+    const items = (Array.isArray(machineData) ? machineData : [machineData]).map((m) => ({
+      id: String(m.id),
+      chn: String(m.chn),
+      impulses: String(m.impulses || '1'),
+    }))
+    const pkg = { op: 'activate-machine', data: items }
+
+    // This used to call `this.send(pkg)` — the serial `send(peripheralId, cmd)`
+    // that replaced it — and so threw "Peripheral [object Object] not connected"
+    // on every call. Report an unreachable controller honestly instead.
+    if (!this.sendPackage(pkg)) {
+      throw new Error('Low-level controller is not connected — machine not activated')
     }
 
-    // Send through websocket if available
-    this.send(pkg)
-    
     // Also emit local event
     this.emit('machine-activated', pkg.data)
     
@@ -1544,6 +1995,9 @@ class Middleware extends EventEmitter {
     if (!iface) {
       throw new Error('Interface not configured for this machine')
     }
+
+    // Interface lives behind the controller: it takes an op, not raw KITSEC bytes.
+    if (this.lowLevel && !isSerialPath(iface.address)) return this.activateViaGateway(machine, iface)
 
     const { address, tOn, tOff } = iface
     const { port, activation, impulses } = machine
@@ -1672,11 +2126,13 @@ class Middleware extends EventEmitter {
 
     // Emit to connected clients via websocket
     this.emit('send', newPkg)
-    
-    // If we have a TCP connection to low-level device, write to it
-    // (This would require extending Middleware to support TCP connections)
-    
-    console.log('Package sent:', JSON.stringify(newPkg))
+
+    // Write to the low-level controller when the gateway is up. The return
+    // value is the truth: `false` means nothing left this process.
+    const sent = this.lowLevel ? this.lowLevel.send(pkg) : false
+
+    console.log(sent ? 'Package sent:' : 'Package NOT sent (no controller link):', JSON.stringify(newPkg))
+    return sent
   }
 
   /**
@@ -1688,9 +2144,71 @@ class Middleware extends EventEmitter {
 
     this.emit('package', pkg)
 
+    // A message with a `code` is the reply to something we asked; everything
+    // else is an unsolicited event from the controller.
+    const isReply = Object.prototype.hasOwnProperty.call(pkg, 'code')
+    const settled = this.settlePending(pkg)
+
     switch (pkg.op) {
+      // --- money -----------------------------------------------------------
+      // `data` is the raw credit code; the equivalence tables give the value.
+      case 'coin-inserted':
+        if (!isReply) this.handleGatewayCredit(pkg, false)
+        break
+      case 'bill-inserted':
+        if (!isReply) this.handleGatewayCredit(pkg, true)
+        break
+      case 'remote-credits':
+        this.emit('remote-credits', pkg.data)
+        break
+      case 'no-change': // shortfall in cents; also settles a waiting get-change
+        this.emit('no-change', { unavailable: centsToEuro(pkg.data) })
+        break
+      case 'hopper-status': {
+        const ok = String(pkg.code) === '200'
+        this.emit('hopper-status', { ok, code: pkg.code })
+        if (!ok) {
+          for (const p of this.gatewayPeripherals('hopper')) this.updatePeripheralStatus(p._id, 'fault')
+        }
+        break
+      }
+
+      // --- cards -----------------------------------------------------------
+      case 'card-inserted':
+        if (pkg.data) {
+          this.lastCard = pkg.data
+          const admin = String(pkg.data.admin) === 'true'
+          this.emit('card-read', {
+            peripheral: this.gatewayPeripherals('rfid_reader')[0],
+            cardNumber: pkg.data.cardId, card: pkg.data, admin,
+          })
+        }
+        break
+      case 'card-removed':
+        this.lastCard = null
+        this.emit('card-removed', pkg.data)
+        break
+      case 'has-card':
+        if (isReply) {
+          this.cardAvailable = String(pkg.code) === '200'
+          this.emit('card-availability', { available: this.cardAvailable })
+        }
+        break
+      case 'write-card': // 200 in progress, 201 written, anything else failed
+        if (isReply && !settled && String(pkg.code) !== '200') {
+          this.emit(String(pkg.code) === '201' ? 'card-write-confirmed' : 'card-write-failed', { code: pkg.code })
+        }
+        break
+      case 'admin-mode':
+        this.emit('admin-mode', { enabled: String(pkg.enabled) === 'true' })
+        break
+
+      // --- machines / interfaces ------------------------------------------
       case 'machine-started':
-        this.emit('machine-started', pkg.data)
+      case 'door-opened':
+        // Same reaction as the legacy kiosk: an event is the cue to re-read status.
+        if (!isReply) this.sendPackage({ op: 'status_int' })
+        if (pkg.op === 'machine-started') this.emit('machine-started', pkg.data)
         break
       case 'machine-reserved':
         this.emit('machine-reserved', pkg.data)
@@ -1701,14 +2219,30 @@ class Middleware extends EventEmitter {
       case 'machine-issue':
         this.emit('machine-issue', pkg.data)
         break
-      case 'status_int':
-        this.emit('status_int', pkg.data)
+      case 'status_int': // the real payload is `dev`, not `data`
+        this.applyInterfaceStatus(pkg.dev)
         break
-      case 'remote-credits':
-        this.emit('remote-credits', pkg.data)
+      case 'activate_int':
+        this.emit('interface-activation-result', { ok: String(pkg.code) === '200', code: pkg.code })
         break
-      case 'card-removed':
-        this.emit('card-removed', pkg.data)
+
+      // --- peripherals / controller ---------------------------------------
+      case 'status_per':
+        this.applyPeripheralStatus(pkg.dev)
+        break
+      case 'get-version':
+        if (pkg.data !== undefined) {
+          this.hardwareVersion = pkg.data
+          this.emit('hardware-version', { version: pkg.data })
+        }
+        break
+      case 'config_int':
+      case 'config_per':
+      case 'print-receipt':
+      case 'card-release':
+      case 'get-change':
+      case 'activate-machine':
+        // Replies to requests we sent; nothing to route.
         break
       default:
         console.log('Unhandled package:', pkg.op)

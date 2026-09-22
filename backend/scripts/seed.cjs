@@ -6,6 +6,25 @@ async function loadModels() {
   require(path.join(__dirname, '..', 'dist')) // in case someone built; not necessary here
 }
 
+// Equivalence tables. Codes are matched as exact strings.
+//  - Direct serial ccTalk: the byte in "0x.." hex form.
+//  - Shop low-level controller (LOWLEVEL_* set): the controller's own decimal codes,
+//    i.e. the tables hard-coded in the legacy kiosk (coins 3-8, bills sent as their
+//    euro value). Seeding hex here would credit the WRONG coin ("3" -> 0x03 = 0.20).
+const useController = process.env.LOWLEVEL_ENABLED === 'true' || !!process.env.LOWLEVEL_HOST
+const DEFAULT_COIN_TABLE = useController
+  ? [
+      { key: '3', value: 0.05 }, { key: '4', value: 0.10 }, { key: '5', value: 0.20 },
+      { key: '6', value: 0.50 }, { key: '7', value: 1.00 }, { key: '8', value: 2.00 },
+    ]
+  : [
+      { key: '0x01', value: 0.05 }, { key: '0x02', value: 0.10 }, { key: '0x03', value: 0.20 },
+      { key: '0x04', value: 0.50 }, { key: '0x05', value: 1.00 }, { key: '0x06', value: 2.00 },
+    ]
+const DEFAULT_BILL_TABLE = useController
+  ? [{ key: '5', value: 5 }, { key: '10', value: 10 }, { key: '20', value: 20 }, { key: '50', value: 50 }]
+  : [{ key: '0x10', value: 5 }, { key: '0x11', value: 10 }, { key: '0x12', value: 20 }]
+
 async function main() {
   const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017/washstore'
   await mongoose.connect(MONGODB_URL)
@@ -57,21 +76,14 @@ async function main() {
   await Setting.updateOne(
     { tenantId: defaultTenant._id, key: 'coinEqTable' },
     { 
-      $setOnInsert: { tenantId: defaultTenant._id, key: 'coinEqTable', value: [
-        { key: '0x01', value: 0.05 },
-        { key: '0x02', value: 0.10 },
-        { key: '0x03', value: 0.20 },
-        { key: '0x04', value: 0.50 },
-        { key: '0x05', value: 1.00 },
-        { key: '0x06', value: 2.00 }
-      ] } 
+      $setOnInsert: { tenantId: defaultTenant._id, key: 'coinEqTable', value: DEFAULT_COIN_TABLE } 
     },
     { upsert: true }
   )
 
   await Setting.updateOne(
     { tenantId: defaultTenant._id, key: 'billEqTable' },
-    { $setOnInsert: { tenantId: defaultTenant._id, key: 'billEqTable', value: [ { key: '0x10', value: 5 }, { key: '0x11', value: 10 }, { key: '0x12', value: 20 } ] } },
+    { $setOnInsert: { tenantId: defaultTenant._id, key: 'billEqTable', value: DEFAULT_BILL_TABLE } },
     { upsert: true }
   )
 

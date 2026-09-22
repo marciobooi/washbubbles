@@ -7,6 +7,12 @@ WashBubbles uses an **offline-first distributed architecture** with two main tie
 1. **Electron POS Client** (Local) — The autonomous POS brain. Runs local SQLite DB, embedded hardware agent, POS business logic, and a background sync engine. Operates fully offline.
 2. **Cloud Server** (Remote) — Management hub for reporting, multi-site admin, price/config management. Receives synced data from POS clients.
 
+> **Shop deployment note (2026-09-21):** the diagram's `COM1`–`COM7` peripheral layout describes a direct-serial
+> design. The live shop is different: its peripherals sit behind a network **low-level controller**
+> (`192.168.2.201:16852`, TCP + JSON) and the PC has no serial devices. That mode is implemented in
+> `backend/src/services/lowLevel.js` and enabled with `LOWLEVEL_HOST`. See
+> [docs/SHOP-HARDWARE-AND-COMMUNICATIONS.md](docs/SHOP-HARDWARE-AND-COMMUNICATIONS.md).
+
 ## Architecture Diagram
 
 ```

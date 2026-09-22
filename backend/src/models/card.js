@@ -42,6 +42,17 @@ const cardSchema = new Schema({
   // Only cards with this true are ever included in a marketing broadcast.
   marketingOptIn: { type: Boolean, default: false },
   
+  /**
+   * What the physical card was last CONFIRMED to hold (services/cardSync.js).
+   *
+   * In controller mode the card carries the balance as well as this database, so
+   * either can be lost and restored from the other. Comparing the card's balance,
+   * ours, and this marker tells "the card missed our last update" (card == marker)
+   * from "the card was changed elsewhere" (ours == marker). null = never synced.
+   */
+  cardSyncedBalance: { type: Number, default: null },
+  cardSyncedAt: { type: Date, default: null },
+
   metadata: { type: Schema.Types.Mixed },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
@@ -54,5 +65,34 @@ cardSchema.pre('save', function(next) {
 
 // Ensure card codes are unique per tenant
 cardSchema.index({ tenantId: 1, code: 1 }, { unique: true })
+
+// --- change notifications ---------------------------------------------------
+// Every balance change in the app goes through a Mongoose call (save,
+// findOneAndUpdate, updateOne), so hooking the model catches all of them —
+// spend, top-up, auto-charge, admin edit, sync — without touching each route.
+// cardSync.js subscribes to write the new balance onto the physical card.
+// (Its own bookkeeping uses the raw collection, which bypasses these hooks.)
+const changeListeners = new Set()
+
+export function onCardChanged(fn) {
+  changeListeners.add(fn)
+  return () => changeListeners.delete(fn)
+}
+
+function notify(tenantId, code) {
+  if (!code || changeListeners.size === 0) return
+  for (const fn of changeListeners) {
+    try { fn(tenantId, String(code)) } catch (err) { console.error('[Card] change listener failed:', err.message) }
+  }
+}
+
+cardSchema.post('save', function (doc) { notify(doc.tenantId, doc.code) })
+// The query's *result* may be the pre-update document; only tenantId/code are
+// used, and the listener re-reads the current balance itself.
+cardSchema.post('findOneAndUpdate', function (doc) { if (doc) notify(doc.tenantId, doc.code) })
+cardSchema.post('updateOne', function () {
+  const f = typeof this.getFilter === 'function' ? this.getFilter() : {}
+  if (f && f.code) notify(f.tenantId, f.code)
+})
 
 export default mongoose.model('Card', cardSchema)

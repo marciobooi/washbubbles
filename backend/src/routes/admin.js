@@ -1245,4 +1245,34 @@ router.post('/whatsapp/disconnect', requireAdmin, async (req, res) => {
   res.json({ success: true })
 })
 
+// --- Central sync (offline queue) -------------------------------------------
+// The site keeps working with no internet; sales, card balances and day-closes
+// wait in a durable queue and are pushed to the central server when it is
+// reachable (services/uplink.js). These let the operator see and nudge it.
+async function getUplink() {
+  const { default: coinMachine } = await import('../services/coinMachine.js')
+  return coinMachine.uplink || null
+}
+
+router.get('/sync/status', requireAdmin, async (req, res) => {
+  const uplink = await getUplink()
+  if (!uplink) return res.json({ enabled: false, pending: 0, dead: 0, online: null })
+  res.json(await uplink.status())
+})
+
+// Send everything due right now (instead of waiting for the next 30 s tick).
+router.post('/sync/flush', requireAdmin, async (req, res) => {
+  const uplink = await getUplink()
+  if (!uplink || !uplink.enabled) return res.status(409).json({ error: 'Central sync is not configured' })
+  uplink.nextTryAt = 0
+  res.json({ result: await uplink.flush(), status: await uplink.status() })
+})
+
+// Records the server rejected ten times: try them again (after fixing the cause).
+router.post('/sync/retry-dead', requireAdmin, async (req, res) => {
+  const uplink = await getUplink()
+  if (!uplink || !uplink.enabled) return res.status(409).json({ error: 'Central sync is not configured' })
+  res.json(await uplink.retryDead())
+})
+
 export default router

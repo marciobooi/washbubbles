@@ -1,4 +1,5 @@
 import mongoose from 'mongoose'
+import modelEvents from '../services/modelEvents.js'
 
 const { Schema } = mongoose
 
@@ -79,5 +80,10 @@ dayCloseSchema.index(
   { tenantId: 1, 'metadata.localId': 1 },
   { partialFilterExpression: { 'metadata.localId': { $type: 'string' } } }
 )
+
+dayCloseSchema.pre('save', function (next) { this.$locals.wasNew = this.isNew; next() })
+dayCloseSchema.post('save', function (doc) {
+  if (doc.$locals.wasNew) modelEvents.emit('dayclose:created', doc)
+})
 
 export default mongoose.model('DayClose', dayCloseSchema)

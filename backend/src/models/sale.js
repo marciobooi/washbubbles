@@ -1,4 +1,5 @@
 import mongoose from 'mongoose'
+import modelEvents from '../services/modelEvents.js'
 
 const { Schema } = mongoose
 
@@ -61,5 +62,12 @@ saleSchema.index(
 
 // Card transaction history (`/pos/cards/:code/history`) was a collection scan.
 saleSchema.index({ tenantId: 1, cardCode: 1, createdAt: -1 })
+
+// Announce NEW sales only (an update, e.g. flagging a sale refunded, is not new
+// money). The central uplink queues each one for the server.
+saleSchema.pre('save', function (next) { this.$locals.wasNew = this.isNew; next() })
+saleSchema.post('save', function (doc) {
+  if (doc.$locals.wasNew) modelEvents.emit('sale:created', doc)
+})
 
 export default mongoose.model('Sale', saleSchema)

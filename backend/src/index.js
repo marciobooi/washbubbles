@@ -1,4 +1,7 @@
 import 'dotenv/config'
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import express from 'express'
 import http from 'http'
 import cors from 'cors'
@@ -51,6 +54,22 @@ app.use('/api/sync', syncRoutes)
 app.use('/api/wifi', wifiRoutes)
 
 app.get('/api/health', (req, res) => res.json({ ok: true }))
+
+// Single-process kiosk install: serve the built web UI from this process so the
+// kiosk browser only needs http://localhost:PORT (same origin => /api and /ws
+// just work, no nginx). Opt-in; the Docker/nginx deployment is unaffected.
+if (process.env.SERVE_FRONTEND === 'true') {
+  const webDist = process.env.WEB_DIST
+    || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../dist')
+  if (fs.existsSync(path.join(webDist, 'index.html'))) {
+    app.use(express.static(webDist))
+    // Client-side routes (BrowserRouter) — anything that is not API/WS/uploads.
+    app.get(/^\/(?!api\/|ws|uploads\/).*/, (req, res) => res.sendFile(path.join(webDist, 'index.html')))
+    console.log(`Serving web UI from ${webDist}`)
+  } else {
+    console.warn(`SERVE_FRONTEND=true but no build found at ${webDist} — run "npm run build"`)
+  }
+}
 
 // Catch-all error handler. Without this an unhandled rejection in any async
 // route handler takes the whole process down on Node 18+ — on a POS backend
@@ -187,9 +206,11 @@ async function start() {
     console.error('Warning: Failed to connect to MongoDB at startup — continuing without DB (some endpoints will fail).', err.message || err)
   }
 
-  server.listen(port, () => {
-    console.log(`API/WS server listening on port ${port}`)
-  })
+  // HOST=127.0.0.1 keeps a kiosk PC's API off the shop LAN (and avoids the
+  // Windows Firewall "allow Node.js?" prompt). Unset = all interfaces, as before.
+  const onListening = () => console.log(`API/WS server listening on ${process.env.HOST || '*'}:${port}`)
+  if (process.env.HOST) server.listen(port, process.env.HOST, onListening)
+  else server.listen(port, onListening)
 }
 
 start()

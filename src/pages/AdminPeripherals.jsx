@@ -77,7 +77,11 @@ export default function AdminPeripherals() {
     if (payload.type !== state.type || payload.code == null) return
 
     const denomValue = state.denoms[state.index]
-    const hexKey = `0x${Number(payload.code).toString(16).padStart(2, '0')}`
+    // Controller (low-level gateway) codes are opaque strings matched exactly — "3", not "0x03".
+    // Serial ccTalk bytes are stored in the documented 0x.. hex form.
+    const hexKey = payload.exact
+      ? String(payload.code)
+      : `0x${Number(payload.code).toString(16).padStart(2, '0')}`
     const setTable = state.type === 'coin' ? setCoinEqTable : setBillEqTable
     setTable(prev => {
       const idx = prev.findIndex(e => String(e.key) === hexKey)
@@ -217,6 +221,30 @@ export default function AdminPeripherals() {
     ]
     setCoinEqTable(defaults)
     toast({ title: 'Mapeamentos padrão de moedas carregados', variant: 'success' })
+  }
+
+  // The tables the legacy shop kiosk actually uses: codes are the controller's own
+  // decimal strings (coins 3–8; bills are sent as their euro value).
+  function loadShopCoinMappings() {
+    setCoinEqTable([
+      { key: '3', value: 0.05 },
+      { key: '4', value: 0.10 },
+      { key: '5', value: 0.20 },
+      { key: '6', value: 0.50 },
+      { key: '7', value: 1.00 },
+      { key: '8', value: 2.00 }
+    ])
+    toast({ title: 'Padrões da loja (controlador) carregados — moedas', variant: 'success' })
+  }
+
+  function loadShopBillMappings() {
+    setBillEqTable([
+      { key: '5', value: 5 },
+      { key: '10', value: 10 },
+      { key: '20', value: 20 },
+      { key: '50', value: 50 }
+    ])
+    toast({ title: 'Padrões da loja (controlador) carregados — notas', variant: 'success' })
   }
 
   function loadDefaultBillMappings() {
@@ -465,6 +493,9 @@ export default function AdminPeripherals() {
                       Carregar Padrões
                     </Button>
                   )}
+                  <Button type="button" variant="outline" size="sm" onClick={loadShopCoinMappings} disabled={!!calibrating}>
+                    Padrões da loja
+                  </Button>
                   <Button type="button" variant="outline" size="sm" onClick={() => startCalibration('coin')} disabled={!!calibrating}>
                     <Sparkles className="h-3.5 w-3.5 mr-1.5" /> Calibrar automaticamente
                   </Button>
@@ -526,6 +557,9 @@ export default function AdminPeripherals() {
                       Carregar Padrões
                     </Button>
                   )}
+                  <Button type="button" variant="outline" size="sm" onClick={loadShopBillMappings} disabled={!!calibrating}>
+                    Padrões da loja
+                  </Button>
                   <Button type="button" variant="outline" size="sm" onClick={() => startCalibration('bill')} disabled={!!calibrating}>
                     <Sparkles className="h-3.5 w-3.5 mr-1.5" /> Calibrar automaticamente
                   </Button>

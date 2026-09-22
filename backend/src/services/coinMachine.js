@@ -8,6 +8,11 @@ import Sale from '../models/sale.js'
 import Card from '../models/card.js'
 import { broadcastMachine, broadcastHardwareEvent } from '../wsServer.js'
 import { roundMoney } from '../utils/money.js'
+import { isChannelBusy } from './lowLevel.js'
+import { CardSync } from './cardSync.js'
+import { Uplink } from './uplink.js'
+import { CashSessionStore } from './cashSession.js'
+import AuditLog from '../models/auditLog.js'
 import { reportFault } from './maintenance.js'
 import { sendCycleCompleteMessage } from './whatsapp.js'
 import { incrementCashDrawer } from './cashDrawer.js'
@@ -105,6 +110,23 @@ class CoinMachine extends EventEmitter {
       
       // Initialize middleware connections
       await this.middleware.initialize()
+
+      // Card <-> database balance sync (controller mode only; a no-op otherwise).
+      this.cardSync = new CardSync({ middleware: this.middleware, tenantId: this.tenantId })
+      this.cardSync.start()
+
+      // Offline-first: sales, card balances and day-closes are queued locally and
+      // pushed to the central server whenever it can be reached (no-op unless
+      // SYNC_SERVER_URL / SYNC_API_KEY are set).
+      this.uplink = new Uplink({ tenantId: this.tenantId })
+      this.uplink.start()
+
+      // Cash already inserted survives a crash / power cut. Restore FIRST, then
+      // start persisting (subscribing saves the current state immediately, which
+      // would otherwise wipe the very file we are about to read).
+      this.cashStore = new CashSessionStore({ tenantId: this.tenantId })
+      await this.restoreCashSession()
+      this.cashSub = this.client.subscribe((state) => this.cashStore.save({ balance: state.balance, bonus: state.bonus }))
       
       // Set up event handlers
       this.setupEventHandlers()
@@ -117,6 +139,40 @@ class CoinMachine extends EventEmitter {
       console.error('Failed to start CoinMachine:', err)
       throw err
     }
+  }
+
+  /** Record a system-generated event for the operator. Never throws. */
+  async auditSystem(action, details) {
+    try {
+      await AuditLog.create({
+        tenantId: this.tenantId, actorUsername: 'system', action,
+        targetType: 'CashSession', targetId: '', details,
+      })
+    } catch (err) {
+      console.error('[CashSession] audit write failed:', err.message)
+    }
+  }
+
+  /** Give a customer back the cash they had inserted before a restart. */
+  async restoreCashSession() {
+    const r = this.cashStore.take()
+    if (!r) return
+
+    if (r.expired) {
+      const { balance, bonus, ageMs } = r.expired
+      const minutes = Math.round(ageMs / 60000)
+      console.warn(`[CashSession] €${balance.toFixed(2)} inserted ${minutes} min before the restart was NOT restored (too old — the customer has gone). Recorded for the operator.`)
+      await this.auditSystem('cash.session.expired', { balance, bonus, minutesAgo: minutes })
+      this.emit('session-expired', { balance, bonus, minutes })
+      return
+    }
+
+    this.client.client.balance = r.balance
+    this.client.client.bonus = r.bonus
+    this.client.updateCredits()
+    console.warn(`[CashSession] Recovered €${r.balance.toFixed(2)} of inserted cash from before the restart`)
+    await this.auditSystem('cash.session.recovered', { balance: r.balance, bonus: r.bonus, secondsAgo: Math.round(r.ageMs / 1000) })
+    this.emit('session-recovered', { balance: r.balance, bonus: r.bonus })
   }
 
   /**
@@ -132,6 +188,11 @@ class CoinMachine extends EventEmitter {
     // Save any pending card data
     await this.client.saveCardBalance()
     
+    this.cardSync?.stop()
+    this.uplink?.stop()
+    // (the cash-session file is deliberately kept: money still in the session is restored on the next start)
+    this.cashSub?.unsubscribe()
+
     // Disconnect all peripherals
     await this.middleware.disconnectAll()
     
@@ -252,6 +313,12 @@ class CoinMachine extends EventEmitter {
     })
     this.subscriptions.push(machineStatusSub)
 
+    // Same, but read from the low-level controller's `status_int` reply.
+    const gatewayStatusSub = this.middleware.subscribe('gateway-machine-status', (data) => {
+      this.handleGatewayMachineStatus(data)
+    })
+    this.subscriptions.push(gatewayStatusSub)
+
     const machineFaultSub = this.middleware.subscribe('machine-fault', (data) => {
       this.handleMachineFault(data)
     })
@@ -284,24 +351,24 @@ class CoinMachine extends EventEmitter {
    * Handle coin rejected (bad coin, foreign, slug)
    */
   handleCoinRejected(data) {
-    const { peripheral, reason, code } = data
-    this.emit('coin-rejected', { peripheral, reason, code })
+    const { peripheral, reason, code, exact } = data
+    this.emit('coin-rejected', { peripheral, reason, code, exact })
     console.warn(`Coin rejected: ${reason || 'unknown reason'}`)
     // Signature is (tenantId, type, payload). Called with two args the tenant
     // became the event name and the payload the type, so these alerts — fraud
     // included — reached nobody.
-    broadcastHardwareEvent(this.tenantId, 'peripheral:rejected', { type: 'coin', reason: reason || 'rejected', code })
+    broadcastHardwareEvent(this.tenantId, 'peripheral:rejected', { type: 'coin', reason: reason || 'rejected', code, exact })
   }
 
   /**
    * Handle bill rejected (bad bill, unrecognised, fraud/fake, jammed)
    */
   handleBillRejected(data) {
-    const { peripheral, reason, fraud, code } = data
+    const { peripheral, reason, fraud, code, exact } = data
     const eventType = fraud ? 'peripheral:fraud' : 'peripheral:rejected'
-    this.emit('bill-rejected', { peripheral, reason, fraud, code })
+    this.emit('bill-rejected', { peripheral, reason, fraud, code, exact })
     console.warn(`Bill ${fraud ? 'FRAUD' : 'rejected'}: ${reason || 'unknown reason'}`)
-    broadcastHardwareEvent(this.tenantId, eventType, { type: 'bill', reason: reason || 'rejected', fraud: !!fraud, code })
+    broadcastHardwareEvent(this.tenantId, eventType, { type: 'bill', reason: reason || 'rejected', fraud: !!fraud, code, exact })
   }
 
   /**
@@ -326,10 +393,12 @@ class CoinMachine extends EventEmitter {
    * Handle coin insertion
    */
   handleCoinInserted(data) {
-    const { value, code } = data
+    const { value, code, exact } = data
 
-    // Apply equivalence table mapping if configured
-    const mappedValue = this.applyCoinEquivalence(value)
+    // The middleware has already turned the device code into euros (`code` is
+    // present). Only a bare value with no code still needs the table — mapping an
+    // already-resolved euro amount again could collide with a decimal code.
+    const mappedValue = code === undefined ? this.applyCoinEquivalence(value) : value
     
     // Calculate bonus
     let bonusValue = 0
@@ -357,7 +426,7 @@ class CoinMachine extends EventEmitter {
     })
     // Lets the coin-calibration wizard learn/confirm a channel code even when
     // it's already mapped (re-inserting an accepted coin), not just unmapped ones.
-    broadcastHardwareEvent(this.tenantId, 'peripheral:accepted', { type: 'coin', value: mappedValue, code })
+    broadcastHardwareEvent(this.tenantId, 'peripheral:accepted', { type: 'coin', value: mappedValue, code, exact })
 
     console.log(`Coin inserted: €${mappedValue.toFixed(2)}${bonusValue > 0 ? ` + €${bonusValue.toFixed(2)} bonus` : ''}, Total: €${this.client.getState().credits.toFixed(2)}`)
   }
@@ -366,10 +435,10 @@ class CoinMachine extends EventEmitter {
    * Handle bill insertion
    */
   handleBillInserted(data) {
-    const { value, code } = data
+    const { value, code, exact } = data
 
-    // Apply equivalence table mapping if configured
-    const mappedValue = this.applyBillEquivalence(value)
+    // See handleCoinInserted: already euros when `code` is present.
+    const mappedValue = code === undefined ? this.applyBillEquivalence(value) : value
     
     // Calculate bonus
     let bonusValue = 0
@@ -392,7 +461,7 @@ class CoinMachine extends EventEmitter {
       bonus: bonusValue,
       balance: this.client.getState().balance
     })
-    broadcastHardwareEvent(this.tenantId, 'peripheral:accepted', { type: 'bill', value: mappedValue, code })
+    broadcastHardwareEvent(this.tenantId, 'peripheral:accepted', { type: 'bill', value: mappedValue, code, exact })
 
     console.log(`Bill inserted: €${mappedValue.toFixed(2)}${bonusValue > 0 ? ` + €${bonusValue.toFixed(2)} bonus` : ''}, Total: €${this.client.getState().credits.toFixed(2)}`)
   }
@@ -428,6 +497,25 @@ class CoinMachine extends EventEmitter {
    */
   async handleCardRead(data) {
     const { cardNumber } = data
+
+    // Controller mode: the card carries its own balance and identity. Adopt an
+    // unknown card, or settle any disagreement with our record, BEFORE loading it.
+    if (data.card && this.cardSync?.enabled) {
+      let r
+      try {
+        r = await this.cardSync.reconcile(data.card)
+      } catch (err) {
+        console.error('[CardSync] reconcile failed:', err)
+      }
+      if (r?.status === 'invalid') {
+        this.emit('card-invalid', { cardNumber, reason: r.reason })
+        console.warn(`Card ${cardNumber} refused: ${r.reason}`)
+        return
+      }
+      // The same card re-reported (e.g. the controller echoes it after a write):
+      // nothing changed, don't reload and disturb the session.
+      if (r?.status === 'in-sync' && this.client.getState().cardNumber === cardNumber) return
+    }
     
     const loaded = await this.client.setClientInfoByCard(cardNumber)
     
@@ -789,9 +877,20 @@ class CoinMachine extends EventEmitter {
    * Handle machine-issue event (fault detected)
    */
   async handleMachineIssue(data) {
+    // The controller reports `{ id: "<interface>", chn: "<channel>", active, status }`
+    // — an interface id and channel, not a machine id, and no `issue` text.
+    if (data && data.chn !== undefined) {
+      if (String(data.active) === '0') {
+        await this.handleGatewayMachineStatus({
+          address: Number(data.id), port: Number(data.chn), connected: false, level: false,
+        })
+      }
+      return
+    }
+
     const { id, issue } = data
     console.log(`Machine issue: id=${id}, issue=${issue}`)
-    
+
     try {
       const machine = await Machine.findOne(this.scoped({ intId: id }))
       if (machine) {
@@ -808,6 +907,35 @@ class CoinMachine extends EventEmitter {
       }
     } catch (err) {
       console.error('Error handling machine-issue:', err)
+    }
+  }
+
+  /**
+   * One channel of a controller `status_int` reply, reduced to the same signals
+   * a KITSEC status byte gives (`fault`, `occupied`, `doorClosed`) so the
+   * existing cycle/idle-confirmation logic in handleMachineStatusUpdate applies.
+   * The controller does not report door state, so it is assumed closed.
+   */
+  async handleGatewayMachineStatus({ address, port, connected, level }) {
+    try {
+      const iface = await Interface.findOne(this.scoped({ address: Number(address) }))
+      if (!iface) return // an interface we have no record of
+
+      // The channel bit is a line LEVEL. Which level means "busy" is the machine's
+      // activation polarity (high: 1 = busy, low: 0 = busy) — reading "1" as
+      // running for every machine would show idle low-polarity machines as busy.
+      const machine = await Machine.findOne(this.scoped({ interfaceId: iface._id, port: Number(port) }))
+      const busy = connected && isChannelBusy(level, machine?.activation)
+
+      await this.handleMachineStatusUpdate({
+        interfaceId: iface._id,
+        port: Number(port),
+        status: { fault: !connected, occupied: busy, doorLocked: false, doorClosed: true },
+      })
+      // While anything runs, ask again soon so the end of the cycle is noticed.
+      if (busy) this.middleware.scheduleBusyPoll?.()
+    } catch (err) {
+      console.error('Error handling gateway machine status:', err)
     }
   }
 
