@@ -1,7 +1,18 @@
+# Every service shares the same log-rotation limits: the default json-file
+# driver keeps logs forever, and on a long-running server that quietly fills
+# the disk. 10 MB x 3 files per container is enough to debug a recent issue
+# without becoming a disk-space incident.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   mongo:
     image: mongo:7
     restart: unless-stopped
+    logging: *default-logging
     volumes:
       - washbubbles_mongo_data:/data/db
     ports:
@@ -10,6 +21,7 @@ services:
   backend:
     build: ./backend
     restart: unless-stopped
+    logging: *default-logging
     environment:
       MONGODB_URL: mongodb://mongo:27017/washstore
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.docker}
@@ -17,6 +29,23 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin1234}
       KIOSK_PASSWORD: ${KIOSK_PASSWORD:-kiosk1234}
       KIOSK_API_KEY: ${KIOSK_API_KEY:?set KIOSK_API_KEY in .env.docker}
+      # Outbound email (password reset, day-close reports, receipts, alerts —
+      # see docs/SHOP-HARDWARE-AND-COMMUNICATIONS.md §15). Optional: unset
+      # MAIL_HOST in .env.docker and mailer.js logs instead of sending, same
+      # safe fallback as local dev.
+      MAIL_HOST: ${MAIL_HOST:-}
+      MAIL_PORT: ${MAIL_PORT:-465}
+      MAIL_USER: ${MAIL_USER:-}
+      MAIL_PASS: ${MAIL_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      # This process sits behind two nginx hops (host nginx, then the
+      # frontend container's own nginx) — see index.js's own comment on this.
+      TRUST_PROXY: 2
+      # This is the central/reporting server, not a shop kiosk PC: it has no
+      # local coin/bill hardware to drive, so don't try (and don't log
+      # "cannot open 40" for a peripheral address that means something only
+      # to a controller this server was never wired to).
+      ENABLE_COIN_MACHINE: "false"
     depends_on:
       - mongo
     ports:
@@ -33,6 +62,7 @@ services:
         # would leak it to anyone who opens devtools.
         VITE_PUBLIC_SITE: "true"
     restart: unless-stopped
+    logging: *default-logging
     depends_on:
       - backend
     ports:

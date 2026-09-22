@@ -28,6 +28,19 @@ if (!process.env.JWT_SECRET) {
 const app = express()
 const server = http.createServer(app)
 
+/**
+ * How many reverse-proxy hops sit in front of this process, so express and
+ * express-rate-limit resolve the real client IP from X-Forwarded-For instead
+ * of the last proxy's address (or, unset, refusing to trust the header at
+ * all and throwing on every rate-limited request — ERR_ERL_UNEXPECTED_X_FORWARDED_FOR).
+ * 0 (default) = no reverse proxy — correct for the shop-PC install, which
+ * binds the kiosk browser straight to this process. The Hetzner/Docker
+ * deployment sits behind TWO nginx hops (host nginx, then the frontend
+ * container's own nginx) and sets TRUST_PROXY=2 in docker-compose.yml.
+ */
+const trustProxy = parseInt(process.env.TRUST_PROXY, 10)
+if (trustProxy > 0) app.set('trust proxy', trustProxy)
+
 app.use(cors())
 app.use(express.json())
 // Resolve tenant early so routes can use `req.tenantFilter` and `req.tenantId`
