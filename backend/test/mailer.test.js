@@ -74,6 +74,67 @@ describe('mailer.sendMail', () => {
     expect(captured).to.include({ port: 587, secure: false })
   })
 
+  it('always sets connection/greeting/socket timeouts, so a silently-blocked port fails instead of hanging forever', async () => {
+    // Regression test: found live against the Hetzner deployment — amen.pt's
+    // documented port 465 is black-holed by the host's outbound SMTP filtering
+    // (no TCP reset, no error, just never connects), and with no timeout
+    // configured that hung the request indefinitely until nginx's own gateway
+    // timeout eventually 504'd the client while the backend kept waiting.
+    process.env.MAIL_HOST = 'smtp-pt.securemail.pro'
+    process.env.MAIL_PORT = '587'
+    const { sendMail } = await freshMailer()
+    const nodemailer = (await import('nodemailer')).default
+    let captured = null
+    const realCreate = nodemailer.createTransport
+    nodemailer.createTransport = (opts) => { captured = opts; return { sendMail: async () => {} } }
+    try {
+      await sendMail({ to: 'a@b.com', subject: 's', text: 't' })
+    } finally {
+      nodemailer.createTransport = realCreate
+    }
+    expect(captured.connectionTimeout).to.be.a('number').and.be.greaterThan(0)
+    expect(captured.greetingTimeout).to.be.a('number').and.be.greaterThan(0)
+    expect(captured.socketTimeout).to.be.a('number').and.be.greaterThan(0)
+  })
+
+  it('MAIL_TIMEOUT_MS overrides the default connect/greeting timeout', async () => {
+    process.env.MAIL_HOST = 'smtp-pt.securemail.pro'
+    process.env.MAIL_PORT = '587'
+    process.env.MAIL_TIMEOUT_MS = '3000'
+    const { sendMail } = await freshMailer()
+    const nodemailer = (await import('nodemailer')).default
+    let captured = null
+    const realCreate = nodemailer.createTransport
+    nodemailer.createTransport = (opts) => { captured = opts; return { sendMail: async () => {} } }
+    try {
+      await sendMail({ to: 'a@b.com', subject: 's', text: 't' })
+    } finally {
+      nodemailer.createTransport = realCreate
+      delete process.env.MAIL_TIMEOUT_MS
+    }
+    expect(captured.connectionTimeout).to.equal(3000)
+    expect(captured.greetingTimeout).to.equal(3000)
+    expect(captured.socketTimeout).to.equal(6000)
+  })
+
+  it('changing the PORT alone (same host) rebuilds the transporter, not just changing the host', async () => {
+    const { sendMail } = await freshMailer()
+    const nodemailer = (await import('nodemailer')).default
+    const captured = []
+    const realCreate = nodemailer.createTransport
+    nodemailer.createTransport = (opts) => { captured.push(opts); return { sendMail: async () => {} } }
+    try {
+      process.env.MAIL_HOST = 'smtp-pt.securemail.pro'
+      process.env.MAIL_PORT = '465'
+      await sendMail({ to: 'a@b.com', subject: 's', text: 't' })
+      process.env.MAIL_PORT = '587' // same host, different port
+      await sendMail({ to: 'a@b.com', subject: 's', text: 't' })
+    } finally {
+      nodemailer.createTransport = realCreate
+    }
+    expect(captured.map((c) => c.port)).to.deep.equal([465, 587])
+  })
+
   it('MAIL_FROM_NAME wraps the address as a display name, quotes escaped, address untouched', async () => {
     process.env.MAIL_HOST = 'smtp-pt.securemail.pro'
     process.env.MAIL_PORT = '465'

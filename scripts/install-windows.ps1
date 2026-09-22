@@ -189,7 +189,7 @@ try {
       '# marcacoes@freshbubbles.pt at amen.pt. Uncomment and set MAIL_PASS from'
       '# amen.pt''s control panel (never commit it) to turn this on.'
       '# MAIL_HOST=smtp-pt.securemail.pro'
-      '# MAIL_PORT=465'
+      '# MAIL_PORT=587'
       '# MAIL_USER=marcacoes@freshbubbles.pt'
       '# MAIL_PASS='
       '# MAIL_FROM=marcacoes@freshbubbles.pt'

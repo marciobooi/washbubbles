@@ -420,22 +420,24 @@ Tests (unit and against the real test database with a fake central server that g
 | Operator alerts (hopper empty, RFID fault, kiosk offline, ...) | `services/alerts.js`, `services/kioskWatchdog.js` | Hardware/health events, if `alerts.email` is set (Admin > Definições > Alertas) |
 | Marketing broadcast | `POST /api/admin/marketing/broadcast` | Admin, to opted-in customers only |
 
-**amen.pt's documented SMTP settings** (verified against amen.pt/assistencia/configuracao-email, 2026-09): host `smtp-pt.securemail.pro`, port `465`, SSL, username = the full email address, password = the one set when the mailbox was activated. `mailer.js` picks implicit TLS automatically for port 465 (any other port starts in plaintext and upgrades via STARTTLS if offered) — no extra flags needed.
+**amen.pt's documented SMTP settings** (amen.pt/assistencia/configuracao-email): host `smtp-pt.securemail.pro`, either port `465` (SSL) or port `587` (STARTTLS), username = the full email address, password = the one set when the mailbox was activated.
+
+**We use port 587, not amen.pt's own headline 465 — found live, not theoretical.** Testing the real send (not just SMTP auth) against the Hetzner-hosted server (§12) produced a hung request that eventually surfaced as `504 Gateway Time-out` through nginx. Cause, confirmed by a raw TCP connect test from inside the backend container: Hetzner silently drops outbound connections on ports 25 and 465 (no refusal, no reset — the connection attempt just never completes, which is indistinguishable from network trouble unless you know to suspect a host-level anti-abuse filter). Port 587 connected and authenticated instantly from the same container. `mailer.js` picks implicit TLS automatically for port 465; anything else, including 587, starts in plaintext and upgrades via STARTTLS if the server offers it — no extra flag needed, just the port number. **`mailer.js` also now sets explicit connect/greeting/socket timeouts** (`MAIL_TIMEOUT_MS`, default 10s) — a silently-blocked port used to hang the request indefinitely; now it fails fast instead, whichever provider or network it's pointed at.
 
 **Setup:** in `backend\.env` (never committed):
 
 ```
 MAIL_HOST=smtp-pt.securemail.pro
-MAIL_PORT=465
+MAIL_PORT=587
 MAIL_USER=marcacoes@freshbubbles.pt
 MAIL_PASS=<the amen.pt mailbox password>
 MAIL_FROM=marcacoes@freshbubbles.pt
 # MAIL_FROM_NAME=Fresh Bubbles   # optional "Display Name <address>"
 ```
 
-With `MAIL_HOST` unset (the default in every environment set up so far, including this dev machine), `mailer.js` logs what it would have sent instead of erroring — password reset, receipts, etc. all still respond success, they just don't deliver. The installer's generated `.env` includes the block above commented out, ready to uncomment once the mailbox password is on hand (§12).
+With `MAIL_HOST` unset, `mailer.js` logs what it would have sent instead of erroring — password reset, receipts, etc. all still respond success, they just don't deliver. The installer's generated `.env` includes the block above commented out, ready to uncomment once the mailbox password is on hand (§12).
 
-**Proven:** unit tests (`backend/test/mailer.test.js`) confirm the exact transporter options built for amen.pt's settings (host, port 465, `secure: true`, username = full address) and for a generic STARTTLS provider (`secure: false`), the `MAIL_FROM_NAME` display-name formatting, and that a changed `MAIL_HOST` rebuilds the transporter rather than keeping a stale one. **Not proven:** an actual send through amen.pt — that needs the real mailbox password, which was not provided, and sending a real email is a user-facing action this survey did not take on its own.
+**Proven:** unit tests (`backend/test/mailer.test.js`, 10) cover both port modes, the timeout hardening, and the transporter-rebuild-on-config-change logic. On the live Hetzner server itself: a raw SMTP-auth check over 587 from inside the backend container succeeded instantly (`SMTP 587 STARTTLS AUTH OK`), proving the credentials, host and now-correct port all work together on this network. **A full real send + delivery confirmation is the next step**, not yet done as of this note — see the go-live checklist (§11) before relying on this for real customers.
 
 ---
 
