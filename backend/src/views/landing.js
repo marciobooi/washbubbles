@@ -7,14 +7,16 @@
  * returns fully-formed markup in the FIRST response — real headings, real text,
  * real structured data — so Google (and everyone else) can read it immediately.
  *
- * Content is intentionally hardcoded, not fetched from Settings: this page must
- * keep working even if the database is briefly down, and it must render in one
- * pass with no request waterfall. If the branding name/colours ever need to
- * change, edit this file.
- *
- * Business facts (address, phone, hours, rating) come from the owner's own
- * Google Business Profile, given directly — not scraped or guessed. If any of
- * it changes, update the BRAND constant below.
+ * Business facts (BRAND, below — address, phone, hours, rating, email, socials)
+ * are hardcoded, not admin-editable: they come from the owner's own Google
+ * Business Profile, given directly, and structured data (jsonLd, below) must
+ * never drift from what's actually true. The page's marketing COPY (headings,
+ * step/feature/CTA/quote text, and any admin-added sections) is a different
+ * story — it's stored as a Setting (key CONTENT_SETTING_KEY) and editable from
+ * the "Página Inicial" tab in AdminSettings.jsx. DEFAULT_CONTENT below is both
+ * the shipped copy and the fallback used whenever nothing's been saved yet or
+ * the DB read fails — see routes/public.js for how the two are combined, with
+ * a short cache and a timeout so a Mongo hiccup never takes this page down.
  *
  * Served only when PUBLIC_LANDING_PAGE=true (routes/public.js) — the shop-kiosk
  * build's own "/" is the real point-of-sale UI and must never be shadowed by
@@ -26,7 +28,8 @@ const LOGIN_URL = '/admin/login'
 
 // Real, current facts only — from the business's own Google Business Profile
 // (address, phone, hours, rating) and its own listing description (services).
-// Nothing on this page is invented.
+// Nothing on this page is invented. Not editable from the admin content tab —
+// see the file-level comment above for why.
 const BRAND = {
   name: 'Fresh Bubbles',
   tagline: 'Laundry & Ironing', // the exact tagline printed on the real logo mark
@@ -55,8 +58,97 @@ const SOCIAL = [
   { name: 'Instagram', url: 'https://www.instagram.com/freshbubblesloures/', icon: 'M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5z M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z M17.5 6.5h.01' },
 ]
 
+// ---------------------------------------------------------------------------
+// Editable content — see the file-level comment above. Persisted under this
+// Setting key (single-tenant deployment: no tenant qualifier needed beyond
+// what withTenant already resolves — see routes/public.js).
+export const CONTENT_SETTING_KEY = 'landingPage.content'
+
+export const DEFAULT_CONTENT = {
+  hero: {
+    eyebrow: 'Lavandaria em Loures',
+    heading: 'Coloque. Pague.',
+    accent: 'Retire fresca.',
+    subheading: 'Máquinas modernas, dos 8 aos 20kg. Pague em moedas, notas, cartão bancário ou o seu cartão Fresh Bubbles. Sem marcações, sem filas — chegue, lave, siga a sua vida.',
+    ctaPrimaryLabel: 'Como funciona',
+    ctaSecondaryLabel: 'Visite-nos',
+  },
+  steps: {
+    visible: true,
+    eyebrow: 'O processo',
+    heading: 'Três passos, sem complicações',
+    description: 'Da roupa suja à roupa fresca, sem precisar de mais nada além de tempo livre.',
+    items: [
+      { t: 'Coloque a roupa', d: 'Escolha a máquina do tamanho certo — dos 8 aos 20kg — e coloque a roupa suja.' },
+      { t: 'Pague como preferir', d: 'Moedas, notas, cartão bancário ou o seu cartão Fresh Bubbles. Sem app a instalar.' },
+      { t: 'Retire fresca', d: 'Lavagem e secagem rápidas. Enquanto espera, ligue-se ao WiFi grátis.' },
+    ],
+  },
+  features: {
+    visible: true,
+    eyebrow: 'Porquê a Fresh Bubbles',
+    heading: 'Feito para o seu dia a dia',
+    description: 'O essencial de uma lavandaria, sem o que não precisa.',
+    items: [
+      { t: 'Self-service, à sua hora', d: 'Moedas, notas, cartão bancário ou cartão de cliente. Sem marcações — chegue quando lhe for melhor.' },
+      { t: 'Engomadoria', d: 'Deixe a roupa connosco e leve-a pronta a vestir, sem passar a ferro em casa.' },
+      { t: 'Limpeza a seco', d: 'Para as peças mais delicadas, o cuidado que precisam.' },
+      { t: 'Lavagem de tapetes', d: 'Tapetes lavados com o mesmo cuidado da sua roupa.' },
+      { t: 'Recolha e entrega ao domicílio', d: 'Não tem de sair de casa — nós vamos buscar e entregamos.' },
+      { t: 'Enquanto espera', d: 'Vending de snacks e bebidas, e WiFi grátis — a sua pausa, tratada.' },
+    ],
+  },
+  cta: {
+    visible: true,
+    heading: 'Pronta para a próxima lavagem?',
+    description: 'Sem marcações. Chegue quando lhe for melhor e a sua roupa espera por si, fresca.',
+  },
+  visit: {
+    visible: true,
+    eyebrow: 'Visite-nos',
+    heading: 'Onde estamos',
+    description: 'Em Loures, aberta todos os dias.',
+    quoteText: 'Serviço impecável e atenção espetacular.',
+    quoteAuthor: 'Daniel Vinhas',
+  },
+  customSections: [],
+}
+
+/**
+ * Merge admin-saved content (partial, and possibly saved under an older
+ * shape) onto DEFAULT_CONTENT. Explicit per-field rather than a generic
+ * deep-merge lib — the shape is small and fixed, and this way a missing or
+ * malformed field always falls back to a real default instead of `undefined`
+ * reaching the template.
+ */
+export function mergeContent(raw) {
+  const c = (raw && typeof raw === 'object') ? raw : {}
+  const items = (list, fallback) => (Array.isArray(list) && list.length ? list : fallback)
+  return {
+    hero: { ...DEFAULT_CONTENT.hero, ...(c.hero || {}) },
+    steps: {
+      ...DEFAULT_CONTENT.steps,
+      ...(c.steps || {}),
+      items: items(c.steps && c.steps.items, DEFAULT_CONTENT.steps.items),
+    },
+    features: {
+      ...DEFAULT_CONTENT.features,
+      ...(c.features || {}),
+      items: items(c.features && c.features.items, DEFAULT_CONTENT.features.items),
+    },
+    cta: { ...DEFAULT_CONTENT.cta, ...(c.cta || {}) },
+    visit: { ...DEFAULT_CONTENT.visit, ...(c.visit || {}) },
+    // Admin-created sections only — needs at least a heading to be worth a
+    // section element, so a half-filled draft never ships blank markup.
+    customSections: Array.isArray(c.customSections) ? c.customSections.filter((s) => s && s.heading) : [],
+  }
+}
+
 const escapeHtml = (s) =>
   String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+
+const slugify = (s) =>
+  String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'section'
 
 /** A small inline SVG "porthole" — the washing-machine drum window that's already the real logo's central mark, reused here as the page's one recurring signature shape. */
 function porthole({ size = 120, ring = true, spin = false } = {}) {
@@ -108,23 +200,6 @@ function bubbleDots(n = 5) {
   return out
 }
 
-const STEPS = [
-  { n: '1', t: 'Coloque a roupa', d: 'Escolha a máquina do tamanho certo — dos 8 aos 20kg — e coloque a roupa suja.' },
-  { n: '2', t: 'Pague como preferir', d: 'Moedas, notas, cartão bancário ou o seu cartão Fresh Bubbles. Sem app a instalar.' },
-  { n: '3', t: 'Retire fresca', d: 'Lavagem e secagem rápidas. Enquanto espera, ligue-se ao WiFi grátis.' },
-]
-
-// The self-service machines are one part of a fuller laundry business — see
-// the owner's own Google Business Profile description. Keeping both, honestly.
-const FEATURES = [
-  { t: 'Self-service, à sua hora', d: 'Moedas, notas, cartão bancário ou cartão de cliente. Sem marcações — chegue quando lhe for melhor.' },
-  { t: 'Engomadoria', d: 'Deixe a roupa connosco e leve-a pronta a vestir, sem passar a ferro em casa.' },
-  { t: 'Limpeza a seco', d: 'Para as peças mais delicadas, o cuidado que precisam.' },
-  { t: 'Lavagem de tapetes', d: 'Tapetes lavados com o mesmo cuidado da sua roupa.' },
-  { t: 'Recolha e entrega ao domicílio', d: 'Não tem de sair de casa — nós vamos buscar e entregamos.' },
-  { t: 'Enquanto espera', d: 'Vending de snacks e bebidas, e WiFi grátis — a sua pausa, tratada.' },
-]
-
 function jsonLd() {
   const data = {
     '@context': 'https://schema.org',
@@ -160,7 +235,27 @@ function jsonLd() {
   return JSON.stringify(data)
 }
 
-export function renderLandingPage() {
+/** An admin-created section: heading + body text + an optional CTA button. Not a general layout/block editor — see the file-level comment on scope. */
+function renderCustomSection(cs) {
+  const slug = slugify(cs.id || cs.heading)
+  return `
+  <section id="custom-${slug}" aria-labelledby="custom-${slug}-h">
+    <div class="wrap">
+      <div class="section-head reveal">
+        ${cs.eyebrow ? `<span class="eyebrow">${escapeHtml(cs.eyebrow)}</span>` : ''}
+        <h2 id="custom-${slug}-h">${escapeHtml(cs.heading)}</h2>
+        ${cs.body ? `<p>${escapeHtml(cs.body)}</p>` : ''}
+      </div>
+      ${cs.ctaLabel && cs.ctaHref ? `
+      <div style="text-align:center">
+        <a class="btn-primary" href="${escapeHtml(cs.ctaHref)}">${escapeHtml(cs.ctaLabel)}</a>
+      </div>` : ''}
+    </div>
+  </section>`
+}
+
+export function renderLandingPage(rawContent) {
+  const content = mergeContent(rawContent)
   const title = `${BRAND.name} Loures — Lavandaria Self-Service, Engomadoria e Limpeza a Seco`
   const description = 'Lavandaria self-service em Loures: máquinas de lavar e secar, engomadoria, limpeza a seco, lavagem de tapetes e recolha ao domicílio. Avaliação 4.5/5 no Google.'
 
@@ -506,9 +601,9 @@ footer .foot-links a:hover{ color:var(--primary-800) }
       <span class="brand-word">${escapeHtml(BRAND.name)}<small>${escapeHtml(BRAND.tagline)}</small></span>
     </a>
     <ul class="nav-links" id="nav-links">
-      <li><a href="#como-funciona">Como funciona</a></li>
-      <li><a href="#servicos">Serviços</a></li>
-      <li><a href="#visite-nos">Visite-nos</a></li>
+      ${content.steps.visible ? `<li><a href="#como-funciona">Como funciona</a></li>` : ''}
+      ${content.features.visible ? `<li><a href="#servicos">Serviços</a></li>` : ''}
+      ${content.visit.visible ? `<li><a href="#visite-nos">Visite-nos</a></li>` : ''}
     </ul>
     <div class="nav-right">
       <a class="btn-login" href="${LOGIN_URL}" aria-label="Entrar — acesso reservado">
@@ -526,14 +621,14 @@ footer .foot-links a:hover{ color:var(--primary-800) }
   <header class="hero" id="topo">
     <div class="wrap">
       <div>
-        <span class="eyebrow">Lavandaria em Loures</span>
-        <h1>Coloque. Pague.<br><span class="accent">Retire fresca.
+        <span class="eyebrow">${escapeHtml(content.hero.eyebrow)}</span>
+        <h1>${escapeHtml(content.hero.heading)}<br><span class="accent">${escapeHtml(content.hero.accent)}
           <svg viewBox="0 0 200 14" preserveAspectRatio="none" aria-hidden="true"><path d="M2 9 C 40 2, 70 13, 100 7 S 160 1, 198 8" fill="none" stroke="var(--coral)" stroke-width="5" stroke-linecap="round"/></svg>
         </span></h1>
-        <p class="hero-sub">Máquinas modernas, dos 8 aos 20kg. Pague em moedas, notas, cartão bancário ou o seu cartão Fresh Bubbles. Sem marcações, sem filas — chegue, lave, siga a sua vida.</p>
+        <p class="hero-sub">${escapeHtml(content.hero.subheading)}</p>
         <div class="hero-cta">
-          <a class="btn-primary" href="#como-funciona">Como funciona</a>
-          <a class="btn-ghost" href="#visite-nos">Visite-nos</a>
+          <a class="btn-primary" href="#como-funciona">${escapeHtml(content.hero.ctaPrimaryLabel)}</a>
+          <a class="btn-ghost" href="#visite-nos">${escapeHtml(content.hero.ctaSecondaryLabel)}</a>
         </div>
         <div class="hero-note">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
@@ -552,33 +647,35 @@ footer .foot-links a:hover{ color:var(--primary-800) }
     </div>
   </header>
 
+  ${content.steps.visible ? `
   <section id="como-funciona" aria-labelledby="como-funciona-h">
     <div class="wrap">
       <div class="section-head reveal">
-        <span class="eyebrow">O processo</span>
-        <h2 id="como-funciona-h">Três passos, sem complicações</h2>
-        <p>Da roupa suja à roupa fresca, sem precisar de mais nada além de tempo livre.</p>
+        <span class="eyebrow">${escapeHtml(content.steps.eyebrow)}</span>
+        <h2 id="como-funciona-h">${escapeHtml(content.steps.heading)}</h2>
+        <p>${escapeHtml(content.steps.description)}</p>
       </div>
       <div class="steps">
-        ${STEPS.map((s, i) => `
+        ${content.steps.items.map((s, i) => `
         <div class="step reveal" style="transition-delay:${i * 0.08}s">
-          <div class="step-mark" data-parallax="${i % 2 === 0 ? 0.06 : -0.06}">${porthole({ size: 88, spin: false })}<span aria-hidden="true">${s.n}</span></div>
+          <div class="step-mark" data-parallax="${i % 2 === 0 ? 0.06 : -0.06}">${porthole({ size: 88, spin: false })}<span aria-hidden="true">${i + 1}</span></div>
           <h3>${escapeHtml(s.t)}</h3>
           <p>${escapeHtml(s.d)}</p>
         </div>`).join('')}
       </div>
     </div>
-  </section>
+  </section>` : ''}
 
+  ${content.features.visible ? `
   <section id="servicos" aria-labelledby="servicos-h" style="background:rgba(255,255,255,.4)">
     <div class="wrap">
       <div class="section-head reveal">
-        <span class="eyebrow">Porquê a Fresh Bubbles</span>
-        <h2 id="servicos-h">Feito para o seu dia a dia</h2>
-        <p>O essencial de uma lavandaria, sem o que não precisa.</p>
+        <span class="eyebrow">${escapeHtml(content.features.eyebrow)}</span>
+        <h2 id="servicos-h">${escapeHtml(content.features.heading)}</h2>
+        <p>${escapeHtml(content.features.description)}</p>
       </div>
       <div class="features">
-        ${FEATURES.map((f, i) => `
+        ${content.features.items.map((f, i) => `
         <div class="feature-card reveal" style="transition-delay:${(i % 3) * 0.07}s">
           <div class="feature-icon">${featureIcon(i)}</div>
           <h3>${escapeHtml(f.t)}</h3>
@@ -586,8 +683,11 @@ footer .foot-links a:hover{ color:var(--primary-800) }
         </div>`).join('')}
       </div>
     </div>
-  </section>
+  </section>` : ''}
 
+  ${content.customSections.filter((s) => s.visible !== false).map(renderCustomSection).join('')}
+
+  ${content.cta.visible ? `
   <section aria-hidden="false">
     <div class="wrap">
       <div class="cta-band reveal">
@@ -596,27 +696,28 @@ footer .foot-links a:hover{ color:var(--primary-800) }
           <circle cx="50" cy="50" r="34" fill="none" stroke="#fff" stroke-width="2.5"/>
           <path d="M50 16 C 66 16 79 27 79 44 C 79 54 73 61 64 66" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
         </svg>
-        <h2>Pronta para a próxima lavagem?</h2>
-        <p>Sem marcações. Chegue quando lhe for melhor e a sua roupa espera por si, fresca.</p>
+        <h2>${escapeHtml(content.cta.heading)}</h2>
+        <p>${escapeHtml(content.cta.description)}</p>
         <div class="hero-cta">
           <a class="btn-primary" href="#visite-nos">Visite-nos</a>
           <a class="btn-ghost" href="mailto:${BRAND.email}">Fale connosco</a>
         </div>
       </div>
     </div>
-  </section>
+  </section>` : ''}
 
+  ${content.visit.visible ? `
   <section id="visite-nos" aria-labelledby="visite-nos-h">
     <div class="wrap">
       <div class="section-head reveal">
-        <span class="eyebrow">Visite-nos</span>
-        <h2 id="visite-nos-h">Onde estamos</h2>
-        <p>Em Loures, aberta todos os dias.</p>
+        <span class="eyebrow">${escapeHtml(content.visit.eyebrow)}</span>
+        <h2 id="visite-nos-h">${escapeHtml(content.visit.heading)}</h2>
+        <p>${escapeHtml(content.visit.description)}</p>
       </div>
 
       <blockquote class="quote reveal">
-        <p>&ldquo;Serviço impecável e atenção espetacular.&rdquo;</p>
-        <cite>Daniel Vinhas <span>· avaliação no Google</span></cite>
+        <p>&ldquo;${escapeHtml(content.visit.quoteText)}&rdquo;</p>
+        <cite>${escapeHtml(content.visit.quoteAuthor)} <span>· avaliação no Google</span></cite>
       </blockquote>
 
       <div class="visit reveal">
@@ -656,7 +757,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
         </div>
       </div>
     </div>
-  </section>
+  </section>` : ''}
 </main>
 
 <footer>
@@ -666,8 +767,8 @@ footer .foot-links a:hover{ color:var(--primary-800) }
       <span class="foot-brand-text">${escapeHtml(BRAND.name)}<small>${escapeHtml(BRAND.tagline)}</small></span>
     </div>
     <div class="foot-links">
-      <a href="#como-funciona">Como funciona</a>
-      <a href="#servicos">Serviços</a>
+      ${content.steps.visible ? `<a href="#como-funciona">Como funciona</a>` : ''}
+      ${content.features.visible ? `<a href="#servicos">Serviços</a>` : ''}
       <a href="${LOGIN_URL}">Entrar</a>
     </div>
     <p class="foot-copy">&copy; ${new Date().getFullYear()} ${escapeHtml(BRAND.name)}. Todos os direitos reservados.</p>
@@ -733,9 +834,12 @@ footer .foot-links a:hover{ color:var(--primary-800) }
 </html>`
 }
 
-// Order matches FEATURES exactly — each icon reads as its own service, not a
-// generic set. "Limpeza a seco" uses the real textile-care dry-clean symbol
-// (a plain circle), not an invented one.
+// Cycles by index (icons[i % icons.length]) so it never throws if an admin
+// changes how many feature items there are — see the file-level comment on
+// what's admin-editable. With the default 6 items, order matches FEATURES
+// exactly and each icon reads as its own service, not a generic set.
+// "Limpeza a seco" uses the real textile-care dry-clean symbol (a plain
+// circle), not an invented one.
 function featureIcon(i) {
   const icons = [
     '<circle cx="8" cy="14" r="5"/><circle cx="15" cy="10" r="5"/>', // self-service: coins

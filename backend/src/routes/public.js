@@ -8,13 +8,59 @@
  * already means there (the kiosk POS app, or nothing at all).
  */
 import express from 'express'
-import { renderLandingPage, renderRobotsTxt, renderSitemapXml } from '../views/landing.js'
+import { renderLandingPage, renderRobotsTxt, renderSitemapXml, CONTENT_SETTING_KEY } from '../views/landing.js'
+import Setting from '../models/setting.js'
+import { withTenant } from '../services/tenant.js'
 
 const router = express.Router()
 
-router.get('/', (req, res) => {
+// The page's editable copy (see landing.js's DEFAULT_CONTENT) lives in Mongo,
+// but this route must keep rendering real content even if Mongo is briefly
+// unreachable — it's the SEO/link-preview entry point, not just an admin
+// convenience. So: a short in-memory cache to avoid a DB round-trip on every
+// hit, a hard timeout so a stuck connection can't hang the response, and on
+// any failure we fall back to the last good value (or, before the first ever
+// successful read, undefined — renderLandingPage() already treats that as
+// "use the defaults").
+//
+// The cache is intentionally not keyed by tenant: this deployment is
+// single-tenant by design (BRAND in landing.js is already hardcoded to one
+// business), so there's only ever one real value to cache.
+const CACHE_TTL_MS = 60_000
+const DB_TIMEOUT_MS = 1500
+let cachedContent
+let cachedAt = 0
+
+// Test-only escape hatch: force the next request to re-read from the DB
+// instead of serving whatever a previous test's request cached. Real traffic
+// never calls this — it only relies on the TTL above.
+export function _resetContentCacheForTests() {
+  cachedContent = undefined
+  cachedAt = 0
+}
+
+async function loadContent(req) {
+  if (cachedAt && Date.now() - cachedAt < CACHE_TTL_MS) return cachedContent
+  try {
+    const SettingT = withTenant(Setting, req)
+    const query = SettingT.findOne({ key: CONTENT_SETTING_KEY }).lean()
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('landing content DB read timed out')), DB_TIMEOUT_MS))
+    const doc = await Promise.race([query, timeout])
+    cachedContent = doc ? doc.value : undefined
+    cachedAt = Date.now()
+  } catch (err) {
+    console.warn('[public] Failed to load landing page content, serving cached/default content:', err.message)
+    // Leave cachedContent as-is (last known good, or undefined if none yet) —
+    // don't update cachedAt, so the next request tries the DB again instead
+    // of being stuck on a failure for the full TTL.
+  }
+  return cachedContent
+}
+
+router.get('/', async (req, res) => {
   res.set('Cache-Control', 'public, max-age=300') // 5 min — plain content, changes rarely
-  res.type('html').send(renderLandingPage())
+  const content = await loadContent(req)
+  res.type('html').send(renderLandingPage(content))
 })
 
 router.get('/robots.txt', (req, res) => {

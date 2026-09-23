@@ -5,8 +5,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Palette, ShieldCheck, Wifi as WifiIcon, Bell, MessageCircle, SlidersHorizontal, Image as ImageIcon, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react'
+import { Palette, ShieldCheck, Wifi as WifiIcon, Bell, MessageCircle, SlidersHorizontal, Image as ImageIcon, Plus, Trash2, ArrowUp, ArrowDown, Globe, Eye, EyeOff } from 'lucide-react'
 import { DEFAULT_BANNERS } from '@/lib/defaultBanners'
+import { DEFAULT_LANDING_CONTENT } from '@/lib/defaultLandingContent'
 
 // Settings hidden from the raw "Avançado" list below — either because they
 // already have a dedicated, friendlier UI elsewhere (so a second raw/rawer
@@ -26,6 +27,7 @@ const HIDDEN_ADVANCED_KEYS = new Set([
   'hopperCoinValue', 'hopperMaxDispenseCoins',
   'branding.companyName', 'branding.logo', 'branding.primaryColor', 'branding.accentColor',
   'banners',
+  'landingPage.content',
   'wifi.enabled',
   'whatsapp.enabled',
   'loyaltyCard.cost', 'loyaltyCard.credit', 'loyaltyCard.minRecharge',
@@ -34,6 +36,7 @@ const HIDDEN_ADVANCED_KEYS = new Set([
 const TABS = [
   { id: 'branding', label: 'Branding', Icon: Palette },
   { id: 'banner', label: 'Banner', Icon: ImageIcon },
+  { id: 'landing', label: 'Página Inicial', Icon: Globe },
   { id: 'staff', label: 'Staff & Manutenção', Icon: ShieldCheck },
   { id: 'wifi', label: 'WiFi', Icon: WifiIcon },
   { id: 'alerts', label: 'Alertas', Icon: Bell },
@@ -59,6 +62,10 @@ export default function AdminSettings(){
   const [bannerSlides, setBannerSlides] = useState(DEFAULT_BANNERS)
   const [savingBanners, setSavingBanners] = useState(false)
   const [uploadingBannerIdx, setUploadingBannerIdx] = useState(null)
+
+  // Public landing page (freshbubbles.pt) content helper state
+  const [landingContent, setLandingContent] = useState(DEFAULT_LANDING_CONTENT)
+  const [savingLanding, setSavingLanding] = useState(false)
 
   // Staff & maintenance helper state
   const [adminPin, setAdminPin] = useState('')
@@ -102,6 +109,86 @@ export default function AdminSettings(){
       const value = saved && Array.isArray(saved.value) ? saved.value : null
       setBannerSlides(value && value.length > 0 ? value : DEFAULT_BANNERS)
     } catch (e) { console.warn('loadBannerSettings failed', e) }
+  }
+
+  // Merges saved content onto the defaults field-by-field — mirrors
+  // backend/src/views/landing.js's own mergeContent(), so a partial save (or
+  // one from before a field existed) never leaves the form with a missing
+  // section instead of falling back to real default copy.
+  async function loadLandingContent() {
+    try {
+      const saved = await api.getSetting('landingPage.content').catch(() => null)
+      const c = (saved && saved.value && typeof saved.value === 'object') ? saved.value : {}
+      const items = (list, fallback) => (Array.isArray(list) && list.length ? list : fallback)
+      setLandingContent({
+        hero: { ...DEFAULT_LANDING_CONTENT.hero, ...(c.hero || {}) },
+        steps: { ...DEFAULT_LANDING_CONTENT.steps, ...(c.steps || {}), items: items(c.steps && c.steps.items, DEFAULT_LANDING_CONTENT.steps.items) },
+        features: { ...DEFAULT_LANDING_CONTENT.features, ...(c.features || {}), items: items(c.features && c.features.items, DEFAULT_LANDING_CONTENT.features.items) },
+        cta: { ...DEFAULT_LANDING_CONTENT.cta, ...(c.cta || {}) },
+        visit: { ...DEFAULT_LANDING_CONTENT.visit, ...(c.visit || {}) },
+        customSections: Array.isArray(c.customSections) ? c.customSections : [],
+      })
+    } catch (e) { console.warn('loadLandingContent failed', e) }
+  }
+
+  function updateHero(field, val) {
+    setLandingContent((c) => ({ ...c, hero: { ...c.hero, [field]: val } }))
+  }
+  function updateSectionField(section, field, val) {
+    setLandingContent((c) => ({ ...c, [section]: { ...c[section], [field]: val } }))
+  }
+  function toggleSectionVisible(section) {
+    setLandingContent((c) => ({ ...c, [section]: { ...c[section], visible: !c[section].visible } }))
+  }
+  function updateSectionItem(section, idx, field, val) {
+    setLandingContent((c) => ({ ...c, [section]: { ...c[section], items: c[section].items.map((it, i) => (i === idx ? { ...it, [field]: val } : it)) } }))
+  }
+  function addSectionItem(section) {
+    setLandingContent((c) => ({ ...c, [section]: { ...c[section], items: [...c[section].items, { t: '', d: '' }] } }))
+  }
+  function removeSectionItem(section, idx) {
+    setLandingContent((c) => ({ ...c, [section]: { ...c[section], items: c[section].items.filter((_, i) => i !== idx) } }))
+  }
+  function moveSectionItem(section, idx, dir) {
+    setLandingContent((c) => {
+      const items = [...c[section].items]
+      const target = idx + dir
+      if (target < 0 || target >= items.length) return c
+      ;[items[idx], items[target]] = [items[target], items[idx]]
+      return { ...c, [section]: { ...c[section], items } }
+    })
+  }
+
+  function addCustomSection() {
+    setLandingContent((c) => ({ ...c, customSections: [...c.customSections, { id: `custom-${Date.now()}`, visible: true, eyebrow: '', heading: '', body: '', ctaLabel: '', ctaHref: '' }] }))
+  }
+  function updateCustomSection(idx, field, val) {
+    setLandingContent((c) => ({ ...c, customSections: c.customSections.map((s, i) => (i === idx ? { ...s, [field]: val } : s)) }))
+  }
+  function removeCustomSection(idx) {
+    setLandingContent((c) => ({ ...c, customSections: c.customSections.filter((_, i) => i !== idx) }))
+  }
+  function moveCustomSection(idx, dir) {
+    setLandingContent((c) => {
+      const sections = [...c.customSections]
+      const target = idx + dir
+      if (target < 0 || target >= sections.length) return c
+      ;[sections[idx], sections[target]] = [sections[target], sections[idx]]
+      return { ...c, customSections: sections }
+    })
+  }
+
+  async function saveLandingContent() {
+    setSavingLanding(true)
+    try {
+      await api.setSetting({ key: 'landingPage.content', value: landingContent })
+      toast({ title: 'Página inicial guardada', variant: 'success' })
+    } catch (e) {
+      console.error(e)
+      toast({ title: 'Erro ao guardar a página inicial', variant: 'destructive' })
+    } finally {
+      setSavingLanding(false)
+    }
   }
 
   async function load() {
@@ -148,7 +235,7 @@ export default function AdminSettings(){
     } catch (e) { console.warn('loadWhatsappSettings failed', e) }
   }
 
-  useEffect(() => { load(); loadBranding(); loadBannerSettings(); loadStaffSettings(); loadWifiSettings(); loadAlertsSettings(); loadWhatsappSettings() }, [])
+  useEffect(() => { load(); loadBranding(); loadBannerSettings(); loadLandingContent(); loadStaffSettings(); loadWifiSettings(); loadAlertsSettings(); loadWhatsappSettings() }, [])
 
   // While WhatsApp is enabled but not yet connected, poll for the QR code /
   // connection state — same "poll a status endpoint while pairing" idea the
@@ -662,6 +749,238 @@ export default function AdminSettings(){
           </div>
         </CardContent>
       </Card>
+      )}
+
+      {/* Public landing page (freshbubbles.pt) content */}
+      {activeTab === 'landing' && (
+      <div className="space-y-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Hero</CardTitle>
+            <CardDescription>O topo da página — a primeira coisa que o visitante vê</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div>
+              <Label htmlFor="hero-eyebrow">Etiqueta</Label>
+              <Input id="hero-eyebrow" value={landingContent.hero.eyebrow} onChange={(e) => updateHero('eyebrow', e.target.value)} placeholder="Ex: Lavandaria em Loures" />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="hero-heading">Título</Label>
+                <Input id="hero-heading" value={landingContent.hero.heading} onChange={(e) => updateHero('heading', e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="hero-accent">Título (destaque)</Label>
+                <Input id="hero-accent" value={landingContent.hero.accent} onChange={(e) => updateHero('accent', e.target.value)} />
+              </div>
+            </div>
+            <div>
+              <Label htmlFor="hero-sub">Subtítulo</Label>
+              <Input id="hero-sub" value={landingContent.hero.subheading} onChange={(e) => updateHero('subheading', e.target.value)} />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="hero-cta1">Botão principal</Label>
+                <Input id="hero-cta1" value={landingContent.hero.ctaPrimaryLabel} onChange={(e) => updateHero('ctaPrimaryLabel', e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="hero-cta2">Botão secundário</Label>
+                <Input id="hero-cta2" value={landingContent.hero.ctaSecondaryLabel} onChange={(e) => updateHero('ctaSecondaryLabel', e.target.value)} />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {[
+          { key: 'steps', title: 'Como funciona', desc: 'Os passos, em ordem, com o número gerado automaticamente' },
+          { key: 'features', title: 'Serviços', desc: 'Os cartões de serviços/vantagens' },
+        ].map(({ key, title, desc }) => (
+          <Card key={key}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
+              <div>
+                <CardTitle>{title}</CardTitle>
+                <CardDescription>{desc}</CardDescription>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={() => toggleSectionVisible(key)}>
+                {landingContent[key].visible
+                  ? (<><Eye className="h-4 w-4 mr-2" />Visível</>)
+                  : (<><EyeOff className="h-4 w-4 mr-2" />Oculto</>)}
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <Label>Etiqueta</Label>
+                  <Input value={landingContent[key].eyebrow} onChange={(e) => updateSectionField(key, 'eyebrow', e.target.value)} />
+                </div>
+                <div>
+                  <Label>Título da secção</Label>
+                  <Input value={landingContent[key].heading} onChange={(e) => updateSectionField(key, 'heading', e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <Label>Descrição</Label>
+                <Input value={landingContent[key].description} onChange={(e) => updateSectionField(key, 'description', e.target.value)} />
+              </div>
+
+              {landingContent[key].items.map((item, idx) => (
+                <div key={idx} className="border rounded-lg p-3 flex flex-col md:flex-row gap-3">
+                  <div className="flex-1 space-y-2">
+                    <Input value={item.t} onChange={(e) => updateSectionItem(key, idx, 't', e.target.value)} placeholder="Título" />
+                    <Input value={item.d} onChange={(e) => updateSectionItem(key, idx, 'd', e.target.value)} placeholder="Texto" />
+                  </div>
+                  <div className="flex md:flex-col gap-2 shrink-0 justify-end">
+                    <Button type="button" variant="outline" size="sm" onClick={() => moveSectionItem(key, idx, -1)} disabled={idx === 0} aria-label="Mover para cima">
+                      <ArrowUp className="h-4 w-4" />
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => moveSectionItem(key, idx, 1)} disabled={idx === landingContent[key].items.length - 1} aria-label="Mover para baixo">
+                      <ArrowDown className="h-4 w-4" />
+                    </Button>
+                    <Button type="button" variant="destructive" size="sm" onClick={() => removeSectionItem(key, idx)} aria-label="Remover item">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              <Button type="button" variant="outline" onClick={() => addSectionItem(key)}>
+                <Plus className="h-4 w-4 mr-2" /> Adicionar item
+              </Button>
+            </CardContent>
+          </Card>
+        ))}
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <div>
+              <CardTitle>Chamada para ação</CardTitle>
+              <CardDescription>A faixa de destaque antes de "Visite-nos"</CardDescription>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => toggleSectionVisible('cta')}>
+              {landingContent.cta.visible
+                ? (<><Eye className="h-4 w-4 mr-2" />Visível</>)
+                : (<><EyeOff className="h-4 w-4 mr-2" />Oculto</>)}
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div>
+              <Label>Título</Label>
+              <Input value={landingContent.cta.heading} onChange={(e) => updateSectionField('cta', 'heading', e.target.value)} />
+            </div>
+            <div>
+              <Label>Texto</Label>
+              <Input value={landingContent.cta.description} onChange={(e) => updateSectionField('cta', 'description', e.target.value)} />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <div>
+              <CardTitle>Visite-nos</CardTitle>
+              <CardDescription>Morada, telefone, horário e redes sociais são factos confirmados e não são editáveis aqui — apenas o texto à volta</CardDescription>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => toggleSectionVisible('visit')}>
+              {landingContent.visit.visible
+                ? (<><Eye className="h-4 w-4 mr-2" />Visível</>)
+                : (<><EyeOff className="h-4 w-4 mr-2" />Oculto</>)}
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <Label>Etiqueta</Label>
+                <Input value={landingContent.visit.eyebrow} onChange={(e) => updateSectionField('visit', 'eyebrow', e.target.value)} />
+              </div>
+              <div>
+                <Label>Título da secção</Label>
+                <Input value={landingContent.visit.heading} onChange={(e) => updateSectionField('visit', 'heading', e.target.value)} />
+              </div>
+            </div>
+            <div>
+              <Label>Descrição</Label>
+              <Input value={landingContent.visit.description} onChange={(e) => updateSectionField('visit', 'description', e.target.value)} />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <Label>Citação (testemunho)</Label>
+                <Input value={landingContent.visit.quoteText} onChange={(e) => updateSectionField('visit', 'quoteText', e.target.value)} />
+              </div>
+              <div>
+                <Label>Autor da citação</Label>
+                <Input value={landingContent.visit.quoteAuthor} onChange={(e) => updateSectionField('visit', 'quoteAuthor', e.target.value)} />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Secções personalizadas</CardTitle>
+            <CardDescription>Adicione novas secções à página — título, texto e, opcionalmente, um botão</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {landingContent.customSections.map((cs, idx) => (
+              <div key={cs.id || idx} className="border rounded-lg p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-muted-foreground">Secção {idx + 1}</span>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" size="sm" onClick={() => updateCustomSection(idx, 'visible', cs.visible === false)}>
+                      {cs.visible !== false
+                        ? (<><Eye className="h-4 w-4 mr-2" />Visível</>)
+                        : (<><EyeOff className="h-4 w-4 mr-2" />Oculto</>)}
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => moveCustomSection(idx, -1)} disabled={idx === 0} aria-label="Mover para cima">
+                      <ArrowUp className="h-4 w-4" />
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => moveCustomSection(idx, 1)} disabled={idx === landingContent.customSections.length - 1} aria-label="Mover para baixo">
+                      <ArrowDown className="h-4 w-4" />
+                    </Button>
+                    <Button type="button" variant="destructive" size="sm" onClick={() => removeCustomSection(idx)} aria-label="Remover secção">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <Label>Etiqueta (opcional)</Label>
+                    <Input value={cs.eyebrow} onChange={(e) => updateCustomSection(idx, 'eyebrow', e.target.value)} />
+                  </div>
+                  <div>
+                    <Label>Título</Label>
+                    <Input value={cs.heading} onChange={(e) => updateCustomSection(idx, 'heading', e.target.value)} placeholder="Obrigatório — sem título a secção não é publicada" />
+                  </div>
+                </div>
+                <div>
+                  <Label>Texto</Label>
+                  <Input value={cs.body} onChange={(e) => updateCustomSection(idx, 'body', e.target.value)} />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <Label>Texto do botão (opcional)</Label>
+                    <Input value={cs.ctaLabel} onChange={(e) => updateCustomSection(idx, 'ctaLabel', e.target.value)} />
+                  </div>
+                  <div>
+                    <Label>Link do botão (opcional)</Label>
+                    <Input value={cs.ctaHref} onChange={(e) => updateCustomSection(idx, 'ctaHref', e.target.value)} placeholder="Ex: /promo ou https://..." />
+                  </div>
+                </div>
+              </div>
+            ))}
+            <Button type="button" variant="outline" onClick={addCustomSection}>
+              <Plus className="h-4 w-4 mr-2" /> Adicionar secção
+            </Button>
+          </CardContent>
+        </Card>
+
+        <div className="flex items-center gap-2 pb-4">
+          <Button type="button" onClick={saveLandingContent} disabled={savingLanding}>
+            {savingLanding ? 'A guardar…' : 'Guardar Página Inicial'}
+          </Button>
+          <Button type="button" variant="outline" onClick={() => setLandingContent(DEFAULT_LANDING_CONTENT)}>
+            Repor predefinições
+          </Button>
+        </div>
+      </div>
       )}
 
       {/* Staff & Maintenance */}

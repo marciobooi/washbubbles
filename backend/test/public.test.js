@@ -1,22 +1,40 @@
 import { expect } from 'chai'
 import express from 'express'
 import request from 'supertest'
-import publicRoutes from '../src/routes/public.js'
+import publicRoutes, { _resetContentCacheForTests } from '../src/routes/public.js'
+import { resolveTenant } from '../src/middleware/tenant.js'
+import { mergeContent, DEFAULT_CONTENT, CONTENT_SETTING_KEY } from '../src/views/landing.js'
+import Setting from '../src/models/setting.js'
+import Tenant from '../src/models/tenant.js'
+import { startTestDb, stopTestDb } from './setup.test-helper.js'
 
 /**
- * The public front page is static content with no DB dependency, so it gets
- * its own minimal app rather than buildTestApp() — mounting it exactly the
- * way index.js does (see the PUBLIC_LANDING_PAGE gate there), nothing more.
+ * Mounts resolveTenant ahead of publicRoutes, mirroring index.js (see the
+ * PUBLIC_LANDING_PAGE gate there) — the route now reads its content Setting
+ * through withTenant(), which needs req.tenantId resolved the same way a
+ * real request gets it.
  */
 function buildPublicApp() {
   const app = express()
+  app.use(express.json())
+  app.use(resolveTenant)
   app.use('/', publicRoutes)
   return app
 }
 
 describe('Public front page (routes/public.js + views/landing.js)', () => {
   let app
-  before(() => { app = buildPublicApp() })
+  let tenant
+  before(async () => {
+    await startTestDb()
+    tenant = await Tenant.create({ name: 'Landing Test Tenant', slug: 'landing-test-tenant' })
+    app = buildPublicApp()
+  })
+  after(async () => { await stopTestDb() })
+  afterEach(async () => {
+    _resetContentCacheForTests()
+    await Setting.deleteMany({ tenantId: tenant._id })
+  })
 
   describe('GET /', () => {
     it('returns real HTML in the first response (no JS required to read it)', async () => {
@@ -145,6 +163,70 @@ describe('Public front page (routes/public.js + views/landing.js)', () => {
     })
   })
 
+  describe('Landing page content (DB-backed, editable from the admin "Página Inicial" tab)', () => {
+    // resolveTenant falls back to X-Tenant-Id explicitly rather than relying
+    // on the "sole tenant" auto-detect — other test files in the same `npm
+    // test` run create their own tenants against the same shared connection,
+    // so single-tenant auto-detect can't be assumed here.
+    const asThisTenant = () => request(app).get('/').set('X-Tenant-Id', tenant._id.toString())
+
+    it('renders default content when nothing has been saved yet', async () => {
+      const res = await asThisTenant()
+      expect(res.text).to.match(/<h1>.*Retire fresca.*<\/h1>/s)
+    })
+
+    it('overrides hero copy with what was saved to the Setting', async () => {
+      await Setting.create({ tenantId: tenant._id, key: CONTENT_SETTING_KEY, value: {
+        hero: { ...DEFAULT_CONTENT.hero, heading: 'Lavagem Premium.', accent: 'Sempre pronta.' },
+      } })
+      const res = await asThisTenant()
+      expect(res.text).to.include('Lavagem Premium.')
+      expect(res.text).to.include('Sempre pronta.')
+    })
+
+    it('omits a section (and its nav link) when saved as not visible', async () => {
+      await Setting.create({ tenantId: tenant._id, key: CONTENT_SETTING_KEY, value: {
+        steps: { visible: false },
+      } })
+      const res = await asThisTenant()
+      expect(res.text).to.not.include('id="como-funciona"')
+      expect(res.text).to.not.match(/<nav[\s\S]*?Como funciona[\s\S]*?<\/nav>/)
+      // Untouched sections keep rendering — turning one off isn't all-or-nothing.
+      expect(res.text).to.include('id="servicos"')
+    })
+
+    it('renders an admin-created custom section, and skips one saved as hidden', async () => {
+      await Setting.create({ tenantId: tenant._id, key: CONTENT_SETTING_KEY, value: {
+        customSections: [
+          { id: 'promo', visible: true, eyebrow: 'Promoção', heading: 'Semana da Lã', body: 'Descontos esta semana.', ctaLabel: 'Saber mais', ctaHref: '/promo' },
+          { id: 'draft', visible: false, heading: 'Ainda não publicado' },
+        ],
+      } })
+      const res = await asThisTenant()
+      expect(res.text).to.include('Semana da Lã')
+      expect(res.text).to.include('Descontos esta semana.')
+      expect(res.text).to.include('href="/promo"')
+      expect(res.text).to.not.include('Ainda não publicado')
+    })
+
+    it('drops a custom section with no heading — a half-filled draft never ships blank markup', async () => {
+      await Setting.create({ tenantId: tenant._id, key: CONTENT_SETTING_KEY, value: {
+        customSections: [{ id: 'empty', visible: true, body: 'Sem título.' }],
+      } })
+      const res = await asThisTenant()
+      expect(res.text).to.not.include('Sem título.')
+    })
+
+    it('escapes HTML saved in admin content — a malicious/compromised save can\'t inject a real script tag', async () => {
+      await Setting.create({ tenantId: tenant._id, key: CONTENT_SETTING_KEY, value: {
+        hero: { ...DEFAULT_CONTENT.hero, heading: '<script>alert(1)</script>' },
+      } })
+      const res = await asThisTenant()
+      expect(res.text).to.not.include('<script>alert(1)</script>')
+      expect(res.text).to.include('&lt;script&gt;alert(1)&lt;/script&gt;')
+    })
+  })
+
   describe('PUBLIC_SITE_URL override', () => {
     it('renderLandingPage/robots/sitemap all honour a different configured site URL', async () => {
       const prev = process.env.PUBLIC_SITE_URL
@@ -159,6 +241,31 @@ describe('Public front page (routes/public.js + views/landing.js)', () => {
         else process.env.PUBLIC_SITE_URL = prev
       }
     })
+  })
+})
+
+describe('mergeContent (views/landing.js) — the DB-down/malformed-data safety net', () => {
+  it('returns exactly the shipped defaults when nothing was ever saved', () => {
+    expect(mergeContent(undefined)).to.deep.equal(DEFAULT_CONTENT)
+    expect(mergeContent(null)).to.deep.equal(DEFAULT_CONTENT)
+  })
+
+  it('falls back per-field: a partial save never loses the fields it did not touch', () => {
+    const merged = mergeContent({ hero: { heading: 'Só isto mudou.' } })
+    expect(merged.hero.heading).to.equal('Só isto mudou.')
+    expect(merged.hero.accent).to.equal(DEFAULT_CONTENT.hero.accent) // untouched field, kept
+    expect(merged.steps).to.deep.equal(DEFAULT_CONTENT.steps) // untouched section, kept
+  })
+
+  it('ignores a malformed items list instead of crashing the render', () => {
+    const merged = mergeContent({ steps: { items: 'not-an-array' }, features: { items: [] } })
+    expect(merged.steps.items).to.deep.equal(DEFAULT_CONTENT.steps.items)
+    expect(merged.features.items).to.deep.equal(DEFAULT_CONTENT.features.items)
+  })
+
+  it('drops custom sections with no heading', () => {
+    const merged = mergeContent({ customSections: [{ body: 'no heading' }, { heading: 'Ok' }] })
+    expect(merged.customSections).to.deep.equal([{ heading: 'Ok' }])
   })
 })
 
