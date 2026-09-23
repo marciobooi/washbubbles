@@ -105,8 +105,13 @@ export const DEFAULT_CONTENT = {
     eyebrow: 'Visite-nos',
     heading: 'Onde estamos',
     description: 'Em Loures, aberta todos os dias.',
-    quoteText: 'Serviço impecável e atenção espetacular.',
-    quoteAuthor: 'Daniel Vinhas',
+    // One real, attributed review only — never invent text for the others
+    // Google shows. Admin can add more (Página Inicial tab) once their real
+    // text is on hand; the carousel below degrades to a static single quote
+    // when there's just one, same as it always looked.
+    reviews: [
+      { text: 'Serviço impecável e atenção espetacular.', author: 'Daniel Vinhas' },
+    ],
   },
   customSections: [],
 }
@@ -156,7 +161,11 @@ export function mergeContent(raw) {
       items: items(c.features && c.features.items, DEFAULT_CONTENT.features.items),
     },
     cta: { ...DEFAULT_CONTENT.cta, ...(c.cta || {}) },
-    visit: { ...DEFAULT_CONTENT.visit, ...(c.visit || {}) },
+    visit: {
+      ...DEFAULT_CONTENT.visit,
+      ...(c.visit || {}),
+      reviews: items(c.visit && c.visit.reviews, DEFAULT_CONTENT.visit.reviews),
+    },
     // Admin-created sections only — needs at least a heading to be worth a
     // section element, so a half-filled draft never ships blank markup.
     customSections: Array.isArray(c.customSections) ? c.customSections.filter((s) => s && s.heading) : [],
@@ -388,7 +397,7 @@ img{ max-width:100%; display:block }
 }
 .nav .wrap{ display:flex; align-items:center; justify-content:space-between; height:72px; gap:16px }
 .brand{ display:flex; align-items:center; gap:10px; text-decoration:none; flex-shrink:0 }
-.brand .porthole{ width:36px; height:36px }
+.brand .brand-logo{ width:36px; height:36px; object-fit:contain }
 .brand-word{ font-family:var(--font-head); font-weight:700; font-size:19px; color:var(--primary-900); line-height:1.1 }
 .brand-word small{ display:block; font-family:var(--font-body); font-weight:500; font-size:10.5px; letter-spacing:.11em; color:var(--ink-soft); text-transform:uppercase }
 
@@ -557,16 +566,33 @@ section{ padding:84px 0 }
 .cta-band .btn-ghost{ color:#fff; border-color:rgba(255,255,255,.35) }
 .cta-band .btn-ghost:hover{ background:rgba(255,255,255,.12); border-color:rgba(255,255,255,.6) }
 
-/* quote */
-.quote{
-  max-width:560px; margin:0 auto 48px; text-align:center; padding:0; border:0;
+/* reviews — a single quote when there's only one (no carousel chrome at
+   all), or an auto-playing crossfade carousel once there's more than one.
+   Inactive slides are absolutely positioned over the active (in-flow) one so
+   the container's height always matches whatever is currently showing. */
+.reviews{
+  max-width:560px; margin:0 auto 48px; text-align:center; padding:0; border:0; position:relative;
 }
-.quote p{
+.review-slide{
+  margin:0; padding:0; border:0;
+  position:absolute; inset:0 0 auto 0; opacity:0; visibility:hidden; transition:opacity .5s ease;
+}
+.review-slide.is-active{ position:relative; opacity:1; visibility:visible }
+.review-slide p{
   font-family:var(--font-head); font-weight:500; font-size:22px; line-height:1.4; color:var(--primary-900);
   margin:0 0 14px;
 }
-.quote cite{ font-style:normal; font-size:14px; font-weight:600; color:var(--ink-soft) }
-.quote cite span{ font-weight:400; color:#94a3a1 }
+.review-slide cite{ font-style:normal; font-size:14px; font-weight:600; color:var(--ink-soft) }
+.review-slide cite span{ font-weight:400; color:#94a3a1 }
+@media (prefers-reduced-motion:reduce){ .review-slide{ transition:none } }
+
+.review-dots{ display:flex; justify-content:center; gap:8px; margin-top:20px }
+.review-dot{
+  width:8px; height:8px; border-radius:999px; border:0; padding:0; cursor:pointer;
+  background:rgba(13,148,136,.25); transition:background .2s ease, transform .2s ease;
+}
+.review-dot.is-active{ background:var(--primary-600); transform:scale(1.3) }
+.review-dot:hover{ background:rgba(13,148,136,.5) }
 
 /* visit us */
 .visit{ display:grid; grid-template-columns:1fr 1fr; gap:28px; align-items:start }
@@ -590,7 +616,7 @@ section{ padding:84px 0 }
 footer{ border-top:1px solid rgba(13,148,136,.14); padding:40px 0 32px }
 footer .wrap{ display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:20px }
 .foot-brand{ display:flex; align-items:center; gap:10px }
-.foot-brand .porthole{ width:28px; height:28px }
+.foot-brand .brand-logo{ width:28px; height:28px; object-fit:contain }
 .foot-brand-text{ font-family:var(--font-head); font-weight:600; font-size:15px; color:var(--primary-900) }
 .foot-brand-text small{ display:block; font-family:var(--font-body); font-weight:400; font-size:11.5px; color:var(--ink-soft); letter-spacing:.06em }
 footer .foot-links{ display:flex; gap:22px; font-size:13.5px; color:var(--ink-soft) }
@@ -643,7 +669,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
 <nav class="nav" aria-label="Navegação principal">
   <div class="wrap">
     <a class="brand" href="#topo">
-      ${porthole({ size: 36, spin: false })}
+      <img class="brand-logo" src="${escapeHtml(brand.logo)}" alt="${escapeHtml(brand.name)}" width="36" height="36">
       <span class="brand-word">${escapeHtml(brand.name)}<small>${escapeHtml(brand.tagline)}</small></span>
     </a>
     <ul class="nav-links" id="nav-links">
@@ -761,10 +787,17 @@ footer .foot-links a:hover{ color:var(--primary-800) }
         <p>${escapeHtml(content.visit.description)}</p>
       </div>
 
-      <blockquote class="quote reveal">
-        <p>&ldquo;${escapeHtml(content.visit.quoteText)}&rdquo;</p>
-        <cite>${escapeHtml(content.visit.quoteAuthor)} <span>· avaliação no Google</span></cite>
-      </blockquote>
+      <div class="reviews reveal"${content.visit.reviews.length > 1 ? ' data-review-carousel' : ''}>
+        ${content.visit.reviews.map((r, i) => `
+        <blockquote class="review-slide${i === 0 ? ' is-active' : ''}">
+          <p>&ldquo;${escapeHtml(r.text)}&rdquo;</p>
+          <cite>${escapeHtml(r.author)} <span>· avaliação no Google</span></cite>
+        </blockquote>`).join('')}
+        ${content.visit.reviews.length > 1 ? `
+        <div class="review-dots" role="tablist" aria-label="Avaliações">
+          ${content.visit.reviews.map((_, i) => `<button type="button" class="review-dot${i === 0 ? ' is-active' : ''}" data-review-dot="${i}" aria-label="Avaliação ${i + 1}"></button>`).join('')}
+        </div>` : ''}
+      </div>
 
       <div class="visit reveal">
         <div class="visit-card">
@@ -809,7 +842,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
 <footer>
   <div class="wrap">
     <div class="foot-brand">
-      ${porthole({ size: 28, spin: false })}
+      <img class="brand-logo" src="${escapeHtml(brand.logo)}" alt="${escapeHtml(brand.name)}" width="28" height="28">
       <span class="foot-brand-text">${escapeHtml(brand.name)}<small>${escapeHtml(brand.tagline)}</small></span>
     </div>
     <div class="foot-links">
@@ -873,6 +906,38 @@ footer .foot-links a:hover{ color:var(--primary-800) }
       window.addEventListener('resize', function(){ vh = window.innerHeight; apply(); });
       apply();
     }
+  }
+
+  // Reviews carousel — only present in the markup at all when there's more
+  // than one review (see renderLandingPage), so a single real review still
+  // renders exactly as the plain static quote it always was. Auto-advances,
+  // pauses on hover/focus (a moving carousel the visitor can't stop is an
+  // accessibility trap), and never auto-advances under reduced motion —
+  // manual dot navigation still works either way.
+  var carousel = document.querySelector('[data-review-carousel]');
+  if (carousel) {
+    var slides = [].slice.call(carousel.querySelectorAll('.review-slide'));
+    var dots = [].slice.call(carousel.querySelectorAll('[data-review-dot]'));
+    var active = 0;
+    var timer = null;
+    var show = function(i){
+      slides[active].classList.remove('is-active');
+      if (dots[active]) dots[active].classList.remove('is-active');
+      active = i;
+      slides[active].classList.add('is-active');
+      if (dots[active]) dots[active].classList.add('is-active');
+    };
+    var next = function(){ show((active + 1) % slides.length); };
+    var start = function(){ if (!reduceMotion && !timer) timer = setInterval(next, 6000); };
+    var stop = function(){ if (timer) { clearInterval(timer); timer = null; } };
+    dots.forEach(function(dot, i){
+      dot.addEventListener('click', function(){ show(i); stop(); start(); });
+    });
+    carousel.addEventListener('mouseenter', stop);
+    carousel.addEventListener('mouseleave', start);
+    carousel.addEventListener('focusin', stop);
+    carousel.addEventListener('focusout', start);
+    start();
   }
 })();
 </script>

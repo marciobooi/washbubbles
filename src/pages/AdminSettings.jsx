@@ -134,7 +134,11 @@ export default function AdminSettings(){
         steps: { ...DEFAULT_LANDING_CONTENT.steps, ...(c.steps || {}), items: items(c.steps && c.steps.items, DEFAULT_LANDING_CONTENT.steps.items) },
         features: { ...DEFAULT_LANDING_CONTENT.features, ...(c.features || {}), items: items(c.features && c.features.items, DEFAULT_LANDING_CONTENT.features.items) },
         cta: { ...DEFAULT_LANDING_CONTENT.cta, ...(c.cta || {}) },
-        visit: { ...DEFAULT_LANDING_CONTENT.visit, ...(c.visit || {}) },
+        visit: {
+          ...DEFAULT_LANDING_CONTENT.visit,
+          ...(c.visit || {}),
+          reviews: items(c.visit && c.visit.reviews, DEFAULT_LANDING_CONTENT.visit.reviews),
+        },
         customSections: Array.isArray(c.customSections) ? c.customSections : [],
       })
     } catch (e) { console.warn('loadLandingContent failed', e) }
@@ -187,6 +191,25 @@ export default function AdminSettings(){
       if (target < 0 || target >= items.length) return c
       ;[items[idx], items[target]] = [items[target], items[idx]]
       return { ...c, [section]: { ...c[section], items } }
+    })
+  }
+
+  function updateReview(idx, field, val) {
+    setLandingContent((c) => ({ ...c, visit: { ...c.visit, reviews: c.visit.reviews.map((r, i) => (i === idx ? { ...r, [field]: val } : r)) } }))
+  }
+  function addReview() {
+    setLandingContent((c) => ({ ...c, visit: { ...c.visit, reviews: [...c.visit.reviews, { text: '', author: '' }] } }))
+  }
+  function removeReview(idx) {
+    setLandingContent((c) => ({ ...c, visit: { ...c.visit, reviews: c.visit.reviews.filter((_, i) => i !== idx) } }))
+  }
+  function moveReview(idx, dir) {
+    setLandingContent((c) => {
+      const reviews = [...c.visit.reviews]
+      const target = idx + dir
+      if (target < 0 || target >= reviews.length) return c
+      ;[reviews[idx], reviews[target]] = [reviews[target], reviews[idx]]
+      return { ...c, visit: { ...c.visit, reviews } }
     })
   }
 
@@ -1025,15 +1048,31 @@ export default function AdminSettings(){
               <Label>Descrição</Label>
               <Input value={landingContent.visit.description} onChange={(e) => updateSectionField('visit', 'description', e.target.value)} />
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <Label>Citação (testemunho)</Label>
-                <Input value={landingContent.visit.quoteText} onChange={(e) => updateSectionField('visit', 'quoteText', e.target.value)} />
-              </div>
-              <div>
-                <Label>Autor da citação</Label>
-                <Input value={landingContent.visit.quoteAuthor} onChange={(e) => updateSectionField('visit', 'quoteAuthor', e.target.value)} />
-              </div>
+            <div className="space-y-2">
+              <Label>Avaliações (testemunhos) — mais do que uma vira um carrossel automático</Label>
+              {landingContent.visit.reviews.map((r, idx) => (
+                <div key={idx} className="border rounded-lg p-3 flex flex-col md:flex-row gap-3">
+                  <div className="flex-1 space-y-2">
+                    <Input value={r.text} onChange={(e) => updateReview(idx, 'text', e.target.value)} placeholder="Texto da avaliação" />
+                    <Input value={r.author} onChange={(e) => updateReview(idx, 'author', e.target.value)} placeholder="Nome de quem avaliou" />
+                  </div>
+                  <div className="flex md:flex-col gap-2 shrink-0 justify-end">
+                    <Button type="button" variant="outline" size="sm" onClick={() => moveReview(idx, -1)} disabled={idx === 0} aria-label="Mover para cima">
+                      <ArrowUp className="h-4 w-4" />
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => moveReview(idx, 1)} disabled={idx === landingContent.visit.reviews.length - 1} aria-label="Mover para baixo">
+                      <ArrowDown className="h-4 w-4" />
+                    </Button>
+                    <Button type="button" variant="destructive" size="sm" onClick={() => removeReview(idx)} aria-label="Remover avaliação">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              <Button type="button" variant="outline" onClick={addReview}>
+                <Plus className="h-4 w-4 mr-2" /> Adicionar avaliação
+              </Button>
+              <p className="text-xs text-muted-foreground">Use apenas o texto real da avaliação do Google — nunca inventado.</p>
             </div>
           </CardContent>
         </Card>

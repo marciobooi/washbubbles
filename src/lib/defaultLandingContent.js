@@ -67,8 +67,9 @@ export const DEFAULT_LANDING_CONTENT = {
     eyebrow: 'Visite-nos',
     heading: 'Onde estamos',
     description: 'Em Loures, aberta todos os dias.',
-    quoteText: 'Serviço impecável e atenção espetacular.',
-    quoteAuthor: 'Daniel Vinhas',
+    reviews: [
+      { text: 'Serviço impecável e atenção espetacular.', author: 'Daniel Vinhas' },
+    ],
   },
   customSections: [],
 }

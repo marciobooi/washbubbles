@@ -108,6 +108,12 @@ describe('Public front page (routes/public.js + views/landing.js)', () => {
       expect((res.text.match(/<blockquote/g) || [])).to.have.length(1)
     })
 
+    it('renders a single review as a plain static quote — no carousel markup for just one', async () => {
+      const res = await request(app).get('/')
+      expect(res.text).to.not.include('<div class="reviews reveal" data-review-carousel>')
+      expect(res.text).to.not.match(/<button type="button" class="review-dot/)
+    })
+
     it('escapes HTML in dynamic text', async () => {
       const res = await request(app).get('/')
       // The email address renders as a real mailto link, not broken markup.
@@ -301,9 +307,38 @@ describe('Public front page (routes/public.js + views/landing.js)', () => {
       expect(data.image).to.equal('https://freshbubbles.pt/uploads/custom-logo-resized.png')
     })
 
+    it('shows the uploaded logo in the visible nav and footer, not just in meta tags', async () => {
+      await Setting.create({ tenantId: tenant._id, key: 'branding.logo', value: '/uploads/custom-logo-resized.png' })
+      const res = await asThisTenant()
+      const navMatch = res.text.match(/<a class="brand"[\s\S]*?<\/a>/)
+      const footMatch = res.text.match(/<div class="foot-brand">[\s\S]*?<\/div>/)
+      expect(navMatch[0]).to.include('<img class="brand-logo" src="/uploads/custom-logo-resized.png"')
+      expect(footMatch[0]).to.include('<img class="brand-logo" src="/uploads/custom-logo-resized.png"')
+    })
+
     it('falls back to the default logo when nothing has been uploaded via the Branding tab', async () => {
       const res = await asThisTenant()
       expect(res.text).to.include('/geral/freshbubbleslogo.png')
+    })
+
+    it('activates the carousel once a second review is added from admin', async () => {
+      await Setting.create({ tenantId: tenant._id, key: CONTENT_SETTING_KEY, value: {
+        visit: { reviews: [
+          { text: 'Serviço impecável e atenção espetacular.', author: 'Daniel Vinhas' },
+          { text: 'Recomendo a todos.', author: 'Maria Silva' },
+        ] },
+      } })
+      const res = await asThisTenant()
+      expect(res.text).to.include('<div class="reviews reveal" data-review-carousel>')
+      expect((res.text.match(/<blockquote/g) || [])).to.have.length(2)
+      expect((res.text.match(/<button type="button" class="review-dot/g) || [])).to.have.length(2)
+      expect(res.text).to.include('Recomendo a todos.')
+      expect(res.text).to.include('Maria Silva')
+    })
+
+    it('gates the auto-advance behind reduced motion, same as the other animation on this page', async () => {
+      const res = await asThisTenant()
+      expect(res.text).to.match(/var start = function\(\)\{ if \(!reduceMotion/)
     })
   })
 
@@ -364,6 +399,12 @@ describe('mergeContent (views/landing.js) — the DB-down/malformed-data safety 
   it('honours an explicit empty social list but falls back to the default when brand was never saved', () => {
     expect(mergeContent({ brand: { social: [] } }).brand.social).to.deep.equal([])
     expect(mergeContent({}).brand.social).to.deep.equal(DEFAULT_CONTENT.brand.social)
+  })
+
+  it('merges the reviews list the same way as steps/features items: real list wins, malformed falls back', () => {
+    const withReviews = mergeContent({ visit: { reviews: [{ text: 'X', author: 'Y' }] } })
+    expect(withReviews.visit.reviews).to.deep.equal([{ text: 'X', author: 'Y' }])
+    expect(mergeContent({ visit: { reviews: 'not-an-array' } }).visit.reviews).to.deep.equal(DEFAULT_CONTENT.visit.reviews)
   })
 })
 
