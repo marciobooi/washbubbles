@@ -675,26 +675,31 @@ section{ padding:84px 0 }
 
 /* reviews — a single quote when there's only one (no carousel chrome at
    all), or an auto-playing crossfade carousel once there's more than one.
-   Inactive slides are absolutely positioned over the active (in-flow) one so
-   the container's height always matches whatever is currently showing. */
+   Every slide shares the same single grid cell (grid-area:1/1 below), so
+   the track auto-sizes to whichever slide is tallest — including the
+   currently-invisible ones, since visibility:hidden still counts for grid
+   track sizing. Two earlier approaches (measuring heights from JS, and
+   absolutely-positioning inactive slides under a flex layout) each had
+   their own real bug — a JS snapshot taken before web fonts finished
+   loading, and inactive slides silently measuring ~80px wider than the
+   active one because absolute inset:0 is relative to the padding edge, not
+   the content edge. This has neither problem: the browser's own layout
+   engine keeps it correct continuously, with no JS and no padding/inset
+   arithmetic to get subtly wrong. */
 .reviews{
   max-width:640px; margin:0 auto; text-align:center; position:relative;
   /* Same glass-card language as .feature-card/.visit-card, just lighter —
      a see-through boundary for the quote, not another solid white box. */
   background:rgba(255,255,255,.35); border:1px solid rgba(255,255,255,.55); border-radius:24px;
-  padding:44px 40px; backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+  backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
   box-shadow:var(--shadow-soft);
-  /* min-height is set from JS once slide heights are measured (a one-line
-     Google review vs. a five-sentence one differ a lot) — flex+center here
-     so whichever slide is active sits centered in that fixed space instead
-     of pinned to the top with empty room below it. */
-  display:flex; flex-direction:column; justify-content:center;
+  display:grid; align-items:center;
 }
 .review-slide{
-  margin:0; padding:0; border:0;
-  position:absolute; inset:0 0 auto 0; opacity:0; visibility:hidden; transition:opacity .5s ease;
+  grid-area:1/1; margin:0; border:0; padding:44px 40px;
+  opacity:0; visibility:hidden; transition:opacity .5s ease;
 }
-.review-slide.is-active{ position:relative; opacity:1; visibility:visible }
+.review-slide.is-active{ opacity:1; visibility:visible }
 .review-slide p{
   font-family:var(--font-head); font-weight:500; font-size:22px; line-height:1.4; color:var(--primary-900);
   margin:0 0 14px;
@@ -1050,19 +1055,10 @@ footer .foot-links a:hover{ color:var(--primary-800) }
     var dots = [].slice.call(carousel.querySelectorAll('[data-review-dot]'));
     var active = 0;
     var timer = null;
-    // Reviews vary a lot in length (a one-line quote vs. a five-sentence
-    // one) — without this, rotating to a shorter review shrinks the card
-    // and shoves everything below it up the page mid-read. Measuring each
-    // slide's own natural height works even while hidden: they're
-    // visibility:hidden, not display:none, so layout still happens for
-    // them, and inset:0 0 auto 0 keeps every slide at the card's full
-    // width throughout, so a measurement taken now still matches after a
-    // resize changes how the text wraps — recomputed below, either way.
-    var sizeToTallest = function(){
-      var maxH = 0;
-      slides.forEach(function(s){ maxH = Math.max(maxH, s.getBoundingClientRect().height); });
-      if (maxH) carousel.style.minHeight = maxH + 'px';
-    };
+    // No height bookkeeping needed here — see .reviews's own CSS comment:
+    // every slide shares one grid cell, so the card is already sized to
+    // the tallest one by the browser's normal layout, kept correct
+    // automatically as fonts load or the viewport resizes.
     var show = function(i){
       slides[active].classList.remove('is-active');
       if (dots[active]) dots[active].classList.remove('is-active');
@@ -1080,15 +1076,6 @@ footer .foot-links a:hover{ color:var(--primary-800) }
     carousel.addEventListener('mouseleave', start);
     carousel.addEventListener('focusin', stop);
     carousel.addEventListener('focusout', start);
-    sizeToTallest();
-    // The immediate call above can measure text in a fallback font — the
-    // Google Fonts <link> hasn't necessarily finished loading yet — giving
-    // a too-small height that a later font swap (Poppins/Inter, both taller
-    // and wider than a generic fallback) then exceeds, which is exactly the
-    // jump this was meant to prevent. Re-measure once fonts are confirmed
-    // loaded; harmless no-op if nothing changed.
-    if (document.fonts && document.fonts.ready) document.fonts.ready.then(sizeToTallest);
-    window.addEventListener('resize', sizeToTallest);
     start();
   }
 })();

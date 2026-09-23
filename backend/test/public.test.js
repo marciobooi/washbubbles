@@ -190,15 +190,14 @@ describe('Public front page (routes/public.js + views/landing.js)', () => {
       expect(res.text).to.include('.reveal.is-visible .accent::before{')
     })
 
-    it('locks the reviews card to the tallest review\'s height so rotating to a shorter one doesn\'t shrink the page around it', async () => {
+    it('locks the reviews card to the tallest review\'s height via CSS grid stacking — no JS measurement to get out of sync with web fonts', async () => {
       const res = await request(app).get('/')
-      expect(res.text).to.include('var sizeToTallest = function()')
-      expect(res.text).to.include("carousel.style.minHeight = maxH + 'px'")
-      expect(res.text).to.include("window.addEventListener('resize', sizeToTallest)")
-      // Re-measures once web fonts are actually loaded — the first pass can
-      // measure fallback-font text that a later Poppins/Inter swap exceeds,
-      // which is exactly the jump this was meant to prevent.
-      expect(res.text).to.include('document.fonts.ready.then(sizeToTallest)')
+      // Every slide shares grid-area 1/1, so the track auto-sizes to
+      // whichever is tallest (including currently-hidden ones) without any
+      // JS snapshot that could run before fonts finish loading.
+      expect(res.text).to.include('display:grid; align-items:center')
+      expect(res.text).to.include('grid-area:1/1')
+      expect(res.text).to.not.include('sizeToTallest')
     })
   })
 
