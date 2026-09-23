@@ -533,13 +533,16 @@ router.post('/settings/logo', requireAdmin, (req, res) => {
       const origPath = req.file.path
       const ext = path.extname(req.file.filename).toLowerCase() || '.jpg'
       const base = path.basename(req.file.filename, ext)
-      const outName = `${base}-resized${ext}`
+      // Always WebP, regardless of what was uploaded — notably smaller than
+      // JPEG/PNG at the same visual quality, and one output format means one
+      // code path instead of per-format quirks.
+      const outName = `${base}-resized.webp`
       const outPath = path.join(uploadDir, outName)
 
-      // Resize, keep orientation and constrain to 800x800
-      await sharp(origPath).rotate().resize({ width: 800, height: 800, fit: 'inside' }).toFile(outPath)
+      await sharp(origPath).rotate().resize({ width: 800, height: 800, fit: 'inside' }).webp({ quality: 82 }).toFile(outPath)
 
-      // If resized file differs, remove original
+      // Output is always a different file (new extension) — remove the
+      // original upload regardless.
       if (outPath !== origPath) {
         try { fs.unlinkSync(origPath) } catch (e) { /* ignore */ }
       }
@@ -575,12 +578,13 @@ router.post('/settings/banner-image', requireAdmin, (req, res) => {
       const origPath = req.file.path
       const ext = path.extname(req.file.filename).toLowerCase() || '.jpg'
       const base = path.basename(req.file.filename, ext)
-      const outName = `${base}-resized${ext}`
+      // Always WebP — see the logo upload's own comment on why.
+      const outName = `${base}-resized.webp`
       const outPath = path.join(uploadDir, outName)
 
       // Wide format, matching the banner's own aspect ratio — a logo's
       // 800x800 square would just get cropped weirdly here.
-      await sharp(origPath).rotate().resize({ width: 1600, height: 640, fit: 'cover' }).toFile(outPath)
+      await sharp(origPath).rotate().resize({ width: 1600, height: 640, fit: 'cover' }).webp({ quality: 82 }).toFile(outPath)
 
       if (outPath !== origPath) {
         try { fs.unlinkSync(origPath) } catch (e) { /* ignore */ }
