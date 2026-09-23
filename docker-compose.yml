@@ -32,9 +32,11 @@ services:
       # Outbound email (password reset, day-close reports, receipts, alerts —
       # see docs/SHOP-HARDWARE-AND-COMMUNICATIONS.md §15). Optional: unset
       # MAIL_HOST in .env.docker and mailer.js logs instead of sending, same
-      # safe fallback as local dev.
+      # safe fallback as local dev. Default port is 587, NOT amen.pt's own
+      # documented 465 — Hetzner silently blocks 25 and 465 outbound; 587
+      # (STARTTLS) is the one that actually connects from this host.
       MAIL_HOST: ${MAIL_HOST:-}
-      MAIL_PORT: ${MAIL_PORT:-465}
+      MAIL_PORT: ${MAIL_PORT:-587}
       MAIL_USER: ${MAIL_USER:-}
       MAIL_PASS: ${MAIL_PASS:-}
       MAIL_FROM: ${MAIL_FROM:-}
@@ -46,6 +48,13 @@ services:
       # "cannot open 40" for a peripheral address that means something only
       # to a controller this server was never wired to).
       ENABLE_COIN_MACHINE: "false"
+      # Server-rendered public front page at "/" (see src/views/landing.js) —
+      # real HTML for crawlers/link-previews, not the client-rendered SPA.
+      # nginx.conf routes the exact "/" path here; everything else still goes
+      # to the SPA. Only meaningful on this cloud deployment — never set on a
+      # shop-kiosk install, whose "/" is the real point-of-sale UI.
+      PUBLIC_LANDING_PAGE: "true"
+      PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://freshbubbles.pt}
     depends_on:
       - mongo
     ports:

@@ -17,6 +17,7 @@ import gatewaysRoutes from './routes/gateways.js'
 import middlewareRoutes from './routes/middleware.js'
 import syncRoutes from './routes/sync.js'
 import wifiRoutes from './routes/wifi.js'
+import publicRoutes from './routes/public.js'
 import kioskWatchdog from './services/kioskWatchdog.js'
 
 // Enforce presence of JWT secret in production-like environments
@@ -67,6 +68,15 @@ app.use('/api/sync', syncRoutes)
 app.use('/api/wifi', wifiRoutes)
 
 app.get('/api/health', (req, res) => res.json({ ok: true }))
+
+// Server-rendered public front page (real HTML in the first response, for
+// crawlers/link-previews) — the cloud/public deployment only. The shop-kiosk
+// build's "/" is the point-of-sale UI (SERVE_FRONTEND below) and must never be
+// shadowed by this; the two are mutually exclusive by what each deployment sets.
+if (process.env.PUBLIC_LANDING_PAGE === 'true') {
+  app.use('/', publicRoutes)
+  console.log('Public front page enabled at /')
+}
 
 // Single-process kiosk install: serve the built web UI from this process so the
 // kiosk browser only needs http://localhost:PORT (same origin => /api and /ws
