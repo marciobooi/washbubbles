@@ -61,9 +61,13 @@ describe('Public front page (routes/public.js + views/landing.js)', () => {
     it('carries the hero\'s coral underline accent onto the other section headings, always on the last word', async () => {
       const res = await request(app).get('/')
       // Steps heading "Três passos, sem complicações" -> last word "complicações"
-      expect(res.text).to.match(/<h2 id="como-funciona-h">Três passos, sem <span class="accent"><svg[\s\S]*?<\/svg>complicações/)
+      expect(res.text).to.match(/<h2 id="como-funciona-h">Três passos, sem <span class="accent">complicações<\/span>/)
       // Features heading "Feito para o seu dia a dia" -> last word "dia"
-      expect(res.text).to.match(/<h2 id="servicos-h">Feito para o seu dia a <span class="accent"><svg[\s\S]*?<\/svg>dia/)
+      expect(res.text).to.match(/<h2 id="servicos-h">Feito para o seu dia a <span class="accent">dia<\/span>/)
+      // Tiled, not one SVG stretched per word — that's what made a short word
+      // ("Google") and a long phrase ("Retire fresca.") look inconsistent.
+      expect(res.text).to.include('background-repeat:repeat-x')
+      expect(res.text).to.not.include('<svg viewBox="0 0 200 14"')
     })
 
     it('has the core SEO tags: title, meta description, canonical, robots', async () => {

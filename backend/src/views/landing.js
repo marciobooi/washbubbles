@@ -208,11 +208,37 @@ const SOCIAL_ICON_PATHS = {
 const GENERIC_LINK_ICON_PATH = 'M9.5 14.5l5-5 M8 12a4 4 0 0 1 0-5.5l1.5-1.5a4 4 0 0 1 5.5 5.5 M16 12a4 4 0 0 1 0 5.5l-1.5 1.5a4 4 0 0 1-5.5-5.5'
 const socialIconPath = (name) => SOCIAL_ICON_PATHS[String(name || '').trim().toLowerCase()] || GENERIC_LINK_ICON_PATH
 
-// The hero's hand-drawn coral underline — its one recurring "emphasis" mark,
-// reused on other section headings via accentLastWord() below instead of
-// each one inventing its own way to draw attention.
-const squiggle = () =>
-  '<svg viewBox="0 0 200 14" preserveAspectRatio="none" aria-hidden="true"><path d="M2 9 C 40 2, 70 13, 100 7 S 160 1, 198 8" fill="none" stroke="var(--coral)" stroke-width="5" stroke-linecap="round"/></svg>'
+/**
+ * The hand-drawn coral underline — the page's one recurring "emphasis" mark
+ * (hero, and other section headings via accentLastWord() below). A single
+ * path stretched to fit each span's width via preserveAspectRatio="none"
+ * looked visibly different per word — a short word ("Google") squashed the
+ * same wave into a different rhythm than a long phrase ("Retire fresca.")
+ * did. This tiles one fixed-period wave instead (CSS background-repeat), so
+ * the rhythm is identical everywhere regardless of what text it's under;
+ * sized in em so it still scales with each heading's own font-size.
+ */
+const SQUIGGLE_DATA_URI = (() => {
+  // A full up-then-down period per tile (like one sine cycle): two quadratic
+  // curves through the same midline (0,10)->(45,10)->(90,10) via control
+  // points (22.5,3) and (67.5,17). What makes it join seamlessly instead of
+  // looking like separate dashes: the tangent *arriving* at x=90 (heading
+  // away from control point (67.5,17)) is identical to the tangent
+  // *leaving* x=0 (heading toward (22.5,3)) — both (+22.5,-7) — so one
+  // tile's end flows into the next tile's start at the same angle.
+  //
+  // The viewBox's own 90:20 (4.5:1) aspect ratio matches the ~4.5:1 shape of
+  // the CSS box it's scaled into (background-size: 1.35em .3em, below) —
+  // that match matters: an earlier square (1:1) viewBox squashed into that
+  // same wide, short box rendered as disconnected dashes instead of a
+  // continuous wave in Chromium, even though the path was mathematically
+  // C1-continuous across tile edges. A non-uniform background-size stretch
+  // on an SVG apparently isn't just "the same picture, scaled" in practice.
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='90' height='20' viewBox='0 0 90 20'>
+    <path d='M0 10 Q22.5 3 45 10 Q67.5 17 90 10' fill='none' stroke='#ff8b6b' stroke-width='5' stroke-linecap='round'/>
+  </svg>`
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`
+})()
 
 /**
  * Underlines the last word of a heading with the squiggle. Section headings
@@ -225,8 +251,8 @@ const squiggle = () =>
 function accentLastWord(text) {
   const trimmed = String(text || '').trim()
   const lastSpace = trimmed.lastIndexOf(' ')
-  if (lastSpace === -1) return `<span class="accent">${squiggle()}${escapeHtml(trimmed)}</span>`
-  return `${escapeHtml(trimmed.slice(0, lastSpace + 1))}<span class="accent">${squiggle()}${escapeHtml(trimmed.slice(lastSpace + 1))}</span>`
+  if (lastSpace === -1) return `<span class="accent">${escapeHtml(trimmed)}</span>`
+  return `${escapeHtml(trimmed.slice(0, lastSpace + 1))}<span class="accent">${escapeHtml(trimmed.slice(lastSpace + 1))}</span>`
 }
 
 /** A small inline SVG "porthole" — the washing-machine drum window that's already the real logo's central mark, reused here as the page's one recurring signature shape. */
@@ -494,13 +520,18 @@ img{ max-width:100%; display:block }
 .accent{
   color:var(--primary-700); position:relative; white-space:nowrap;
 }
-/* No z-index here on purpose: it only reliably paints behind the text in
-   *some* ancestor stacking contexts (worked in the hero, not inside the CTA
-   band's own layered background) — instead the svg comes FIRST in the
-   markup below and the text after, so plain DOM paint order (later sibling
-   on top) puts the text above the underline everywhere, with no dependence
-   on what stacking context happens to be above it. */
-.accent svg{ position:absolute; left:-2%; bottom:-.12em; width:104%; height:.3em }
+/* ::before (not ::after) so it's generated BEFORE the text node in paint
+   order — later content paints on top at the same stacking level, so this
+   sits under the text with no z-index needed (z-index:-1 here only worked
+   in *some* ancestor stacking contexts: fine in the hero, invisible inside
+   the CTA band's own layered background). A tiled background-repeat instead
+   of one stretched SVG keeps the wave's rhythm identical under any word,
+   long or short — see SQUIGGLE_DATA_URI's own comment. */
+.accent::before{
+  content:''; position:absolute; left:-2%; right:-2%; bottom:-.12em; height:.3em;
+  background-image:url("${SQUIGGLE_DATA_URI}");
+  background-repeat:repeat-x; background-size:1.35em .3em; background-position:left center;
+}
 .cta-band h2 .accent{ color:#fff }
 .hero-sub{ margin-top:22px; font-size:17.5px; color:var(--ink-soft); max-width:46ch }
 .hero-cta{ display:flex; flex-wrap:wrap; gap:14px; margin-top:34px }
@@ -627,7 +658,12 @@ section{ padding:84px 0 }
    Inactive slides are absolutely positioned over the active (in-flow) one so
    the container's height always matches whatever is currently showing. */
 .reviews{
-  max-width:560px; margin:0 auto 48px; text-align:center; padding:0; border:0; position:relative;
+  max-width:640px; margin:0 auto; text-align:center; position:relative;
+  /* Same glass-card language as .feature-card/.visit-card, just lighter —
+     a see-through boundary for the quote, not another solid white box. */
+  background:rgba(255,255,255,.35); border:1px solid rgba(255,255,255,.55); border-radius:24px;
+  padding:44px 40px; backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+  box-shadow:var(--shadow-soft);
 }
 .review-slide{
   margin:0; padding:0; border:0;
@@ -752,7 +788,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
     <div class="wrap">
       <div>
         <span class="eyebrow">${escapeHtml(content.hero.eyebrow)}</span>
-        <h1>${escapeHtml(content.hero.heading)}<br><span class="accent">${squiggle()}${escapeHtml(content.hero.accent)}</span></h1>
+        <h1>${escapeHtml(content.hero.heading)}<br><span class="accent">${escapeHtml(content.hero.accent)}</span></h1>
         <p class="hero-sub">${escapeHtml(content.hero.subheading)}</p>
         <div class="hero-cta">
           <a class="btn-primary" href="#como-funciona">${escapeHtml(content.hero.ctaPrimaryLabel)}</a>
