@@ -12,6 +12,7 @@ import DayClose from '../models/dayClose.js'
 import { withTenant } from './tenant.js'
 import { acquireLock, releaseLock } from '../models/lock.js'
 import { sendMail } from './mailer.js'
+import { renderEmailHtml, escapeHtml } from './emailTemplate.js'
 import { getCashDrawerLedger, resetCashDrawerLedger } from './cashDrawer.js'
 
 /**
@@ -341,6 +342,42 @@ function formatDayCloseReceiptText(dc) {
   return lines.join('\n')
 }
 
+/** HTML twin of formatDayCloseReceiptText — same fields, same order. */
+function formatDayCloseReceiptHtml(dc) {
+  const f = (n) => Number(n || 0).toFixed(2)
+  const row = (label, value, bold) => `<tr><td style="padding:5px 0; ${bold ? 'font-weight:bold;' : ''}">${escapeHtml(label)}</td><td style="padding:5px 0; text-align:right; ${bold ? 'font-weight:bold;' : ''}">€${value}</td></tr>`
+  const rows = [
+    row('Fundo inicial', f(dc.openingFloat)),
+    row('Vendas dinheiro', f(dc.totalCash)),
+    row('Vendas cartão', f(dc.totalCard)),
+    row('Esperado em caixa', f(dc.expectedCash)),
+    row('Contado', f(dc.countedCash)),
+    row('Diferença', f(dc.discrepancy)),
+    row('Para o banco', f(dc.amountToBank), true),
+    row('Fundo para próxima sessão', f(dc.floatLeft), true),
+  ].join('')
+
+  let denomHtml = ''
+  if (dc.countedDenominations?.length) {
+    const denomRows = dc.countedDenominations.map((d) => {
+      const label = d.value < 1 ? `${Math.round(d.value * 100)}c` : `${d.value}€`
+      return row(`${label} x${d.count}`, f(d.total))
+    }).join('')
+    denomHtml = `<h3 style="margin:20px 0 8px; font-size:14px;">Contagem</h3><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${denomRows}</table>`
+  }
+  const notesHtml = dc.notes ? `<p style="margin-top:16px;"><strong>Notas:</strong> ${escapeHtml(dc.notes)}</p>` : ''
+
+  return `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${rows}</table>
+    ${denomHtml}
+    ${notesHtml}
+    <p style="margin-top:20px; font-size:13px; color:#3d6a63;">
+      Fechado por: ${escapeHtml(dc.closedByUsername || '-')}<br>
+      ${escapeHtml(new Date(dc.periodTo || dc.createdAt).toLocaleString('pt-PT'))}
+    </p>
+  `
+}
+
 /** Email a Z-report summary of one close (or float adjustment) — same record the history view already renders. */
 export async function emailDayCloseReceipt(req, id, email) {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || ''))) {
@@ -350,7 +387,12 @@ export async function emailDayCloseReceipt(req, id, email) {
   const dc = await DayCloseT.findById(id).lean()
   if (!dc) return { status: 404, body: { error: 'Cash session record not found' } }
 
-  await sendMail({ to: email, subject: 'Fecho de Caixa', text: formatDayCloseReceiptText(dc) })
+  await sendMail({
+    to: email,
+    subject: 'Fecho de Caixa',
+    text: formatDayCloseReceiptText(dc),
+    html: renderEmailHtml({ title: 'Fecho de Caixa', bodyHtml: formatDayCloseReceiptHtml(dc) }),
+  })
   return { status: 200, body: { success: true } }
 }
 

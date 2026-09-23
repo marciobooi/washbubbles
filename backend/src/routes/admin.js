@@ -4,6 +4,7 @@ import { requireAdmin, requireSuperAdmin, requireStaffRead, requireAnyStaff, req
 import MaintenanceTicket from '../models/maintenanceTicket.js'
 import Coupon from '../models/coupon.js'
 import { sendMail } from '../services/mailer.js'
+import { renderEmailHtml, escapeHtmlMultiline } from '../services/emailTemplate.js'
 import Machine from '../models/machine.js'
 import User from '../models/user.js'
 import Sale from '../models/sale.js'
@@ -967,11 +968,14 @@ router.post('/marketing/broadcast', requireAdmin, async (req, res) => {
   const CardT = withTenant(Card, req)
   const recipients = await CardT.find({ marketingOptIn: true, email: { $nin: [null, ''] } }).select('email').lean()
 
+  const bodyHtml = `<p>${escapeHtmlMultiline(message)}</p>`
+  const html = renderEmailHtml({ title: subject, bodyHtml })
+
   let sent = 0
   let failed = 0
   for (const r of recipients) {
     try {
-      await sendMail({ to: r.email, subject, text: message })
+      await sendMail({ to: r.email, subject, text: message, html })
       sent++
     } catch (e) {
       failed++

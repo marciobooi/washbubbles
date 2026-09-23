@@ -6,6 +6,7 @@
  */
 import Setting from '../models/setting.js'
 import { sendMail } from './mailer.js'
+import { renderEmailHtml, escapeHtmlMultiline } from './emailTemplate.js'
 
 export async function sendAlertForTenant(tenantId, subject, message) {
   try {
@@ -13,7 +14,13 @@ export async function sendAlertForTenant(tenantId, subject, message) {
     const row = await Setting.findOne({ tenantId, key: 'alerts.email' })
     const to = row?.value
     if (!to) return
-    await sendMail({ to, subject: `[WashBubbles] ${subject}`, text: message })
+    const bodyHtml = `<p>${escapeHtmlMultiline(message)}</p>`
+    await sendMail({
+      to,
+      subject: `[WashBubbles] ${subject}`,
+      text: message,
+      html: renderEmailHtml({ title: subject, bodyHtml }),
+    })
   } catch (err) {
     // An alert failing to send must never surface to whatever triggered
     // it (a kiosk push, a customer-facing request) — log and move on.
