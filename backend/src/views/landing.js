@@ -78,6 +78,20 @@ function porthole({ size = 120, ring = true, spin = false } = {}) {
     </svg>`
 }
 
+/**
+ * A subtle grain texture, generated once at module load — not a downloaded
+ * asset. Flat CSS gradients alone read as slightly plasticky; a faint
+ * blend-moded noise layer over the whole page is one of the cheapest ways to
+ * make a digital surface feel physical/designed rather than templated.
+ */
+const NOISE_DATA_URI = (() => {
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'>
+    <filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/></filter>
+    <rect width='100%' height='100%' filter='url(#n)'/>
+  </svg>`
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`
+})()
+
 function starIcon() {
   return '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.5 1.3 6.6L12 17.4 6.1 20.5l1.3-6.6-4.9-4.5 6.6-.8z"/></svg>'
 }
@@ -202,9 +216,18 @@ body{
   margin:0; color:var(--ink); font-family:var(--font-body); line-height:1.55;
   background:
     radial-gradient(1200px 600px at 85% -10%, var(--primary-100) 0%, transparent 60%),
-    radial-gradient(900px 500px at -10% 20%, #fff7ed 0%, transparent 55%),
+    radial-gradient(900px 500px at -6% 8%, #fff2e4 0%, transparent 52%),
+    radial-gradient(700px 900px at 100% 55%, rgba(45,212,191,.14) 0%, transparent 60%),
     var(--primary-50);
   -webkit-font-smoothing:antialiased;
+  position:relative;
+}
+/* Grain — see NOISE_DATA_URI's own comment. Fixed + blended, so it reads as
+   texture on the surface rather than a moving/scrolling layer. */
+body::after{
+  content:''; position:fixed; inset:0; z-index:999; pointer-events:none;
+  background-image:url("${NOISE_DATA_URI}"); background-size:170px 170px;
+  opacity:.035; mix-blend-mode:overlay;
 }
 h1,h2,h3{ font-family:var(--font-head); color:var(--ink); margin:0; letter-spacing:-0.01em }
 p{ margin:0 }
@@ -297,10 +320,21 @@ img{ max-width:100%; display:block }
 .rating-count{ font-weight:500; color:var(--ink-soft) }
 
 .hero-art{ position:relative; aspect-ratio:1/1; display:flex; align-items:center; justify-content:center }
-.hero-art .porthole{ position:absolute; filter:drop-shadow(0 30px 45px rgba(13,148,136,.22)) }
-.hero-art .ph-main{ width:78%; height:78%; }
-.hero-art .ph-back-a{ width:38%; height:38%; top:2%; left:-2%; opacity:.85 }
-.hero-art .ph-back-b{ width:26%; height:26%; bottom:6%; right:2%; opacity:.9 }
+/* Each porthole sits in its own positioned wrapper (.pl) so scroll-parallax
+   (JS, sets translateY on the wrapper) and the drum-spin (CSS keyframe on the
+   svg itself) animate two different elements — set them on the same element
+   and the JS write clobbers the CSS animation's transform every frame. */
+.hero-art .pl{ position:absolute; will-change:transform }
+.hero-art .pl .porthole{ display:block; width:100%; height:100%; filter:drop-shadow(0 30px 45px rgba(13,148,136,.22)) }
+.hero-art .pl.ph-main{ width:80%; height:80%; }
+.hero-art .pl.ph-back-a{ width:40%; height:40%; top:-4%; left:-6%; opacity:.85 }
+.hero-art .pl.ph-back-b{ width:27%; height:27%; bottom:2%; right:-3%; opacity:.9 }
+.hero-art .pl.ph-back-c{ width:16%; height:16%; top:12%; right:8%; opacity:.8 }
+.ph-glow{
+  position:absolute; inset:6%; border-radius:999px; z-index:-1;
+  background:radial-gradient(circle at 40% 35%, rgba(45,212,191,.45), rgba(13,148,136,.14) 55%, transparent 75%);
+  filter:blur(32px);
+}
 .porthole--spin{ animation:spin 32s linear infinite }
 @keyframes spin{ to{ transform:rotate(360deg) } }
 @media (prefers-reduced-motion:reduce){ .porthole--spin{ animation:none } }
@@ -375,6 +409,7 @@ section{ padding:84px 0 }
              radial-gradient(420px 260px at 100% 100%, rgba(255,139,107,.18), transparent 60%);
 }
 .cta-band > *{ position:relative }
+.cta-watermark{ position:absolute; top:-18%; right:-10%; width:60%; max-width:420px; opacity:.14; pointer-events:none }
 .cta-band h2{ color:#fff; font-size:clamp(1.6rem,2vw + 1rem,2.2rem) }
 .cta-band p{ color:rgba(240,253,250,.82); margin-top:12px; font-size:16px }
 .cta-band .hero-cta{ justify-content:center; margin-top:30px }
@@ -507,9 +542,11 @@ footer .foot-links a:hover{ color:var(--primary-800) }
         </div>
       </div>
       <div class="hero-art" aria-hidden="true">
-        ${porthole({ size: 420, spin: true }).replace('class="porthole', 'class="porthole ph-main')}
-        ${porthole({ size: 160, spin: false }).replace('class="porthole', 'class="porthole ph-back-a')}
-        ${porthole({ size: 110, spin: false }).replace('class="porthole', 'class="porthole ph-back-b')}
+        <div class="ph-glow" data-parallax="0.04"></div>
+        <div class="pl ph-main" data-parallax="0.05">${porthole({ size: 420, spin: true })}</div>
+        <div class="pl ph-back-a" data-parallax="0.16">${porthole({ size: 160, spin: false })}</div>
+        <div class="pl ph-back-b" data-parallax="-0.13">${porthole({ size: 110, spin: false })}</div>
+        <div class="pl ph-back-c" data-parallax="0.22">${porthole({ size: 70, spin: false, ring: false })}</div>
         ${bubbleDots(6)}
       </div>
     </div>
@@ -525,7 +562,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
       <div class="steps">
         ${STEPS.map((s, i) => `
         <div class="step reveal" style="transition-delay:${i * 0.08}s">
-          <div class="step-mark">${porthole({ size: 88, spin: false })}<span aria-hidden="true">${s.n}</span></div>
+          <div class="step-mark" data-parallax="${i % 2 === 0 ? 0.06 : -0.06}">${porthole({ size: 88, spin: false })}<span aria-hidden="true">${s.n}</span></div>
           <h3>${escapeHtml(s.t)}</h3>
           <p>${escapeHtml(s.d)}</p>
         </div>`).join('')}
@@ -554,6 +591,11 @@ footer .foot-links a:hover{ color:var(--primary-800) }
   <section aria-hidden="false">
     <div class="wrap">
       <div class="cta-band reveal">
+        <svg class="cta-watermark" data-parallax="0.06" viewBox="0 0 100 100" aria-hidden="true">
+          <circle cx="50" cy="50" r="47" fill="none" stroke="#fff" stroke-width="1.5"/>
+          <circle cx="50" cy="50" r="34" fill="none" stroke="#fff" stroke-width="2.5"/>
+          <path d="M50 16 C 66 16 79 27 79 44 C 79 54 73 61 64 66" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>
         <h2>Pronta para a próxima lavagem?</h2>
         <p>Sem marcações. Chegue quando lhe for melhor e a sua roupa espera por si, fresca.</p>
         <div class="hero-cta">
@@ -656,6 +698,34 @@ footer .foot-links a:hover{ color:var(--primary-800) }
       });
     }, { threshold: 0.15, rootMargin: '0px 0px -40px 0px' });
     reveals.forEach(function(el){ io.observe(el); });
+  }
+
+  // Scroll parallax: each [data-parallax] layer shifts relative to how far it
+  // is from the viewport's vertical centre, not from raw scrollY — so depth
+  // feels right wherever the element sits on the page (hero near the top,
+  // the CTA band's watermark much further down), never a runaway offset.
+  // Skipped entirely under reduced motion, same as the spin/drift/reveal above.
+  if (!reduceMotion) {
+    var layers = [].slice.call(document.querySelectorAll('[data-parallax]'));
+    if (layers.length && 'requestAnimationFrame' in window) {
+      var vh = window.innerHeight;
+      var ticking = false;
+      var apply = function(){
+        layers.forEach(function(el){
+          var speed = parseFloat(el.getAttribute('data-parallax')) || 0;
+          var rect = el.getBoundingClientRect();
+          var offset = (rect.top + rect.height / 2 - vh / 2) * speed;
+          el.style.transform = 'translate3d(0,' + offset.toFixed(1) + 'px,0)';
+        });
+        ticking = false;
+      };
+      var onScroll = function(){
+        if (!ticking) { window.requestAnimationFrame(apply); ticking = true; }
+      };
+      window.addEventListener('scroll', onScroll, { passive: true });
+      window.addEventListener('resize', function(){ vh = window.innerHeight; apply(); });
+      apply();
+    }
   }
 })();
 </script>

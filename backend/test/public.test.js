@@ -106,6 +106,21 @@ describe('Public front page (routes/public.js + views/landing.js)', () => {
       const res = await request(app).get('/')
       expect(res.text).to.include("matchMedia('(prefers-reduced-motion: reduce)')")
     })
+
+    it('ships scroll-parallax layers, gated behind reduced-motion like the other animation', async () => {
+      const res = await request(app).get('/')
+      const parallaxAttrs = res.text.match(/data-parallax="[^"]*"/g) || []
+      // Hero glow + 4 portholes + 3 step-marks + 1 CTA watermark = 9 layers.
+      expect(parallaxAttrs.length).to.be.at.least(9)
+      expect(res.text).to.match(/if \(!reduceMotion\) \{[\s\S]*data-parallax/)
+    })
+
+    it('ships a grain overlay as a generated data URI, not a downloaded asset', async () => {
+      const res = await request(app).get('/')
+      expect(res.text).to.include('body::after')
+      expect(res.text).to.include('data:image/svg+xml;base64,')
+      expect(res.text).to.include('mix-blend-mode:overlay')
+    })
   })
 
   describe('GET /robots.txt', () => {
