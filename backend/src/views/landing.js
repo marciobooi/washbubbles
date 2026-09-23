@@ -112,6 +112,11 @@ export const DEFAULT_CONTENT = {
     reviews: [
       { text: 'Serviço impecável e atenção espetacular.', author: 'Daniel Vinhas' },
     ],
+    // The nav/footer already link to /admin/login — this is a second, more
+    // prominent copy of that link sitting inside the public contact card.
+    // Admin-toggleable since a marketing page for customers doesn't always
+    // want to advertise a staff-only link that prominently.
+    showLoginLink: true,
   },
   customSections: [],
 }
@@ -195,6 +200,27 @@ const SOCIAL_ICON_PATHS = {
 }
 const GENERIC_LINK_ICON_PATH = 'M9.5 14.5l5-5 M8 12a4 4 0 0 1 0-5.5l1.5-1.5a4 4 0 0 1 5.5 5.5 M16 12a4 4 0 0 1 0 5.5l-1.5 1.5a4 4 0 0 1-5.5-5.5'
 const socialIconPath = (name) => SOCIAL_ICON_PATHS[String(name || '').trim().toLowerCase()] || GENERIC_LINK_ICON_PATH
+
+// The hero's hand-drawn coral underline — its one recurring "emphasis" mark,
+// reused on other section headings via accentLastWord() below instead of
+// each one inventing its own way to draw attention.
+const squiggle = () =>
+  '<svg viewBox="0 0 200 14" preserveAspectRatio="none" aria-hidden="true"><path d="M2 9 C 40 2, 70 13, 100 7 S 160 1, 198 8" fill="none" stroke="var(--coral)" stroke-width="5" stroke-linecap="round"/></svg>'
+
+/**
+ * Underlines the last word of a heading with the squiggle. Section headings
+ * are single free-text admin fields (unlike the hero, which has a dedicated
+ * `accent` field for exactly the emphasized phrase) — wrapping a specific
+ * word chosen in code would silently stop matching the moment an admin
+ * edits the text. The last word always exists, so this stays correct for
+ * whatever the heading currently says.
+ */
+function accentLastWord(text) {
+  const trimmed = String(text || '').trim()
+  const lastSpace = trimmed.lastIndexOf(' ')
+  if (lastSpace === -1) return `<span class="accent">${squiggle()}${escapeHtml(trimmed)}</span>`
+  return `${escapeHtml(trimmed.slice(0, lastSpace + 1))}<span class="accent">${squiggle()}${escapeHtml(trimmed.slice(lastSpace + 1))}</span>`
+}
 
 /** A small inline SVG "porthole" — the washing-machine drum window that's already the real logo's central mark, reused here as the page's one recurring signature shape. */
 function porthole({ size = 120, ring = true, spin = false } = {}) {
@@ -454,10 +480,21 @@ img{ max-width:100%; display:block }
 .hero h1{
   font-size:clamp(2.4rem,4.6vw + 1rem,3.85rem); font-weight:700; line-height:1.06; letter-spacing:-0.02em;
 }
-.hero h1 .accent{
+/* .accent — the hand-drawn coral underline. Started as the hero's own
+   emphasis mark, now reused on other headings via accentLastWord() (see its
+   own comment); sized in em so the same markup reads right at any heading's
+   font-size without a per-context override. */
+.accent{
   color:var(--primary-700); position:relative; white-space:nowrap;
 }
-.hero h1 .accent svg{ position:absolute; left:-2%; bottom:-.12em; width:104%; height:.3em; z-index:-1 }
+/* No z-index here on purpose: it only reliably paints behind the text in
+   *some* ancestor stacking contexts (worked in the hero, not inside the CTA
+   band's own layered background) — instead the svg comes FIRST in the
+   markup below and the text after, so plain DOM paint order (later sibling
+   on top) puts the text above the underline everywhere, with no dependence
+   on what stacking context happens to be above it. */
+.accent svg{ position:absolute; left:-2%; bottom:-.12em; width:104%; height:.3em }
+.cta-band h2 .accent{ color:#fff }
 .hero-sub{ margin-top:22px; font-size:17.5px; color:var(--ink-soft); max-width:46ch }
 .hero-cta{ display:flex; flex-wrap:wrap; gap:14px; margin-top:34px }
 .hero-note{ margin-top:22px; display:flex; align-items:center; flex-wrap:wrap; gap:10px; font-size:14px; color:var(--ink-soft) }
@@ -675,6 +712,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
     <ul class="nav-links" id="nav-links">
       ${content.steps.visible ? `<li><a href="#como-funciona">Como funciona</a></li>` : ''}
       ${content.features.visible ? `<li><a href="#servicos">Serviços</a></li>` : ''}
+      ${content.customSections.filter((s) => s.visible !== false).map((s) => `<li><a href="#custom-${slugify(s.id || s.heading)}">${escapeHtml(s.heading)}</a></li>`).join('')}
       ${content.visit.visible ? `<li><a href="#visite-nos">Visite-nos</a></li>` : ''}
     </ul>
     <div class="nav-right">
@@ -694,9 +732,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
     <div class="wrap">
       <div>
         <span class="eyebrow">${escapeHtml(content.hero.eyebrow)}</span>
-        <h1>${escapeHtml(content.hero.heading)}<br><span class="accent">${escapeHtml(content.hero.accent)}
-          <svg viewBox="0 0 200 14" preserveAspectRatio="none" aria-hidden="true"><path d="M2 9 C 40 2, 70 13, 100 7 S 160 1, 198 8" fill="none" stroke="var(--coral)" stroke-width="5" stroke-linecap="round"/></svg>
-        </span></h1>
+        <h1>${escapeHtml(content.hero.heading)}<br><span class="accent">${squiggle()}${escapeHtml(content.hero.accent)}</span></h1>
         <p class="hero-sub">${escapeHtml(content.hero.subheading)}</p>
         <div class="hero-cta">
           <a class="btn-primary" href="#como-funciona">${escapeHtml(content.hero.ctaPrimaryLabel)}</a>
@@ -724,7 +760,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
     <div class="wrap">
       <div class="section-head reveal">
         <span class="eyebrow">${escapeHtml(content.steps.eyebrow)}</span>
-        <h2 id="como-funciona-h">${escapeHtml(content.steps.heading)}</h2>
+        <h2 id="como-funciona-h">${accentLastWord(content.steps.heading)}</h2>
         <p>${escapeHtml(content.steps.description)}</p>
       </div>
       <div class="steps">
@@ -743,7 +779,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
     <div class="wrap">
       <div class="section-head reveal">
         <span class="eyebrow">${escapeHtml(content.features.eyebrow)}</span>
-        <h2 id="servicos-h">${escapeHtml(content.features.heading)}</h2>
+        <h2 id="servicos-h">${accentLastWord(content.features.heading)}</h2>
         <p>${escapeHtml(content.features.description)}</p>
       </div>
       <div class="features">
@@ -768,7 +804,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
           <circle cx="50" cy="50" r="34" fill="none" stroke="#fff" stroke-width="2.5"/>
           <path d="M50 16 C 66 16 79 27 79 44 C 79 54 73 61 64 66" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
         </svg>
-        <h2>${escapeHtml(content.cta.heading)}</h2>
+        <h2>${accentLastWord(content.cta.heading)}</h2>
         <p>${escapeHtml(content.cta.description)}</p>
         <div class="hero-cta">
           <a class="btn-primary" href="#visite-nos">Visite-nos</a>
@@ -829,10 +865,11 @@ footer .foot-links a:hover{ color:var(--primary-800) }
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${socialIconPath(s.name)}"/></svg>
             <a href="${escapeHtml(s.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(s.name)}</a>
           </div>`).join('')}
+          ${content.visit.showLoginLink !== false ? `
           <div class="visit-row">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>
             <a href="${LOGIN_URL}">Área reservada (equipa)</a>
-          </div>
+          </div>` : ''}
         </div>
       </div>
     </div>
@@ -848,6 +885,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
     <div class="foot-links">
       ${content.steps.visible ? `<a href="#como-funciona">Como funciona</a>` : ''}
       ${content.features.visible ? `<a href="#servicos">Serviços</a>` : ''}
+      ${content.customSections.filter((s) => s.visible !== false).map((s) => `<a href="#custom-${slugify(s.id || s.heading)}">${escapeHtml(s.heading)}</a>`).join('')}
       <a href="${LOGIN_URL}">Entrar</a>
     </div>
     <p class="foot-copy">&copy; ${new Date().getFullYear()} ${escapeHtml(brand.name)}. Todos os direitos reservados.</p>

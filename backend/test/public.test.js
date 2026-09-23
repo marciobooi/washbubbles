@@ -58,6 +58,14 @@ describe('Public front page (routes/public.js + views/landing.js)', () => {
       expect(res.text).to.match(/<h1>.*Retire fresca.*<\/h1>/s)
     })
 
+    it('carries the hero\'s coral underline accent onto the other section headings, always on the last word', async () => {
+      const res = await request(app).get('/')
+      // Steps heading "Três passos, sem complicações" -> last word "complicações"
+      expect(res.text).to.match(/<h2 id="como-funciona-h">Três passos, sem <span class="accent"><svg[\s\S]*?<\/svg>complicações/)
+      // Features heading "Feito para o seu dia a dia" -> last word "dia"
+      expect(res.text).to.match(/<h2 id="servicos-h">Feito para o seu dia a <span class="accent"><svg[\s\S]*?<\/svg>dia/)
+    })
+
     it('has the core SEO tags: title, meta description, canonical, robots', async () => {
       const res = await request(app).get('/')
       expect(res.text).to.match(/<title>[^<]+<\/title>/)
@@ -213,6 +221,29 @@ describe('Public front page (routes/public.js + views/landing.js)', () => {
       expect(res.text).to.include('Descontos esta semana.')
       expect(res.text).to.include('href="/promo"')
       expect(res.text).to.not.include('Ainda não publicado')
+    })
+
+    it('links a custom section from the nav and footer — a section with no way to reach it is dead weight', async () => {
+      await Setting.create({ tenantId: tenant._id, key: CONTENT_SETTING_KEY, value: {
+        customSections: [
+          { id: 'promo', visible: true, heading: 'Semana da Lã' },
+          { id: 'draft', visible: false, heading: 'Ainda não publicado' },
+        ],
+      } })
+      const res = await asThisTenant()
+      const navMatch = res.text.match(/<ul class="nav-links"[\s\S]*?<\/ul>/)[0]
+      const footMatch = res.text.match(/<div class="foot-links">[\s\S]*?<\/div>/)[0]
+      expect(navMatch).to.include('<a href="#custom-promo">Semana da Lã</a>')
+      expect(footMatch).to.include('<a href="#custom-promo">Semana da Lã</a>')
+      expect(navMatch).to.not.include('draft')
+    })
+
+    it('hides the "Área reservada" link when saved as not visible', async () => {
+      await Setting.create({ tenantId: tenant._id, key: CONTENT_SETTING_KEY, value: { visit: { showLoginLink: false } } })
+      const res = await asThisTenant()
+      expect(res.text).to.not.include('Área reservada (equipa)')
+      // The nav's own login button is untouched — this only hides the second copy.
+      expect(res.text).to.include('Entrar')
     })
 
     it('drops a custom section with no heading — a half-filled draft never ships blank markup', async () => {

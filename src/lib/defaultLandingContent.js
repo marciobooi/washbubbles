@@ -70,6 +70,7 @@ export const DEFAULT_LANDING_CONTENT = {
     reviews: [
       { text: 'Serviço impecável e atenção espetacular.', author: 'Daniel Vinhas' },
     ],
+    showLoginLink: true,
   },
   customSections: [],
 }

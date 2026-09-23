@@ -1022,10 +1022,42 @@ export default function AdminSettings(){
         </Card>
 
         <Card>
+          <CardHeader>
+            <CardTitle>Avaliações (testemunhos)</CardTitle>
+            <CardDescription>Mostradas na secção "Visite-nos" — mais do que uma vira um carrossel automático</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {landingContent.visit.reviews.map((r, idx) => (
+              <div key={idx} className="border rounded-lg p-3 flex flex-col md:flex-row gap-3">
+                <div className="flex-1 space-y-2">
+                  <Input value={r.text} onChange={(e) => updateReview(idx, 'text', e.target.value)} placeholder="Texto da avaliação" />
+                  <Input value={r.author} onChange={(e) => updateReview(idx, 'author', e.target.value)} placeholder="Nome de quem avaliou" />
+                </div>
+                <div className="flex md:flex-col gap-2 shrink-0 justify-end">
+                  <Button type="button" variant="outline" size="sm" onClick={() => moveReview(idx, -1)} disabled={idx === 0} aria-label="Mover para cima">
+                    <ArrowUp className="h-4 w-4" />
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => moveReview(idx, 1)} disabled={idx === landingContent.visit.reviews.length - 1} aria-label="Mover para baixo">
+                    <ArrowDown className="h-4 w-4" />
+                  </Button>
+                  <Button type="button" variant="destructive" size="sm" onClick={() => removeReview(idx)} aria-label="Remover avaliação">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+            <Button type="button" variant="outline" onClick={addReview}>
+              <Plus className="h-4 w-4 mr-2" /> Adicionar avaliação
+            </Button>
+            <p className="text-xs text-muted-foreground">Use apenas o texto real da avaliação do Google — nunca inventado.</p>
+          </CardContent>
+        </Card>
+
+        <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <div>
               <CardTitle>Visite-nos</CardTitle>
-              <CardDescription>Morada, telefone, horário e redes sociais são factos confirmados e não são editáveis aqui — apenas o texto à volta</CardDescription>
+              <CardDescription>Morada, telefone, horário e redes sociais editam-se no cartão "Dados do negócio" acima — aqui só o texto à volta</CardDescription>
             </div>
             <Button type="button" variant="outline" size="sm" onClick={() => toggleSectionVisible('visit')}>
               {landingContent.visit.visible
@@ -1048,31 +1080,17 @@ export default function AdminSettings(){
               <Label>Descrição</Label>
               <Input value={landingContent.visit.description} onChange={(e) => updateSectionField('visit', 'description', e.target.value)} />
             </div>
-            <div className="space-y-2">
-              <Label>Avaliações (testemunhos) — mais do que uma vira um carrossel automático</Label>
-              {landingContent.visit.reviews.map((r, idx) => (
-                <div key={idx} className="border rounded-lg p-3 flex flex-col md:flex-row gap-3">
-                  <div className="flex-1 space-y-2">
-                    <Input value={r.text} onChange={(e) => updateReview(idx, 'text', e.target.value)} placeholder="Texto da avaliação" />
-                    <Input value={r.author} onChange={(e) => updateReview(idx, 'author', e.target.value)} placeholder="Nome de quem avaliou" />
-                  </div>
-                  <div className="flex md:flex-col gap-2 shrink-0 justify-end">
-                    <Button type="button" variant="outline" size="sm" onClick={() => moveReview(idx, -1)} disabled={idx === 0} aria-label="Mover para cima">
-                      <ArrowUp className="h-4 w-4" />
-                    </Button>
-                    <Button type="button" variant="outline" size="sm" onClick={() => moveReview(idx, 1)} disabled={idx === landingContent.visit.reviews.length - 1} aria-label="Mover para baixo">
-                      <ArrowDown className="h-4 w-4" />
-                    </Button>
-                    <Button type="button" variant="destructive" size="sm" onClick={() => removeReview(idx)} aria-label="Remover avaliação">
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-              <Button type="button" variant="outline" onClick={addReview}>
-                <Plus className="h-4 w-4 mr-2" /> Adicionar avaliação
+
+            <div className="flex items-center justify-between border rounded-lg p-3">
+              <div>
+                <p className="text-sm font-medium">Ligação "Área reservada (equipa)"</p>
+                <p className="text-xs text-muted-foreground">Um segundo acesso à área de equipa, dentro do cartão de contacto — o menu já tem um em cima.</p>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={() => updateSectionField('visit', 'showLoginLink', !landingContent.visit.showLoginLink)}>
+                {landingContent.visit.showLoginLink !== false
+                  ? (<><Eye className="h-4 w-4 mr-2" />Visível</>)
+                  : (<><EyeOff className="h-4 w-4 mr-2" />Oculto</>)}
               </Button>
-              <p className="text-xs text-muted-foreground">Use apenas o texto real da avaliação do Google — nunca inventado.</p>
             </div>
           </CardContent>
         </Card>
