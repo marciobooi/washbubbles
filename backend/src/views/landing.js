@@ -105,18 +105,24 @@ export const DEFAULT_CONTENT = {
     eyebrow: 'Visite-nos',
     heading: 'Onde estamos',
     description: 'Em Loures, aberta todos os dias.',
-    // One real, attributed review only — never invent text for the others
-    // Google shows. Admin can add more (Página Inicial tab) once their real
-    // text is on hand; the carousel below degrades to a static single quote
-    // when there's just one, same as it always looked.
-    reviews: [
-      { text: 'Serviço impecável e atenção espetacular.', author: 'Daniel Vinhas' },
-    ],
     // The nav/footer already link to /admin/login — this is a second, more
     // prominent copy of that link sitting inside the public contact card.
     // Admin-toggleable since a marketing page for customers doesn't always
     // want to advertise a staff-only link that prominently.
     showLoginLink: true,
+  },
+  // Its own section, not part of Visite-nos — testimonials aren't contact
+  // info. One real, attributed review only — never invent text for the
+  // others Google shows. Admin can add more once their real text is on
+  // hand; the carousel degrades to a static single quote when there's just
+  // one, same as it always looked before this had its own section.
+  reviews: {
+    visible: true,
+    eyebrow: 'O que dizem',
+    heading: 'Avaliações reais no Google',
+    items: [
+      { text: 'Serviço impecável e atenção espetacular.', author: 'Daniel Vinhas' },
+    ],
   },
   customSections: [],
 }
@@ -166,10 +172,11 @@ export function mergeContent(raw) {
       items: items(c.features && c.features.items, DEFAULT_CONTENT.features.items),
     },
     cta: { ...DEFAULT_CONTENT.cta, ...(c.cta || {}) },
-    visit: {
-      ...DEFAULT_CONTENT.visit,
-      ...(c.visit || {}),
-      reviews: items(c.visit && c.visit.reviews, DEFAULT_CONTENT.visit.reviews),
+    visit: { ...DEFAULT_CONTENT.visit, ...(c.visit || {}) },
+    reviews: {
+      ...DEFAULT_CONTENT.reviews,
+      ...(c.reviews || {}),
+      items: items(c.reviews && c.reviews.items, DEFAULT_CONTENT.reviews.items),
     },
     // Admin-created sections only — needs at least a heading to be worth a
     // section element, so a half-filled draft never ships blank markup.
@@ -543,13 +550,25 @@ img{ max-width:100%; display:block }
 /* ---------- sections ---------- */
 section{ padding:84px 0 }
 .section-head{ max-width:640px; margin:0 auto 52px; text-align:center }
-.section-head .eyebrow{ margin-bottom:16px }
+.section-head .eyebrow{
+  margin-bottom:16px;
+  /* Draws in left-to-right when its section scrolls into view, piggybacking
+     on .reveal's own IntersectionObserver trigger below — clip-path doesn't
+     affect layout/spacing at all, only what's painted, so this needs no JS
+     of its own. */
+  clip-path:inset(0 100% 0 0);
+  transition:clip-path .7s cubic-bezier(.16,.84,.44,1);
+}
+.reveal.is-visible .eyebrow{ clip-path:inset(0 0 0 0) }
 .section-head h2{ font-size:clamp(1.7rem,2.2vw + 1rem,2.5rem); font-weight:700; letter-spacing:-0.015em }
 .section-head p{ margin-top:14px; font-size:16.5px; color:var(--ink-soft) }
 
 .reveal{ opacity:0; transform:translateY(22px); transition:opacity .6s ease, transform .6s cubic-bezier(.16,.84,.44,1) }
 .reveal.is-visible{ opacity:1; transform:none }
-@media (prefers-reduced-motion:reduce){ .reveal{ opacity:1; transform:none; transition:none } }
+@media (prefers-reduced-motion:reduce){
+  .reveal{ opacity:1; transform:none; transition:none }
+  .section-head .eyebrow{ clip-path:inset(0 0 0 0); transition:none }
+}
 
 /* how it works */
 .steps{ display:grid; grid-template-columns:repeat(3,1fr); gap:28px; counter-reset:step; position:relative }
@@ -713,6 +732,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
       ${content.steps.visible ? `<li><a href="#como-funciona">Como funciona</a></li>` : ''}
       ${content.features.visible ? `<li><a href="#servicos">Serviços</a></li>` : ''}
       ${content.customSections.filter((s) => s.visible !== false).map((s) => `<li><a href="#custom-${slugify(s.id || s.heading)}">${escapeHtml(s.heading)}</a></li>`).join('')}
+      ${content.reviews.visible ? `<li><a href="#avaliacoes">Avaliações</a></li>` : ''}
       ${content.visit.visible ? `<li><a href="#visite-nos">Visite-nos</a></li>` : ''}
     </ul>
     <div class="nav-right">
@@ -814,6 +834,28 @@ footer .foot-links a:hover{ color:var(--primary-800) }
     </div>
   </section>` : ''}
 
+  ${content.reviews.visible ? `
+  <section id="avaliacoes" aria-labelledby="avaliacoes-h">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">${escapeHtml(content.reviews.eyebrow)}</span>
+        <h2 id="avaliacoes-h">${accentLastWord(content.reviews.heading)}</h2>
+      </div>
+
+      <div class="reviews reveal"${content.reviews.items.length > 1 ? ' data-review-carousel' : ''}>
+        ${content.reviews.items.map((r, i) => `
+        <blockquote class="review-slide${i === 0 ? ' is-active' : ''}">
+          <p>&ldquo;${escapeHtml(r.text)}&rdquo;</p>
+          <cite>${escapeHtml(r.author)} <span>· avaliação no Google</span></cite>
+        </blockquote>`).join('')}
+        ${content.reviews.items.length > 1 ? `
+        <div class="review-dots" role="tablist" aria-label="Avaliações">
+          ${content.reviews.items.map((_, i) => `<button type="button" class="review-dot${i === 0 ? ' is-active' : ''}" data-review-dot="${i}" aria-label="Avaliação ${i + 1}"></button>`).join('')}
+        </div>` : ''}
+      </div>
+    </div>
+  </section>` : ''}
+
   ${content.visit.visible ? `
   <section id="visite-nos" aria-labelledby="visite-nos-h">
     <div class="wrap">
@@ -821,18 +863,6 @@ footer .foot-links a:hover{ color:var(--primary-800) }
         <span class="eyebrow">${escapeHtml(content.visit.eyebrow)}</span>
         <h2 id="visite-nos-h">${escapeHtml(content.visit.heading)}</h2>
         <p>${escapeHtml(content.visit.description)}</p>
-      </div>
-
-      <div class="reviews reveal"${content.visit.reviews.length > 1 ? ' data-review-carousel' : ''}>
-        ${content.visit.reviews.map((r, i) => `
-        <blockquote class="review-slide${i === 0 ? ' is-active' : ''}">
-          <p>&ldquo;${escapeHtml(r.text)}&rdquo;</p>
-          <cite>${escapeHtml(r.author)} <span>· avaliação no Google</span></cite>
-        </blockquote>`).join('')}
-        ${content.visit.reviews.length > 1 ? `
-        <div class="review-dots" role="tablist" aria-label="Avaliações">
-          ${content.visit.reviews.map((_, i) => `<button type="button" class="review-dot${i === 0 ? ' is-active' : ''}" data-review-dot="${i}" aria-label="Avaliação ${i + 1}"></button>`).join('')}
-        </div>` : ''}
       </div>
 
       <div class="visit reveal">
@@ -886,6 +916,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
       ${content.steps.visible ? `<a href="#como-funciona">Como funciona</a>` : ''}
       ${content.features.visible ? `<a href="#servicos">Serviços</a>` : ''}
       ${content.customSections.filter((s) => s.visible !== false).map((s) => `<a href="#custom-${slugify(s.id || s.heading)}">${escapeHtml(s.heading)}</a>`).join('')}
+      ${content.reviews.visible ? `<a href="#avaliacoes">Avaliações</a>` : ''}
       <a href="${LOGIN_URL}">Entrar</a>
     </div>
     <p class="foot-copy">&copy; ${new Date().getFullYear()} ${escapeHtml(brand.name)}. Todos os direitos reservados.</p>

@@ -122,6 +122,25 @@ describe('Public front page (routes/public.js + views/landing.js)', () => {
       expect(res.text).to.not.match(/<button type="button" class="review-dot/)
     })
 
+    it('renders reviews as their own section, not nested inside Visite-nos', async () => {
+      const res = await request(app).get('/')
+      expect(res.text).to.match(/<section id="avaliacoes" aria-labelledby="avaliacoes-h">/)
+      // The reviews block must come BEFORE Visite-nos opens, i.e. it's a
+      // sibling section, not content inside it.
+      const avaliacoesIdx = res.text.indexOf('<section id="avaliacoes"')
+      const visiteNosIdx = res.text.indexOf('<section id="visite-nos"')
+      expect(avaliacoesIdx).to.be.greaterThan(0)
+      expect(avaliacoesIdx).to.be.lessThan(visiteNosIdx)
+      const visitSectionOnly = res.text.slice(visiteNosIdx, res.text.indexOf('</section>', visiteNosIdx))
+      expect(visitSectionOnly).to.not.include('review-slide')
+    })
+
+    it('links "Avaliações" from the nav and footer', async () => {
+      const res = await request(app).get('/')
+      expect(res.text).to.match(/<ul class="nav-links"[\s\S]*?<a href="#avaliacoes">Avaliações<\/a>[\s\S]*?<\/ul>/)
+      expect(res.text).to.match(/<div class="foot-links">[\s\S]*?<a href="#avaliacoes">Avaliações<\/a>[\s\S]*?<\/div>/)
+    })
+
     it('escapes HTML in dynamic text', async () => {
       const res = await request(app).get('/')
       // The email address renders as a real mailto link, not broken markup.
@@ -152,6 +171,12 @@ describe('Public front page (routes/public.js + views/landing.js)', () => {
       expect(res.text).to.include('body::after')
       expect(res.text).to.include('data:image/svg+xml;base64,')
       expect(res.text).to.include('mix-blend-mode:overlay')
+    })
+
+    it('draws the eyebrow in left-to-right on scroll (clip-path, reusing .reveal\'s own trigger — no extra JS)', async () => {
+      const res = await request(app).get('/')
+      expect(res.text).to.include('clip-path:inset(0 100% 0 0)')
+      expect(res.text).to.include('.reveal.is-visible .eyebrow{ clip-path:inset(0 0 0 0) }')
     })
   })
 
@@ -354,7 +379,7 @@ describe('Public front page (routes/public.js + views/landing.js)', () => {
 
     it('activates the carousel once a second review is added from admin', async () => {
       await Setting.create({ tenantId: tenant._id, key: CONTENT_SETTING_KEY, value: {
-        visit: { reviews: [
+        reviews: { items: [
           { text: 'Serviço impecável e atenção espetacular.', author: 'Daniel Vinhas' },
           { text: 'Recomendo a todos.', author: 'Maria Silva' },
         ] },
@@ -433,9 +458,9 @@ describe('mergeContent (views/landing.js) — the DB-down/malformed-data safety 
   })
 
   it('merges the reviews list the same way as steps/features items: real list wins, malformed falls back', () => {
-    const withReviews = mergeContent({ visit: { reviews: [{ text: 'X', author: 'Y' }] } })
-    expect(withReviews.visit.reviews).to.deep.equal([{ text: 'X', author: 'Y' }])
-    expect(mergeContent({ visit: { reviews: 'not-an-array' } }).visit.reviews).to.deep.equal(DEFAULT_CONTENT.visit.reviews)
+    const withReviews = mergeContent({ reviews: { items: [{ text: 'X', author: 'Y' }] } })
+    expect(withReviews.reviews.items).to.deep.equal([{ text: 'X', author: 'Y' }])
+    expect(mergeContent({ reviews: { items: 'not-an-array' } }).reviews.items).to.deep.equal(DEFAULT_CONTENT.reviews.items)
   })
 })
 

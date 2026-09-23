@@ -134,10 +134,11 @@ export default function AdminSettings(){
         steps: { ...DEFAULT_LANDING_CONTENT.steps, ...(c.steps || {}), items: items(c.steps && c.steps.items, DEFAULT_LANDING_CONTENT.steps.items) },
         features: { ...DEFAULT_LANDING_CONTENT.features, ...(c.features || {}), items: items(c.features && c.features.items, DEFAULT_LANDING_CONTENT.features.items) },
         cta: { ...DEFAULT_LANDING_CONTENT.cta, ...(c.cta || {}) },
-        visit: {
-          ...DEFAULT_LANDING_CONTENT.visit,
-          ...(c.visit || {}),
-          reviews: items(c.visit && c.visit.reviews, DEFAULT_LANDING_CONTENT.visit.reviews),
+        visit: { ...DEFAULT_LANDING_CONTENT.visit, ...(c.visit || {}) },
+        reviews: {
+          ...DEFAULT_LANDING_CONTENT.reviews,
+          ...(c.reviews || {}),
+          items: items(c.reviews && c.reviews.items, DEFAULT_LANDING_CONTENT.reviews.items),
         },
         customSections: Array.isArray(c.customSections) ? c.customSections : [],
       })
@@ -195,21 +196,21 @@ export default function AdminSettings(){
   }
 
   function updateReview(idx, field, val) {
-    setLandingContent((c) => ({ ...c, visit: { ...c.visit, reviews: c.visit.reviews.map((r, i) => (i === idx ? { ...r, [field]: val } : r)) } }))
+    setLandingContent((c) => ({ ...c, reviews: { ...c.reviews, items: c.reviews.items.map((r, i) => (i === idx ? { ...r, [field]: val } : r)) } }))
   }
   function addReview() {
-    setLandingContent((c) => ({ ...c, visit: { ...c.visit, reviews: [...c.visit.reviews, { text: '', author: '' }] } }))
+    setLandingContent((c) => ({ ...c, reviews: { ...c.reviews, items: [...c.reviews.items, { text: '', author: '' }] } }))
   }
   function removeReview(idx) {
-    setLandingContent((c) => ({ ...c, visit: { ...c.visit, reviews: c.visit.reviews.filter((_, i) => i !== idx) } }))
+    setLandingContent((c) => ({ ...c, reviews: { ...c.reviews, items: c.reviews.items.filter((_, i) => i !== idx) } }))
   }
   function moveReview(idx, dir) {
     setLandingContent((c) => {
-      const reviews = [...c.visit.reviews]
+      const items = [...c.reviews.items]
       const target = idx + dir
-      if (target < 0 || target >= reviews.length) return c
-      ;[reviews[idx], reviews[target]] = [reviews[target], reviews[idx]]
-      return { ...c, visit: { ...c.visit, reviews } }
+      if (target < 0 || target >= items.length) return c
+      ;[items[idx], items[target]] = [items[target], items[idx]]
+      return { ...c, reviews: { ...c.reviews, items } }
     })
   }
 
@@ -1022,12 +1023,29 @@ export default function AdminSettings(){
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Avaliações (testemunhos)</CardTitle>
-            <CardDescription>Mostradas na secção "Visite-nos" — mais do que uma vira um carrossel automático</CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <div>
+              <CardTitle>Avaliações (testemunhos)</CardTitle>
+              <CardDescription>Secção própria — mais do que uma vira um carrossel automático</CardDescription>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => toggleSectionVisible('reviews')}>
+              {landingContent.reviews.visible
+                ? (<><Eye className="h-4 w-4 mr-2" />Visível</>)
+                : (<><EyeOff className="h-4 w-4 mr-2" />Oculto</>)}
+            </Button>
           </CardHeader>
           <CardContent className="space-y-3">
-            {landingContent.visit.reviews.map((r, idx) => (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <Label>Etiqueta</Label>
+                <Input value={landingContent.reviews.eyebrow} onChange={(e) => updateSectionField('reviews', 'eyebrow', e.target.value)} />
+              </div>
+              <div>
+                <Label>Título da secção</Label>
+                <Input value={landingContent.reviews.heading} onChange={(e) => updateSectionField('reviews', 'heading', e.target.value)} />
+              </div>
+            </div>
+            {landingContent.reviews.items.map((r, idx) => (
               <div key={idx} className="border rounded-lg p-3 flex flex-col md:flex-row gap-3">
                 <div className="flex-1 space-y-2">
                   <Input value={r.text} onChange={(e) => updateReview(idx, 'text', e.target.value)} placeholder="Texto da avaliação" />
@@ -1037,7 +1055,7 @@ export default function AdminSettings(){
                   <Button type="button" variant="outline" size="sm" onClick={() => moveReview(idx, -1)} disabled={idx === 0} aria-label="Mover para cima">
                     <ArrowUp className="h-4 w-4" />
                   </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={() => moveReview(idx, 1)} disabled={idx === landingContent.visit.reviews.length - 1} aria-label="Mover para baixo">
+                  <Button type="button" variant="outline" size="sm" onClick={() => moveReview(idx, 1)} disabled={idx === landingContent.reviews.items.length - 1} aria-label="Mover para baixo">
                     <ArrowDown className="h-4 w-4" />
                   </Button>
                   <Button type="button" variant="destructive" size="sm" onClick={() => removeReview(idx)} aria-label="Remover avaliação">
