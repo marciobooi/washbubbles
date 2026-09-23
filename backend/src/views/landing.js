@@ -531,8 +531,26 @@ img{ max-width:100%; display:block }
   content:''; position:absolute; left:-2%; right:-2%; bottom:-.12em; height:.3em;
   background-image:url("${SQUIGGLE_DATA_URI}");
   background-repeat:repeat-x; background-size:1.35em .3em; background-position:left center;
+  /* Hidden until drawn in — clip-path grows left-to-right like a pen stroke,
+     not a fade, so it actually reads as "hand-drawn" rather than "appeared". */
+  clip-path:inset(0 100% 0 0);
 }
 .cta-band h2 .accent{ color:#fff }
+/* Hero is above the fold — visible immediately, nothing to scroll into
+   view — so its squiggle draws itself in shortly after load instead of
+   waiting on the .reveal/IntersectionObserver mechanism the other headings
+   use below (there's nothing for that to trigger on here). */
+.hero .accent::before{ animation:draw-squiggle .9s cubic-bezier(.16,.84,.44,1) .5s forwards }
+@keyframes draw-squiggle{ to{ clip-path:inset(0 0 0 0) } }
+/* Everywhere else, the heading itself sits inside a .reveal element (the
+   section-head div, or .cta-band) — same trigger the eyebrow already uses,
+   so the squiggle draws in right as its heading scrolls into view. */
+.reveal.is-visible .accent::before{
+  clip-path:inset(0 0 0 0); transition:clip-path .8s cubic-bezier(.16,.84,.44,1) .1s;
+}
+@media (prefers-reduced-motion:reduce){
+  .accent::before{ clip-path:inset(0 0 0 0); animation:none; transition:none }
+}
 .hero-sub{ margin-top:22px; font-size:17.5px; color:var(--ink-soft); max-width:46ch }
 .hero-cta{ display:flex; flex-wrap:wrap; gap:14px; margin-top:34px }
 .hero-note{ margin-top:22px; display:flex; align-items:center; flex-wrap:wrap; gap:10px; font-size:14px; color:var(--ink-soft) }
@@ -605,7 +623,9 @@ section{ padding:84px 0 }
 .steps{ display:grid; grid-template-columns:repeat(3,1fr); gap:28px; counter-reset:step; position:relative }
 .steps::before{
   content:''; position:absolute; top:44px; left:14%; right:14%; height:2px;
-  background:repeating-linear-gradient(90deg,rgba(13,148,136,.32) 0 10px,transparent 10px 20px);
+  /* Coral, not teal — matches the squiggle/eyebrow-dot accent color instead
+     of introducing a third accent tone. */
+  background:repeating-linear-gradient(90deg,rgba(255,139,107,.4) 0 10px,transparent 10px 20px);
 }
 .step{ position:relative; text-align:center; padding:0 8px }
 .step-mark{ position:relative; width:88px; height:88px; margin:0 auto 22px }
@@ -664,6 +684,11 @@ section{ padding:84px 0 }
   background:rgba(255,255,255,.35); border:1px solid rgba(255,255,255,.55); border-radius:24px;
   padding:44px 40px; backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
   box-shadow:var(--shadow-soft);
+  /* min-height is set from JS once slide heights are measured (a one-line
+     Google review vs. a five-sentence one differ a lot) — flex+center here
+     so whichever slide is active sits centered in that fixed space instead
+     of pinned to the top with empty room below it. */
+  display:flex; flex-direction:column; justify-content:center;
 }
 .review-slide{
   margin:0; padding:0; border:0;
@@ -1025,6 +1050,19 @@ footer .foot-links a:hover{ color:var(--primary-800) }
     var dots = [].slice.call(carousel.querySelectorAll('[data-review-dot]'));
     var active = 0;
     var timer = null;
+    // Reviews vary a lot in length (a one-line quote vs. a five-sentence
+    // one) — without this, rotating to a shorter review shrinks the card
+    // and shoves everything below it up the page mid-read. Measuring each
+    // slide's own natural height works even while hidden: they're
+    // visibility:hidden, not display:none, so layout still happens for
+    // them, and inset:0 0 auto 0 keeps every slide at the card's full
+    // width throughout, so a measurement taken now still matches after a
+    // resize changes how the text wraps — recomputed below, either way.
+    var sizeToTallest = function(){
+      var maxH = 0;
+      slides.forEach(function(s){ maxH = Math.max(maxH, s.getBoundingClientRect().height); });
+      if (maxH) carousel.style.minHeight = maxH + 'px';
+    };
     var show = function(i){
       slides[active].classList.remove('is-active');
       if (dots[active]) dots[active].classList.remove('is-active');
@@ -1042,6 +1080,8 @@ footer .foot-links a:hover{ color:var(--primary-800) }
     carousel.addEventListener('mouseleave', start);
     carousel.addEventListener('focusin', stop);
     carousel.addEventListener('focusout', start);
+    sizeToTallest();
+    window.addEventListener('resize', sizeToTallest);
     start();
   }
 })();

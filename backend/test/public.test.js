@@ -182,6 +182,20 @@ describe('Public front page (routes/public.js + views/landing.js)', () => {
       expect(res.text).to.include('clip-path:inset(0 100% 0 0)')
       expect(res.text).to.include('.reveal.is-visible .eyebrow{ clip-path:inset(0 0 0 0) }')
     })
+
+    it('draws the underline squiggle in too — on load for the hero (above the fold), on scroll for the rest', async () => {
+      const res = await request(app).get('/')
+      expect(res.text).to.include('.hero .accent::before{ animation:draw-squiggle')
+      expect(res.text).to.include('@keyframes draw-squiggle{ to{ clip-path:inset(0 0 0 0) } }')
+      expect(res.text).to.include('.reveal.is-visible .accent::before{')
+    })
+
+    it('locks the reviews card to the tallest review\'s height so rotating to a shorter one doesn\'t shrink the page around it', async () => {
+      const res = await request(app).get('/')
+      expect(res.text).to.include('var sizeToTallest = function()')
+      expect(res.text).to.include("carousel.style.minHeight = maxH + 'px'")
+      expect(res.text).to.include("window.addEventListener('resize', sizeToTallest)")
+    })
   })
 
   describe('GET /robots.txt', () => {
