@@ -195,6 +195,10 @@ describe('Public front page (routes/public.js + views/landing.js)', () => {
       expect(res.text).to.include('var sizeToTallest = function()')
       expect(res.text).to.include("carousel.style.minHeight = maxH + 'px'")
       expect(res.text).to.include("window.addEventListener('resize', sizeToTallest)")
+      // Re-measures once web fonts are actually loaded — the first pass can
+      // measure fallback-font text that a later Poppins/Inter swap exceeds,
+      // which is exactly the jump this was meant to prevent.
+      expect(res.text).to.include('document.fonts.ready.then(sizeToTallest)')
     })
   })
 

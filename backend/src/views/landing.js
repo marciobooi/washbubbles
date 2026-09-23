@@ -1081,6 +1081,13 @@ footer .foot-links a:hover{ color:var(--primary-800) }
     carousel.addEventListener('focusin', stop);
     carousel.addEventListener('focusout', start);
     sizeToTallest();
+    // The immediate call above can measure text in a fallback font — the
+    // Google Fonts <link> hasn't necessarily finished loading yet — giving
+    // a too-small height that a later font swap (Poppins/Inter, both taller
+    // and wider than a generic fallback) then exceeds, which is exactly the
+    // jump this was meant to prevent. Re-measure once fonts are confirmed
+    // loaded; harmless no-op if nothing changed.
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(sizeToTallest);
     window.addEventListener('resize', sizeToTallest);
     start();
   }
