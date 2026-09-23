@@ -7,7 +7,7 @@ import http from 'http'
 import cors from 'cors'
 import { connectMongo } from './db.js'
 import authRoutes from './routes/auth.js'
-import adminRoutes from './routes/admin.js'
+import adminRoutes, { uploadDir } from './routes/admin.js'
 import posRoutes from './routes/pos.js'
 import { initWebSocket, broadcastHardwareEvent } from './wsServer.js'
 import hardwareAgentServer from './hardwareAgentServer.js'
@@ -68,6 +68,16 @@ app.use('/api/sync', syncRoutes)
 app.use('/api/wifi', wifiRoutes)
 
 app.get('/api/health', (req, res) => res.json({ ok: true }))
+
+// Uploaded logo/banner images (see routes/admin.js's upload endpoints) —
+// serving them was previously left to whatever static hosting happened to
+// share a filesystem with this process, which only ever really held for
+// local dev (Vite's own publicDir already covers the same resolved path).
+// The Docker/cloud deployment runs this in a separate container from the
+// one serving the SPA, with no shared volume, so nothing served these at
+// all; the shop-kiosk single-process build had the same gap. Mounted here,
+// once, so every deployment mode actually serves what it just wrote.
+app.use('/uploads', express.static(uploadDir))
 
 // Server-rendered public front page (real HTML in the first response, for
 // crawlers/link-previews) — the cloud/public deployment only. The shop-kiosk

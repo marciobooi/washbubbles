@@ -489,7 +489,12 @@ const uploadDirs = [
   path.resolve(process.cwd(), 'public/uploads'),
   path.resolve(process.cwd(), '../../public/uploads'),
 ]
-let uploadDir = null
+// Exported so index.js can serve this exact directory at /uploads — local
+// dev's own resolved path (repo-root public/uploads) is already covered by
+// Vite serving its publicDir, but the Docker/cloud deployment (two separate
+// containers, no shared filesystem) and the shop-kiosk single-process build
+// both need the backend to serve what it just wrote; neither did before.
+export let uploadDir = null
 for (const d of uploadDirs) {
   try {
     fs.mkdirSync(d, { recursive: true })
