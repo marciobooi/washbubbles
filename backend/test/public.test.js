@@ -108,7 +108,7 @@ describe('Public front page (routes/public.js + views/landing.js)', () => {
       expect((res.text.match(/<blockquote/g) || [])).to.have.length(1)
     })
 
-    it('escapes HTML in dynamic text (defence in depth, even though BRAND is a hardcoded constant today)', async () => {
+    it('escapes HTML in dynamic text', async () => {
       const res = await request(app).get('/')
       // The email address renders as a real mailto link, not broken markup.
       expect(res.text).to.include('href="mailto:marcacoes@freshbubbles.pt"')
@@ -225,6 +225,86 @@ describe('Public front page (routes/public.js + views/landing.js)', () => {
       expect(res.text).to.not.include('<script>alert(1)</script>')
       expect(res.text).to.include('&lt;script&gt;alert(1)&lt;/script&gt;')
     })
+
+    it('overrides business facts (phone/hours/rating), keeping the fields not touched', async () => {
+      await Setting.create({ tenantId: tenant._id, key: CONTENT_SETTING_KEY, value: {
+        brand: { phone: '+351 999 888 777', hours: { open: '08:00', close: '20:00' }, rating: { value: 4.8, count: 42 } },
+      } })
+      const res = await asThisTenant()
+      expect(res.text).to.include('+351 999 888 777')
+      expect(res.text).to.include('das 08:00 às 20:00')
+      expect(res.text).to.include('4.8')
+      expect(res.text).to.include('(42 no Google)')
+      // Untouched brand fields (name, address, email) keep their real defaults.
+      expect(res.text).to.include('Fresh Bubbles')
+      expect(res.text).to.include('marcacoes@freshbubbles.pt')
+    })
+
+    it('keeps structured data (JSON-LD) in sync with an edited business fact — one source of truth, not two', async () => {
+      await Setting.create({ tenantId: tenant._id, key: CONTENT_SETTING_KEY, value: {
+        brand: { phone: '+351 999 888 777', rating: { value: 4.8, count: 42 } },
+      } })
+      const res = await asThisTenant()
+      const m = res.text.match(/<script type="application\/ld\+json">(.*?)<\/script>/s)
+      const data = JSON.parse(m[1])
+      expect(data.telephone).to.equal('+351 999 888 777')
+      expect(data.aggregateRating).to.deep.equal({ '@type': 'AggregateRating', ratingValue: 4.8, reviewCount: 42 })
+    })
+
+    it('derives the tel: href from the saved phone number rather than a separately stored field', async () => {
+      await Setting.create({ tenantId: tenant._id, key: CONTENT_SETTING_KEY, value: {
+        brand: { phone: '+351 91 271 5258' },
+      } })
+      const res = await asThisTenant()
+      expect(res.text).to.include('href="tel:+351912715258"')
+    })
+
+    it('lets admin replace social links — including adding one that did not exist at launch (e.g. Facebook)', async () => {
+      await Setting.create({ tenantId: tenant._id, key: CONTENT_SETTING_KEY, value: {
+        brand: { social: [
+          { name: 'Instagram', url: 'https://www.instagram.com/freshbubblesloures/' },
+          { name: 'Facebook', url: 'https://www.facebook.com/freshbubblesloures' },
+        ] },
+      } })
+      const res = await asThisTenant()
+      expect(res.text).to.include('href="https://www.facebook.com/freshbubblesloures"')
+      const m = res.text.match(/<script type="application\/ld\+json">(.*?)<\/script>/s)
+      const data = JSON.parse(m[1])
+      expect(data.sameAs).to.deep.equal([
+        'https://www.instagram.com/freshbubblesloures/',
+        'https://www.facebook.com/freshbubblesloures',
+      ])
+    })
+
+    it('respects an intentional "no social links" save instead of falling back to the default Instagram entry', async () => {
+      await Setting.create({ tenantId: tenant._id, key: CONTENT_SETTING_KEY, value: { brand: { social: [] } } })
+      const res = await asThisTenant()
+      expect(res.text).to.not.include('instagram.com')
+    })
+
+    it('escapes HTML saved in business-fact fields too', async () => {
+      await Setting.create({ tenantId: tenant._id, key: CONTENT_SETTING_KEY, value: {
+        brand: { name: '<b>Evil</b>' },
+      } })
+      const res = await asThisTenant()
+      expect(res.text).to.not.include('<b>Evil</b>')
+      expect(res.text).to.include('&lt;b&gt;Evil&lt;/b&gt;')
+    })
+
+    it('uses the logo uploaded via the Branding tab (Setting key branding.logo), not a second upload here', async () => {
+      await Setting.create({ tenantId: tenant._id, key: 'branding.logo', value: '/uploads/custom-logo-resized.png' })
+      const res = await asThisTenant()
+      expect(res.text).to.include('/uploads/custom-logo-resized.png')
+      expect(res.text).to.not.include('/geral/freshbubbleslogo.png')
+      const m = res.text.match(/<script type="application\/ld\+json">(.*?)<\/script>/s)
+      const data = JSON.parse(m[1])
+      expect(data.image).to.equal('https://freshbubbles.pt/uploads/custom-logo-resized.png')
+    })
+
+    it('falls back to the default logo when nothing has been uploaded via the Branding tab', async () => {
+      const res = await asThisTenant()
+      expect(res.text).to.include('/geral/freshbubbleslogo.png')
+    })
   })
 
   describe('PUBLIC_SITE_URL override', () => {
@@ -266,6 +346,24 @@ describe('mergeContent (views/landing.js) — the DB-down/malformed-data safety 
   it('drops custom sections with no heading', () => {
     const merged = mergeContent({ customSections: [{ body: 'no heading' }, { heading: 'Ok' }] })
     expect(merged.customSections).to.deep.equal([{ heading: 'Ok' }])
+  })
+
+  it('merges brand facts per-field, including nested address/hours', () => {
+    const merged = mergeContent({ brand: { phone: '+351 900 000 000', address: { city: 'Lisboa' } } })
+    expect(merged.brand.phone).to.equal('+351 900 000 000')
+    expect(merged.brand.address.city).to.equal('Lisboa')
+    expect(merged.brand.address.street).to.equal(DEFAULT_CONTENT.brand.address.street) // untouched, kept
+    expect(merged.brand.hours).to.deep.equal(DEFAULT_CONTENT.brand.hours)
+  })
+
+  it('falls back to the default rating when a saved rating is not a real number', () => {
+    const merged = mergeContent({ brand: { rating: { value: 'not-a-number', count: null } } })
+    expect(merged.brand.rating).to.deep.equal(DEFAULT_CONTENT.brand.rating)
+  })
+
+  it('honours an explicit empty social list but falls back to the default when brand was never saved', () => {
+    expect(mergeContent({ brand: { social: [] } }).brand.social).to.deep.equal([])
+    expect(mergeContent({}).brand.social).to.deep.equal(DEFAULT_CONTENT.brand.social)
   })
 })
 

@@ -7,16 +7,19 @@
  * returns fully-formed markup in the FIRST response — real headings, real text,
  * real structured data — so Google (and everyone else) can read it immediately.
  *
- * Business facts (BRAND, below — address, phone, hours, rating, email, socials)
- * are hardcoded, not admin-editable: they come from the owner's own Google
- * Business Profile, given directly, and structured data (jsonLd, below) must
- * never drift from what's actually true. The page's marketing COPY (headings,
- * step/feature/CTA/quote text, and any admin-added sections) is a different
- * story — it's stored as a Setting (key CONTENT_SETTING_KEY) and editable from
- * the "Página Inicial" tab in AdminSettings.jsx. DEFAULT_CONTENT below is both
- * the shipped copy and the fallback used whenever nothing's been saved yet or
- * the DB read fails — see routes/public.js for how the two are combined, with
- * a short cache and a timeout so a Mongo hiccup never takes this page down.
+ * Business facts (address, phone, hours, rating, email, socials — DEFAULT_CONTENT.brand,
+ * below) and the page's marketing COPY (headings, step/feature/CTA/quote text,
+ * and any admin-added sections) are both stored as one Setting (key
+ * CONTENT_SETTING_KEY) and editable from the "Página Inicial" tab in
+ * AdminSettings.jsx. There's deliberately only one source of truth for a
+ * business fact: jsonLd(), below, builds structured data straight from the
+ * same content, so editing the phone number here can never leave the visible
+ * page and Google's LocalBusiness schema disagreeing with each other. Only the
+ * logo (a real uploaded asset, not text) stays outside this and fixed in code.
+ * DEFAULT_CONTENT is both the shipped copy/facts and the fallback used
+ * whenever nothing's been saved yet or the DB read fails — see routes/public.js
+ * for how the two are combined, with a short cache and a timeout so a Mongo
+ * hiccup never takes this page down.
  *
  * Served only when PUBLIC_LANDING_PAGE=true (routes/public.js) — the shop-kiosk
  * build's own "/" is the real point-of-sale UI and must never be shadowed by
@@ -25,38 +28,11 @@
 
 const SITE_URL = process.env.PUBLIC_SITE_URL || 'https://freshbubbles.pt'
 const LOGIN_URL = '/admin/login'
-
-// Real, current facts only — from the business's own Google Business Profile
-// (address, phone, hours, rating) and its own listing description (services).
-// Nothing on this page is invented. Not editable from the admin content tab —
-// see the file-level comment above for why.
-const BRAND = {
-  name: 'Fresh Bubbles',
-  tagline: 'Laundry & Ironing', // the exact tagline printed on the real logo mark
-  email: 'marcacoes@freshbubbles.pt',
-  logo: '/geral/freshbubbleslogo.png', // real asset, served by the frontend container
-  phone: '+351 912 715 258',
-  phoneHref: '+351912715258',
-  address: {
-    street: 'Av. Dr. António Carvalho de Figueiredo 35A',
-    postal: '2670-407',
-    city: 'Loures',
-    country: 'Portugal',
-  },
-  // Google's live status snapshot showed "Opens 7 AM · Closes 11:30 PM" with no
-  // per-weekday breakdown available — represented as one daily range, not a
-  // fabricated weekly table.
-  hours: { open: '07:00', close: '23:30' },
-  rating: { value: 4.5, count: 11 }, // Google, as pasted by the owner
-}
-const fullAddress = `${BRAND.address.street}, ${BRAND.address.postal} ${BRAND.address.city}, ${BRAND.address.country}`
-const mapsQuery = encodeURIComponent(fullAddress)
-
-// Verified profiles only. Facebook is coming but doesn't exist yet — add it
-// here (same shape) the day it does; nothing else needs to change.
-const SOCIAL = [
-  { name: 'Instagram', url: 'https://www.instagram.com/freshbubblesloures/', icon: 'M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5z M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z M17.5 6.5h.01' },
-]
+// Default until an admin uploads a different one — via the existing Branding
+// tab's logo upload (Setting key branding.logo), not a separate control
+// here. routes/public.js reads that Setting and overlays it onto
+// content.brand.logo before rendering; see its own comment for why.
+const DEFAULT_LOGO_PATH = '/geral/freshbubbleslogo.png'
 
 // ---------------------------------------------------------------------------
 // Editable content — see the file-level comment above. Persisted under this
@@ -65,6 +41,27 @@ const SOCIAL = [
 export const CONTENT_SETTING_KEY = 'landingPage.content'
 
 export const DEFAULT_CONTENT = {
+  // Real, current facts only — originally from the business's own Google
+  // Business Profile (address, phone, hours, rating). Editable from admin;
+  // these values are also what ships if nothing's ever been saved.
+  brand: {
+    name: 'Fresh Bubbles',
+    tagline: 'Laundry & Ironing', // the exact tagline printed on the real logo mark
+    email: 'marcacoes@freshbubbles.pt',
+    logo: DEFAULT_LOGO_PATH,
+    phone: '+351 912 715 258',
+    address: {
+      street: 'Av. Dr. António Carvalho de Figueiredo 35A',
+      postal: '2670-407',
+      city: 'Loures',
+      country: 'Portugal',
+    },
+    hours: { open: '07:00', close: '23:30' },
+    rating: { value: 4.5, count: 11 },
+    social: [
+      { name: 'Instagram', url: 'https://www.instagram.com/freshbubblesloures/' },
+    ],
+  },
   hero: {
     eyebrow: 'Lavandaria em Loures',
     heading: 'Coloque. Pague.',
@@ -124,7 +121,29 @@ export const DEFAULT_CONTENT = {
 export function mergeContent(raw) {
   const c = (raw && typeof raw === 'object') ? raw : {}
   const items = (list, fallback) => (Array.isArray(list) && list.length ? list : fallback)
+  const b = (c.brand && typeof c.brand === 'object') ? c.brand : {}
+  // `val != null` first: Number(null) is 0 and Number.isFinite(0) is true, so
+  // a saved `{ count: null }` would otherwise merge in as a real 0 instead of
+  // falling back to the default — "field not provided" and "field is zero"
+  // must stay distinguishable.
+  const numberOr = (val, fallback) => (val != null && Number.isFinite(Number(val)) ? Number(val) : fallback)
   return {
+    brand: {
+      ...DEFAULT_CONTENT.brand,
+      ...b,
+      address: { ...DEFAULT_CONTENT.brand.address, ...(b.address || {}) },
+      hours: { ...DEFAULT_CONTENT.brand.hours, ...(b.hours || {}) },
+      rating: {
+        value: numberOr(b.rating && b.rating.value, DEFAULT_CONTENT.brand.rating.value),
+        count: numberOr(b.rating && b.rating.count, DEFAULT_CONTENT.brand.rating.count),
+      },
+      // Array.isArray (not "has length") so an intentional "remove all social
+      // links" save is honoured — only a field that was never saved at all
+      // falls back to the default Instagram entry.
+      social: Array.isArray(b.social)
+        ? b.social.filter((s) => s && s.name && s.url)
+        : DEFAULT_CONTENT.brand.social,
+    },
     hero: { ...DEFAULT_CONTENT.hero, ...(c.hero || {}) },
     steps: {
       ...DEFAULT_CONTENT.steps,
@@ -149,6 +168,24 @@ const escapeHtml = (s) =>
 
 const slugify = (s) =>
   String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'section'
+
+// Derived from the saved phone number rather than stored as its own field —
+// two copies of the same number (display + tel: href) drifting apart after
+// an edit is exactly the kind of bug a computed value avoids outright.
+const toTelHref = (phone) => String(phone || '').replace(/[^\d+]/g, '')
+
+// Social links are free-form admin input (any name, any URL) — not a fixed
+// per-platform config — so the icon is picked by matching the name against
+// known platforms, with a plain "link" glyph for anything else. Good enough
+// for a small row icon; never blocks adding a profile we don't recognise.
+const SOCIAL_ICON_PATHS = {
+  instagram: 'M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5z M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z M17.5 6.5h.01',
+  facebook: 'M14 9h3V6h-3a4 4 0 0 0-4 4v2H8v3h2v6h3v-6h3l1-3h-4v-2a1 1 0 0 1 1-1z',
+  tiktok: 'M14 3v10.5a2.5 2.5 0 1 1-2.5-2.5 M14 3a5 5 0 0 0 5 5',
+  whatsapp: 'M12 3a9 9 0 0 0-7.8 13.5L3 21l4.7-1.2A9 9 0 1 0 12 3z M8.5 8.5c0 4 3 7 7 7',
+}
+const GENERIC_LINK_ICON_PATH = 'M9.5 14.5l5-5 M8 12a4 4 0 0 1 0-5.5l1.5-1.5a4 4 0 0 1 5.5 5.5 M16 12a4 4 0 0 1 0 5.5l-1.5 1.5a4 4 0 0 1-5.5-5.5'
+const socialIconPath = (name) => SOCIAL_ICON_PATHS[String(name || '').trim().toLowerCase()] || GENERIC_LINK_ICON_PATH
 
 /** A small inline SVG "porthole" — the washing-machine drum window that's already the real logo's central mark, reused here as the page's one recurring signature shape. */
 function porthole({ size = 120, ring = true, spin = false } = {}) {
@@ -200,39 +237,45 @@ function bubbleDots(n = 5) {
   return out
 }
 
-function jsonLd() {
+function jsonLd(content) {
+  const brand = content.brand
   const data = {
     '@context': 'https://schema.org',
     '@type': 'LocalBusiness',
-    name: BRAND.name,
+    name: brand.name,
     url: SITE_URL,
-    image: `${SITE_URL}${BRAND.logo}`,
-    email: BRAND.email,
-    telephone: BRAND.phone,
+    image: `${SITE_URL}${brand.logo}`,
+    email: brand.email,
+    telephone: brand.phone,
     description: 'Lavandaria self-service, engomadoria, limpeza a seco e lavagem de tapetes em Loures. Recolha e entrega ao domicílio disponível.',
     priceRange: '€€',
     areaServed: 'Loures',
     address: {
       '@type': 'PostalAddress',
-      streetAddress: BRAND.address.street,
-      postalCode: BRAND.address.postal,
-      addressLocality: BRAND.address.city,
+      streetAddress: brand.address.street,
+      postalCode: brand.address.postal,
+      addressLocality: brand.address.city,
       addressCountry: 'PT',
     },
     openingHoursSpecification: {
       '@type': 'OpeningHoursSpecification',
       dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
-      opens: BRAND.hours.open,
-      closes: BRAND.hours.close,
+      opens: brand.hours.open,
+      closes: brand.hours.close,
     },
     aggregateRating: {
       '@type': 'AggregateRating',
-      ratingValue: BRAND.rating.value,
-      reviewCount: BRAND.rating.count,
+      ratingValue: brand.rating.value,
+      reviewCount: brand.rating.count,
     },
-    sameAs: SOCIAL.map((s) => s.url),
+    sameAs: brand.social.map((s) => s.url),
   }
-  return JSON.stringify(data)
+  // Business facts are admin text now, not a fixed literal — JSON.stringify
+  // alone doesn't escape "<", so a saved value containing "</script>" could
+  // otherwise close this tag early and inject markup. < is valid inside
+  // a JSON string and decodes back to "<" on JSON.parse, so this is inert to
+  // any consumer reading the structured data, just unusable as HTML.
+  return JSON.stringify(data).replace(/</g, '\\u003c')
 }
 
 /** An admin-created section: heading + body text + an optional CTA button. Not a general layout/block editor — see the file-level comment on scope. */
@@ -256,8 +299,11 @@ function renderCustomSection(cs) {
 
 export function renderLandingPage(rawContent) {
   const content = mergeContent(rawContent)
-  const title = `${BRAND.name} Loures — Lavandaria Self-Service, Engomadoria e Limpeza a Seco`
-  const description = 'Lavandaria self-service em Loures: máquinas de lavar e secar, engomadoria, limpeza a seco, lavagem de tapetes e recolha ao domicílio. Avaliação 4.5/5 no Google.'
+  const brand = content.brand
+  const fullAddress = `${brand.address.street}, ${brand.address.postal} ${brand.address.city}, ${brand.address.country}`
+  const mapsQuery = encodeURIComponent(fullAddress)
+  const title = `${brand.name} Loures — Lavandaria Self-Service, Engomadoria e Limpeza a Seco`
+  const description = `Lavandaria self-service em Loures: máquinas de lavar e secar, engomadoria, limpeza a seco, lavagem de tapetes e recolha ao domicílio. Avaliação ${brand.rating.value}/5 no Google.`
 
   return `<!DOCTYPE html>
 <html lang="pt-PT">
@@ -271,23 +317,23 @@ export function renderLandingPage(rawContent) {
 <meta name="theme-color" content="#0d9488">
 
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="${escapeHtml(BRAND.name)}">
+<meta property="og:site_name" content="${escapeHtml(brand.name)}">
 <meta property="og:locale" content="pt_PT">
 <meta property="og:title" content="${escapeHtml(title)}">
 <meta property="og:description" content="${escapeHtml(description)}">
 <meta property="og:url" content="${SITE_URL}/">
-<meta property="og:image" content="${SITE_URL}${BRAND.logo}">
+<meta property="og:image" content="${SITE_URL}${escapeHtml(brand.logo)}">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="${escapeHtml(title)}">
 <meta name="twitter:description" content="${escapeHtml(description)}">
-<meta name="twitter:image" content="${SITE_URL}${BRAND.logo}">
+<meta name="twitter:image" content="${SITE_URL}${escapeHtml(brand.logo)}">
 
-<link rel="icon" href="${BRAND.logo}" type="image/png">
+<link rel="icon" href="${escapeHtml(brand.logo)}" type="image/png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet">
 
-<script type="application/ld+json">${jsonLd()}</script>
+<script type="application/ld+json">${jsonLd(content)}</script>
 
 <style>
 :root{
@@ -598,7 +644,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
   <div class="wrap">
     <a class="brand" href="#topo">
       ${porthole({ size: 36, spin: false })}
-      <span class="brand-word">${escapeHtml(BRAND.name)}<small>${escapeHtml(BRAND.tagline)}</small></span>
+      <span class="brand-word">${escapeHtml(brand.name)}<small>${escapeHtml(brand.tagline)}</small></span>
     </a>
     <ul class="nav-links" id="nav-links">
       ${content.steps.visible ? `<li><a href="#como-funciona">Como funciona</a></li>` : ''}
@@ -632,8 +678,8 @@ footer .foot-links a:hover{ color:var(--primary-800) }
         </div>
         <div class="hero-note">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
-          Aberto todos os dias, das ${BRAND.hours.open} às ${BRAND.hours.close}
-          <span class="rating-chip">${starIcon()} ${BRAND.rating.value} <span class="rating-count">(${BRAND.rating.count} no Google)</span></span>
+          Aberto todos os dias, das ${escapeHtml(brand.hours.open)} às ${escapeHtml(brand.hours.close)}
+          <span class="rating-chip">${starIcon()} ${brand.rating.value} <span class="rating-count">(${brand.rating.count} no Google)</span></span>
         </div>
       </div>
       <div class="hero-art" aria-hidden="true">
@@ -700,7 +746,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
         <p>${escapeHtml(content.cta.description)}</p>
         <div class="hero-cta">
           <a class="btn-primary" href="#visite-nos">Visite-nos</a>
-          <a class="btn-ghost" href="mailto:${BRAND.email}">Fale connosco</a>
+          <a class="btn-ghost" href="mailto:${escapeHtml(brand.email)}">Fale connosco</a>
         </div>
       </div>
     </div>
@@ -735,20 +781,20 @@ footer .foot-links a:hover{ color:var(--primary-800) }
           <h3>Contacto &amp; horário</h3>
           <div class="visit-row">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
-            <span>Todos os dias, das ${BRAND.hours.open} às ${BRAND.hours.close}</span>
+            <span>Todos os dias, das ${escapeHtml(brand.hours.open)} às ${escapeHtml(brand.hours.close)}</span>
           </div>
           <div class="visit-row">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.362 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-            <a href="tel:${BRAND.phoneHref}">${escapeHtml(BRAND.phone)}</a>
+            <a href="tel:${toTelHref(brand.phone)}">${escapeHtml(brand.phone)}</a>
           </div>
           <div class="visit-row">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v16H4z" opacity="0"/><path d="M22 6l-10 7L2 6"/><path d="M2 6h20v12H2z"/></svg>
-            <a href="mailto:${BRAND.email}">${escapeHtml(BRAND.email)}</a>
+            <a href="mailto:${escapeHtml(brand.email)}">${escapeHtml(brand.email)}</a>
           </div>
-          ${SOCIAL.map((s) => `
+          ${brand.social.map((s) => `
           <div class="visit-row">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${s.icon}"/></svg>
-            <a href="${s.url}" target="_blank" rel="noopener noreferrer">${escapeHtml(s.name)}</a>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${socialIconPath(s.name)}"/></svg>
+            <a href="${escapeHtml(s.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(s.name)}</a>
           </div>`).join('')}
           <div class="visit-row">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>
@@ -764,14 +810,14 @@ footer .foot-links a:hover{ color:var(--primary-800) }
   <div class="wrap">
     <div class="foot-brand">
       ${porthole({ size: 28, spin: false })}
-      <span class="foot-brand-text">${escapeHtml(BRAND.name)}<small>${escapeHtml(BRAND.tagline)}</small></span>
+      <span class="foot-brand-text">${escapeHtml(brand.name)}<small>${escapeHtml(brand.tagline)}</small></span>
     </div>
     <div class="foot-links">
       ${content.steps.visible ? `<a href="#como-funciona">Como funciona</a>` : ''}
       ${content.features.visible ? `<a href="#servicos">Serviços</a>` : ''}
       <a href="${LOGIN_URL}">Entrar</a>
     </div>
-    <p class="foot-copy">&copy; ${new Date().getFullYear()} ${escapeHtml(BRAND.name)}. Todos os direitos reservados.</p>
+    <p class="foot-copy">&copy; ${new Date().getFullYear()} ${escapeHtml(brand.name)}. Todos os direitos reservados.</p>
   </div>
 </footer>
 

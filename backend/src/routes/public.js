@@ -31,6 +31,11 @@ const DB_TIMEOUT_MS = 1500
 let cachedContent
 let cachedAt = 0
 
+// The logo is uploaded once, from the existing Branding tab (AdminSettings.jsx),
+// not re-uploaded here — the landing page just reads that same Setting and
+// overlays it onto content.brand.logo, so there's one logo to manage, not two.
+const BRAND_LOGO_SETTING_KEY = 'branding.logo'
+
 // Test-only escape hatch: force the next request to re-read from the DB
 // instead of serving whatever a previous test's request cached. Real traffic
 // never calls this — it only relies on the TTL above.
@@ -43,10 +48,14 @@ async function loadContent(req) {
   if (cachedAt && Date.now() - cachedAt < CACHE_TTL_MS) return cachedContent
   try {
     const SettingT = withTenant(Setting, req)
-    const query = SettingT.findOne({ key: CONTENT_SETTING_KEY }).lean()
-    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('landing content DB read timed out')), DB_TIMEOUT_MS))
-    const doc = await Promise.race([query, timeout])
-    cachedContent = doc ? doc.value : undefined
+    const timeout = () => new Promise((_, reject) => setTimeout(() => reject(new Error('landing content DB read timed out')), DB_TIMEOUT_MS))
+    const [contentDoc, logoDoc] = await Promise.all([
+      Promise.race([SettingT.findOne({ key: CONTENT_SETTING_KEY }).lean(), timeout()]),
+      Promise.race([SettingT.findOne({ key: BRAND_LOGO_SETTING_KEY }).lean(), timeout()]),
+    ])
+    const raw = (contentDoc && contentDoc.value) || {}
+    const logoUrl = logoDoc && logoDoc.value ? String(logoDoc.value) : null
+    cachedContent = logoUrl ? { ...raw, brand: { ...(raw.brand || {}), logo: logoUrl } } : raw
     cachedAt = Date.now()
   } catch (err) {
     console.warn('[public] Failed to load landing page content, serving cached/default content:', err.message)

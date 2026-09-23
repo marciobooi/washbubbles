@@ -7,6 +7,23 @@
 // even if this frontend bundle is unrelated/unavailable, and a shared import
 // would couple two different build targets for no real benefit.
 export const DEFAULT_LANDING_CONTENT = {
+  brand: {
+    name: 'Fresh Bubbles',
+    tagline: 'Laundry & Ironing',
+    email: 'marcacoes@freshbubbles.pt',
+    phone: '+351 912 715 258',
+    address: {
+      street: 'Av. Dr. António Carvalho de Figueiredo 35A',
+      postal: '2670-407',
+      city: 'Loures',
+      country: 'Portugal',
+    },
+    hours: { open: '07:00', close: '23:30' },
+    rating: { value: 4.5, count: 11 },
+    social: [
+      { name: 'Instagram', url: 'https://www.instagram.com/freshbubblesloures/' },
+    ],
+  },
   hero: {
     eyebrow: 'Lavandaria em Loures',
     heading: 'Coloque. Pague.',

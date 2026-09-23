@@ -120,7 +120,16 @@ export default function AdminSettings(){
       const saved = await api.getSetting('landingPage.content').catch(() => null)
       const c = (saved && saved.value && typeof saved.value === 'object') ? saved.value : {}
       const items = (list, fallback) => (Array.isArray(list) && list.length ? list : fallback)
+      const b = (c.brand && typeof c.brand === 'object') ? c.brand : {}
       setLandingContent({
+        brand: {
+          ...DEFAULT_LANDING_CONTENT.brand,
+          ...b,
+          address: { ...DEFAULT_LANDING_CONTENT.brand.address, ...(b.address || {}) },
+          hours: { ...DEFAULT_LANDING_CONTENT.brand.hours, ...(b.hours || {}) },
+          rating: { ...DEFAULT_LANDING_CONTENT.brand.rating, ...(b.rating || {}) },
+          social: Array.isArray(b.social) ? b.social : DEFAULT_LANDING_CONTENT.brand.social,
+        },
         hero: { ...DEFAULT_LANDING_CONTENT.hero, ...(c.hero || {}) },
         steps: { ...DEFAULT_LANDING_CONTENT.steps, ...(c.steps || {}), items: items(c.steps && c.steps.items, DEFAULT_LANDING_CONTENT.steps.items) },
         features: { ...DEFAULT_LANDING_CONTENT.features, ...(c.features || {}), items: items(c.features && c.features.items, DEFAULT_LANDING_CONTENT.features.items) },
@@ -133,6 +142,28 @@ export default function AdminSettings(){
 
   function updateHero(field, val) {
     setLandingContent((c) => ({ ...c, hero: { ...c.hero, [field]: val } }))
+  }
+
+  function updateBrandField(field, val) {
+    setLandingContent((c) => ({ ...c, brand: { ...c.brand, [field]: val } }))
+  }
+  function updateBrandAddress(field, val) {
+    setLandingContent((c) => ({ ...c, brand: { ...c.brand, address: { ...c.brand.address, [field]: val } } }))
+  }
+  function updateBrandHours(field, val) {
+    setLandingContent((c) => ({ ...c, brand: { ...c.brand, hours: { ...c.brand.hours, [field]: val } } }))
+  }
+  function updateBrandRating(field, val) {
+    setLandingContent((c) => ({ ...c, brand: { ...c.brand, rating: { ...c.brand.rating, [field]: val } } }))
+  }
+  function addSocialLink() {
+    setLandingContent((c) => ({ ...c, brand: { ...c.brand, social: [...c.brand.social, { name: '', url: '' }] } }))
+  }
+  function updateSocialLink(idx, field, val) {
+    setLandingContent((c) => ({ ...c, brand: { ...c.brand, social: c.brand.social.map((s, i) => (i === idx ? { ...s, [field]: val } : s)) } }))
+  }
+  function removeSocialLink(idx) {
+    setLandingContent((c) => ({ ...c, brand: { ...c.brand, social: c.brand.social.filter((_, i) => i !== idx) } }))
   }
   function updateSectionField(section, field, val) {
     setLandingContent((c) => ({ ...c, [section]: { ...c[section], [field]: val } }))
@@ -375,8 +406,16 @@ export default function AdminSettings(){
   }
 
   async function saveBanners() {
-    if (bannerSlides.some((s) => !s.image)) {
-      return toast({ title: 'Cada slide precisa de uma imagem', variant: 'destructive' })
+    // Must be a real uploaded file (uploadBannerImage's own output shape),
+    // not just "truthy" — DEFAULT_BANNERS seeds new slides with an imported
+    // asset path (e.g. /src/assets/banner/dry.png in dev, a hashed
+    // /assets/... path in a production build) so the editor has something to
+    // preview before a real upload. That path only resolves inside the exact
+    // frontend build that imported it — saving it as if it were a stable URL
+    // means it 404s the moment a different build or environment serves this
+    // same Setting. Requiring /uploads/ here forces a real upload before save.
+    if (bannerSlides.some((s) => !s.image || !s.image.startsWith('/uploads/'))) {
+      return toast({ title: 'Cada slide precisa de uma imagem carregada — escolha um ficheiro para cada slide', variant: 'destructive' })
     }
     setSavingBanners(true)
     try {
@@ -787,6 +826,92 @@ export default function AdminSettings(){
                 <Label htmlFor="hero-cta2">Botão secundário</Label>
                 <Input id="hero-cta2" value={landingContent.hero.ctaSecondaryLabel} onChange={(e) => updateHero('ctaSecondaryLabel', e.target.value)} />
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Dados do negócio</CardTitle>
+            <CardDescription>Morada, contactos, horário, avaliação e redes sociais — usados também nos dados estruturados que o Google lê (mantém-se tudo sincronizado). O logótipo vem do separador Branding, não daqui.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="brand-name">Nome</Label>
+                <Input id="brand-name" value={landingContent.brand.name} onChange={(e) => updateBrandField('name', e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="brand-tagline">Etiqueta (sob o nome)</Label>
+                <Input id="brand-tagline" value={landingContent.brand.tagline} onChange={(e) => updateBrandField('tagline', e.target.value)} />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="brand-email">Email</Label>
+                <Input id="brand-email" type="email" value={landingContent.brand.email} onChange={(e) => updateBrandField('email', e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="brand-phone">Telefone</Label>
+                <Input id="brand-phone" value={landingContent.brand.phone} onChange={(e) => updateBrandField('phone', e.target.value)} placeholder="Ex: +351 912 715 258" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="md:col-span-2">
+                <Label htmlFor="brand-street">Morada</Label>
+                <Input id="brand-street" value={landingContent.brand.address.street} onChange={(e) => updateBrandAddress('street', e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="brand-postal">Código postal</Label>
+                <Input id="brand-postal" value={landingContent.brand.address.postal} onChange={(e) => updateBrandAddress('postal', e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="brand-city">Localidade</Label>
+                <Input id="brand-city" value={landingContent.brand.address.city} onChange={(e) => updateBrandAddress('city', e.target.value)} />
+              </div>
+              <div className="md:col-span-2">
+                <Label htmlFor="brand-country">País</Label>
+                <Input id="brand-country" value={landingContent.brand.address.country} onChange={(e) => updateBrandAddress('country', e.target.value)} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="brand-open">Abre às</Label>
+                <Input id="brand-open" type="time" value={landingContent.brand.hours.open} onChange={(e) => updateBrandHours('open', e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="brand-close">Fecha às</Label>
+                <Input id="brand-close" type="time" value={landingContent.brand.hours.close} onChange={(e) => updateBrandHours('close', e.target.value)} />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="brand-rating-value">Avaliação Google (0–5)</Label>
+                <Input id="brand-rating-value" type="number" min="0" max="5" step="0.1" value={landingContent.brand.rating.value} onChange={(e) => updateBrandRating('value', Number(e.target.value))} />
+              </div>
+              <div>
+                <Label htmlFor="brand-rating-count">Número de avaliações</Label>
+                <Input id="brand-rating-count" type="number" min="0" step="1" value={landingContent.brand.rating.count} onChange={(e) => updateBrandRating('count', Number(e.target.value))} />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Redes sociais</Label>
+              {landingContent.brand.social.map((s, idx) => (
+                <div key={idx} className="flex flex-col md:flex-row gap-2">
+                  <Input value={s.name} onChange={(e) => updateSocialLink(idx, 'name', e.target.value)} placeholder="Ex: Instagram, Facebook" className="md:w-48" />
+                  <Input value={s.url} onChange={(e) => updateSocialLink(idx, 'url', e.target.value)} placeholder="https://..." className="flex-1" />
+                  <Button type="button" variant="destructive" size="sm" onClick={() => removeSocialLink(idx)} aria-label="Remover rede social">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+              <Button type="button" variant="outline" size="sm" onClick={addSocialLink}>
+                <Plus className="h-4 w-4 mr-2" /> Adicionar rede social
+              </Button>
             </div>
           </CardContent>
         </Card>
