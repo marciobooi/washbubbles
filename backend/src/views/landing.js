@@ -862,6 +862,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
   ${content.steps.visible ? `
   <section id="como-funciona" aria-labelledby="como-funciona-h" style="position:relative;">
     ${bgBubble({ size: 110, pos: 'top:8%; right:6%;', opacity: 0.55, speed: 0.05 })}
+    ${bgBubble({ size: 60, pos: 'bottom:6%; left:5%;', opacity: 0.4, speed: 0.04 })}
     <div class="wrap">
       <div class="section-head reveal">
         <span class="eyebrow">${escapeHtml(content.steps.eyebrow)}</span>
@@ -882,6 +883,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
   ${content.features.visible ? `
   <section id="servicos" aria-labelledby="servicos-h" style="background:rgba(255,255,255,.4); position:relative;">
     ${bgBubble({ size: 140, pos: 'bottom:4%; left:4%;', opacity: 0.45, speed: -0.07 })}
+    ${bgBubble({ size: 95, pos: 'top:10%; left:8%;', opacity: 0.35, speed: -0.06 })}
     <div class="wrap">
       <div class="section-head reveal">
         <span class="eyebrow">${escapeHtml(content.features.eyebrow)}</span>
@@ -905,6 +907,8 @@ footer .foot-links a:hover{ color:var(--primary-800) }
   <section aria-hidden="false">
     <div class="wrap">
       <div class="cta-band reveal">
+        ${bgBubble({ size: 105, pos: 'top:-10%; left:8%;', opacity: 0.3, speed: 0.05 })}
+        ${bgBubble({ size: 50, pos: 'bottom:8%; right:22%;', opacity: 0.25, speed: -0.08 })}
         <svg class="cta-watermark" data-parallax="0.06" viewBox="0 0 100 100" aria-hidden="true">
           <circle cx="50" cy="50" r="47" fill="none" stroke="#fff" stroke-width="1.5"/>
           <circle cx="50" cy="50" r="34" fill="none" stroke="#fff" stroke-width="2.5"/>
@@ -924,6 +928,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
   <section id="avaliacoes" aria-labelledby="avaliacoes-h" style="position:relative;">
     ${bgBubble({ size: 70, pos: 'top:6%; left:10%;', opacity: 0.5, speed: 0.09 })}
     ${bgBubble({ size: 44, pos: 'bottom:10%; right:12%;', opacity: 0.4, speed: -0.05 })}
+    ${bgBubble({ size: 80, pos: 'bottom:2%; left:30%;', opacity: 0.3, speed: 0.06 })}
     <div class="wrap">
       <div class="section-head reveal">
         <span class="eyebrow">${escapeHtml(content.reviews.eyebrow)}</span>
@@ -945,7 +950,10 @@ footer .foot-links a:hover{ color:var(--primary-800) }
   </section>` : ''}
 
   ${content.visit.visible ? `
-  <section id="visite-nos" aria-labelledby="visite-nos-h">
+  <section id="visite-nos" aria-labelledby="visite-nos-h" style="position:relative;">
+    ${bgBubble({ size: 145, pos: 'top:4%; right:4%;', opacity: 0.4, speed: -0.04 })}
+    ${bgBubble({ size: 65, pos: 'bottom:8%; left:6%;', opacity: 0.35, speed: 0.07 })}
+    ${bgBubble({ size: 160, pos: 'bottom:-6%; right:20%;', opacity: 0.25, speed: -0.03 })}
     <div class="wrap">
       <div class="section-head reveal">
         <span class="eyebrow">${escapeHtml(content.visit.eyebrow)}</span>
