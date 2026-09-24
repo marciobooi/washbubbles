@@ -305,6 +305,11 @@ function bubbleDots(n = 5) {
   return out
 }
 
+/** A single static background bubble, scroll-parallaxed via data-parallax — see .bg-bubble's own CSS comment. `pos` is any mix of top/left/right/bottom CSS values. */
+function bgBubble({ size = 80, pos, opacity = 0.5, speed = 0.08 }) {
+  return `<span class="bg-bubble" style="width:${size}px; height:${size}px; ${pos}; opacity:${opacity}" data-parallax="${speed}" aria-hidden="true"></span>`
+}
+
 function jsonLd(content) {
   const brand = content.brand
   const data = {
@@ -596,6 +601,19 @@ img{ max-width:100%; display:block }
 }
 @media (prefers-reduced-motion:reduce){ .bubble{ animation:none; opacity:0 } }
 
+/* Background soap bubbles scattered through the rest of the page — same
+   glassy radial-gradient look as the hero's .bubble, but static (no
+   keyframe animation) since movement here comes entirely from data-parallax
+   (the same scroll-linked system the hero portholes already use). Stacking
+   a CSS animation AND the JS parallax transform on one element is exactly
+   the bug the hero's portholes had to work around with a wrapper div — no
+   wrapper needed here since there's only one thing driving transform. */
+.bg-bubble{
+  position:absolute; border-radius:999px; pointer-events:none; will-change:transform; z-index:0;
+  background:radial-gradient(circle at 32% 28%, rgba(255,255,255,.9), rgba(153,246,228,.32) 55%, rgba(13,148,136,.1) 80%, transparent 100%);
+  box-shadow:inset 0 0 10px rgba(255,255,255,.5);
+}
+
 /* ---------- sections ---------- */
 section{ padding:84px 0 }
 .section-head{ max-width:640px; margin:0 auto 52px; text-align:center }
@@ -842,7 +860,8 @@ footer .foot-links a:hover{ color:var(--primary-800) }
   </header>
 
   ${content.steps.visible ? `
-  <section id="como-funciona" aria-labelledby="como-funciona-h">
+  <section id="como-funciona" aria-labelledby="como-funciona-h" style="position:relative;">
+    ${bgBubble({ size: 110, pos: 'top:8%; right:6%;', opacity: 0.55, speed: 0.05 })}
     <div class="wrap">
       <div class="section-head reveal">
         <span class="eyebrow">${escapeHtml(content.steps.eyebrow)}</span>
@@ -861,7 +880,8 @@ footer .foot-links a:hover{ color:var(--primary-800) }
   </section>` : ''}
 
   ${content.features.visible ? `
-  <section id="servicos" aria-labelledby="servicos-h" style="background:rgba(255,255,255,.4)">
+  <section id="servicos" aria-labelledby="servicos-h" style="background:rgba(255,255,255,.4); position:relative;">
+    ${bgBubble({ size: 140, pos: 'bottom:4%; left:4%;', opacity: 0.45, speed: -0.07 })}
     <div class="wrap">
       <div class="section-head reveal">
         <span class="eyebrow">${escapeHtml(content.features.eyebrow)}</span>
@@ -901,7 +921,9 @@ footer .foot-links a:hover{ color:var(--primary-800) }
   </section>` : ''}
 
   ${content.reviews.visible ? `
-  <section id="avaliacoes" aria-labelledby="avaliacoes-h">
+  <section id="avaliacoes" aria-labelledby="avaliacoes-h" style="position:relative;">
+    ${bgBubble({ size: 70, pos: 'top:6%; left:10%;', opacity: 0.5, speed: 0.09 })}
+    ${bgBubble({ size: 44, pos: 'bottom:10%; right:12%;', opacity: 0.4, speed: -0.05 })}
     <div class="wrap">
       <div class="section-head reveal">
         <span class="eyebrow">${escapeHtml(content.reviews.eyebrow)}</span>

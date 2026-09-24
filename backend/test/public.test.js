@@ -128,7 +128,7 @@ describe('Public front page (routes/public.js + views/landing.js)', () => {
 
     it('renders reviews as their own section, not nested inside Visite-nos', async () => {
       const res = await request(app).get('/')
-      expect(res.text).to.match(/<section id="avaliacoes" aria-labelledby="avaliacoes-h">/)
+      expect(res.text).to.match(/<section id="avaliacoes" aria-labelledby="avaliacoes-h"/)
       // The reviews block must come BEFORE Visite-nos opens, i.e. it's a
       // sibling section, not content inside it.
       const avaliacoesIdx = res.text.indexOf('<section id="avaliacoes"')
@@ -165,9 +165,21 @@ describe('Public front page (routes/public.js + views/landing.js)', () => {
     it('ships scroll-parallax layers, gated behind reduced-motion like the other animation', async () => {
       const res = await request(app).get('/')
       const parallaxAttrs = res.text.match(/data-parallax="[^"]*"/g) || []
-      // Hero glow + 4 portholes + 3 step-marks + 1 CTA watermark = 9 layers.
-      expect(parallaxAttrs.length).to.be.at.least(9)
+      // Hero glow + 4 portholes + 3 step-marks + 1 CTA watermark + 4 background bubbles = 13 layers.
+      expect(parallaxAttrs.length).to.be.at.least(13)
       expect(res.text).to.match(/if \(!reduceMotion\) \{[\s\S]*data-parallax/)
+    })
+
+    it('scatters a few background soap bubbles, parallaxed like everything else — reuses the same data-parallax system, no separate JS', async () => {
+      const res = await request(app).get('/')
+      const bubbles = res.text.match(/class="bg-bubble"[^>]*data-parallax="[\d.-]+"/g) || []
+      expect(bubbles.length).to.equal(4)
+      // Static positioning, not the hero's drift keyframe — the .drift
+      // animation and a JS-driven parallax transform would fight over the
+      // same CSS property, the exact bug the hero portholes needed a
+      // wrapper div to avoid.
+      expect(res.text).to.include('.bg-bubble{')
+      expect(res.text).to.not.match(/\.bg-bubble\{[^}]*animation:/)
     })
 
     it('ships a grain overlay as a generated data URI, not a downloaded asset', async () => {
