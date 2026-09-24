@@ -726,7 +726,10 @@ section{ padding:84px 0 }
 .review-slide cite span{ font-weight:400; color:#94a3a1 }
 @media (prefers-reduced-motion:reduce){ .review-slide{ transition:none } }
 
-.review-dots{ display:flex; justify-content:center; gap:8px; margin-top:20px }
+/* .review-dots sits as a sibling of .review-slide inside .reviews, which has
+   no padding of its own (see .review-slide's comment on why) — without its
+   own padding here it sat flush against the card's rounded bottom edge. */
+.review-dots{ display:flex; justify-content:center; gap:8px; margin-top:20px; padding:0 40px 32px }
 .review-dot{
   width:8px; height:8px; border-radius:999px; border:0; padding:0; cursor:pointer;
   background:rgba(13,148,136,.25); transition:background .2s ease, transform .2s ease;
@@ -735,10 +738,15 @@ section{ padding:84px 0 }
 .review-dot:hover{ background:rgba(13,148,136,.5) }
 
 /* visit us */
-.visit{ display:grid; grid-template-columns:1fr 1fr; gap:28px; align-items:start }
+.visit{ display:grid; grid-template-columns:1fr 1fr; gap:28px; align-items:stretch }
 .visit-card{
   background:rgba(255,255,255,.85); border:1px solid rgba(255,255,255,.7); border-radius:20px;
   padding:30px 28px; box-shadow:var(--shadow-soft);
+  /* align-items:stretch above makes both cards match the taller one's
+     height (the map makes "Morada" the tall one) — flex+center here so the
+     shorter card's content sits balanced in the middle of that extra space
+     instead of top-anchored with a slab of empty white below it. */
+  display:flex; flex-direction:column; justify-content:center;
 }
 .visit-card h3{ font-size:15px; font-weight:600; text-transform:uppercase; letter-spacing:.06em; color:var(--primary-700); margin-bottom:14px }
 .visit-row{ display:flex; align-items:flex-start; gap:12px; font-size:15px; color:var(--ink-soft); margin-bottom:12px }
@@ -767,7 +775,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
 /* ---------- responsive ---------- */
 @media (max-width:900px){
   .hero .wrap{ grid-template-columns:1fr; gap:40px }
-  .hero{ padding-top:40px; text-align:center }
+  .hero{ padding-top:72px; text-align:center }
   .hero-sub{ margin-inline:auto }
   .hero-cta{ justify-content:center }
   .hero-note{ justify-content:center }
@@ -892,7 +900,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
       </div>
       <div class="features">
         ${content.features.items.map((f, i) => `
-        <div class="feature-card reveal" style="transition-delay:${(i % 3) * 0.07}s">
+        <div class="feature-card reveal" style="transition-delay:${i * 0.08}s">
           <div class="feature-icon">${featureIcon(i)}</div>
           <h3>${escapeHtml(f.t)}</h3>
           <p>${escapeHtml(f.d)}</p>
