@@ -117,9 +117,9 @@ export default function Pos() {
       <div className="relative min-h-[calc(100vh-35rem)] flex flex-col z-10">
         {/* Cards Grid */}
         <div className="grow flex items-center justify-center px-6 pb-32">
-          <div className="w-full max-w-7xl grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="w-full max-w-5xl grid grid-cols-2 gap-10">
             {cards.map((c) => (
-              <div key={c.id} className="aspect-3/4 sm:aspect-square lg:aspect-3/4 xl:aspect-square transition-all duration-300 hover:-translate-y-2">
+              <div key={c.id} className="aspect-square transition-all duration-300 hover:-translate-y-2">
                 <Card c={c} onClick={(id) => {
                   if (c.id === 'wash' || c.id === 'dry') {
                     navigate(`/pos/machines?type=${c.id}`)

@@ -505,13 +505,13 @@ function AppInner() {
         <header className="p-4 border-b border-primary-100 bg-white/70 backdrop-blur">
           <div className="container mx-auto flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Link to="/" className="inline-flex items-center gap-2 p-2 rounded-md hover:bg-white/60 focus:outline-none" title="Home">
+              <Link to="/" className="inline-flex items-center gap-2 p-3 rounded-lg hover:bg-white/60 focus:outline-none" title="Home">
                 {branding.logo ? (
-                  <img src={branding.logo} alt={branding.companyName || 'Company'} className="h-6 w-6 object-contain rounded-sm" />
+                  <img src={branding.logo} alt={branding.companyName || 'Company'} className="h-12 w-12 object-contain rounded-md" />
                 ) : (
-                  <Home className="h-5 w-5 text-primary-800" />
+                  <Home className="h-9 w-9 text-primary-800" />
                 )}
-                <span className="text-xl font-semibold text-primary-800">{branding.companyName || 'Washstore'}</span>
+                <span className="text-3xl font-semibold text-primary-800">{branding.companyName || 'Washstore'}</span>
               </Link>
             </div>
             <div className="flex items-center gap-3">
@@ -519,8 +519,8 @@ function AppInner() {
 
 
               {showHome && (
-                <Link to="/pos" className="inline-flex items-center p-2 rounded-md hover:bg-white/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400" title="Home">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-primary-800" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+                <Link to="/pos" className="inline-flex items-center p-3 rounded-lg hover:bg-white/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400" title="Home">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-primary-800" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 9.75L12 3l9 6.75V20a1 1 0 0 1-1 1h-5.5a1 1 0 0 1-1-1V14a1 1 0 0 0-1-1H10a1 1 0 0 0-1 1v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9.75z" />
                   </svg>
                   <span className="sr-only">Home</span>
@@ -529,7 +529,7 @@ function AppInner() {
 
               {credit > 0 && location.pathname.startsWith('/pos') && (
                 <span
-                  className="inline-flex items-center gap-1 rounded-full bg-teal-600 px-3 py-1 text-sm font-semibold text-white shadow"
+                  className="inline-flex items-center gap-1 rounded-full bg-teal-600 px-4 py-2 text-lg font-bold text-white shadow"
                   title="Dinheiro inserido"
                   aria-live="polite"
                 >
@@ -538,12 +538,12 @@ function AppInner() {
               )}
 
                          {cartCount > 0 && (
-                <button aria-label="Abrir carrinho" className="relative inline-flex items-center p-2 rounded-md hover:bg-white/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400" onClick={() => setCartOpen(true)}>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-primary-800" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+                <button aria-label="Abrir carrinho" className="relative inline-flex items-center p-3 rounded-lg hover:bg-white/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400" onClick={() => setCartOpen(true)}>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-primary-800" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4m1.6 8L5 21h14" />
                   </svg>
                   <span className="sr-only">Carrinho</span>
-                  <span className="absolute -top-1 -right-1 inline-flex items-center justify-center px-1.5 py-0.5 text-xs font-semibold leading-none text-white bg-red-600 rounded-full">{cartCount}</span>
+                  <span className="absolute -top-1 -right-1 inline-flex items-center justify-center px-2 py-1 text-sm font-bold leading-none text-white bg-red-600 rounded-full">{cartCount}</span>
                 </button>
               )}
      {location.pathname.startsWith('/admin') && <TenantSelector className="mr-2" />}
@@ -552,8 +552,8 @@ function AppInner() {
      )}
     {location.pathname.startsWith('/pos') && <LanguageSwitcher />}
 
-              <button aria-label="Ajuda" className="inline-flex items-center p-2 rounded-md hover:bg-white/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400" onClick={() => setHelpOpen(true)} title="Ajuda">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-primary-800" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+              <button aria-label="Ajuda" className="inline-flex items-center p-3 rounded-lg hover:bg-white/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400" onClick={() => setHelpOpen(true)} title="Ajuda">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-primary-800" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <span className="sr-only">Ajuda</span>
