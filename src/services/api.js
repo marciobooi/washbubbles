@@ -535,6 +535,15 @@ export function createApi(config) {
     return request('/middleware/activate-machine', { method: 'POST', json: machineData, expect: 'json' });
   }
 
+  // Start / release a machine with no payment. On the central server this is queued for the
+  // shop and answers { queued: true }; on the shop PC it happens at once.
+  function adminStartMachine(id) {
+    return request(`/admin/machines/${id}/start`, { method: 'POST', expect: 'json' });
+  }
+  function adminEndMachine(id) {
+    return request(`/admin/machines/${id}/end`, { method: 'POST', expect: 'json' });
+  }
+
 
 
 
@@ -650,6 +659,8 @@ export function createApi(config) {
 
     // Middleware
     activateMachine,
+    adminStartMachine,
+    adminEndMachine,
 
     // Day Close
     getDayCloseSummary,
@@ -725,6 +736,8 @@ export const {
   createPeripheral,
   updatePeripheral,
   activateMachine,
+  adminStartMachine,
+  adminEndMachine,
   getDayCloseSummary,
   getDayCloses,
   createDayClose,

@@ -714,3 +714,87 @@ describe('WashBubbles backend', function () {
     })
   })
 })
+
+describe('Admin start/end without payment', function () {
+  let app, tenant, kiosk, adminToken, kioskToken, machine
+  before(async () => {
+    await startTestDb()
+    await clearTestDb()
+    app = await buildTestApp()
+    ;({ tenant, kiosk } = await seedTenantAndUsers())
+    const login = (u, p) => request(app).post('/api/auth/login').send({ username: u, password: p })
+    adminToken = (await login('admin', 'admin1234')).body.token
+    kioskToken = signToken(kiosk)
+    const Machine = (await import('../src/models/machine.js')).default
+    machine = await Machine.create({ tenantId: tenant._id, name: 'Lavar Remoto', type: 'wash', weight: 8 })
+  })
+  after(async () => { await stopTestDb() })
+
+  it('on the central server (no hardware) it queues a command for the shop and leaves the machine alone', async () => {
+    const SyncCommand = (await import('../src/models/syncCommand.js')).default
+    const res = await request(app).post(`/api/admin/machines/${machine._id}/start`).set('Authorization', `Bearer ${adminToken}`)
+    expect(res.status).to.equal(200)
+    expect(res.body.queued).to.equal(true)
+    const cmd = await SyncCommand.findOne({ kioskId: kiosk._id, type: 'start_machine' })
+    expect(cmd.payload.machineId).to.equal(String(machine._id))
+    const Machine = (await import('../src/models/machine.js')).default
+    expect((await Machine.findById(machine._id)).status).to.equal('free') // not changed until the shop confirms
+  })
+
+  it('the shop receives it, and its "done" report marks the machine running on the central copy', async () => {
+    const pulled = await request(app).get('/api/sync/commands').set('Authorization', `Bearer ${kioskToken}`)
+    expect(pulled.body).to.have.length(1)
+    expect(pulled.body[0].type).to.equal('start_machine')
+    expect(pulled.body[0].createdAt).to.be.a('string')
+    await request(app).post(`/api/sync/commands/${pulled.body[0].id}/done`).set('Authorization', `Bearer ${kioskToken}`).send({})
+    const Machine = (await import('../src/models/machine.js')).default
+    expect((await Machine.findById(machine._id)).status).to.equal('working')
+    // handed out once only
+    const again = await request(app).get('/api/sync/commands').set('Authorization', `Bearer ${kioskToken}`)
+    expect(again.body).to.have.length(0)
+  })
+
+  it('a kiosk cannot ask for it (admin only)', async () => {
+    const res = await request(app).post(`/api/admin/machines/${machine._id}/start`).set('Authorization', `Bearer ${kioskToken}`)
+    expect(res.status).to.be.oneOf([401, 403])
+  })
+
+  it('on the shop (hardware present) the machine is started at once through the interface, and refused without a wiring', async () => {
+    const coinMachine = (await import('../src/services/coinMachine.js')).default
+    const Machine = (await import('../src/models/machine.js')).default
+    const Interface = (await import('../src/models/interface.js')).default
+    const sent = []
+    const saved = { running: coinMachine.running, tenantId: coinMachine.tenantId, send: coinMachine.middleware.sendMachineActivation }
+    coinMachine.running = true
+    coinMachine.tenantId = tenant._id
+    coinMachine.middleware.sendMachineActivation = async (m, iface) => { sent.push({ machine: m.name, address: iface.address, port: m.port }) }
+    try {
+      const unwired = await request(app).post(`/api/admin/machines/${machine._id}/start`).set('Authorization', `Bearer ${adminToken}`)
+      expect(unwired.status).to.equal(400)
+      expect(unwired.body.error).to.match(/no interface/)
+
+      const iface = await Interface.create({ tenantId: tenant._id, name: 'Int T', address: '12', serialNumber: 'SN-T-12', status: 'active' })
+      const wired = await Machine.create({ tenantId: tenant._id, name: 'Lavar Ligada', type: 'wash', weight: 8, interfaceId: iface._id, port: 2 })
+      const ok = await request(app).post(`/api/admin/machines/${wired._id}/start`).set('Authorization', `Bearer ${adminToken}`)
+      expect(ok.status).to.equal(200)
+      expect(ok.body.queued).to.equal(false)
+      expect(sent).to.have.length(1)
+      expect(sent[0].machine).to.equal('Lavar Ligada')
+      expect(String(sent[0].address)).to.equal('12')
+      expect(sent[0].port).to.equal(2)
+      expect((await Machine.findById(wired._id)).status).to.equal('working')
+
+      const twice = await request(app).post(`/api/admin/machines/${wired._id}/start`).set('Authorization', `Bearer ${adminToken}`)
+      expect(twice.status).to.equal(400) // already running: no second pulse
+      expect(sent).to.have.length(1)
+
+      const end = await request(app).post(`/api/admin/machines/${wired._id}/end`).set('Authorization', `Bearer ${adminToken}`)
+      expect(end.status).to.equal(200)
+      expect((await Machine.findById(wired._id)).status).to.equal('free')
+    } finally {
+      coinMachine.running = saved.running
+      coinMachine.tenantId = saved.tenantId
+      coinMachine.middleware.sendMachineActivation = saved.send
+    }
+  })
+})

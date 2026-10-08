@@ -101,16 +101,24 @@ export default function AdminOperations() {
   }
 
   // shorthand helpers
-  const startMachine = async (m) => {
-    await setMachineStatus(m, 'working', 'Ocupado')
+  // Start / end really act on the machine (no payment). On the central server the request is
+  // queued for the shop, which does it within seconds; the machine's status here changes when
+  // the shop reports back, so it is NOT set optimistically.
+  const runAdminAction = async (m, action) => {
     try {
-      // record admin-initiated start as a transaction (no price)
-      await api.createTransaction({ machineId: m._id, amount: 0, type: 'admin_start' })
+      const r = action === 'start' ? await api.adminStartMachine(m._id) : await api.adminEndMachine(m._id)
+      if (r?.queued) {
+        toast({ title: `Pedido enviado ao posto`, description: `${action === 'start' ? 'Iniciar' : 'Parar'} ${m.name}. O estado atualiza quando o posto confirmar.`, variant: 'success' })
+      } else {
+        toast({ title: action === 'start' ? `${m.name} iniciada` : `${m.name} libertada`, variant: 'success' })
+        setMachines((s) => s.map((x) => x._id === m._id ? { ...x, status: action === 'start' ? 'working' : 'free', statusText: action === 'start' ? 'Ocupado' : 'Livre' } : x))
+      }
     } catch (e) {
-      console.warn('Failed to record admin start transaction', e)
+      toast({ title: action === 'start' ? 'Não foi possível iniciar' : 'Não foi possível parar', description: e?.message || String(e), variant: 'destructive' })
     }
   }
-  const stopMachine = (m) => setMachineStatus(m, 'free', 'Livre')
+  const startMachine = (m) => runAdminAction(m, 'start')
+  const stopMachine = (m) => runAdminAction(m, 'end')
   const setOffline = (m) => setMachineStatus(m, 'offline', 'Offline')
   const setOnline = (m) => setMachineStatus(m, 'free', 'Livre')
   // "Avariar" / "Reparado": the machine's own status enum already has a

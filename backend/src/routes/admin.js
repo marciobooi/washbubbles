@@ -193,6 +193,42 @@ router.delete('/machines/:id', requireAdmin, async (req, res) => {
   res.json({ success: true })
 })
 
+// POST /admin/machines/:id/start and /end — start or release a machine with no payment.
+// On a server that has the hardware (the shop PC) it happens right here. On the central
+// server, which has none, it is queued as a remote command that the shop picks up within a
+// few seconds (services/remoteCommands.js) and reports back on.
+async function machineAdminAction(req, res, kind) {
+  const MachineT = withTenant(Machine, req)
+  const machine = await MachineT.findById(req.params.id)
+  if (!machine) return res.status(404).json({ error: 'Machine not found' })
+  const { default: coinMachine } = await import('../services/coinMachine.js')
+
+  if (coinMachine.running) {
+    try {
+      const result = kind === 'start' ? await coinMachine.adminStartMachine(machine._id) : await coinMachine.adminEndMachine(machine._id)
+      logAction(req, `machine.admin_${kind}`, 'Machine', machine._id, { name: machine.name })
+      if (kind === 'start') {
+        await withTenant(Sale, req).create({ machineId: machine._id, amount: 0, type: 'admin_start', method: 'cash' }).catch(() => {})
+      }
+      return res.json({ ...result, queued: false })
+    } catch (err) {
+      return res.status(400).json({ error: err.message })
+    }
+  }
+
+  const kiosks = await User.find({ tenantId: req.tenantId, role: 'KIOSK' }).select('_id').lean()
+  if (kiosks.length === 0) return res.status(409).json({ error: 'No shop kiosk is registered for this tenant' })
+  const SyncCommandT = withTenant(SyncCommand, req)
+  const cmds = []
+  for (const k of kiosks) {
+    cmds.push(await SyncCommandT.create({ kioskId: k._id, type: kind === 'start' ? 'start_machine' : 'end_machine', payload: { machineId: String(machine._id) } }))
+  }
+  logAction(req, `machine.admin_${kind}_requested`, 'Machine', machine._id, { name: machine.name })
+  res.json({ success: true, queued: true, commandIds: cmds.map((c) => c._id) })
+}
+router.post('/machines/:id/start', requireAdmin, (req, res, next) => machineAdminAction(req, res, 'start').catch(next))
+router.post('/machines/:id/end', requireAdmin, (req, res, next) => machineAdminAction(req, res, 'end').catch(next))
+
 // POST /admin/machines/:id/service — logs a manual maintenance visit and
 // resolves the machine's open ticket, if any.
 router.post('/machines/:id/service', requireTechnician, async (req, res) => {

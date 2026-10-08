@@ -12,6 +12,7 @@ import { isChannelBusy } from './lowLevel.js'
 import { CardSync } from './cardSync.js'
 import { Uplink } from './uplink.js'
 import { Downlink } from './downlink.js'
+import { RemoteCommands } from './remoteCommands.js'
 import { CashSessionStore } from './cashSession.js'
 import AuditLog from '../models/auditLog.js'
 import { reportFault } from './maintenance.js'
@@ -130,6 +131,16 @@ class CoinMachine extends EventEmitter {
       this.uplink = new Uplink({ tenantId: this.tenantId })
       this.uplink.start()
 
+      // The central admin can start or release a machine here with no payment: its request
+      // is queued on the server and picked up by this poller (no-op unless sync is configured).
+      this.remoteCommands = new RemoteCommands({
+        handlers: {
+          start_machine: (p) => this.adminStartMachine(p.machineId),
+          end_machine: (p) => this.adminEndMachine(p.machineId),
+        },
+      })
+      this.remoteCommands.start()
+
       // Cash already inserted survives a crash / power cut. Restore FIRST, then
       // start persisting (subscribing saves the current state immediately, which
       // would otherwise wipe the very file we are about to read).
@@ -200,6 +211,7 @@ class CoinMachine extends EventEmitter {
     this.cardSync?.stop()
     this.uplink?.stop()
     this.downlink?.stop()
+    this.remoteCommands?.stop()
     // (the cash-session file is deliberately kept: money still in the session is restored on the next start)
     this.cashSub?.unsubscribe()
 
@@ -798,6 +810,55 @@ class CoinMachine extends EventEmitter {
       console.error('Failed to activate machine:', err)
       throw err
     }
+  }
+
+  /**
+   * Admin start: run a machine now, no payment, no reservation. For the operator to test
+   * wiring, serve a customer by hand, or start a machine from the central admin (which reaches
+   * the shop as a remote command, see services/remoteCommands.js).
+   * Still refuses what would only fail at the washer: no interface/port, inactive interface,
+   * machine already running, or no controller link.
+   */
+  async adminStartMachine(machineId) {
+    const machine = await Machine.findOne(this.scoped({ _id: machineId })).populate('interfaceId')
+    if (!machine) throw new Error('Machine not found')
+    const iface = machine.interfaceId
+    if (!iface || !machine.port) throw new Error(`${machine.name} has no interface/port configured`)
+    if (iface.status !== 'active') throw new Error(`Interface ${iface.name} is not active (status: ${iface.status})`)
+    if (machine.status === 'working') throw new Error(`${machine.name} is already running`)
+
+    // Throws if the controller is not connected — nothing is marked running in that case.
+    await this.middleware.sendMachineActivation(machine, iface)
+
+    machine.status = 'working'
+    machine.statusText = 'Ocupado'
+    machine.startedAt = new Date()
+    machine.currentProgram = machine.currentProgram || 'Início manual'
+    await machine.save()
+    this.machines.set(machine.intId || machine._id, { ...machine.toObject(), activatedAt: new Date() })
+    try { await broadcastMachine(machine) } catch { /* the websocket server may not be up in tests */ }
+    this.emit('machines-activated', { machineId: String(machine._id), admin: true })
+    console.log(`Machine ${machine.name} started by admin via Interface ${iface.name} (addr=${iface.address}, port=${machine.port})`)
+    return { success: true }
+  }
+
+  /**
+   * Admin end: free the machine in the system. The controller has no stop command (see the
+   * protocol notes in docs §9), so a running cycle finishes by itself; this only releases the
+   * machine here so the next customer can pick it.
+   */
+  async adminEndMachine(machineId) {
+    const machine = await Machine.findOne(this.scoped({ _id: machineId }))
+    if (!machine) throw new Error('Machine not found')
+    machine.status = 'free'
+    machine.statusText = 'Livre'
+    machine.startedAt = null
+    machine.currentProgram = null
+    machine.reserved = false
+    machine.reservedBy = null
+    await machine.save()
+    try { await broadcastMachine(machine) } catch { /* see above */ }
+    return { success: true }
   }
 
   /**

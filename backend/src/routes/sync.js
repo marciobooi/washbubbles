@@ -350,7 +350,7 @@ router.get('/commands', async (req, res) => {
       await SyncCommandT.updateMany({ _id: { $in: ids } }, { status: 'executing' })
     }
 
-    res.json(commands.map(c => ({ id: c._id, type: c.type, payload: c.payload })))
+    res.json(commands.map(c => ({ id: c._id, type: c.type, payload: c.payload, createdAt: c.createdAt })))
   } catch (err) {
     console.error('[Sync] Pull commands error:', err)
     res.status(500).json({ error: err.message })
@@ -364,10 +364,22 @@ router.get('/commands', async (req, res) => {
 router.post('/commands/:id/done', async (req, res) => {
   try {
     const SyncCommandT = withTenant(SyncCommand, req)
-    await SyncCommandT.findByIdAndUpdate(req.params.id, { 
-      status: 'done', 
-      executedAt: new Date() 
-    })
+    const cmd = await SyncCommandT.findByIdAndUpdate(req.params.id, {
+      status: 'done',
+      executedAt: new Date()
+    }, { new: true })
+    // The shop did it: reflect it on this (central) server's own copy of the machine, so the
+    // admin screen shows what really happened and not merely that a request was sent.
+    if (cmd && (cmd.type === 'start_machine' || cmd.type === 'end_machine') && cmd.payload?.machineId && mongoose.isValidObjectId(cmd.payload.machineId)) {
+      const MachineT = withTenant(Machine, req)
+      const started = cmd.type === 'start_machine'
+      const m = await MachineT.findByIdAndUpdate(cmd.payload.machineId, started
+        ? { status: 'working', statusText: 'Ocupado', startedAt: new Date() }
+        : { status: 'free', statusText: 'Livre', startedAt: null, currentProgram: null }, { new: true })
+      if (m) {
+        try { const { broadcastMachine } = await import('../wsServer.js'); await broadcastMachine(m) } catch { /* wsServer may not be loaded */ }
+      }
+    }
     res.json({ success: true })
   } catch (err) {
     res.status(500).json({ error: err.message })
