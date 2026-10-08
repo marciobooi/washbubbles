@@ -1,5 +1,15 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { subscribe } from '@/services/websocket'
+import api from '@/services/api'
+
+// The kiosk authenticates with its own API key, same as the other kiosk pages.
+function kioskHeaders() {
+  try {
+    const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
+    const key = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
+    return key ? { Authorization: `ApiKey ${key}` } : undefined
+  } catch { return undefined }
+}
 
 const CartContext = createContext()
 
@@ -21,7 +31,26 @@ export const CartProvider = ({ children }) => {
       import('@/components/ui/Toast').then(({ toast }) => toast({ title: `Dinheiro inserido: ${amount.toFixed(2)}€`, variant: 'success' })).catch(() => {})
     })
   }, [])
-  const resetCredit = () => setCredit(0)
+
+  // Cash already in the machine when this page loads (page reloaded, or coins put in before
+  // it opened) — the backend is the one that actually holds it.
+  useEffect(() => {
+    let alive = true
+    api.request('/middleware/client/balance', { method: 'GET', expect: 'json', headers: kioskHeaders(), skipAuth: true })
+      .then((s) => {
+        const cash = Number(s?.cash)
+        if (alive && cash > 0) setCredit((c) => Math.max(c, Math.round(cash * 100) / 100))
+      })
+      .catch(() => { /* offline or not a shop PC: the badge simply starts at 0 */ })
+    return () => { alive = false }
+  }, [])
+
+  // After a cash payment the money is spent: clear it here AND in the backend, otherwise it
+  // would come back as phantom credit the next time the page loads.
+  const resetCredit = () => {
+    setCredit(0)
+    api.request('/middleware/client/reset', { method: 'POST', expect: 'json', headers: kioskHeaders(), skipAuth: true }).catch(() => {})
+  }
 
   function addToCart(item) {
     // If item represents a machine (has an _id or id and is not a recharge), disallow adding the same
