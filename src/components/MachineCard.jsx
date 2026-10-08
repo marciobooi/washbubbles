@@ -32,7 +32,7 @@ export default function MachineCard({ m, frames, onSelect = () => {} }) {
   const seed = Array.from(String(uniqueId)).reduce((s, c) => s * 31 + c.charCodeAt(0), 0)
   const frame = useFrameAnimation(frames, 300, { seed })
   const isFree = m.status === 'free'
-  const borderClass = isFree ? 'border-1 border-green-500' : 'border-1 border-red-500'
+  const borderClass = isFree ? 'border-2 border-green-500' : 'border-2 border-red-500'
   const interactiveClass = isFree
     ? 'cursor-pointer active:scale-95 active:shadow-lg hover:shadow-lg transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-400'
     : 'cursor-not-allowed opacity-70 pointer-events-none'
@@ -46,33 +46,33 @@ export default function MachineCard({ m, frames, onSelect = () => {} }) {
 
   return (
     <div
-      className={`rounded-xl shadow-xl bg-white flex items-center gap-4 p-4 ${borderClass} ${interactiveClass}`}
+      className={`rounded-2xl shadow-xl bg-white flex items-center gap-6 p-6 ${borderClass} ${interactiveClass}`}
       onClick={() => isFree && onSelect(uniqueId)}
       role="button"
       aria-disabled={!isFree}
       aria-label={m.name}
     >
-      <div className="w-20 h-20 flex items-center justify-center">
+      <div className="w-32 h-32 shrink-0 flex items-center justify-center">
         {frame && (
-          <img src={frame} alt={m.name} className="w-16 h-16 object-contain tealFilter" />
+          <img src={frame} alt={m.name} className="w-28 h-28 object-contain tealFilter" />
         )}
       </div>
       <div className="flex-1">
-        <div className="text-lg font-semibold flex items-center gap-2">
+        <div className="text-3xl font-semibold flex items-center gap-3">
           {m.name}
           {isPromo && (
-            <span className="text-xs px-2 py-0.5 bg-orange-100 text-orange-800 rounded flex items-center gap-1">
-              <Tag className="h-3 w-3" /> PROMO
+            <span className="text-base px-3 py-1 bg-orange-100 text-orange-800 rounded-lg flex items-center gap-2">
+              <Tag className="h-5 w-5" /> PROMO
             </span>
           )}
         </div>
-        <div className="text-sm text-neutral-600">
+        <div className="text-xl text-neutral-600 mt-1">
           {m.weight} {t('unit.kg')} • {fmt.format(cashPrice)}€ dinheiro • {fmt.format(cardPrice)}€ cartão
         </div>
       </div>
       <div className="flex items-center gap-2">
         <div className={`w-3 h-3 rounded-full ${isFree ? 'bg-green-500' : 'bg-red-500'}`} />
-        <div className="text-sm font-medium">{t(`status.${isFree ? 'free' : 'occupied'}`)}</div>
+        <div className="text-2xl font-medium">{t(`status.${isFree ? 'free' : 'occupied'}`)}</div>
       </div>
     </div>
   )

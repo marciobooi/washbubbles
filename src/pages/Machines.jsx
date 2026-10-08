@@ -134,11 +134,11 @@ export default function Machines() {
   return (
     <div className='flex-1 container mx-auto p-4'>
     <div className="relative pb-[12vh] z-10">
-      <h2 className="p-4 text-center text-xl font-semibold mb-4">{t('machines.select', { type: typeLabel })}</h2>
+      <h2 className="p-4 text-center text-4xl font-semibold mb-6">{t('machines.select', { type: typeLabel })}</h2>
       {loading ? (
         <div className="text-center text-neutral-500">Carregando máquinas...</div>
       ) : (
-        <div className="grid gap-4">
+        <div className="grid gap-6">
           {machines.map((m) => (
             <MachineCard key={m._id || m.id} m={m} frames={frames} onSelect={(id) => { const mFound = machines.find((x) => String(x._id || x.id) === String(id)); if (mFound) openForAdd(mFound) }} />
           ))}
