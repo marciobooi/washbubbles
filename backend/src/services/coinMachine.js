@@ -11,6 +11,7 @@ import { roundMoney } from '../utils/money.js'
 import { isChannelBusy } from './lowLevel.js'
 import { CardSync } from './cardSync.js'
 import { Uplink } from './uplink.js'
+import { Downlink } from './downlink.js'
 import { CashSessionStore } from './cashSession.js'
 import AuditLog from '../models/auditLog.js'
 import { reportFault } from './maintenance.js'
@@ -105,9 +106,17 @@ class CoinMachine extends EventEmitter {
       // Must come first — everything below is scoped to this tenant.
       await this.resolveTenant()
 
+      // The central server is the source of truth for machines, prices, settings and
+      // hardware config. Pull once BEFORE loading them so a new/empty site comes up
+      // already configured; offline just keeps what is stored locally (no-op unless
+      // SYNC_SERVER_URL / SYNC_API_KEY are set).
+      this.downlink = new Downlink({ tenantId: this.tenantId })
+      await this.downlink.pullAll()
+      this.downlink.start()
+
       // Load settings
       await this.loadSettings()
-      
+
       // Initialize middleware connections
       await this.middleware.initialize()
 
@@ -190,6 +199,7 @@ class CoinMachine extends EventEmitter {
     
     this.cardSync?.stop()
     this.uplink?.stop()
+    this.downlink?.stop()
     // (the cash-session file is deliberately kept: money still in the session is restored on the next start)
     this.cashSub?.unsubscribe()
 

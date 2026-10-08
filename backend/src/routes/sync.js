@@ -373,9 +373,12 @@ router.post('/commands/:id/fail', async (req, res) => {
 /** Generic helper for pull endpoints */
 async function handlePull(req, res, Model, label) {
   try {
-    const since = req.query.since ? new Date(req.query.since) : new Date(0)
     const ModelT = withTenant(Model, req)
-    const items = await ModelT.find({ updatedAt: { $gte: since } }).lean()
+    // No `since` = a full snapshot. Filtering on updatedAt >= epoch would silently
+    // drop every row of a model with no updatedAt field (machines, settings), so a
+    // new kiosk pulled zero machines.
+    const query = req.query.since ? { updatedAt: { $gte: new Date(req.query.since) } } : {}
+    const items = await ModelT.find(query).lean()
     res.json(items)
   } catch (err) {
     console.error(`[Sync] Pull ${label} error:`, err)
