@@ -27,7 +27,10 @@ if exist "backend\.env" (
   )
 )
 
-start "WashBubbles backend" /min cmd /c ""%~dp0scripts\run-backend.bat""
+rem The boot-time task "WashBubbles Backend" normally has it running already;
+rem only start another copy if nothing answers (e.g. the task is not installed).
+powershell -NoProfile -Command "try{ if((Invoke-WebRequest 'http://127.0.0.1:%PORT%/api/health' -UseBasicParsing -TimeoutSec 2).StatusCode -eq 200){ exit 0 } }catch{}; exit 1"
+if errorlevel 1 start "WashBubbles backend" /min cmd /c ""%~dp0scripts\run-backend.bat""
 
 echo Waiting for the backend on port %PORT% ...
 powershell -NoProfile -Command "$u='http://127.0.0.1:%PORT%/api/health'; for($i=0;$i -lt 60;$i++){ try{ if((Invoke-WebRequest $u -UseBasicParsing -TimeoutSec 2).StatusCode -eq 200){ exit 0 } }catch{}; Start-Sleep 2 }; exit 1"

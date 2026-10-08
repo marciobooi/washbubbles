@@ -311,6 +311,16 @@ try {
       $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero)
       Register-ScheduledTask -TaskName 'WashBubbles Kiosk' -Action $action -Trigger $trigger -Settings $settings -User $KioskUser -RunLevel Limited -Force | Out-Null
       Ok "task 'WashBubbles Kiosk' runs start-kiosk.bat when $KioskUser logs on"
+
+      # The backend itself starts at BOOT as SYSTEM, so sales/sync/hardware keep working
+      # even if nobody has logged in (e.g. after a power cut). start-kiosk.bat reuses it.
+      $runBackend = Join-Path $Root 'scripts\run-backend.bat'
+      $bAction = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument "/c `"$runBackend`"" -WorkingDirectory $Root
+      $bTrigger = New-ScheduledTaskTrigger -AtStartup
+      $bTrigger.Delay = 'PT30S'   # let the MongoDB service come up first
+      $bPrincipal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+      Register-ScheduledTask -TaskName 'WashBubbles Backend' -Action $bAction -Trigger $bTrigger -Settings $settings -Principal $bPrincipal -Force | Out-Null
+      Ok "task 'WashBubbles Backend' runs the backend at boot (no login needed)"
     }
   }
 
