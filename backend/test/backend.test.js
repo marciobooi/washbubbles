@@ -253,6 +253,27 @@ describe('WashBubbles backend', function () {
     })
   })
 
+  describe('Sync: peripheral status up, full config down', () => {
+    it('stores the shop-reported status on the central peripheral, and ignores bad input', async () => {
+      const Peripheral = (await import('../src/models/peripheral.js')).default
+      const p = await Peripheral.create({ tenantId: tenant._id, name: 'Coin', type: 'coin_acceptor', status: 'fault' })
+      const res = await request(app).post('/api/sync/push/peripheral-status')
+        .set('Authorization', `Bearer ${kioskToken}`)
+        .send({ peripherals: [{ id: p._id.toString(), status: 'ok' }, { id: 'not-an-id', status: 'ok' }, { id: p._id.toString(), status: 'exploded' }] })
+      expect(res.status).to.equal(200)
+      expect(res.body.updated).to.equal(1)
+      expect((await Peripheral.findById(p._id)).status).to.equal('ok')
+    })
+
+    it('returns machines and settings on a full pull (they have no updatedAt)', async () => {
+      const Machine = (await import('../src/models/machine.js')).default
+      await Machine.create({ tenantId: tenant._id, name: 'Pull Me', type: 'wash', weight: 7 })
+      const res = await request(app).get('/api/sync/pull/machines').set('Authorization', `Bearer ${kioskToken}`)
+      expect(res.status).to.equal(200)
+      expect(res.body.map((m) => m.name)).to.include('Pull Me')
+    })
+  })
+
   describe('Sync push: card creation and status (offline card purchase)', () => {
     it('creates a card at the id the kiosk generated, and is idempotent on code', async () => {
       const id = 'aaaaaaaaaaaaaaaaaaaaaaaa' // 24 hex chars, like a Mongo ObjectId

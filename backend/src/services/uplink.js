@@ -20,6 +20,7 @@
 import EventEmitter from 'events'
 import SyncOutbox from '../models/syncOutbox.js'
 import Card, { onCardChanged } from '../models/card.js'
+import Peripheral from '../models/peripheral.js'
 import modelEvents from './modelEvents.js'
 
 const MAX_ATTEMPTS = 10
@@ -71,6 +72,8 @@ export class Uplink extends EventEmitter {
     fetchImpl = globalThis.fetch,
     OutboxModel = SyncOutbox,
     CardModel = Card,
+    PeripheralModel = Peripheral,
+    statusIntervalMs = 60_000,
   }) {
     super()
     this.tenantId = tenantId
@@ -83,6 +86,11 @@ export class Uplink extends EventEmitter {
     this.fetch = fetchImpl
     this.Outbox = OutboxModel
     this.Card = CardModel
+    this.Peripheral = PeripheralModel
+    this.statusIntervalMs = statusIntervalMs
+    this.statusTimer = null
+    this.lastStatusSig = ''
+    this.lastStatusPushAt = 0
 
     this.online = null          // null = not tried yet
     this.lastSyncAt = null
@@ -130,11 +138,19 @@ export class Uplink extends EventEmitter {
     this.timer = setInterval(() => this.flush().catch(() => {}), this.intervalMs)
     this.timer.unref?.()
     this.flush().catch(() => {}) // drain anything left from before a restart
+    // Live peripheral health is a state, not an event: it is sent as-is, never queued.
+    this.statusTimer = setInterval(() => this.pushPeripheralStatus().catch(() => {}), this.statusIntervalMs)
+    this.statusTimer.unref?.()
+    this.statusSoon = setTimeout(() => this.pushPeripheralStatus().catch(() => {}), 20_000)
+    this.statusSoon.unref?.()
     console.log(`[Uplink] enabled -> ${this.url}`)
   }
 
   stop() {
     clearInterval(this.timer)
+    clearInterval(this.statusTimer)
+    clearTimeout(this.statusSoon)
+    this.statusTimer = null
     this.timer = null
     for (const off of this.unsubscribers) off()
     this.unsubscribers = []
@@ -236,6 +252,30 @@ export class Uplink extends EventEmitter {
     if (marked.modifiedCount === 0) return 'stale' // refreshed meanwhile: goes out again
     this.emit('sent', { entityType: item.entityType, entityId: item.entityId })
     return 'sent'
+  }
+
+  /**
+   * Tell the central server how each peripheral is doing right now (ok / fault / offline),
+   * so its admin shows the shop's real hardware instead of its own empty copies.
+   * Sent when something changed, and at least every 5 minutes as a heartbeat. Offline or
+   * rejected is simply tried again next time; nothing is queued.
+   */
+  async pushPeripheralStatus() {
+    if (!this.enabled || this.authFailed) return false
+    const rows = await this.Peripheral.find({ tenantId: this.tenantId }).select('_id status').lean()
+    if (rows.length === 0) return false
+    const peripherals = rows.map((r) => ({ id: String(r._id), status: r.status }))
+    const sig = JSON.stringify(peripherals)
+    if (sig === this.lastStatusSig && Date.now() - this.lastStatusPushAt < 5 * 60_000) return false
+    try {
+      await this.post('/sync/push/peripheral-status', { peripherals })
+      this.lastStatusSig = sig
+      this.lastStatusPushAt = Date.now()
+      return true
+    } catch (err) {
+      this.lastStatusSig = '' // send again next time
+      return false
+    }
   }
 
   async post(path, body) {

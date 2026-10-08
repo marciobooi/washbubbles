@@ -6,6 +6,7 @@ import { startTestDb, stopTestDb } from './setup.test-helper.js'
 import Tenant from '../src/models/tenant.js'
 import Sale from '../src/models/sale.js'
 import Card from '../src/models/card.js'
+import Peripheral from '../src/models/peripheral.js'
 import DayClose from '../src/models/dayClose.js'
 import AuditLog from '../src/models/auditLog.js'
 import SyncOutbox from '../src/models/syncOutbox.js'
@@ -360,5 +361,47 @@ describe('CoinMachine restores inserted cash after a restart', () => {
     await after.restoreCashSession()
     expect(after.client.getState().balance).to.equal(0)
     expect((await AuditLog.find({ tenantId: tenant._id, action: 'cash.session.expired' })).length).to.be.greaterThan(0)
+  })
+})
+
+describe('Uplink — peripheral status for the central admin', function () {
+  let tenant, central, uplink
+  before(async () => {
+    await startTestDb()
+    tenant = await Tenant.create({ name: 'Status Test', slug: `status-${Date.now()}` })
+  })
+  after(async () => {
+    await Peripheral.deleteMany({ tenantId: tenant._id })
+    await Tenant.deleteOne({ _id: tenant._id })
+    await stopTestDb()
+  })
+  beforeEach(async () => {
+    await Peripheral.deleteMany({ tenantId: tenant._id })
+    central = fakeCentral()
+    uplink = new Uplink({ tenantId: tenant._id, url: 'http://central.test/api', apiKey: 'k', intervalMs: 3_600_000, statusIntervalMs: 3_600_000, fetchImpl: central.fetch })
+  })
+
+  it('sends nothing when there are no peripherals', async () => {
+    expect(await uplink.pushPeripheralStatus()).to.equal(false)
+    expect(central.calls).to.have.length(0)
+  })
+
+  it('sends each peripheral id with its live status, only when something changed', async () => {
+    const hopper = await Peripheral.create({ tenantId: tenant._id, name: 'Hopper', type: 'hopper', status: 'ok' })
+    expect(await uplink.pushPeripheralStatus()).to.equal(true)
+    expect(central.calls[0].path).to.equal('/api/sync/push/peripheral-status')
+    expect(central.calls[0].body.peripherals).to.deep.equal([{ id: String(hopper._id), status: 'ok' }])
+    expect(await uplink.pushPeripheralStatus()).to.equal(false) // unchanged: no repeat inside 5 min
+    await Peripheral.updateOne({ _id: hopper._id }, { status: 'fault' })
+    expect(await uplink.pushPeripheralStatus()).to.equal(true)
+    expect(central.calls[1].body.peripherals[0].status).to.equal('fault')
+  })
+
+  it('is not an error to be offline: it just tries again next time', async () => {
+    await Peripheral.create({ tenantId: tenant._id, name: 'Printer', type: 'printer', status: 'ok' })
+    central.mode = 'offline'
+    expect(await uplink.pushPeripheralStatus()).to.equal(false)
+    central.mode = 'ok'
+    expect(await uplink.pushPeripheralStatus()).to.equal(true)
   })
 })

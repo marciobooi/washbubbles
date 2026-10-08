@@ -301,6 +301,31 @@ router.post('/push/machine', async (req, res) => {
   }
 })
 
+/**
+ * POST /api/sync/push/peripheral-status
+ * The shop reports how each peripheral is doing right now, so this server's admin shows
+ * real hardware health. Only `status` is touched; ids are the central ids the shop
+ * pulled (see services/downlink.js).
+ * Body: { peripherals: [{ id, status }] }
+ */
+router.post('/push/peripheral-status', async (req, res) => {
+  try {
+    const list = Array.isArray(req.body?.peripherals) ? req.body.peripherals.slice(0, 50) : []
+    const allowed = new Set(['ok', 'fault', 'offline', 'unknown'])
+    const PeripheralT = withTenant(Peripheral, req)
+    let updated = 0
+    for (const p of list) {
+      if (!p || !mongoose.isValidObjectId(p.id) || !allowed.has(p.status)) continue
+      const doc = await PeripheralT.findByIdAndUpdate(p.id, { status: p.status }, { new: true })
+      if (doc) updated++
+    }
+    res.json({ success: true, updated })
+  } catch (err) {
+    console.error('[Sync] Push peripheral-status error:', err)
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
 // ─── Remote Commands: POS Pulls from Server ───
 
 /**
