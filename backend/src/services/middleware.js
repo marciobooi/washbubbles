@@ -532,7 +532,10 @@ class Middleware extends EventEmitter {
   requestStatus() {
     if (!this.lowLevel?.isConnected) return false
     this.sendPackage({ op: 'status_per' })
-    this.sendPackage({ op: 'status_int' })
+    // Not back-to-back: on the shop controller the peripheral-status reply never came when
+    // both requests were sent together (the interface-status one always did).
+    const t = setTimeout(() => { if (this.lowLevel?.isConnected) this.sendPackage({ op: 'status_int' }) }, 400)
+    t.unref?.()
     return true
   }
 
