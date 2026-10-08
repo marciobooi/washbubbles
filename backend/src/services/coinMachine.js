@@ -437,6 +437,9 @@ class CoinMachine extends EventEmitter {
     // Lets the coin-calibration wizard learn/confirm a channel code even when
     // it's already mapped (re-inserting an accepted coin), not just unmapped ones.
     broadcastHardwareEvent(this.tenantId, 'peripheral:accepted', { type: 'coin', value: mappedValue, code, exact })
+    // The kiosk page's cash counter (CartModal) listens for this message; without it the
+    // coin is credited in the backend but nothing shows on screen.
+    broadcastHardwareEvent(this.tenantId, 'peripheral:credit', { type: 'coin', amount: mappedValue })
 
     console.log(`Coin inserted: €${mappedValue.toFixed(2)}${bonusValue > 0 ? ` + €${bonusValue.toFixed(2)} bonus` : ''}, Total: €${this.client.getState().credits.toFixed(2)}`)
   }
@@ -472,6 +475,7 @@ class CoinMachine extends EventEmitter {
       balance: this.client.getState().balance
     })
     broadcastHardwareEvent(this.tenantId, 'peripheral:accepted', { type: 'bill', value: mappedValue, code, exact })
+    broadcastHardwareEvent(this.tenantId, 'peripheral:credit', { type: 'bill', amount: mappedValue })
 
     console.log(`Bill inserted: €${mappedValue.toFixed(2)}${bonusValue > 0 ? ` + €${bonusValue.toFixed(2)} bonus` : ''}, Total: €${this.client.getState().credits.toFixed(2)}`)
   }
