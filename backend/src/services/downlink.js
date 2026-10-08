@@ -34,10 +34,13 @@ export const MACHINE_RUNTIME_FIELDS = [
   'runningDuration', 'lastServicedAt',
 ]
 
+/** Peripheral fields owned by this site: live status from the controller, and the hopper's coin stock. */
+export const PERIPHERAL_RUNTIME_FIELDS = ['status', 'hopperConfig.currentCount', 'hopperConfig.currentStock']
+
 /** Order matters: interfaces before the machines that point at them. */
 export const RESOURCES = [
   { name: 'interfaces', Model: Interface, prune: true },
-  { name: 'peripherals', Model: Peripheral, prune: true },
+  { name: 'peripherals', Model: Peripheral, prune: true, skip: PERIPHERAL_RUNTIME_FIELDS, flatten: ['hopperConfig'] },
   { name: 'prices', Model: Price, prune: true },
   { name: 'machines', Model: Machine, prune: true, skip: MACHINE_RUNTIME_FIELDS },
   { name: 'settings', Model: Setting, prune: false },
@@ -49,7 +52,15 @@ const toOid = (v) => (v && mongoose.isValidObjectId(v) ? new mongoose.Types.Obje
 export function localDoc(item, tenantId, skip = []) {
   const doc = { ...item, tenantId: toOid(tenantId) }
   delete doc.__v
-  for (const k of skip) delete doc[k]
+  for (const k of skip) {
+    const [head, ...rest] = k.split('.')
+    if (!rest.length) { delete doc[head]; continue }
+    // Dotted path: drop just that nested field, keep the rest of the sub-document.
+    if (doc[head] && typeof doc[head] === 'object') {
+      doc[head] = { ...doc[head] }
+      delete doc[head][rest.join('.')]
+    }
+  }
   for (const k of ['_id', 'interfaceId']) if (doc[k]) doc[k] = toOid(doc[k])
   for (const k of ['createdAt', 'updatedAt', 'reservedAt', 'startedAt']) {
     if (typeof doc[k] === 'string') doc[k] = new Date(doc[k])
@@ -136,7 +147,7 @@ export class Downlink extends EventEmitter {
     }
   }
 
-  async pullResource({ name, Model, prune, skip = [] }) {
+  async pullResource({ name, Model, prune, skip = [], flatten = [] }) {
     const items = await this.fetchSnapshot(name)
     // An empty snapshot is never trusted to mean "delete everything".
     if (items.length === 0) { this.counts[name] = 0; return }
@@ -155,6 +166,14 @@ export class Downlink extends EventEmitter {
         return { updateOne: { filter: { tenantId: tenant, key: d.key }, update: { $set: rest }, upsert: true } }
       }
       const { _id, ...rest } = d
+      // Sub-documents named in `flatten` are set field by field (hopperConfig.coinValue, ...)
+      // so site-owned fields inside them, such as the hopper's coin count, survive.
+      for (const f of flatten) {
+        if (rest[f] && typeof rest[f] === 'object' && !Array.isArray(rest[f])) {
+          for (const [k, v] of Object.entries(rest[f])) rest[`${f}.${k}`] = v
+          delete rest[f]
+        }
+      }
       return { updateOne: { filter: { _id }, update: { $set: rest }, upsert: true } }
     })
     await Model.bulkWrite(ops, { ordered: true })

@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState } from 'react'
+import React, { createContext, useContext, useState, useEffect } from 'react'
+import { subscribe } from '@/services/websocket'
 
 const CartContext = createContext()
 
@@ -6,6 +7,21 @@ export const useCart = () => useContext(CartContext)
 
 export const CartProvider = ({ children }) => {
   const [cart, setCart] = useState([])
+
+  // Cash (coins/bills) the customer has put in and not yet spent. Lives here, not in the
+  // cart window, so it shows from the moment the first coin lands — before any machine is
+  // chosen — and survives opening and closing the cart.
+  const [credit, setCredit] = useState(0)
+  useEffect(() => {
+    return subscribe((data) => {
+      if (!data || data.type !== 'peripheral:credit') return
+      const amount = Number(data.payload?.amount)
+      if (!(amount > 0)) return
+      setCredit((c) => Math.round((c + amount) * 100) / 100)
+      import('@/components/ui/Toast').then(({ toast }) => toast({ title: `Dinheiro inserido: ${amount.toFixed(2)}€`, variant: 'success' })).catch(() => {})
+    })
+  }, [])
+  const resetCredit = () => setCredit(0)
 
   function addToCart(item) {
     // If item represents a machine (has an _id or id and is not a recharge), disallow adding the same
@@ -45,6 +61,6 @@ export const CartProvider = ({ children }) => {
     try { window.dispatchEvent(new CustomEvent('open-cart')) } catch (e) { console.warn('openCart event failed', e) }
   }
 
-  const value = { cart, addToCart, removeFromCart, clearCart, openCart }
+  const value = { cart, addToCart, removeFromCart, clearCart, openCart, credit, resetCredit }
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>
 }

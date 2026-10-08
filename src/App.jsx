@@ -88,7 +88,7 @@ export default function App() {
 }
 
 function AppInner() {
-  const { cart, clearCart } = useCart()
+  const { cart, clearCart, credit, resetCredit } = useCart()
   const { processPayment } = usePayment()
   const cartCount = cart.length
   const [cartOpen, setCartOpen] = React.useState(false)
@@ -293,6 +293,7 @@ function AppInner() {
               try { if (only.name) showMachineNotice([only.name]) } catch { /* the notice is cosmetic; the payment already succeeded */ }
               tryShowWifiVoucher([only], batchId, kioskKey)
               setReceiptItems([only])
+              resetCredit()
               clearCart()
               setCartOpen(false)
               return
@@ -317,6 +318,7 @@ function AppInner() {
               try { if (machineItems.length) showMachineNotice(machineItems.map(i => i.name).filter(Boolean)) } catch { /* the notice is cosmetic; the payment already succeeded */ }
               tryShowWifiVoucher(machineItems, batchId, kioskKey)
               setReceiptItems(items)
+              resetCredit()
               clearCart()
               setCartOpen(false)
               return
@@ -357,6 +359,7 @@ function AppInner() {
         tryShowWifiVoucher(items.filter(i => !(i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge')))), batchId, kioskKey)
         setReceiptBatchId(batchId)
         setReceiptItems(items)
+        resetCredit()
         clearCart()
         setCartOpen(false)
         return
@@ -522,6 +525,16 @@ function AppInner() {
                   </svg>
                   <span className="sr-only">Home</span>
                 </Link>
+              )}
+
+              {credit > 0 && location.pathname.startsWith('/pos') && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full bg-teal-600 px-3 py-1 text-sm font-semibold text-white shadow"
+                  title="Dinheiro inserido"
+                  aria-live="polite"
+                >
+                  Crédito: {credit.toFixed(2)}€
+                </span>
               )}
 
                          {cartCount > 0 && (

@@ -8,7 +8,7 @@ import * as websocket from '@/services/websocket'
 import * as localApi from '@/services/local-api'
 
 export default function CartModal({ open, onClose, onPay = () => {}, onClear = () => {} }) {
-  const { cart, removeFromCart, clearCart } = useCart()
+  const { cart, removeFromCart, clearCart, credit } = useCart()
   const [showCash, setShowCash] = React.useState(false)
   // Staff-only manual payment, for when the coin acceptor or card reader is down.
   // Gated behind the operator's admin PIN so a customer cannot self-serve a wash.
@@ -28,7 +28,10 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
   const [topupAmount, setTopupAmount] = React.useState(0)
 
   // Auto-detection state
-  const [cashInserted, setCashInserted] = React.useState(0)
+  // Cash inserted so far: tracked app-wide in CartContext so it is also visible before
+  // a machine is chosen and is not lost when this window closes.
+  const cashInserted = credit
+  const autoPaid = React.useRef(false)
   const [detectedCardCode, setDetectedCardCode] = React.useState(null)
 
   // Local (offline) session credit — kept separate from `cashInserted` above,
@@ -54,7 +57,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
   React.useEffect(() => {
     if (!open) {
       // Reset detection state when modal closes
-      setCashInserted(0)
+      autoPaid.current = false
       setDetectedCardCode(null)
       setLocalSession(null)
       setCouponCode('')
@@ -64,26 +67,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
     const unsubscribe = websocket.subscribe((data) => {
       if (!data || typeof data !== 'object') return
 
-      // Handle peripheral credit events (coins/bills inserted)
-      if (data.type === 'peripheral:credit') {
-        const { amount } = data.payload || {}
-        if (amount && amount > 0) {
-          setCashInserted(prev => {
-            const newTotal = prev + amount
-            console.log('[CartModal] Cash inserted:', amount, 'Total:', newTotal)
-            toast({ title: `Dinheiro inserido: ${amount.toFixed(2)}€`, variant: 'success' })
-            
-            // Auto-process payment if enough cash inserted
-            if (newTotal >= total) {
-              console.log('[CartModal] Sufficient cash, auto-processing payment...')
-              setTimeout(() => {
-                handleCashConfirm(newTotal)
-              }, 500)
-            }
-            return newTotal
-          })
-        }
-      }
+      // (Coin/bill credit events are handled app-wide in CartContext.)
 
       // Handle rejected coin/bill
       if (data.type === 'peripheral:rejected') {
@@ -142,6 +126,16 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
 
     return unsubscribe
   }, [open, total])
+
+  // Pay automatically once the cash inserted covers the cart — whether the coins went in
+  // before or after the machine was chosen.
+  React.useEffect(() => {
+    if (!open || autoPaid.current) return
+    if (total > 0 && credit >= total) {
+      autoPaid.current = true
+      setTimeout(() => handleCashConfirm(credit), 500)
+    }
+  }, [open, credit, total])
 
   // Embedded hardware agent's own RFID tap, straight over IPC — no network
   // hop, works with the kiosk fully offline. Separate from the websocket

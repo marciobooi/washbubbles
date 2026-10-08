@@ -5,6 +5,7 @@ import Tenant from '../src/models/tenant.js'
 import Machine from '../src/models/machine.js'
 import Price from '../src/models/price.js'
 import Setting from '../src/models/setting.js'
+import Peripheral from '../src/models/peripheral.js'
 import { Downlink } from '../src/services/downlink.js'
 
 const oid = () => new mongoose.Types.ObjectId().toString()
@@ -27,7 +28,7 @@ describe('Downlink — central server is the source of truth', function () {
   let tenant, central
   const centralTenant = oid() // the ids on Hetzner belong to ANOTHER tenant
   const mk = () => new Downlink({ tenantId: tenant._id, url: 'http://central.test/api', apiKey: 'k', fetchImpl: central.fetch })
-  const wipe = () => Promise.all([Machine, Price, Setting].map((M) => M.deleteMany({ tenantId: tenant._id })))
+  const wipe = () => Promise.all([Machine, Price, Setting, Peripheral].map((M) => M.deleteMany({ tenantId: tenant._id })))
 
   before(async () => {
     await startTestDb()
@@ -82,6 +83,22 @@ describe('Downlink — central server is the source of truth', function () {
     await mk().pullAll()
     expect((await Price.find({ tenantId: tenant._id })).map((p) => p.cashPrice)).to.deep.equal([4])
     expect(await Machine.countDocuments({ tenantId: tenant._id, name: 'Old local' })).to.equal(0)
+  })
+
+  it("never overwrites a peripheral's live status or the hopper's coin stock", async () => {
+    const id = oid()
+    central.data.peripherals = [{ _id: id, tenantId: centralTenant, name: 'Hopper', type: 'hopper', status: 'fault', hopperConfig: { coinValue: 1, currentCount: 0 } }]
+    await mk().pullAll()
+    expect((await Peripheral.findById(id)).status).to.equal('unknown') // new row: schema default, never central's "fault"
+    await Peripheral.updateOne({ _id: id }, { status: 'ok', 'hopperConfig.currentCount': 120 })
+    central.data.peripherals[0].hopperConfig = { coinValue: 2, currentCount: 0 }
+    central.data.peripherals[0].name = 'Hopper 2'
+    await mk().pullAll()
+    const p = await Peripheral.findById(id)
+    expect(p.name).to.equal('Hopper 2') // configuration still follows central
+    expect(p.hopperConfig.coinValue).to.equal(2)
+    expect(p.status).to.equal('ok') // live status stays
+    expect(p.hopperConfig.currentCount).to.equal(120) // coin stock stays
   })
 
   it('keeps site-only settings (settings are never deleted)', async () => {
