@@ -511,19 +511,35 @@ img{ max-width:100%; display:block }
 .btn-login:hover{ transform:translateY(-2px); box-shadow:var(--shadow-btn-hover); background:linear-gradient(135deg,var(--primary-500),var(--primary-600)) }
 .btn-login:active{ transform:translateY(0) scale(.97) }
 .btn-login svg{ width:17px; height:17px }
+/* Language dropdown — the same glass as the nav bar, the same height/type as the "Entrar" button next to it. */
 .lang-dd{ position:relative }
-.lang-dd summary{ list-style:none; cursor:pointer; display:flex; align-items:center; gap:6px; padding:9px 12px; border-radius:999px; background:rgba(255,255,255,.8); border:1px solid rgba(15,42,39,.08); font:600 13px/1 var(--font-head); letter-spacing:.03em; color:var(--ink); user-select:none }
+.lang-dd summary{
+  list-style:none; cursor:pointer; user-select:none; display:flex; align-items:center; gap:7px;
+  font-family:var(--font-body); font-weight:600; font-size:14.5px; color:var(--primary-800);
+  padding:8.5px 14px 8.5px 13px; border-radius:999px;
+  background:rgba(240,253,250,.42); border:1.5px solid rgba(13,148,136,.28);
+  backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+  transition:background .2s ease, border-color .2s ease, transform .2s ease;
+}
 .lang-dd summary::-webkit-details-marker{ display:none }
-.lang-dd summary:hover{ background:#fff }
-.lang-dd summary:focus-visible{ outline:2px solid var(--primary-500); outline-offset:2px }
-.lang-dd summary svg{ width:16px; height:16px }
+.lang-dd summary:hover{ background:rgba(13,148,136,.08); border-color:rgba(13,148,136,.5); transform:translateY(-1px) }
+.lang-dd[open] summary{ background:rgba(13,148,136,.10); border-color:rgba(13,148,136,.5) }
+.lang-dd summary svg{ width:17px; height:17px }
 .lang-dd .chev{ width:13px; height:13px; transition:transform .2s ease }
 .lang-dd[open] .chev{ transform:rotate(180deg) }
-.lang-dd ul{ position:absolute; right:0; top:calc(100% + 8px); min-width:168px; margin:0; padding:6px; list-style:none; background:#fff; border-radius:14px; box-shadow:0 12px 32px -8px rgba(15,42,39,.28), 0 0 0 1px rgba(15,42,39,.06); z-index:70 }
-.lang-dd li a{ display:block; padding:10px 12px; border-radius:10px; color:var(--ink); text-decoration:none; font:500 14px/1.2 var(--font-body) }
-.lang-dd li a:hover{ background:var(--primary-50) }
-.lang-dd li a[aria-current]{ background:var(--primary-100); font-weight:600 }
-@media (max-width:520px){ .lang-dd summary{ padding:9px 10px } .lang-dd summary span{ display:none } }
+.lang-dd ul{
+  position:absolute; right:0; top:calc(100% + 10px); min-width:176px; margin:0; padding:6px; list-style:none; z-index:70;
+  background:rgba(240,253,250,.78); border:1px solid rgba(13,148,136,.16); border-radius:20px;
+  backdrop-filter:blur(18px) saturate(1.3); -webkit-backdrop-filter:blur(18px) saturate(1.3);
+  box-shadow:0 14px 36px -10px rgba(13,148,136,.32), 0 2px 8px rgba(15,42,39,.06);
+}
+.lang-dd li a{
+  display:block; text-decoration:none; font-weight:500; font-size:14.5px; color:var(--ink-soft);
+  padding:9px 16px; border-radius:999px; transition:background .18s ease, color .18s ease;
+}
+.lang-dd li a:hover{ background:rgba(13,148,136,.08); color:var(--primary-800) }
+.lang-dd li a[aria-current]{ background:rgba(13,148,136,.14); color:var(--primary-800); font-weight:600 }
+@media (max-width:520px){ .lang-dd summary{ padding:8.5px 11px } .lang-dd summary span{ display:none } }
 
 .nav-toggle{
   display:none; background:none; border:0; padding:8px; border-radius:8px; cursor:pointer;
