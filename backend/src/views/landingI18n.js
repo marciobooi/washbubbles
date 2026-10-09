@@ -13,6 +13,8 @@ export const TRANSLATED_LANGS = ['en', 'fr', 'de', 'es']
 export const UI = {
   pt: {
     htmlLang: 'pt-PT', ogLocale: 'pt_PT', name: 'Português',
+    prices: 'Preços', pricesWash: 'Lavagem', pricesDry: 'Secagem', capacity: 'Capacidade', duration: 'Duração', cash: 'Dinheiro', cardPay: 'Cartão', minutes: '{n} min', machineOne: '{n} máquina', machineMany: '{n} máquinas', kg: '{n} kg',
+    stepOf: 'Passo {n} de {total}', seeServices: 'Ver serviços', seePrices: 'Ver preços',
     skip: 'Saltar para o conteúdo', navAria: 'Navegação principal', langAria: 'Idioma',
     how: 'Como funciona', services: 'Serviços', reviews: 'Avaliações', visit: 'Visite-nos',
     enter: 'Entrar', enterAria: 'Entrar — acesso reservado', openMenu: 'Abrir menu',
@@ -27,6 +29,8 @@ export const UI = {
   },
   en: {
     htmlLang: 'en', ogLocale: 'en_GB', name: 'English',
+    prices: 'Prices', pricesWash: 'Washing', pricesDry: 'Drying', capacity: 'Capacity', duration: 'Duration', cash: 'Cash', cardPay: 'Card', minutes: '{n} min', machineOne: '{n} machine', machineMany: '{n} machines', kg: '{n} kg',
+    stepOf: 'Step {n} of {total}', seeServices: 'See our services', seePrices: 'See our prices',
     skip: 'Skip to content', navAria: 'Main navigation', langAria: 'Language',
     how: 'How it works', services: 'Services', reviews: 'Reviews', visit: 'Visit us',
     enter: 'Log in', enterAria: 'Log in — staff access only', openMenu: 'Open menu',
@@ -41,6 +45,8 @@ export const UI = {
   },
   fr: {
     htmlLang: 'fr', ogLocale: 'fr_FR', name: 'Français',
+    prices: 'Tarifs', pricesWash: 'Lavage', pricesDry: 'Séchage', capacity: 'Capacité', duration: 'Durée', cash: 'Espèces', cardPay: 'Carte', minutes: '{n} min', machineOne: '{n} machine', machineMany: '{n} machines', kg: '{n} kg',
+    stepOf: 'Étape {n} sur {total}', seeServices: 'Voir nos services', seePrices: 'Voir les tarifs',
     skip: 'Aller au contenu', navAria: 'Navigation principale', langAria: 'Langue',
     how: 'Comment ça marche', services: 'Services', reviews: 'Avis', visit: 'Nous rendre visite',
     enter: 'Connexion', enterAria: 'Connexion — accès réservé', openMenu: 'Ouvrir le menu',
@@ -55,6 +61,8 @@ export const UI = {
   },
   de: {
     htmlLang: 'de', ogLocale: 'de_DE', name: 'Deutsch',
+    prices: 'Preise', pricesWash: 'Waschen', pricesDry: 'Trocknen', capacity: 'Kapazität', duration: 'Dauer', cash: 'Bargeld', cardPay: 'Karte', minutes: '{n} Min.', machineOne: '{n} Maschine', machineMany: '{n} Maschinen', kg: '{n} kg',
+    stepOf: 'Schritt {n} von {total}', seeServices: 'Unsere Leistungen', seePrices: 'Preise ansehen',
     skip: 'Zum Inhalt springen', navAria: 'Hauptnavigation', langAria: 'Sprache',
     how: 'So funktioniert’s', services: 'Leistungen', reviews: 'Bewertungen', visit: 'Besuchen Sie uns',
     enter: 'Anmelden', enterAria: 'Anmelden — nur für Mitarbeiter', openMenu: 'Menü öffnen',
@@ -69,6 +77,8 @@ export const UI = {
   },
   es: {
     htmlLang: 'es', ogLocale: 'es_ES', name: 'Español',
+    prices: 'Precios', pricesWash: 'Lavado', pricesDry: 'Secado', capacity: 'Capacidad', duration: 'Duración', cash: 'Efectivo', cardPay: 'Tarjeta', minutes: '{n} min', machineOne: '{n} máquina', machineMany: '{n} máquinas', kg: '{n} kg',
+    stepOf: 'Paso {n} de {total}', seeServices: 'Ver servicios', seePrices: 'Ver precios',
     skip: 'Saltar al contenido', navAria: 'Navegación principal', langAria: 'Idioma',
     how: 'Cómo funciona', services: 'Servicios', reviews: 'Opiniones', visit: 'Visítenos',
     enter: 'Acceder', enterAria: 'Acceder — acceso reservado', openMenu: 'Abrir menú',

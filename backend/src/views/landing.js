@@ -97,6 +97,14 @@ export const DEFAULT_CONTENT = {
       { t: 'Enquanto espera', d: 'Vending de snacks e bebidas, e WiFi grátis — a sua pausa, tratada.' },
     ],
   },
+  // The table itself is never typed in: its rows are read from the database (prices + machines) on every
+  // render (routes/public.js). Only the words around it are editable here.
+  prices: {
+    visible: true,
+    eyebrow: 'Preços',
+    heading: 'Preços claros, sem surpresas',
+    description: 'Pague só pelo que usar. Os valores são os mesmos que vê nas máquinas.',
+  },
   cta: {
     visible: true,
     heading: 'Pronta para a próxima lavagem?',
@@ -173,6 +181,7 @@ export function mergeContent(raw) {
       ...(c.features || {}),
       items: items(c.features && c.features.items, DEFAULT_CONTENT.features.items),
     },
+    prices: { ...DEFAULT_CONTENT.prices, ...(c.prices || {}) },
     cta: { ...DEFAULT_CONTENT.cta, ...(c.cta || {}) },
     visit: { ...DEFAULT_CONTENT.visit, ...(c.visit || {}) },
     reviews: {
@@ -376,8 +385,9 @@ function renderCustomSection(cs) {
  * @param rawContent  the page's content (already in the language to show)
  * @param opts.lang   'pt' (default, served at "/") or a translated language ('en', 'fr', 'de', 'es')
  * @param opts.available  the languages that currently have a page, for the switcher and hreflang links
+ * @param opts.prices     rows for the price table, read from the database: { type, weight, duration, tImp, cash, card, machines }
  */
-export function renderLandingPage(rawContent, { lang = 'pt', available = ['pt'] } = {}) {
+export function renderLandingPage(rawContent, { lang = 'pt', available = ['pt'], prices = [] } = {}) {
   if (!UI[lang]) lang = 'pt'
   const L = UI[lang]
   const hours = (tpl, b) => fmt(tpl, { open: b.hours.open, close: b.hours.close })
@@ -404,6 +414,51 @@ export function renderLandingPage(rawContent, { lang = 'pt', available = ['pt'] 
         <ul>${langs.map((l) => `<li><a href="${langPath(l)}" hreflang="${UI[l].htmlLang}" lang="${UI[l].htmlLang}"${l === lang ? ' aria-current="true"' : ''}>${escapeHtml(UI[l].name)}</a></li>`).join('')}</ul>
       </details>`
     : ''
+
+  // Prices table: rows come from the database (routes/public.js passes them in), never from the admin text.
+  const eur = new Intl.NumberFormat(L.htmlLang, { style: 'currency', currency: 'EUR' })
+  const priceRowsAll = (Array.isArray(prices) ? prices : []).filter((p) => Number.isFinite(p.cash) && Number.isFinite(p.card) && Number.isFinite(p.weight))
+  const showPrices = Boolean(content.prices.visible && priceRowsAll.length)
+  const PRICE_ICON = {
+    wash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="12" cy="13" r="5"/><circle cx="7" cy="6.5" r=".8" fill="currentColor"/><circle cx="10" cy="6.5" r=".8" fill="currentColor"/></svg>',
+    dry: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h10a3 3 0 1 0-3-3M3 12h15a3 3 0 1 1-3 3M3 16h7"/></svg>',
+  }
+  const priceCard = (type) => {
+    const rows = priceRowsAll.filter((p) => p.type === type).sort((a, b) => a.weight - b.weight)
+    if (!rows.length) return ''
+    return `
+      <div class="price-card reveal">
+        <div class="price-head"><span class="price-ico" aria-hidden="true">${PRICE_ICON[type]}</span><h3>${escapeHtml(type === 'wash' ? L.pricesWash : L.pricesDry)}</h3></div>
+        <table class="price-table">
+          <thead><tr><th scope="col">${escapeHtml(L.capacity)}</th><th scope="col" class="col-dur">${escapeHtml(L.duration)}</th><th scope="col">${escapeHtml(L.cash)}</th><th scope="col">${escapeHtml(L.cardPay)}</th></tr></thead>
+          <tbody>${rows.map((p) => {
+            const mins = p.duration || p.tImp
+            const count = p.machines > 0 ? `<small>${escapeHtml(fmt(p.machines === 1 ? L.machineOne : L.machineMany, { n: p.machines }))}</small>` : ''
+            return `<tr><th scope="row">${escapeHtml(fmt(L.kg, { n: p.weight }))}${count}</th><td class="col-dur">${mins ? escapeHtml(fmt(L.minutes, { n: mins })) : '&mdash;'}</td><td class="p-cash">${escapeHtml(eur.format(p.cash))}</td><td class="p-card">${escapeHtml(eur.format(p.card))}</td></tr>`
+          }).join('')}</tbody>
+        </table>
+      </div>`
+  }
+
+  // "How it works" layout: up to five cards in a row; a last row with fewer cards is centred (cards span two
+  // of 2×N grid columns, so each missing card shifts the row by one column).
+  const stepTotal = content.steps.items.length
+  const stepCols = Math.max(1, Math.min(stepTotal, 5))
+  const stepStyle = (i) => {
+    const rowStart = Math.floor(i / stepCols) * stepCols
+    const inRow = Math.min(stepCols, stepTotal - rowStart)
+    const delay = `transition-delay:${(i * 0.08).toFixed(2)}s`
+    return inRow === stepCols ? delay : `${delay}; grid-column:${1 + (stepCols - inRow) + (i - rowStart) * 2} / span 2`
+  }
+  const STEP_ICON_PATHS = [
+    '<path d="M12 2l2.4 7.2L21.6 12l-7.2 2.4L12 21.6l-2.4-7.2L2.4 12l7.2-2.4z" fill="currentColor" stroke="none"/>',
+    '<path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>',
+    '<rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="12" cy="13" r="5"/><circle cx="7" cy="6.5" r=".7" fill="currentColor"/>',
+    '<path d="M5 13l4 4L19 7"/>',
+    '<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/>',
+  ]
+  const STEP_ICON_STAR = '<path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" fill="currentColor" stroke="none"/>'
+  const stepIcon = (k) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${k === 'star' ? STEP_ICON_STAR : STEP_ICON_PATHS[k % STEP_ICON_PATHS.length]}</svg>`
 
   return `<!DOCTYPE html>
 <html lang="${L.htmlLang}">
@@ -700,43 +755,83 @@ section{ padding:84px 0 }
   .section-head .eyebrow{ clip-path:inset(0 0 0 0); transition:none }
 }
 
-/* how it works */
+/* how it works — a timeline: numbered badges on one orange line, a glass card under each, the last one highlighted */
 .steps{
-  --gap:28px; --pad:26px;
-  /* Six columns so that each card spans two, and a last row of one or two cards can sit CENTRED
-     under the three above it instead of hugging the left edge. */
-  display:grid; grid-template-columns:repeat(6,1fr); gap:var(--gap); counter-reset:step; position:relative;
-  isolation:isolate; /* keeps the glass layers (z-index:-1) inside this block */
+  --gap:20px;
+  /* Cards span two of 2×N columns, so a last row with fewer cards can be centred (see stepStyle in the renderer). */
+  display:grid; gap:var(--gap) 18px; position:relative; align-items:stretch;
+  isolation:isolate;
 }
-/* Each step is a frosted-glass card (the same glass as the nav bar). The glass is its own layer, one step
-   below the content, so the numbered circle and the text stay sharp on top of it. */
-.step{ grid-column:span 2; position:relative; text-align:center; padding:var(--pad) 22px 30px }
-.step:last-of-type:nth-of-type(3n+1){ grid-column:3 / span 2 }
-.step:nth-last-of-type(2):nth-of-type(3n+1){ grid-column:2 / span 2 }
-.step:last-of-type:nth-of-type(3n+2){ grid-column:4 / span 2 }
-.step::after{
-  content:''; position:absolute; inset:0; z-index:-1; pointer-events:none; border-radius:24px;
-  background:rgba(240,253,250,.72); border:1px solid rgba(13,148,136,.12);
-  box-shadow:var(--shadow-soft);
-  backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
-}
-/* The dotted wave through the circles (drawn by the script at the end of the page). It sits above the
-   glass and under the circles. The dots drift slowly forward along it, unless motion is reduced. */
+.step{ grid-column:span 2; display:flex; flex-direction:column; min-width:0 }
+/* The orange line is drawn by the page script through the real badge positions (so it follows them while
+   they drift with the scroll). It sits above the cards' glass and under the badges. */
 .steps-line{ position:absolute; left:-30px; top:-12px; width:calc(100% + 60px); height:calc(100% + 24px); overflow:visible; pointer-events:none; z-index:0 }
 .steps-line path{
-  fill:none; stroke:#ff8b6b; stroke-opacity:.85; stroke-width:3; stroke-linecap:round; stroke-dasharray:0.1 8;
-  animation:steps-flow 9s linear infinite;
+  fill:none; stroke:var(--coral); stroke-width:3.5; stroke-linecap:round; stroke-linejoin:round;
+  filter:drop-shadow(0 2px 6px rgba(255,139,107,.45));
 }
-@keyframes steps-flow{ to{ stroke-dashoffset:-81 } }
-@media (prefers-reduced-motion:reduce){ .steps-line path{ animation:none } }
-.step-mark{ position:relative; z-index:1; width:88px; height:88px; margin:0 auto 22px }
-.step-mark .porthole{ width:100%; height:100% }
-.step-mark span{
-  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
-  font-family:var(--font-head); font-weight:700; font-size:26px; color:var(--primary-800);
+.step-badge{
+  position:relative; z-index:1; align-self:center; margin-bottom:22px; flex:none;
+  width:58px; height:58px; border-radius:18px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+  background:#fff; border:2px solid var(--primary-500); color:var(--primary-500);
+  box-shadow:0 10px 20px -10px rgba(13,148,136,.55), 0 2px 6px rgba(15,42,39,.08);
 }
-.step h3{ font-size:19px; font-weight:600; margin-bottom:8px }
-.step p{ font-size:15px; color:var(--ink-soft) }
+.step-badge b{ font:800 12px/1 var(--font-head); letter-spacing:.07em; color:var(--primary-800) }
+.step-badge svg{ width:16px; height:16px }
+.step--final .step-badge{
+  background:linear-gradient(135deg,var(--primary-600),#10b981); border-color:transparent; color:#fff;
+  box-shadow:0 0 0 5px rgba(45,212,191,.25), 0 14px 26px -10px rgba(13,148,136,.6);
+}
+.step--final .step-badge b{ color:#fff }
+.step-card{
+  flex:1; display:flex; flex-direction:column; text-align:left; border-radius:24px; padding:24px 22px 18px;
+  background:rgba(240,253,250,.72); border:1px solid rgba(13,148,136,.14); box-shadow:var(--shadow-soft);
+  backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+  transition:transform .3s cubic-bezier(.175,.885,.32,1.275), box-shadow .3s ease, border-color .3s ease;
+}
+.step-card:hover{ transform:translateY(-4px); box-shadow:var(--shadow-lift); border-color:rgba(13,148,136,.32) }
+.step-top{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:12px }
+.step-card h3{ position:relative; font-size:18px; font-weight:600; padding-bottom:10px }
+/* a short orange line under every title */
+.step-card h3::after{ content:''; position:absolute; left:0; bottom:0; width:34px; height:3px; border-radius:3px; background:var(--coral) }
+.step-chip{
+  flex:none; width:34px; height:34px; border-radius:12px; display:grid; place-items:center;
+  background:rgba(204,251,241,.7); border:1px solid rgba(13,148,136,.16); color:var(--primary-600);
+}
+.step-chip svg{ width:16px; height:16px }
+.step-card p{ font-size:14.5px; line-height:1.6; color:var(--ink-soft); margin-bottom:18px }
+.step-foot{
+  margin-top:auto; padding-top:13px; border-top:1px solid rgba(13,148,136,.13);
+  display:flex; align-items:center; gap:8px; font:600 11.5px/1 var(--font-body); letter-spacing:.04em; color:var(--primary-700);
+}
+.step-foot::before{ content:''; width:7px; height:7px; border-radius:50%; background:var(--coral); flex:none }
+/* the last step: deep emerald, with a soft glow */
+.step--final .step-card{
+  position:relative; overflow:hidden; border-color:rgba(45,212,191,.3);
+  background:linear-gradient(145deg,var(--primary-700),var(--primary-800) 55%,#064e3b);
+  box-shadow:0 24px 44px -16px rgba(15,118,110,.6), 0 8px 18px -8px rgba(13,148,136,.28);
+  backdrop-filter:none; -webkit-backdrop-filter:none;
+}
+.step--final .step-card::after{
+  content:''; position:absolute; right:-34px; bottom:-34px; width:140px; height:140px; border-radius:50%;
+  background:rgba(45,212,191,.22); filter:blur(26px); pointer-events:none;
+}
+.step--final .step-card > *{ position:relative; z-index:1 }
+.step--final .step-card h3{ color:#fff }
+.step--final .step-card p{ color:rgba(204,251,241,.92); margin-bottom:6px }
+.step--final .step-card:hover{ transform:translateY(-4px) scale(1.015) }
+/* below the timeline: opening hours + two calls to action */
+.steps-cta{
+  margin-top:48px; padding-top:26px; border-top:1px solid rgba(255,139,107,.28);
+  display:flex; align-items:center; justify-content:space-between; gap:18px 24px; flex-wrap:wrap;
+}
+.steps-open{ display:flex; align-items:center; gap:11px; font-weight:500; font-size:15px; color:var(--ink-soft) }
+.open-dot{ position:relative; width:11px; height:11px; border-radius:50%; background:#10b981; flex:none }
+.open-dot::after{ content:''; position:absolute; inset:0; border-radius:50%; background:#34d399; animation:open-ping 2.2s cubic-bezier(0,0,.2,1) infinite }
+@keyframes open-ping{ 75%,100%{ transform:scale(2.4); opacity:0 } }
+@media (prefers-reduced-motion:reduce){ .open-dot::after{ animation:none } }
+.steps-actions{ display:flex; gap:12px; flex-wrap:wrap }
+.btn-sm{ padding:12px 22px !important; font-size:14.5px !important }
 
 /* features */
 .features{ display:grid; grid-template-columns:repeat(3,1fr); gap:22px }
@@ -856,6 +951,47 @@ footer .foot-links a:hover{ color:var(--primary-800) }
 .foot-copy{ font-size:12.5px; color:#94a3a1; width:100%; text-align:center; margin-top:24px }
 
 /* ---------- responsive ---------- */
+/* prices (read from the database) */
+.price-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr)); gap:22px; align-items:start }
+.price-card{
+  border-radius:24px; padding:26px 26px 14px;
+  background:rgba(240,253,250,.72); border:1px solid rgba(13,148,136,.14); box-shadow:var(--shadow-soft);
+  backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+}
+.price-head{ display:flex; align-items:center; gap:14px; margin-bottom:16px }
+.price-ico{
+  width:46px; height:46px; border-radius:14px; display:grid; place-items:center; flex:none;
+  background:linear-gradient(135deg,var(--primary-100),var(--primary-200)); color:var(--primary-700);
+}
+.price-ico svg{ width:24px; height:24px }
+.price-head h3{ position:relative; font-size:20px; font-weight:600; padding-bottom:9px }
+.price-head h3::after{ content:''; position:absolute; left:0; bottom:0; width:34px; height:3px; border-radius:3px; background:var(--coral) }
+.price-table{ width:100%; border-collapse:collapse }
+.price-table th, .price-table td{ padding:14px 8px; text-align:right; white-space:nowrap }
+.price-table th:first-child, .price-table td:first-child{ text-align:left; padding-left:0 }
+.price-table th:last-child, .price-table td:last-child{ padding-right:0 }
+.price-table thead th{
+  font:600 11.5px/1 var(--font-body); letter-spacing:.07em; text-transform:uppercase; color:var(--ink-soft);
+  padding-bottom:11px; border-bottom:1.5px solid rgba(255,139,107,.45);
+}
+.price-table tbody tr + tr > *{ border-top:1px solid rgba(13,148,136,.12) }
+.price-table tbody th{ font:600 17px/1.2 var(--font-head); color:var(--ink) }
+.price-table tbody th small{ display:block; font:500 12px/1.3 var(--font-body); color:var(--ink-soft); margin-top:3px }
+.price-table td{ font-size:15px; color:var(--ink-soft) }
+.price-table td.p-cash{ font:700 18px/1 var(--font-head); color:var(--primary-800) }
+.price-table tbody tr{ transition:background .18s ease }
+.price-table tbody tr:hover{ background:rgba(13,148,136,.05) }
+@media (max-width:520px){
+  .price-card{ padding:20px 16px 8px }
+  .price-table th, .price-table td{ padding:12px 5px }
+  .price-table .col-dur{ display:none }
+}
+
+@media (max-width:1180px){
+  .step-card{ padding:20px 16px 16px }
+  .step-card h3{ font-size:17px }
+  .step-card p{ font-size:13.5px }
+}
 @media (max-width:900px){
   .hero .wrap{ grid-template-columns:1fr; gap:40px }
   .hero{ padding-top:72px; text-align:center }
@@ -867,8 +1003,11 @@ footer .foot-links a:hover{ color:var(--primary-800) }
      without an explicit width, aspect-ratio has nothing to compute from and
      the whole box (and everything in it) collapses to 0x0. */
   .hero-art{ order:-1; width:100%; max-width:360px; margin:0 auto; aspect-ratio:4/3 }
-  .steps{ grid-template-columns:1fr; --gap:36px }
-  .step{ grid-column:1 !important }
+  /* one column: the badge sits to the left of its card and the line runs down through the badges */
+  .steps{ grid-template-columns:1fr !important; --gap:26px }
+  .step{ grid-column:1 !important; display:grid; grid-template-columns:58px minmax(0,1fr); column-gap:16px; align-items:start }
+  .step-badge{ margin:0; align-self:start }
+  .steps-cta{ flex-direction:column; align-items:flex-start }
   .features{ grid-template-columns:1fr 1fr }
   .visit{ grid-template-columns:1fr }
 }
@@ -906,6 +1045,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
     <ul class="nav-links" id="nav-links">
       ${content.steps.visible ? `<li><a href="#como-funciona">${escapeHtml(L.how)}</a></li>` : ''}
       ${content.features.visible ? `<li><a href="#servicos">${escapeHtml(L.services)}</a></li>` : ''}
+      ${showPrices ? `<li><a href="#precos">${escapeHtml(L.prices)}</a></li>` : ''}
       ${content.customSections.filter((s) => s.visible !== false).map((s) => `<li><a href="#custom-${slugify(s.id || s.heading)}">${escapeHtml(s.heading)}</a></li>`).join('')}
       ${content.reviews.visible ? `<li><a href="#avaliacoes">${escapeHtml(L.reviews)}</a></li>` : ''}
       ${content.visit.visible ? `<li><a href="#visite-nos">${escapeHtml(L.visit)}</a></li>` : ''}
@@ -961,15 +1101,34 @@ footer .foot-links a:hover{ color:var(--primary-800) }
         <h2 id="como-funciona-h">${accentLastWord(content.steps.heading)}</h2>
         <p>${escapeHtml(content.steps.description)}</p>
       </div>
-      <div class="steps">
+      <div class="steps" style="grid-template-columns:repeat(${stepCols * 2}, minmax(0, 1fr))">
         <svg class="steps-line" aria-hidden="true" focusable="false"><path d=""/></svg>
-        ${content.steps.items.map((s, i) => `
-        <div class="step reveal" style="transition-delay:${i * 0.08}s">
-          <div class="step-mark" data-parallax="${i % 2 === 0 ? 0.06 : -0.06}">${porthole({ size: 88, spin: false })}<span aria-hidden="true">${i + 1}</span></div>
-          <h3>${escapeHtml(s.t)}</h3>
-          <p>${escapeHtml(s.d)}</p>
-        </div>`).join('')}
+        ${content.steps.items.map((s, i) => {
+          const last = stepTotal > 1 && i === stepTotal - 1
+          return `
+        <article class="step reveal${last ? ' step--final' : ''}" style="${stepStyle(i)}">
+          <div class="step-badge" data-parallax="${i % 2 === 0 ? 0.04 : -0.04}"><b>${String(i + 1).padStart(2, '0')}</b>${stepIcon(last ? 'star' : i)}</div>
+          <div class="step-card">
+            <div class="step-top">
+              <h3>${escapeHtml(s.t)}</h3>
+              ${last ? '' : `<span class="step-chip" aria-hidden="true">${stepIcon(i + 1)}</span>`}
+            </div>
+            <p>${escapeHtml(s.d)}</p>
+            ${last ? '' : `<div class="step-foot">${escapeHtml(fmt(L.stepOf, { n: i + 1, total: stepTotal }))}</div>`}
+          </div>
+        </article>`
+        }).join('')}
       </div>
+      ${(showPrices || content.features.visible || content.visit.visible) ? `
+      <div class="steps-cta reveal">
+        <p class="steps-open"><span class="open-dot" aria-hidden="true"></span>${escapeHtml(hours(L.openNote, brand))}</p>
+        <div class="steps-actions">
+          ${showPrices
+            ? `<a class="btn-ghost btn-sm" href="#precos">${escapeHtml(L.seePrices)}</a>`
+            : (content.features.visible ? `<a class="btn-ghost btn-sm" href="#servicos">${escapeHtml(L.seeServices)}</a>` : '')}
+          ${content.visit.visible ? `<a class="btn-primary btn-sm" href="#visite-nos">${escapeHtml(L.ctaVisit)}</a>` : ''}
+        </div>
+      </div>` : ''}
     </div>
   </section>` : ''}
 
@@ -991,6 +1150,20 @@ footer .foot-links a:hover{ color:var(--primary-800) }
           <p>${escapeHtml(f.d)}</p>
         </div>`).join('')}
       </div>
+    </div>
+  </section>` : ''}
+
+  ${showPrices ? `
+  <section id="precos" aria-labelledby="precos-h" style="position:relative;">
+    ${bgBubble({ size: 120, pos: 'top:6%; left:5%;', opacity: 0.4, speed: 0.05 })}
+    ${bgBubble({ size: 70, pos: 'bottom:8%; right:6%;', opacity: 0.35, speed: -0.06 })}
+    <div class="wrap">
+      <div class="section-head reveal">
+        <span class="eyebrow">${escapeHtml(content.prices.eyebrow)}</span>
+        <h2 id="precos-h">${accentLastWord(content.prices.heading)}</h2>
+        <p>${escapeHtml(content.prices.description)}</p>
+      </div>
+      <div class="price-grid">${priceCard('wash')}${priceCard('dry')}</div>
     </div>
   </section>` : ''}
 
@@ -1104,6 +1277,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
     <div class="foot-links">
       ${content.steps.visible ? `<a href="#como-funciona">${escapeHtml(L.how)}</a>` : ''}
       ${content.features.visible ? `<a href="#servicos">${escapeHtml(L.services)}</a>` : ''}
+      ${showPrices ? `<a href="#precos">${escapeHtml(L.prices)}</a>` : ''}
       ${content.customSections.filter((s) => s.visible !== false).map((s) => `<a href="#custom-${slugify(s.id || s.heading)}">${escapeHtml(s.heading)}</a>`).join('')}
       ${content.reviews.visible ? `<a href="#avaliacoes">${escapeHtml(L.reviews)}</a>` : ''}
       <a href="${LOGIN_URL}">${escapeHtml(L.enter)}</a>
@@ -1144,73 +1318,35 @@ footer .foot-links a:hover{ color:var(--primary-800) }
     reveals.forEach(function(el){ io.observe(el); });
   }
 
-  // How it works: ONE continuous dotted wave through the numbered circles, drawn live so it keeps
-  // following them while they drift with the scroll (the parallax below calls drawSteps every frame).
-  // Same row: circle to circle. Where the row wraps: out past the right edge of the last card of the row,
-  // back along the gap between the rows, and down into the first circle of the next row — never across text.
-  // One column (phones): from the bottom of a card down into the next circle.
+  // How it works: one orange line through the numbered badges, drawn live so it keeps following them while they
+  // drift with the scroll (the parallax below calls drawSteps every frame). Badges in the same row are joined
+  // left to right; on a phone (one column) they are joined top to bottom.
   var stepsEl = document.querySelector('.steps');
   var stepsSvg = stepsEl && stepsEl.querySelector('.steps-line');
   var stepsPath = stepsSvg && stepsSvg.querySelector('path');
   var drawSteps = null;
   if (stepsPath) {
-    var densify = function(pts, rad){
-      var poly = [pts[0]];
-      for (var k = 1; k < pts.length - 1; k++) {
-        var p = pts[k - 1], v = pts[k], n = pts[k + 1];
-        var l1 = Math.hypot(v[0] - p[0], v[1] - p[1]) || 1, l2 = Math.hypot(n[0] - v[0], n[1] - v[1]) || 1;
-        var t = Math.min(rad, l1 / 2, l2 / 2);
-        var s0 = [v[0] - (v[0] - p[0]) / l1 * t, v[1] - (v[1] - p[1]) / l1 * t];
-        var e0 = [v[0] + (n[0] - v[0]) / l2 * t, v[1] + (n[1] - v[1]) / l2 * t];
-        for (var j = 0; j <= 8; j++) {
-          var u = j / 8, w = 1 - u;
-          poly.push([w * w * s0[0] + 2 * w * u * v[0] + u * u * e0[0], w * w * s0[1] + 2 * w * u * v[1] + u * u * e0[1]]);
-        }
-      }
-      poly.push(pts[pts.length - 1]);
-      var cum = [0];
-      for (var q = 1; q < poly.length; q++) cum.push(cum[q - 1] + Math.hypot(poly[q][0] - poly[q - 1][0], poly[q][1] - poly[q - 1][1]));
-      var total = cum[cum.length - 1], res = [], idx = 1;
-      for (var d = 0; d < total; d += 6) {
-        while (idx < cum.length - 1 && cum[idx] < d) idx++;
-        var seg = (cum[idx] - cum[idx - 1]) || 1, f = (d - cum[idx - 1]) / seg;
-        res.push([poly[idx - 1][0] + (poly[idx][0] - poly[idx - 1][0]) * f, poly[idx - 1][1] + (poly[idx][1] - poly[idx - 1][1]) * f, d]);
-      }
-      var last = poly[poly.length - 1];
-      res.push([last[0], last[1], total]);
-      return { pts: res, total: total };
-    };
-    var wavy = function(pts, rad, amp){
-      var dn = densify(pts, rad), r = dn.pts, out = '';
-      for (var i = 0; i < r.length; i++) {
-        var a = r[Math.max(0, i - 1)], b = r[Math.min(r.length - 1, i + 1)];
-        var tx = b[0] - a[0], ty = b[1] - a[1], tl = Math.hypot(tx, ty) || 1;
-        var edge = Math.min(1, r[i][2] / 44, (dn.total - r[i][2]) / 44);
-        var ease = edge * edge * (3 - 2 * edge);
-        var off = amp * ease * Math.sin(r[i][2] / 140 * 2 * Math.PI);
-        out += (i ? 'L' : 'M') + (r[i][0] - ty / tl * off).toFixed(1) + ' ' + (r[i][1] + tx / tl * off).toFixed(1) + ' ';
-      }
-      return out;
-    };
     drawSteps = function(){
       var items = [].slice.call(stepsEl.querySelectorAll('.step'));
-      if (items.length < 2) { stepsPath.setAttribute('d', ''); return; }
       var base = stepsSvg.getBoundingClientRect();
       var info = items.map(function(it){
-        var m = it.querySelector('.step-mark').getBoundingClientRect();
+        var m = it.querySelector('.step-badge').getBoundingClientRect();
         var c = it.getBoundingClientRect();
-        return { x: m.left + m.width / 2 - base.left, y: m.top + m.height / 2 - base.top, top: c.top - base.top, right: c.right - base.left, bottom: c.bottom - base.top };
+        return { x: m.left + m.width / 2 - base.left, y: m.top + m.height / 2 - base.top, top: c.top - base.top };
       });
       var d = '';
       for (var i = 0; i < info.length - 1; i++) {
         var a = info[i], b = info[i + 1];
-        if (Math.abs(a.top - b.top) < 4) {
-          d += wavy([[a.x, a.y], [b.x, b.y]], 0, 9);
-        } else if (Math.abs(a.x - b.x) < 4) {
-          d += wavy([[a.x, a.bottom], [b.x, b.y]], 0, 6);
-        } else {
-          var rx = a.right + 16, gy = (a.bottom + b.top) / 2;
-          d += wavy([[a.x, a.y], [rx, a.y], [rx, gy], [b.x, gy], [b.x, b.y]], 26, 5);
+        var sameRow = Math.abs(a.top - b.top) < 4, sameCol = Math.abs(a.x - b.x) < 4;
+        if (sameRow || sameCol) {
+          // A wave from badge to badge: a straight line between the two centres with a sine added across it,
+          // one and a half swings per link, so it stays wavy however the badges drift up and down.
+          var dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+          var nx = -dy / len, ny = dx / len, amp = sameRow ? 17 : 12, steps = 56;
+          for (var j = 0; j <= steps; j++) {
+            var t = j / steps, off = amp * Math.sin(3 * Math.PI * t);
+            d += (j ? 'L' : 'M') + (a.x + dx * t + nx * off).toFixed(1) + ' ' + (a.y + dy * t + ny * off).toFixed(1) + ' ';
+          }
         }
       }
       stepsPath.setAttribute('d', d);

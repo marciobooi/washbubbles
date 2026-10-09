@@ -137,6 +137,7 @@ export default function AdminSettings(){
         hero: { ...DEFAULT_LANDING_CONTENT.hero, ...(c.hero || {}) },
         steps: { ...DEFAULT_LANDING_CONTENT.steps, ...(c.steps || {}), items: items(c.steps && c.steps.items, DEFAULT_LANDING_CONTENT.steps.items) },
         features: { ...DEFAULT_LANDING_CONTENT.features, ...(c.features || {}), items: items(c.features && c.features.items, DEFAULT_LANDING_CONTENT.features.items) },
+        prices: { ...DEFAULT_LANDING_CONTENT.prices, ...(c.prices || {}) },
         cta: { ...DEFAULT_LANDING_CONTENT.cta, ...(c.cta || {}) },
         visit: { ...DEFAULT_LANDING_CONTENT.visit, ...(c.visit || {}) },
         reviews: {
@@ -1006,6 +1007,35 @@ export default function AdminSettings(){
             </CardContent>
           </Card>
         ))}
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+            <div>
+              <CardTitle>Preços</CardTitle>
+              <CardDescription>A tabela vem sozinha da base de dados (Preços e Máquinas) — aqui só escreve o título e a introdução</CardDescription>
+            </div>
+            <Button type="button" variant="outline" size="sm" onClick={() => toggleSectionVisible('prices')}>
+              {landingContent.prices.visible
+                ? (<><Eye className="h-4 w-4 mr-2" />Visível</>)
+                : (<><EyeOff className="h-4 w-4 mr-2" />Oculto</>)}
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div>
+              <Label>Etiqueta</Label>
+              <Input value={landingContent.prices.eyebrow} onChange={(e) => updateSectionField('prices', 'eyebrow', e.target.value)} />
+            </div>
+            <div>
+              <Label>Título</Label>
+              <Input value={landingContent.prices.heading} onChange={(e) => updateSectionField('prices', 'heading', e.target.value)} />
+            </div>
+            <div>
+              <Label>Texto</Label>
+              <Input value={landingContent.prices.description} onChange={(e) => updateSectionField('prices', 'description', e.target.value)} />
+            </div>
+            <p className="text-xs text-muted-foreground">Mostra apenas tamanhos que tenham pelo menos uma máquina. Para mudar um preço, use a página Preços.</p>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0">

@@ -261,3 +261,137 @@ describe('A new translation shows on the page at once (no waiting for the cache)
     expect(en.keptPortuguese).to.be.greaterThan(0)
   })
 })
+
+describe('Prices table (read from the database)', () => {
+  const rows = [
+    { type: 'wash', weight: 12, duration: 45, tImp: null, cash: 7, card: 6.5, machines: 2 },
+    { type: 'wash', weight: 8, duration: 45, tImp: null, cash: 5, card: 4.5, machines: 1 },
+    { type: 'dry', weight: 18, duration: null, tImp: 15, cash: 2, card: 1.8, machines: 5 },
+  ]
+
+  it('shows washing and drying with every size, sorted, with real prices and machine counts', () => {
+    const html = renderLandingPage({}, { prices: rows })
+    expect(html).to.include('id="precos"')
+    expect(html).to.include('Lavagem')
+    expect(html).to.include('Secagem')
+    expect(html.indexOf('8 kg')).to.be.lessThan(html.indexOf('12 kg')) // sorted by size
+    expect(html).to.match(/5,00\s€/)
+    expect(html).to.match(/4,50\s€/)
+    expect(html).to.include('1 máquina<')
+    expect(html).to.include('2 máquinas<')
+    expect(html).to.include('18 kg')
+    expect(html).to.include('15 min') // a dryer shows its time per impulse
+    expect(html).to.include('45 min')
+  })
+
+  it('is linked from the menu and the footer only when there is something to show', () => {
+    expect(renderLandingPage({}, { prices: rows })).to.include('<li><a href="#precos">Preços</a></li>')
+    for (const html of [renderLandingPage({}), renderLandingPage({}, { prices: [] })]) {
+      expect(html).to.not.include('id="precos"')
+      expect(html).to.not.include('href="#precos"')
+    }
+  })
+
+  it('the admin can hide it, and its words come from the admin text', () => {
+    expect(renderLandingPage({ prices: { visible: false } }, { prices: rows })).to.not.include('id="precos"')
+    const html = renderLandingPage({ prices: { eyebrow: 'Tarifas', heading: 'O que pagar', description: 'Sem surpresas' } }, { prices: rows })
+    expect(html).to.include('Tarifas')
+    expect(html).to.include('Sem surpresas')
+  })
+
+  it('labels and money follow the language', () => {
+    const html = renderLandingPage({}, { lang: 'en', available: ['pt', 'en'], prices: rows })
+    expect(html).to.include('Washing')
+    expect(html).to.include('Capacity')
+    expect(html).to.include('>Cash<')
+    expect(html).to.include('€5.00')
+    expect(html).to.include('1 machine<')
+    const de = renderLandingPage({}, { lang: 'de', available: ['pt', 'de'], prices: rows })
+    expect(de).to.include('Waschen')
+    expect(de).to.match(/5,00\s€/)
+  })
+
+  it('ignores a row with a missing price instead of showing "NaN"', () => {
+    const html = renderLandingPage({}, { prices: [{ type: 'wash', weight: 8, duration: 45, cash: null, card: 4.5, machines: 1 }] })
+    expect(html).to.not.include('NaN')
+    expect(html).to.not.include('id="precos"')
+  })
+
+  it('its words are translated with the other admin text, the rows are not text to translate', () => {
+    const { strings } = collectStrings(mergeContent({}))
+    expect(strings).to.include('Preços claros, sem surpresas')
+  })
+})
+
+describe('Prices on the live route', function () {
+  let tenant, app
+  before(async () => {
+    await startTestDb()
+    tenant = await Tenant.create({ name: 'Landing Prices', slug: 'landing-prices' })
+    resetSoleTenantCache()
+    app = express(); app.use(express.json()); app.use(resolveTenant); app.use('/', publicRoutes)
+    const Price = (await import('../src/models/price.js')).default
+    const Machine = (await import('../src/models/machine.js')).default
+    await Price.create([
+      { tenantId: tenant._id, type: 'wash', weight: 8, duration: 45, cashPrice: 5, cardPrice: 4.5 },
+      { tenantId: tenant._id, type: 'wash', weight: 20, duration: 45, cashPrice: 10.5, cardPrice: 10 }, // no machine of this size
+      { tenantId: tenant._id, type: 'dry', weight: 18, cashPrice: 2, cardPrice: 1.8 },
+    ])
+    await Machine.create([
+      { tenantId: tenant._id, name: 'W1', type: 'wash', weight: 8 },
+      { tenantId: tenant._id, name: 'D1', type: 'dry', weight: 18, tImp: 15 },
+      { tenantId: tenant._id, name: 'D2', type: 'dry', weight: 18, tImp: 15 },
+    ])
+  })
+  after(async () => {
+    const Price = (await import('../src/models/price.js')).default
+    const Machine = (await import('../src/models/machine.js')).default
+    await Promise.all([Price, Machine, Setting].map((M) => M.deleteMany({ tenantId: tenant._id })))
+    await Tenant.deleteOne({ _id: tenant._id })
+    resetSoleTenantCache()
+    await stopTestDb()
+  })
+
+  it('builds the table from the prices and machines in the database, and leaves out sizes nobody can use', async () => {
+    _resetContentCacheForTests()
+    const res = await request(app).get('/')
+    expect(res.status).to.equal(200)
+    expect(res.text).to.include('id="precos"')
+    expect(res.text).to.include('8 kg')
+    expect(res.text).to.match(/5,00\s€/)
+    expect(res.text).to.include('2 máquinas<') // the two dryers
+    expect(res.text).to.not.include('20 kg') // a price exists, but there is no 20 kg machine
+    expect(res.text).to.include('15 min')
+  })
+
+  it('a price changed in the admin shows on the page without a deploy (after the short cache)', async () => {
+    const Price = (await import('../src/models/price.js')).default
+    await Price.updateOne({ tenantId: tenant._id, type: 'wash', weight: 8 }, { cashPrice: 6, cardPrice: 5.5 })
+    _resetContentCacheForTests() // stands in for the 60 s cache expiring
+    const res = await request(app).get('/')
+    expect(res.text).to.match(/6,00\s€/)
+    expect(res.text).to.not.match(/5,00\s€/)
+  })
+
+  it('the other languages show the same live rows', async () => {
+    await translateLanding(tenant._id, { translate: async (strings, { target }) => strings.map((s) => `[${target}] ${s}`) })
+    _resetContentCacheForTests()
+    const res = await request(app).get('/en')
+    expect(res.status).to.equal(200)
+    expect(res.text).to.include('Washing')
+    expect(res.text).to.include('€6.00')
+    expect(res.text).to.include('[en] Preços claros, sem') // (the last word of a heading is wrapped for its underline)
+  })
+})
+
+describe('The "how it works" button goes to the price table', () => {
+  const rows = [{ type: 'wash', weight: 8, duration: 45, tImp: null, cash: 5, card: 4.5, machines: 1 }]
+  it('says "see prices" and jumps to the table when there is one', () => {
+    const html = renderLandingPage({}, { prices: rows })
+    expect(html).to.match(/<a class="btn-ghost btn-sm" href="#precos">Ver preços<\/a>/)
+    expect(renderLandingPage({}, { lang: 'en', available: ['pt', 'en'], prices: rows })).to.match(/href="#precos">See our prices<\/a>/)
+  })
+  it('without a table it falls back to the services section', () => {
+    expect(renderLandingPage({}, { prices: [] })).to.match(/<a class="btn-ghost btn-sm" href="#servicos">Ver serviços<\/a>/)
+  })
+})

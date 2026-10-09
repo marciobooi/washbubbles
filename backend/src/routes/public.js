@@ -10,6 +10,8 @@
 import express from 'express'
 import { renderLandingPage, renderRobotsTxt, renderSitemapXml, mergeContent, CONTENT_SETTING_KEY } from '../views/landing.js'
 import Setting from '../models/setting.js'
+import Price from '../models/price.js'
+import Machine from '../models/machine.js'
 import { withTenant } from '../services/tenant.js'
 import { TRANSLATIONS_KEY } from '../services/landingTranslate.js'
 import { landingVersion } from '../services/landingCache.js'
@@ -35,6 +37,8 @@ let cachedContent
 let cachedAt = 0
 // Stored translations of the admin's text (services/landingTranslate.js), cached the same way.
 let cachedTranslations = {}
+// The price table's rows: read from the database (prices + how many machines of each kind), cached like the rest.
+let cachedPrices = []
 let cachedVersion = 0 // see services/landingCache.js: changes when content/translations were just saved
 
 // The logo is uploaded once, from the existing Branding tab (AdminSettings.jsx),
@@ -49,6 +53,7 @@ export function _resetContentCacheForTests() {
   cachedContent = undefined
   cachedAt = 0
   cachedTranslations = {}
+  cachedPrices = []
   cachedVersion = 0
 }
 
@@ -62,6 +67,19 @@ async function loadContent(req) {
       Promise.race([SettingT.findOne({ key: BRAND_LOGO_SETTING_KEY }).lean(), timeout()]),
       Promise.race([SettingT.findOne({ key: TRANSLATIONS_KEY }).lean(), timeout()]),
     ])
+    // Prices: one row per (type, size) that has at least one machine — a price nobody can use is not shown.
+    const MachineT = withTenant(Machine, req)
+    const [priceDocs, groups] = await Promise.all([
+      Promise.race([withTenant(Price, req).find().lean(), timeout()]),
+      Promise.race([MachineT.aggregate([{ $group: { _id: { t: '$type', w: '$weight' }, n: { $sum: 1 }, tImp: { $max: '$tImp' } } }]), timeout()]),
+    ])
+    const byKind = new Map((groups || []).map((g) => [`${g._id.t}|${g._id.w}`, g]))
+    cachedPrices = (priceDocs || [])
+      .map((p) => {
+        const g = byKind.get(`${p.type}|${p.weight}`)
+        return { type: p.type, weight: p.weight, duration: p.duration ?? null, tImp: g ? (g.tImp ?? null) : null, cash: p.cashPrice, card: p.cardPrice, machines: g ? g.n : 0 }
+      })
+      .filter((p) => p.machines > 0)
     cachedTranslations = (translationsDoc && translationsDoc.value && typeof translationsDoc.value === 'object') ? translationsDoc.value : {}
     const raw = (contentDoc && contentDoc.value) || {}
     const logoUrl = logoDoc && logoDoc.value ? String(logoDoc.value) : null
@@ -83,7 +101,7 @@ const availableLangs = () => ['pt', ...TRANSLATED_LANGS.filter((l) => cachedTran
 router.get('/', async (req, res) => {
   res.set('Cache-Control', 'public, max-age=300') // 5 min — plain content, changes rarely
   const content = await loadContent(req)
-  res.type('html').send(renderLandingPage(content, { lang: 'pt', available: availableLangs() }))
+  res.type('html').send(renderLandingPage(content, { lang: 'pt', available: availableLangs(), prices: cachedPrices }))
 })
 
 // The same page in another language: /en /fr /de /es. Text written by the admin comes from the stored
@@ -97,7 +115,7 @@ router.get('/:lang(en|fr|de|es)', async (req, res) => {
   res.set('Cache-Control', 'public, max-age=300')
   res.set('Content-Language', lang)
   const merged = { ...stored.content, brand: mergeContent(content).brand }
-  res.type('html').send(renderLandingPage(merged, { lang, available: availableLangs() }))
+  res.type('html').send(renderLandingPage(merged, { lang, available: availableLangs(), prices: cachedPrices }))
 })
 
 router.get('/robots.txt', (req, res) => {

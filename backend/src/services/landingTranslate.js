@@ -23,7 +23,7 @@ export const STATUS_KEY = 'landingPage.translationStatus'
 /** Keys whose value is never translated: names, links, contact data, ids and switches. */
 const SKIP_KEYS = new Set(['id', 'url', 'href', 'src', 'logo', 'image', 'icon', 'author', 'email', 'phone', 'name', 'ctaHref', 'visible', 'showLoginLink', 'type'])
 /** Top-level blocks that are translated. `brand` is deliberately not one of them. */
-const TRANSLATED_BLOCKS = ['hero', 'steps', 'features', 'cta', 'visit', 'reviews', 'customSections']
+const TRANSLATED_BLOCKS = ['hero', 'steps', 'features', 'prices', 'cta', 'visit', 'reviews', 'customSections']
 
 /** Every translatable string in the content, with the path to put its translation back. */
 export function collectStrings(content) {

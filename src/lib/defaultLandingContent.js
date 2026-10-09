@@ -57,6 +57,13 @@ export const DEFAULT_LANDING_CONTENT = {
       { t: 'Enquanto espera', d: 'Vending de snacks e bebidas, e WiFi grátis — a sua pausa, tratada.' },
     ],
   },
+  // Only the words around the price table are edited here: its rows come straight from Preços + Máquinas.
+  prices: {
+    visible: true,
+    eyebrow: 'Preços',
+    heading: 'Preços claros, sem surpresas',
+    description: 'Pague só pelo que usar. Os valores são os mesmos que vê nas máquinas.',
+  },
   cta: {
     visible: true,
     heading: 'Pronta para a próxima lavagem?',
