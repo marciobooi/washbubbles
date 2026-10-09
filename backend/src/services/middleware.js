@@ -118,6 +118,13 @@ function isPcscSuccess(resp) {
  * Handles coin acceptors, bill acceptors, card dispensers, hoppers, printers, RFID readers
  * Also manages machine control interfaces
  */
+/**
+ * Controller codes read at this shop (see docs §9): coins arrive as 4..8, the 10 euro note as "10".
+ * Only used when the database holds no table at all, e.g. a new PC that is offline on day one.
+ */
+export const SHOP_COIN_CODES = { '4': 0.1, '5': 0.2, '6': 0.5, '7': 1, '8': 2 }
+export const SHOP_BILL_CODES = { '10': 10 }
+
 class Middleware extends EventEmitter {
   constructor() {
     super()
@@ -372,6 +379,21 @@ class Middleware extends EventEmitter {
       for (const row of rows) {
         if (row.key === 'coinEqTable') this.coinEqTable = toMap(row.value)
         if (row.key === 'billEqTable') this.billEqTable = toMap(row.value)
+      }
+
+      // A PC that has never reached the central server and was never given tables would refuse
+      // every coin and bill. On the controller path, fall back to the codes measured at this
+      // shop (docs §9). Anything not listed is still refused, never guessed.
+      if ((await this.getLowLevelConfig()).enabled) {
+        const empty = (t) => !t || Object.keys(t).length === 0
+        if (empty(this.coinEqTable)) {
+          this.coinEqTable = { ...SHOP_COIN_CODES }
+          console.warn('[HW] No coin table stored - using the built-in shop codes (4..8 = 0.10..2.00)')
+        }
+        if (empty(this.billEqTable)) {
+          this.billEqTable = { ...SHOP_BILL_CODES }
+          console.warn('[HW] No bill table stored - using the built-in shop code (10 = 10.00)')
+        }
       }
     } catch (err) {
       console.error('[HW] Failed to load coin/bill equivalence tables:', err.message)

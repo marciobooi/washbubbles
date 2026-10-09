@@ -406,6 +406,13 @@ Tests (unit and against the real test database with a fake central server that g
 - The **cash-drawer ledger** (per-denomination prefill for day-close) is unchanged: it is a convenience, not accounting, and a missed increment while the database is down is not replayed.
 - The Electron POS client is unchanged and still cannot drive the controller; it is not part of the shop install.
 
+### 14.5 Cash left in the machine is paid back, and coins are recognised offline
+
+Both run entirely on the shop PC (controller, hoppers, local MongoDB) — **no internet is needed**.
+
+- **Refund of unspent cash** (`CoinMachine.refundCredit`, `checkCreditRefund`). When coins/bills are in and nobody has touched the kiosk for `creditRefundSeconds` (setting, default **120**, `0` = never) the cash is paid back from the hopper via `get-change`. Every coin/bill and every touch of the screen (`POST /api/middleware/client/keepalive`) restarts the wait; the kiosk header shows "Crédito … · devolução em m:ss". A payout that comes up short is **not forgotten**: the unpaid part stays as credit (persisted, so a restart keeps it), the kiosk is told (`credit:refund-failed`), and the audit log gets `cash.refund.short` with the exact amount owed (`cash.refund` when complete). A customer with a card loaded is left to the card flow (unspent cash moves onto the card). Operators can force it with `POST /api/middleware/client/refund` (admin). Note `coinMachine.dispenseChange` now passes on the controller's real result; it used to answer `success: true` whatever happened. **Not yet tested on real hardware** (hopper stock was 0 when written).
+- **Coin/bill tables** (`coinEqTable`, `billEqTable`) are stored in the shop's own database; the central server only *updates* them (`services/downlink.js`, never from an empty or failed answer), so losing the internet changes nothing. A PC that has no table at all (new PC, never online) falls back to the codes read at this shop — coins `4..8` = 0.10/0.20/0.50/1/2, note `"10"` = 10 — and still refuses every other code. Controller codes are matched exactly (§9), so the central table must hold controller codes, not the serial `0x01…` form.
+
 ---
 
 ## 15. Outbound email
