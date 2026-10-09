@@ -121,3 +121,27 @@ describe('Downlink — central server is the source of truth', function () {
     expect(await Price.countDocuments({ tenantId: tenant._id })).to.equal(1)
   })
 })
+
+describe('Downlink — tells the shop when it has new central settings', function () {
+  let tenant
+  before(async () => { await startTestDb(); tenant = await Tenant.create({ name: 'Synced Test', slug: `synced-${Date.now()}` }) })
+  after(async () => { await Setting.deleteMany({ tenantId: tenant._id }); await Tenant.deleteOne({ _id: tenant._id }); await stopTestDb() })
+
+  it("emits 'synced' after a successful pull, and not when the server is unreachable", async () => {
+    const data = { settings: [{ _id: oid(), tenantId: oid(), key: 'creditRefundSeconds', value: 45 }] }
+    let offline = false
+    const fetchImpl = async (url) => {
+      if (offline) throw new TypeError('fetch failed')
+      return { ok: true, status: 200, json: async () => data[new URL(url).pathname.split('/').pop()] ?? [] }
+    }
+    const d = new Downlink({ tenantId: tenant._id, url: 'http://central.test/api', apiKey: 'k', fetchImpl })
+    let synced = 0
+    d.on('synced', () => synced++)
+    await d.pullAll()
+    expect(synced).to.equal(1)
+    expect((await Setting.findOne({ tenantId: tenant._id, key: 'creditRefundSeconds' })).value).to.equal(45)
+    offline = true
+    await d.pullAll()
+    expect(synced).to.equal(1)
+  })
+})

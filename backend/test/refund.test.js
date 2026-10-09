@@ -3,6 +3,7 @@ import { startTestDb, stopTestDb } from './setup.test-helper.js'
 import Tenant from '../src/models/tenant.js'
 import Peripheral from '../src/models/peripheral.js'
 import AuditLog from '../src/models/auditLog.js'
+import Setting from '../src/models/setting.js'
 import { CoinMachine } from '../src/services/coinMachine.js'
 
 describe('Unspent cash is paid back after the kiosk is left alone', function () {
@@ -115,5 +116,26 @@ describe('Unspent cash is paid back after the kiosk is left alone', function () 
     const r = await cm.dispenseChange('h1', 5)
     expect(r.success).to.equal(false)
     expect(r.remaining).to.equal(5)
+  })
+})
+
+describe('The refund time comes from the admin setting', function () {
+  let tenant
+  before(async () => { await startTestDb(); tenant = await Tenant.create({ name: 'Refund Setting', slug: `refset-${Date.now()}` }) })
+  after(async () => { await Setting.deleteMany({ tenantId: tenant._id }); await Tenant.deleteOne({ _id: tenant._id }); await stopTestDb() })
+  const mk = () => new CoinMachine({ tenantId: tenant._id, middleware: { subscribe: () => ({ unsubscribe() {} }) } })
+
+  it('defaults to 2 minutes when nothing is set', async () => {
+    const cm = mk(); await cm.loadSettings()
+    expect(cm.creditRefundSeconds).to.equal(120)
+  })
+
+  it('uses the value saved in the admin, and a change is picked up by reloading settings', async () => {
+    await Setting.create({ tenantId: tenant._id, key: 'creditRefundSeconds', value: 45 })
+    const cm = mk(); await cm.loadSettings()
+    expect(cm.creditRefundSeconds).to.equal(45)
+    await Setting.updateOne({ tenantId: tenant._id, key: 'creditRefundSeconds' }, { value: 0 })
+    await cm.loadSettings()
+    expect(cm.creditRefundSeconds).to.equal(0) // 0 = never refund
   })
 })

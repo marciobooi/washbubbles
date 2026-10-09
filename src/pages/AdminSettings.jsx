@@ -24,7 +24,7 @@ const HIDDEN_ADVANCED_KEYS = new Set([
   'cashDrawerLedger',
   'hopperTarget',
   'coinEqTable', 'billEqTable', 'rechargeCoinBonus', 'rechargeBillBonus', 'autoCharge',
-  'hopperCoinValue', 'hopperMaxDispenseCoins',
+  'hopperCoinValue', 'hopperMaxDispenseCoins', 'creditRefundSeconds',
   'branding.companyName', 'branding.logo', 'branding.primaryColor', 'branding.accentColor',
   'banners',
   'landingPage.content',

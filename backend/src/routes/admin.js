@@ -507,9 +507,23 @@ router.get('/settings/:key', requireAdmin, async (req, res) => {
 router.post('/settings', requireAdmin, async (req, res) => {
   const { key, value } = req.body
   if (!key) return res.status(400).json({ error: 'Missing key' })
+  // Seconds before unspent cash is paid back from the hopper; 0 = never. A bad value here
+  // would either keep a customer's money forever or pay it out at once, so refuse it.
+  if (key === 'creditRefundSeconds') {
+    const n = Number(value)
+    if (value === '' || value === null || !Number.isInteger(n) || n < 0 || n > 3600) {
+      return res.status(400).json({ error: 'creditRefundSeconds must be a whole number of seconds from 0 to 3600' })
+    }
+  }
   const SettingT = withTenant(Setting, req)
   const s = await SettingT.findOneAndUpdate({ key }, { value }, { upsert: true, new: true })
   logAction(req, 'setting.update', 'Setting', key, { value })
+  if (key === 'creditRefundSeconds') {
+    // On the shop PC the running kiosk uses it from now on (no restart). On the central server
+    // there is no hardware; the shop picks it up with its next pull (services/downlink.js).
+    const { default: coinMachine } = await import('../services/coinMachine.js')
+    if (coinMachine.settings) coinMachine.settings.creditRefundSeconds = Number(value)
+  }
   // The hardware middleware caches these two at boot (a live coin/bill event
   // is on the hot path — not worth a DB round-trip per insert) — without this,
   // an edited mapping wouldn't take effect until the backend restarted.

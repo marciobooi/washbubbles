@@ -798,3 +798,33 @@ describe('Admin start/end without payment', function () {
     }
   })
 })
+
+describe('Admin setting: automatic refund time', function () {
+  let app, adminToken
+  before(async () => {
+    await startTestDb(); await clearTestDb()
+    app = await buildTestApp()
+    await seedTenantAndUsers()
+    adminToken = (await request(app).post('/api/auth/login').send({ username: 'admin', password: 'admin1234' })).body.token
+  })
+  after(async () => { await stopTestDb() })
+  const save = (value) => request(app).post('/api/admin/settings').set('Authorization', `Bearer ${adminToken}`).send({ key: 'creditRefundSeconds', value })
+
+  it('accepts whole seconds from 0 to 3600', async () => {
+    for (const v of [0, 30, 120, 3600]) expect((await save(v)).status).to.equal(200)
+  })
+
+  it('refuses anything that could keep or dump a customer\'s money', async () => {
+    for (const v of [-1, 3601, 1.5, 'abc', '', null]) expect((await save(v)).status, `value ${JSON.stringify(v)}`).to.equal(400)
+  })
+
+  it('a running shop kiosk uses a new value at once, without a restart', async () => {
+    const coinMachine = (await import('../src/services/coinMachine.js')).default
+    const before = coinMachine.settings
+    coinMachine.settings = { creditRefundSeconds: 120 }
+    try {
+      await save(45)
+      expect(coinMachine.creditRefundSeconds).to.equal(45)
+    } finally { coinMachine.settings = before }
+  })
+})

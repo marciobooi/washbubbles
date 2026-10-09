@@ -32,6 +32,7 @@ export default function AdminPeripherals() {
   const [autoCharge, setAutoCharge] = React.useState(false)
   const [hopperCoinValue, setHopperCoinValue] = React.useState(1)
   const [hopperMaxDispenseCoins, setHopperMaxDispenseCoins] = React.useState(50)
+  const [creditRefundSeconds, setCreditRefundSeconds] = React.useState(120)
 
   // Guided calibration: instead of typing hex codes by hand, insert one coin/
   // note of each denomination and let the hardware tell us which channel code
@@ -147,6 +148,7 @@ export default function AdminPeripherals() {
       const autoChargeVal = await api.getSetting('autoCharge').catch(() => null)
       const hopperVal = await api.getSetting('hopperCoinValue').catch(() => null)
       const hopperMax = await api.getSetting('hopperMaxDispenseCoins').catch(() => null)
+      const refundSecs = await api.getSetting('creditRefundSeconds').catch(() => null)
 
       setCoinEqTable(coinEq && Array.isArray(coinEq.value) ? coinEq.value : [])
       setBillEqTable(billEq && Array.isArray(billEq.value) ? billEq.value : [])
@@ -155,6 +157,7 @@ export default function AdminPeripherals() {
       setAutoCharge(autoChargeVal && autoChargeVal.value ? Boolean(autoChargeVal.value) : false)
       setHopperCoinValue(hopperVal && hopperVal.value != null ? Number(hopperVal.value) : 1)
       setHopperMaxDispenseCoins(hopperMax && hopperMax.value != null ? Number(hopperMax.value) : 50)
+      setCreditRefundSeconds(refundSecs && refundSecs.value != null ? Number(refundSecs.value) : 120)
     } catch (e) {
       console.warn('loadCoinMachineSettings failed', e)
     }
@@ -166,6 +169,10 @@ export default function AdminPeripherals() {
       toast({ title: 'Máximo de moedas a dispensar parece muito alto (>200) — confirme antes de guardar', variant: 'destructive' })
       return
     }
+    if (!Number.isInteger(creditRefundSeconds) || creditRefundSeconds < 0 || creditRefundSeconds > 3600) {
+      toast({ title: 'A devolução automática tem de ser entre 0 e 3600 segundos (0 = nunca devolver)', variant: 'destructive' })
+      return
+    }
     try {
       await api.setSetting({ key: 'coinEqTable', value: coinEqTable })
       await api.setSetting({ key: 'billEqTable', value: billEqTable })
@@ -174,6 +181,7 @@ export default function AdminPeripherals() {
       await api.setSetting({ key: 'autoCharge', value: autoCharge })
       await api.setSetting({ key: 'hopperCoinValue', value: hopperCoinValue })
       await api.setSetting({ key: 'hopperMaxDispenseCoins', value: hopperMaxDispenseCoins })
+      await api.setSetting({ key: 'creditRefundSeconds', value: creditRefundSeconds })
       toast({ title: 'Configurações de moedas/notas guardadas', variant: 'success' })
       loadCoinMachineSettings()
     } catch (e) {
@@ -677,6 +685,19 @@ export default function AdminPeripherals() {
                   <Input id="hopperMaxDispenseCoins" type="number" step="1" min="1" value={hopperMaxDispenseCoins} onChange={(e) => setHopperMaxDispenseCoins(Number(e.target.value))} />
                   <p className="text-xs text-muted-foreground">Limite de segurança — um pedido acima disto é recusado em vez de arriscar esvaziar o hopper por um erro de cálculo.</p>
                 </div>
+              </div>
+            </div>
+
+            <div className="border-t pt-4">
+              <Label className="mb-2 block">Devolução automática do crédito</Label>
+              <div className="space-y-2 max-w-md">
+                <Label htmlFor="creditRefundSeconds">Devolver o dinheiro não usado ao fim de (segundos)</Label>
+                <Input id="creditRefundSeconds" type="number" step="1" min="0" max="3600" value={creditRefundSeconds} onChange={(e) => setCreditRefundSeconds(Number(e.target.value))} />
+                <p className="text-xs text-muted-foreground">
+                  Se o cliente inserir moedas/notas e deixar o quiosque sem tocar neste tempo, o dinheiro é devolvido pelo hopper.
+                  Cada moeda, nota ou toque no ecrã reinicia a contagem. <strong>0 = nunca devolver.</strong> Por omissão: 120 (2 minutos).
+                  A alteração chega ao quiosque em poucos minutos.
+                </p>
               </div>
             </div>
 

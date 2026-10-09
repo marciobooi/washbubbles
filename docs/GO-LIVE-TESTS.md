@@ -10,7 +10,8 @@ Written 2026-10-09. Related: `docs/SHOP-HARDWARE-AND-COMMUNICATIONS.md` §9, §1
 Committed and pushed, **not yet on the PC**:
 
 - [ ] Copy to `C:\washbubbles`: `backend/src/services/coinMachine.js`, `backend/src/services/middleware.js`,
-      `backend/src/routes/middleware.js`, `src/App.jsx`, `src/context/CartContext.jsx`
+      `backend/src/services/downlink.js`, `backend/src/routes/middleware.js`, `backend/src/routes/admin.js`,
+      `src/App.jsx`, `src/context/CartContext.jsx`, `src/pages/AdminPeripherals.jsx`, `src/pages/AdminSettings.jsx`
 - [ ] Rebuild the screen (`npm run build` with `VITE_KIOSK_API_KEY` taken from `backend\.env`), kill `node`
       (the boot task `WashBubbles Backend` restarts it), press F5 on the kiosk
 - [ ] Backend log shows `Low-level controller connected` and `[Downlink] in step with central`
@@ -49,7 +50,9 @@ Committed and pushed, **not yet on the PC**:
 - [ ] A customer with a card loaded is **not** refunded in coins (the card flow takes the unspent cash)
 - [ ] Refund works with **no internet** (unplug `Ethernet 3`, then repeat the first test)
 - [ ] Admin forced refund: `POST /api/middleware/client/refund`
-- [ ] Setting `creditRefundSeconds` changed in Hetzner admin reaches the PC (and `0` turns the refund off)
+- [ ] Refund time: change it in the admin (Periféricos → "Devolução automática do crédito"); within ~5 min the PC uses it
+      (check the countdown length on the kiosk); `0` turns the refund off; 3601 or `abc` are refused by the server
+- [ ] A coin/bill code changed in Hetzner is applied on the PC after the next pull, **without a restart**
 
 ## 4. Change from the hopper (never tested)
 

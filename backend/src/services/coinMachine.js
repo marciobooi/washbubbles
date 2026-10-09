@@ -118,6 +118,12 @@ class CoinMachine extends EventEmitter {
       // already configured; offline just keeps what is stored locally (no-op unless
       // SYNC_SERVER_URL / SYNC_API_KEY are set).
       this.downlink = new Downlink({ tenantId: this.tenantId })
+      // Whatever the central server changed (refund time, coin/bill codes, bonuses) takes effect
+      // on the next pull, not only after a restart.
+      this.downlink.on('synced', () => {
+        this.loadSettings().catch(() => {})
+        this.middleware.loadEquivalenceTables?.().catch?.(() => {})
+      })
       await this.downlink.pullAll()
       this.downlink.start()
 

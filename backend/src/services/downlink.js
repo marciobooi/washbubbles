@@ -117,6 +117,7 @@ export class Downlink extends EventEmitter {
         for (const r of this.resources) await this.pullResource(r)
         this.lastPullAt = new Date()
         this.lastError = ''
+        this.emit('synced', { ...this.counts })
         console.log('[Downlink] in step with central:', JSON.stringify(this.counts))
         return true
       } catch (err) {
