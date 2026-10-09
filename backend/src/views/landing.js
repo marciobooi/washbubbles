@@ -703,39 +703,33 @@ section{ padding:84px 0 }
 /* how it works */
 .steps{
   --gap:28px; --pad:26px;
-  display:grid; grid-template-columns:repeat(3,1fr); gap:var(--gap); counter-reset:step; position:relative;
-  isolation:isolate; /* the connectors (z-index:-1) stay inside this block, behind the cards' glass */
-  /* Coral dotted waves, one tiling-free SVG per direction. vector-effect keeps the dots round and evenly
-     spaced however far the SVG is stretched; preserveAspectRatio="none" lets one shape fit any card width. */
-  --wave-h:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 30' preserveAspectRatio='none'><path d='M0 15 C 6 0, 19 0, 25 15 S 44 30, 50 15 S 69 0, 75 15 S 94 30, 100 15' fill='none' stroke='%23ff8b6b' stroke-opacity='.85' stroke-width='3' stroke-linecap='round' stroke-dasharray='0.1 8' vector-effect='non-scaling-stroke'/></svg>");
-  --wave-turn:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'><path d='M100 0 C 100 40, 96 52, 88 52 S 76 40, 66 52 S 52 64, 44 52 S 30 40, 22 52 S 0 60, 0 100' fill='none' stroke='%23ff8b6b' stroke-opacity='.85' stroke-width='3' stroke-linecap='round' stroke-dasharray='0.1 8' vector-effect='non-scaling-stroke'/></svg>");
-  --wave-v:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 100' preserveAspectRatio='none'><path d='M15 0 C 28 12, 28 38, 15 50 S 2 88, 15 100' fill='none' stroke='%23ff8b6b' stroke-opacity='.85' stroke-width='3' stroke-linecap='round' stroke-dasharray='0.1 8' vector-effect='non-scaling-stroke'/></svg>");
+  /* Six columns so that each card spans two, and a last row of one or two cards can sit CENTRED
+     under the three above it instead of hugging the left edge. */
+  display:grid; grid-template-columns:repeat(6,1fr); gap:var(--gap); counter-reset:step; position:relative;
+  isolation:isolate; /* keeps the glass layers (z-index:-1) inside this block */
 }
-/* Each step is a frosted-glass card (the same glass as the nav bar). The glass is a pseudo-element
-   layer so that the connector lines, which sit one layer lower, show through it softly. */
-.step{ position:relative; text-align:center; padding:var(--pad) 22px 30px }
+/* Each step is a frosted-glass card (the same glass as the nav bar). The glass is its own layer, one step
+   below the content, so the numbered circle and the text stay sharp on top of it. */
+.step{ grid-column:span 2; position:relative; text-align:center; padding:var(--pad) 22px 30px }
+.step:last-of-type:nth-of-type(3n+1){ grid-column:3 / span 2 }
+.step:nth-last-of-type(2):nth-of-type(3n+1){ grid-column:2 / span 2 }
+.step:last-of-type:nth-of-type(3n+2){ grid-column:4 / span 2 }
 .step::after{
   content:''; position:absolute; inset:0; z-index:-1; pointer-events:none; border-radius:24px;
   background:rgba(240,253,250,.72); border:1px solid rgba(13,148,136,.12);
   box-shadow:var(--shadow-soft);
   backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
 }
-/* The link to the next step: a dotted wave from this circle to the next one (same row)... */
-.step:not(:last-child)::before{
-  /* Above the glass of every card (so the dots are seen), but earlier in the tree than each card's own
-     numbered circle, which therefore paints on top of the line where they meet. */
-  content:''; position:absolute; z-index:0; pointer-events:none;
-  left:50%; top:calc(var(--pad) + 44px); width:calc(100% + var(--gap)); height:30px; transform:translateY(-50%);
-  background:var(--wave-h) center / 100% 100% no-repeat;
+/* The dotted wave through the circles (drawn by the script at the end of the page). It sits above the
+   glass and under the circles. The dots drift slowly forward along it, unless motion is reduced. */
+.steps-line{ position:absolute; left:-30px; top:-12px; width:calc(100% + 60px); height:calc(100% + 24px); overflow:visible; pointer-events:none; z-index:0 }
+.steps-line path{
+  fill:none; stroke:#ff8b6b; stroke-opacity:.85; stroke-width:3; stroke-linecap:round; stroke-dasharray:0.1 8;
+  animation:steps-flow 9s linear infinite;
 }
-/* ...and where the row wraps (every 3rd card), from the bottom of this card down and across to the top
-   of the first card of the next row, so the chain 1-2-3-4-5 is never broken. */
-.step:nth-child(3n):not(:last-child)::before{
-  left:calc(50% - 2 * (100% + var(--gap))); width:calc(2 * (100% + var(--gap)));
-  top:100%; height:calc(var(--gap) + var(--pad)); transform:none;
-  background:var(--wave-turn) center / 100% 100% no-repeat;
-}
-.step-mark{ position:relative; width:88px; height:88px; margin:0 auto 22px }
+@keyframes steps-flow{ to{ stroke-dashoffset:-81 } }
+@media (prefers-reduced-motion:reduce){ .steps-line path{ animation:none } }
+.step-mark{ position:relative; z-index:1; width:88px; height:88px; margin:0 auto 22px }
 .step-mark .porthole{ width:100%; height:100% }
 .step-mark span{
   position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
@@ -874,10 +868,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
      the whole box (and everything in it) collapses to 0x0. */
   .hero-art{ order:-1; width:100%; max-width:360px; margin:0 auto; aspect-ratio:4/3 }
   .steps{ grid-template-columns:1fr; --gap:36px }
-  .step:not(:last-child)::before, .step:nth-child(3n):not(:last-child)::before{
-    left:calc(50% - 15px); width:30px; top:100%; height:calc(var(--gap) + var(--pad)); transform:none;
-    background:var(--wave-v) center / 100% 100% no-repeat;
-  }
+  .step{ grid-column:1 !important }
   .features{ grid-template-columns:1fr 1fr }
   .visit{ grid-template-columns:1fr }
 }
@@ -971,9 +962,10 @@ footer .foot-links a:hover{ color:var(--primary-800) }
         <p>${escapeHtml(content.steps.description)}</p>
       </div>
       <div class="steps">
+        <svg class="steps-line" aria-hidden="true" focusable="false"><path d=""/></svg>
         ${content.steps.items.map((s, i) => `
         <div class="step reveal" style="transition-delay:${i * 0.08}s">
-          <div class="step-mark">${porthole({ size: 88, spin: false })}<span aria-hidden="true">${i + 1}</span></div>
+          <div class="step-mark" data-parallax="${i % 2 === 0 ? 0.06 : -0.06}">${porthole({ size: 88, spin: false })}<span aria-hidden="true">${i + 1}</span></div>
           <h3>${escapeHtml(s.t)}</h3>
           <p>${escapeHtml(s.d)}</p>
         </div>`).join('')}
@@ -1152,6 +1144,91 @@ footer .foot-links a:hover{ color:var(--primary-800) }
     reveals.forEach(function(el){ io.observe(el); });
   }
 
+  // How it works: ONE continuous dotted wave through the numbered circles, drawn live so it keeps
+  // following them while they drift with the scroll (the parallax below calls drawSteps every frame).
+  // Same row: circle to circle. Where the row wraps: out past the right edge of the last card of the row,
+  // back along the gap between the rows, and down into the first circle of the next row — never across text.
+  // One column (phones): from the bottom of a card down into the next circle.
+  var stepsEl = document.querySelector('.steps');
+  var stepsSvg = stepsEl && stepsEl.querySelector('.steps-line');
+  var stepsPath = stepsSvg && stepsSvg.querySelector('path');
+  var drawSteps = null;
+  if (stepsPath) {
+    var densify = function(pts, rad){
+      var poly = [pts[0]];
+      for (var k = 1; k < pts.length - 1; k++) {
+        var p = pts[k - 1], v = pts[k], n = pts[k + 1];
+        var l1 = Math.hypot(v[0] - p[0], v[1] - p[1]) || 1, l2 = Math.hypot(n[0] - v[0], n[1] - v[1]) || 1;
+        var t = Math.min(rad, l1 / 2, l2 / 2);
+        var s0 = [v[0] - (v[0] - p[0]) / l1 * t, v[1] - (v[1] - p[1]) / l1 * t];
+        var e0 = [v[0] + (n[0] - v[0]) / l2 * t, v[1] + (n[1] - v[1]) / l2 * t];
+        for (var j = 0; j <= 8; j++) {
+          var u = j / 8, w = 1 - u;
+          poly.push([w * w * s0[0] + 2 * w * u * v[0] + u * u * e0[0], w * w * s0[1] + 2 * w * u * v[1] + u * u * e0[1]]);
+        }
+      }
+      poly.push(pts[pts.length - 1]);
+      var cum = [0];
+      for (var q = 1; q < poly.length; q++) cum.push(cum[q - 1] + Math.hypot(poly[q][0] - poly[q - 1][0], poly[q][1] - poly[q - 1][1]));
+      var total = cum[cum.length - 1], res = [], idx = 1;
+      for (var d = 0; d < total; d += 6) {
+        while (idx < cum.length - 1 && cum[idx] < d) idx++;
+        var seg = (cum[idx] - cum[idx - 1]) || 1, f = (d - cum[idx - 1]) / seg;
+        res.push([poly[idx - 1][0] + (poly[idx][0] - poly[idx - 1][0]) * f, poly[idx - 1][1] + (poly[idx][1] - poly[idx - 1][1]) * f, d]);
+      }
+      var last = poly[poly.length - 1];
+      res.push([last[0], last[1], total]);
+      return { pts: res, total: total };
+    };
+    var wavy = function(pts, rad, amp){
+      var dn = densify(pts, rad), r = dn.pts, out = '';
+      for (var i = 0; i < r.length; i++) {
+        var a = r[Math.max(0, i - 1)], b = r[Math.min(r.length - 1, i + 1)];
+        var tx = b[0] - a[0], ty = b[1] - a[1], tl = Math.hypot(tx, ty) || 1;
+        var edge = Math.min(1, r[i][2] / 44, (dn.total - r[i][2]) / 44);
+        var ease = edge * edge * (3 - 2 * edge);
+        var off = amp * ease * Math.sin(r[i][2] / 140 * 2 * Math.PI);
+        out += (i ? 'L' : 'M') + (r[i][0] - ty / tl * off).toFixed(1) + ' ' + (r[i][1] + tx / tl * off).toFixed(1) + ' ';
+      }
+      return out;
+    };
+    drawSteps = function(){
+      var items = [].slice.call(stepsEl.querySelectorAll('.step'));
+      if (items.length < 2) { stepsPath.setAttribute('d', ''); return; }
+      var base = stepsSvg.getBoundingClientRect();
+      var info = items.map(function(it){
+        var m = it.querySelector('.step-mark').getBoundingClientRect();
+        var c = it.getBoundingClientRect();
+        return { x: m.left + m.width / 2 - base.left, y: m.top + m.height / 2 - base.top, top: c.top - base.top, right: c.right - base.left, bottom: c.bottom - base.top };
+      });
+      var d = '';
+      for (var i = 0; i < info.length - 1; i++) {
+        var a = info[i], b = info[i + 1];
+        if (Math.abs(a.top - b.top) < 4) {
+          d += wavy([[a.x, a.y], [b.x, b.y]], 0, 9);
+        } else if (Math.abs(a.x - b.x) < 4) {
+          d += wavy([[a.x, a.bottom], [b.x, b.y]], 0, 6);
+        } else {
+          var rx = a.right + 16, gy = (a.bottom + b.top) / 2;
+          d += wavy([[a.x, a.y], [rx, a.y], [rx, gy], [b.x, gy], [b.x, b.y]], 26, 5);
+        }
+      }
+      stepsPath.setAttribute('d', d);
+    };
+    drawSteps();
+    window.addEventListener('resize', drawSteps);
+    window.addEventListener('load', drawSteps);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(drawSteps);
+    if ('ResizeObserver' in window) new ResizeObserver(function(){ drawSteps(); }).observe(stepsEl);
+    // The cards slide in when revealed: follow them frame by frame while that lasts.
+    var follow = function(){
+      var until = Date.now() + 900;
+      var tick = function(){ drawSteps(); if (Date.now() < until) window.requestAnimationFrame(tick); };
+      window.requestAnimationFrame(tick);
+    };
+    stepsEl.addEventListener('transitionrun', follow);
+  }
+
   // Scroll parallax: each [data-parallax] layer shifts relative to how far it
   // is from the viewport's vertical centre, not from raw scrollY — so depth
   // feels right wherever the element sits on the page (hero near the top,
@@ -1169,6 +1246,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
           var offset = (rect.top + rect.height / 2 - vh / 2) * speed;
           el.style.transform = 'translate3d(0,' + offset.toFixed(1) + 'px,0)';
         });
+        if (drawSteps) drawSteps(); // the dotted line follows the circles that just moved
         ticking = false;
       };
       var onScroll = function(){
