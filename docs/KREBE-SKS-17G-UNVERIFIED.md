@@ -11,7 +11,7 @@
   switches each machine through a KITSEC interface board and reads back **two channel bits per board** (`status_int`). There are
   no Modbus registers (40001, 40101 …) for our app to read or write, unless the controller exposes them, which is unknown.
 - The addresses are described as "standard industrial memory addresses", i.e. generic, not taken from a Krebe document.
-- It assumes a **gas dryer** (ignition, gas type, burner). We do not know that the dryers here are gas-fired.
+- It assumes a **gas dryer** (ignition, gas type, burner). **Confirmed by the owner: the dryers here are gas-fired**, so ignition, gas and overheating faults are real things to look for. The codes and numbers listed here are still unverified.
 - The text itself says the platform is "frequently based on classic OEM microprocessors" — a guess, not a fact.
 - The machines are of different models and years (SKS-16-G 2015, SKS-17-G 2014, …); one list for "the dryer" cannot be right for all.
 

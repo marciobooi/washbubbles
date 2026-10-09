@@ -82,29 +82,72 @@ const FRAUD_CODES = new Set([2, 3, 4, 5, 6, 15, 16, 17])
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 /**
- * Work out which hopper pays what, largest coin first.
+ * The fewest coins that make `amount` exactly, from bins of coins that each have a value and a stock
+ * (Infinity = not counted), which with euro coins means the BIGGEST coins first: €3.80 is 2 + 1 + 0.50 + 0.20 + 0.10,
+ * never thirty-eight ten-cent coins. When a big coin has run out the next ones make up for it; when the exact amount
+ * cannot be made at all, it pays the most it can and reports the rest as `unpayable` (never a silent shortfall).
+ * Bills are never part of a payout: change is always coins.
+ *
+ * @param {number} amount in euros
+ * @param {{ value:number, stock:number }[]} bins
+ * @returns {{ counts:number[], payable:number, unpayable:number }}  counts is in the same order as `bins`
+ */
+export function planCoinPayout(amount, bins) {
+  const MAX_CENTS = 20000 // €200: far above any real change, and keeps the table small
+  const want = Math.min(Math.round(roundMoney(amount) * 100), MAX_CENTS)
+  const order = bins
+    .map((bin, index) => ({ index, cents: Math.round(Number(bin.value) * 100), stock: Number(bin.stock) }))
+    .filter((x) => x.cents > 0 && x.stock > 0)
+    .sort((x, y) => y.cents - x.cents)
+
+  const INF = 1e9
+  let prev = new Array(want + 1).fill(INF)
+  prev[0] = 0
+  const choice = [] // choice[k][c] = how many coins of order[k] are used to make c
+  for (const bin of order) {
+    const next = new Array(want + 1).fill(INF)
+    const used = new Uint16Array(want + 1)
+    for (let c = 0; c <= want; c++) {
+      const most = Math.min(bin.stock, Math.floor(c / bin.cents), 65535)
+      for (let x = most; x >= 0; x--) { // the largest count first, so ties go to the bigger coin
+        const before = prev[c - x * bin.cents]
+        if (before < INF && before + x < next[c]) { next[c] = before + x; used[c] = x }
+      }
+    }
+    choice.push(used)
+    prev = next
+  }
+
+  let reach = want
+  while (reach > 0 && prev[reach] >= INF) reach-- // exact is impossible: pay the most we can
+  const counts = new Array(bins.length).fill(0)
+  let c = reach
+  for (let k = order.length - 1; k >= 0; k--) {
+    const x = choice[k][c]
+    counts[order[k].index] = x
+    c -= x * order[k].cents
+  }
+  const payable = reach / 100
+  return { counts, payable, unpayable: roundMoney(Math.max(0, roundMoney(amount) - payable)) }
+}
+
+/**
+ * Work out which hopper pays what: fewest coins, largest coin first (see planCoinPayout).
  *
  * `unpayable` is the remainder that no configured hopper can make — e.g. €0.03
  * when the smallest hopper holds 5c coins. Reporting it is what stops the
  * customer being silently short-changed.
  */
-function planPayout(amount, hoppers) {
-  let remaining = roundMoney(amount)
-  const steps = []
-
-  for (const h of hoppers) {
-    if (remaining < h.coinValue) continue
+export function planPayout(amount, hoppers) {
+  const bins = hoppers.map((h) => {
     const stock = Number(h.connection.peripheral.hopperConfig?.currentCount)
-    const available = Number.isFinite(stock) && stock > 0 ? stock : Infinity
-    const wanted = Math.floor(roundMoney(remaining) / h.coinValue + 1e-9)
-    const count = Math.min(wanted, available)
-    if (count <= 0) continue
-    steps.push({ connection: h.connection, coinValue: h.coinValue, count })
-    remaining = roundMoney(remaining - count * h.coinValue)
-    if (remaining <= 0) break
-  }
-
-  return { steps, unpayable: Math.max(0, remaining) }
+    return { value: h.coinValue, stock: Number.isFinite(stock) && stock > 0 ? stock : Infinity } // 0 = stock not counted
+  })
+  const plan = planCoinPayout(amount, bins)
+  const steps = []
+  hoppers.forEach((h, i) => { if (plan.counts[i] > 0) steps.push({ connection: h.connection, coinValue: h.coinValue, count: plan.counts[i] }) })
+  steps.sort((x, y) => y.coinValue - x.coinValue)
+  return { steps, unpayable: plan.unpayable }
 }
 
 /** PC/SC-style readers answer with a two-byte status word; 0x9000 means OK. */
@@ -674,6 +717,10 @@ class Middleware extends EventEmitter {
       const fail = (error, extra = {}) => ({ success: false, error, dispensed: 0, remaining: target, breakdown: [], ...extra })
 
       if (!this.lowLevel?.isConnected) return fail('Low-level controller is not connected')
+
+      // The controller picks the coins itself (it only receives the total). Log what a biggest-coins-first payout would
+      // be, so the real payout can be compared with it at the machine (docs/GO-LIVE-TESTS.md §4).
+      console.log(`[HW] get-change €${target.toFixed(2)} sent; biggest coins first would be ${this.describeBigFirst(target)}`)
 
       // Send first, then register the waiter in the same tick: replies are only
       // delivered on a later event-loop turn, so none can be missed.
@@ -1745,6 +1792,20 @@ class Middleware extends EventEmitter {
         ? `Cannot make €${target.toFixed(2)} from the available coins`
         : 'Hopper did not dispense the full amount'),
     }
+  }
+
+  /** "1×€2.00 + 1×€1.00": the biggest-coins-first payout of `amount` from the coins this shop accepts. */
+  describeBigFirst(amount) {
+    const values = [...new Set(Object.values(this.coinEqTable || {}).map(Number).filter((v) => v > 0))]
+    if (!values.length) return '(coin values unknown)'
+    const plan = planCoinPayout(amount, values.map((value) => ({ value, stock: Infinity })))
+    const parts = values
+      .map((value, i) => ({ value, n: plan.counts[i] }))
+      .filter((p) => p.n > 0)
+      .sort((x, y) => y.value - x.value)
+      .map((p) => `${p.n}×€${p.value.toFixed(2)}`)
+    const rest = plan.unpayable > 0 ? ` (€${plan.unpayable.toFixed(2)} cannot be made from these coins)` : ''
+    return (parts.join(' + ') || 'nothing') + rest
   }
 
   /** Enabled, connected hoppers with a configured coin value, largest coin first. */

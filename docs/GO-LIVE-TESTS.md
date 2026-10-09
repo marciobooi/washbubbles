@@ -17,6 +17,15 @@ Committed and pushed, **not yet on the PC**:
 - [ ] Backend log shows `Low-level controller connected` and `[Downlink] in step with central`
 - [ ] **Hopper has coins in it** (the database said 0). Note how many and of which value
 
+## 0a. Operating rule: only one PC at a time
+
+The old PC is the live shop until we migrate. **The two PCs are never switched on at the same time** (owner's rule): the new PC is
+switched on only when the admin is at the shop or at a quiet time, and then the old PC is off. That is what keeps the controller
+(which probably takes one client only) and the hardware address (`192.168.2.190`, the same on both PCs) free of clashes.
+
+- [ ] Keep to the rule: new PC on ⇒ old PC off. If it ever has to be otherwise, unplug the new PC's `Ethernet` (controller side) cable first
+- [ ] To switch the shop back to the old PC: switch the new PC off (or set `LOWLEVEL_ENABLED=false` and restart its backend), then start the old PC
+
 ## 1. Already proven ✔ (do not redo, only re-check if something changes)
 
 - [x] SSH to the PC over Tailscale; backend starts at boot; app + MongoDB installed
@@ -61,6 +70,18 @@ Committed and pushed, **not yet on the PC**:
 - [ ] `hopperCoinValue`/`hopperMaxDispenseCoins` are right for the coins actually loaded
 - [ ] Hopper stock counter (`hopperConfig.currentCount`) goes down after payouts and survives a restart/pull
 
+- [ ] **Which coins does the controller pay?** In the shop the app only sends the total to the controller (`get-change`, in cents) and the
+      controller chooses the coins, so "biggest coins first" has to be seen at the machine. For each of €0.30, €1.70, €3.80, €5.00 and €9.90:
+      insert that much cash, use the operator refund (`POST /api/middleware/client/refund`), and write down which coins fell. The backend log
+      prints `biggest coins first would be …` for each request: compare the two. If the controller does not pay biggest-first, find out
+      (vendor / its configuration) whether it can be told, because the app cannot choose coins by itself in this mode
+- [ ] **Bills are never returned**: every payout, including the automatic 2-minute refund of a bill's credit, must come out as coins only. Check that a €10 bill's
+      credit comes back as coins, and what happens when the hopper has too few coins (the shortfall must stay as credit, with the amount owed in the audit log)
+- [ ] **Decide what happens to change that cannot be paid** (hopper empty): today it stays as credit on the kiosk and the operator is told. Option: offer it as
+      credit on a card. Decide with the owner
+- [ ] The controller can send a **`per-notification`** message (a peripheral `type`, a `code` and a `msg`). Our app does not handle it yet (it only logs
+      "Unhandled package"). With the PC on, see which codes really arrive (jam, empty, ...) and then turn them into alerts and an admin message
+
 ## 5. A real paid machine start
 
 First settle the wiring (see §9), then:
@@ -85,6 +106,8 @@ come from the machines and the controller themselves, or from the maker or the P
 
 - [ ] **Write down the model and year of each of the 9 machines** (name plate on each) and enter brand + model in the admin
       (Máquinas), so the differences between models can be matched with the differences in their signals
+- [ ] **The dryers are gas-fired** (confirmed by the owner). Safety signals matter most: ignition failure, overheating and airflow faults
+      should raise an alert (email/WhatsApp) and take the dryer out of service in the admin. Find out which signal, if any, says this
 - [ ] Compare the real signals with `docs/KREBE-SKS-17G-UNVERIFIED.md` (an AI-written list of error codes, states and registers for the SKS-17 G:
       **unverified**, only a list of things to look for; keep what is seen, throw away what is not)
 - [ ] **Ask Krebe-Tippo or the distributor** for the technical manual / interface description of each model (what the coin or
