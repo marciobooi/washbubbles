@@ -79,6 +79,14 @@ First settle the wiring (see §9), then:
 Today the app really uses almost nothing beyond **busy / free** (plus a fault flag) per machine. Before go-live, record what the
 controller and the machines send, so nothing useful is thrown away and nothing is wrongly assumed. Keep `LOWLEVEL_TRACE=true`.
 
+**The machines** (told by the owner, 2026-10-09): all are made by **Krebe** (Krebe-Tippo, Maribor, Slovenia), but different models and years,
+for example **SKS-16-G (2015)** and **SKS-17-G (2014)**. No public manual was found for these models, so the signal list has to
+come from the machines and the controller themselves, or from the maker or the Portuguese distributor.
+
+- [ ] **Write down the model and year of each of the 9 machines** (name plate on each) and enter brand + model in the admin
+      (Máquinas), so the differences between models can be matched with the differences in their signals
+- [ ] **Ask Krebe-Tippo or the distributor** for the technical manual / interface description of each model (what the coin or
+      pulse input expects, and what status signals the machine outputs). Older and newer models may signal differently
 - [ ] **Full-cycle recording, one machine of each kind** (a washer and a dryer): start it and keep the trace from start to finish.
       Save the raw log lines into `docs/` (what happened at the machine, with the time, next to each controller message)
 - [ ] **List every message type (`op`) the controller sends** over a full day and count them. Any `op` the app does not handle

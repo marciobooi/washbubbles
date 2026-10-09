@@ -47,6 +47,7 @@ export const DEFAULT_GLOSSARY = [
   e('wifi grátis', 'free WiFi', 'WiFi gratuit', 'kostenloses WLAN', 'WiFi gratis'),
   e('máquinas modernas', 'modern machines', 'machines modernes', 'moderne Maschinen', 'máquinas modernas'),
   // everyday words
+  e('em moedas, notas', 'in coins, banknotes', 'en pièces, billets', 'mit Münzen, Geldscheinen', 'en monedas, billetes'),
   e('moedas', 'coins', 'pièces', 'Münzen', 'monedas'),
   e('notas', 'banknotes', 'billets', 'Geldscheine', 'billetes'),
   e('lavagem', 'washing', 'lavage', 'Wäsche', 'lavado'),
