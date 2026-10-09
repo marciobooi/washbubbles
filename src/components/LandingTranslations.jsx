@@ -11,6 +11,115 @@ const LANGS = [
   { code: 'es', label: 'Español' },
 ]
 
+const COLS = [
+  { key: 'pt', label: 'Português' },
+  { key: 'en', label: 'English' },
+  { key: 'fr', label: 'Français' },
+  { key: 'de', label: 'Deutsch' },
+  { key: 'es', label: 'Español' },
+]
+
+/**
+ * The small dictionary behind the translations: words and phrases that the free translator gets wrong. A text that is
+ * exactly a row is not machine translated at all; a row's words inside a longer text are always rendered as written
+ * here. Saving it translates the page again. Once saved, this list replaces the built-in one ("Repor" brings it back).
+ */
+function GlossaryEditor({ onSaved }) {
+  const [open, setOpen] = useState(false)
+  const [data, setData] = useState(null) // { entries, isDefault }
+  const [busy, setBusy] = useState(false)
+
+  const load = useCallback(async () => {
+    try { setData(await api.request('/admin/landing/glossary', { method: 'GET', expect: 'json' })) } catch (e) { toast({ title: 'Não foi possível abrir o dicionário', description: e?.message, variant: 'destructive' }) }
+  }, [])
+  useEffect(() => { if (open && !data) load() }, [open, data, load])
+
+  const setCell = (i, key, value) => setData((d) => ({ ...d, entries: d.entries.map((r, k) => (k === i ? { ...r, [key]: value } : r)) }))
+  const addRow = () => setData((d) => ({ ...d, entries: [{ pt: '', en: '', fr: '', de: '', es: '' }, ...d.entries] }))
+  const removeRow = (i) => setData((d) => ({ ...d, entries: d.entries.filter((_, k) => k !== i) }))
+
+  async function save() {
+    setBusy(true)
+    try {
+      const r = await api.request('/admin/landing/glossary', { method: 'PUT', json: { entries: data.entries }, expect: 'json' })
+      setData({ entries: r.entries, isDefault: false })
+      toast({ title: 'Dicionário guardado', description: 'A traduzir a página outra vez (cerca de 2 minutos).', variant: 'success' })
+      onSaved && onSaved()
+    } catch (e) {
+      toast({ title: 'Não foi possível guardar', description: e?.message || String(e), variant: 'destructive' })
+    } finally { setBusy(false) }
+  }
+  async function reset() {
+    if (!window.confirm('Repor o dicionário predefinido? As suas alterações ao dicionário perdem-se.')) return
+    setBusy(true)
+    try {
+      const r = await api.request('/admin/landing/glossary', { method: 'DELETE', expect: 'json' })
+      setData({ entries: r.entries, isDefault: true })
+      toast({ title: 'Dicionário predefinido reposto', variant: 'success' })
+      onSaved && onSaved()
+    } catch (e) {
+      toast({ title: 'Não foi possível repor', description: e?.message || String(e), variant: 'destructive' })
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <div className="border-t pt-3">
+      <button type="button" className="text-sm font-medium underline text-primary-700" onClick={() => setOpen((o) => !o)}>
+        {open ? 'Fechar o dicionário' : 'Dicionário de traduções (palavras que o tradutor automático erra)'}
+      </button>
+      {open && (
+        <div className="mt-3 space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Escreva em português uma palavra ou frase e como deve ficar em cada língua. Se um texto da página for exatamente uma linha,
+            usa-se a sua tradução; se a linha estiver dentro de um texto maior, essa parte fica sempre como escreveu. Deixe uma língua em branco
+            para a traduzir automaticamente. Em alemão, francês e espanhol prefira frases com o artigo (&quot;o seu cartão&quot;).
+            {data?.isDefault ? ' (Esta é a lista predefinida.)' : ''}
+          </p>
+          {!data ? <p className="text-sm text-neutral-500">A abrir…</p> : (
+            <>
+              <div className="max-h-[420px] overflow-auto border rounded-lg">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-white">
+                    <tr>
+                      {COLS.map((c) => <th key={c.key} className="text-left font-semibold px-2 py-2">{c.label}</th>)}
+                      <th className="w-8" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.entries.map((row, i) => (
+                      <tr key={i} className="border-t">
+                        {COLS.map((c) => (
+                          <td key={c.key} className="px-1 py-1">
+                            <input
+                              className="w-full min-w-[110px] rounded border border-neutral-200 px-2 py-1"
+                              value={row[c.key] || ''}
+                              onChange={(e) => setCell(i, c.key, e.target.value)}
+                              aria-label={`${c.label}: linha ${i + 1}`}
+                            />
+                          </td>
+                        ))}
+                        <td className="px-1 text-center">
+                          <button type="button" className="text-red-600 text-base leading-none" onClick={() => removeRow(i)} aria-label={`Apagar linha ${i + 1}`} title="Apagar">×</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={addRow}>Adicionar linha</Button>
+                <Button type="button" size="sm" disabled={busy} onClick={save}>Guardar e traduzir de novo</Button>
+                <Button type="button" variant="outline" size="sm" disabled={busy || data.isDefault} onClick={reset}>Repor predefinição</Button>
+                <span className="text-xs text-neutral-500">{data.entries.length} linhas</span>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const fmtDate = (d) => {
   try { return new Date(d).toLocaleString('pt-PT', { dateStyle: 'short', timeStyle: 'short' }) } catch { return '' }
 }
@@ -92,6 +201,7 @@ export default function LandingTranslations() {
           </Button>
           {status?.state === 'error' && <span className="text-sm text-red-600">A última tentativa falhou. Tente de novo dentro de momentos.</span>}
         </div>
+        <GlossaryEditor onSaved={() => setTimeout(load, 1200)} />
       </CardContent>
     </Card>
   )

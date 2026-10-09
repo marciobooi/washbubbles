@@ -16,6 +16,7 @@ import { mergeContent, CONTENT_SETTING_KEY } from '../views/landing.js'
 import { TRANSLATED_LANGS } from '../views/landingI18n.js'
 import { translateBatch, translatorEnabled } from './translator.js'
 import { bumpLandingVersion } from './landingCache.js'
+import { loadGlossary, translateWithGlossary } from './landingGlossary.js'
 
 export const TRANSLATIONS_KEY = 'landingPage.translations'
 export const STATUS_KEY = 'landingPage.translationStatus'
@@ -125,15 +126,16 @@ async function runOnce(tenantId, langs, translate) {
   const failed = {}
   const done = []
   const keptPt = {}
+  const { entries: glossary } = await loadGlossary(Setting, tenantId) // the small dictionary (built-in or the admin's own)
 
   for (const lang of langs) {
     try {
-      const raw = await translate(strings, { source: 'pt', target: lang })
+      const { out: raw, stats } = await translateWithGlossary(strings, lang, glossary, (list) => translate(list, { source: 'pt', target: lang }))
       const { out: translated, kept } = guardNumbers(strings, raw)
       const content = applyTranslations(source, paths, translated)
       await Setting.updateOne(
         { tenantId, key: TRANSLATIONS_KEY },
-        { $set: { [`value.${lang}`]: { content, at: new Date(), sourceHash, keptPortuguese: kept } } },
+        { $set: { [`value.${lang}`]: { content, at: new Date(), sourceHash, keptPortuguese: kept, glossary: stats } } },
         { upsert: true },
       )
       bumpLandingVersion() // the page can show it right away

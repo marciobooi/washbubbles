@@ -28,6 +28,7 @@ import { logAction } from '../services/auditLog.js'
 import { translateLandingSoon, translateLanding, getTranslations, getStatus } from '../services/landingTranslate.js'
 import { translatorEnabled } from '../services/translator.js'
 import { bumpLandingVersion } from '../services/landingCache.js'
+import { loadGlossary, sanitizeGlossary, GLOSSARY_KEY } from '../services/landingGlossary.js'
 import { creditCard } from '../services/cardBalance.js'
 import AuditLog from '../models/auditLog.js'
 
@@ -488,6 +489,27 @@ router.post('/landing/translate', requireAdmin, async (req, res) => {
   translateLanding(req.tenantId).catch((err) => console.warn('[landing-translate]', err.message))
   logAction(req, 'landing.translate_requested', 'Setting', 'landingPage.content', {})
   res.status(202).json({ success: true })
+})
+
+// The small dictionary behind the page's translations (services/landingGlossary.js). Saving it translates again.
+router.get('/landing/glossary', requireAdmin, async (req, res) => {
+  const g = await loadGlossary(Setting, req.tenantId)
+  res.json({ entries: g.entries, isDefault: g.isDefault })
+})
+router.put('/landing/glossary', requireAdmin, async (req, res) => {
+  let entries
+  try { entries = sanitizeGlossary(req.body && req.body.entries) } catch (err) { return res.status(400).json({ error: err.message }) }
+  await Setting.findOneAndUpdate({ tenantId: req.tenantId, key: GLOSSARY_KEY }, { $set: { value: entries } }, { upsert: true })
+  logAction(req, 'landing.glossary_saved', 'Setting', GLOSSARY_KEY, { entries: entries.length })
+  translateLandingSoon(req.tenantId)
+  res.json({ success: true, entries, isDefault: false })
+})
+router.delete('/landing/glossary', requireAdmin, async (req, res) => {
+  await Setting.deleteOne({ tenantId: req.tenantId, key: GLOSSARY_KEY })
+  logAction(req, 'landing.glossary_reset', 'Setting', GLOSSARY_KEY, {})
+  translateLandingSoon(req.tenantId)
+  const g = await loadGlossary(Setting, req.tenantId)
+  res.json({ success: true, entries: g.entries, isDefault: true })
 })
 
 // Settings (simple key/value store)

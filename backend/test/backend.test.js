@@ -828,3 +828,51 @@ describe('Admin setting: automatic refund time', function () {
     } finally { coinMachine.settings = before }
   })
 })
+
+describe('Admin: the translation dictionary', function () {
+  let app, adminToken
+  before(async () => {
+    await startTestDb(); await clearTestDb()
+    app = await buildTestApp()
+    await seedTenantAndUsers()
+    adminToken = (await request(app).post('/api/auth/login').send({ username: 'admin', password: 'admin1234' })).body.token
+  })
+  after(async () => { await stopTestDb() })
+  const auth = (r) => r.set('Authorization', `Bearer ${adminToken}`)
+
+  it('starts with the built-in list, marked as such', async () => {
+    const res = await auth(request(app).get('/api/admin/landing/glossary'))
+    expect(res.status).to.equal(200)
+    expect(res.body.isDefault).to.equal(true)
+    expect(res.body.entries.length).to.be.greaterThan(20)
+  })
+
+  it('saves the admin\'s list (cleaned), which then replaces the built-in one', async () => {
+    const res = await auth(request(app).put('/api/admin/landing/glossary')).send({ entries: [{ pt: ' sem filas ', en: 'no queues', fr: 'sans file', de: 'ohne Schlange', es: 'sin colas' }, { pt: '' }] })
+    expect(res.status).to.equal(200)
+    expect(res.body.entries).to.have.length(1)
+    const again = await auth(request(app).get('/api/admin/landing/glossary'))
+    expect(again.body.isDefault).to.equal(false)
+    expect(again.body.entries[0].de).to.equal('ohne Schlange')
+  })
+
+  it('refuses a broken list instead of saving it', async () => {
+    const bad = await auth(request(app).put('/api/admin/landing/glossary')).send({ entries: 'not a list' })
+    expect(bad.status).to.equal(400)
+    const long = await auth(request(app).put('/api/admin/landing/glossary')).send({ entries: [{ pt: 'x'.repeat(200) }] })
+    expect(long.status).to.equal(400)
+    expect((await auth(request(app).get('/api/admin/landing/glossary'))).body.entries[0].pt).to.equal('sem filas') // unchanged
+  })
+
+  it('"restore" brings the built-in list back', async () => {
+    const res = await auth(request(app).delete('/api/admin/landing/glossary'))
+    expect(res.status).to.equal(200)
+    expect(res.body.isDefault).to.equal(true)
+    expect((await auth(request(app).get('/api/admin/landing/glossary'))).body.entries.length).to.be.greaterThan(20)
+  })
+
+  it('only an admin can change it', async () => {
+    const res = await request(app).put('/api/admin/landing/glossary').send({ entries: [] })
+    expect(res.status).to.be.oneOf([401, 403])
+  })
+})

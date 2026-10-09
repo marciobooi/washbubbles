@@ -74,6 +74,29 @@ First settle the wiring (see §9), then:
 - [ ] A dryer: the time bought = impulses × 15 min (`tImp`); polarity `low` machines read busy/free correctly
 - [ ] Two machines in one cart start both
 
+## 5b. What do the machines actually tell the app? (find missing or unused signals)
+
+Today the app really uses almost nothing beyond **busy / free** (plus a fault flag) per machine. Before go-live, record what the
+controller and the machines send, so nothing useful is thrown away and nothing is wrongly assumed. Keep `LOWLEVEL_TRACE=true`.
+
+- [ ] **Full-cycle recording, one machine of each kind** (a washer and a dryer): start it and keep the trace from start to finish.
+      Save the raw log lines into `docs/` (what happened at the machine, with the time, next to each controller message)
+- [ ] **List every message type (`op`) the controller sends** over a full day and count them. Any `op` the app does not handle
+      is a candidate for a missing feature (the backend should log unknown ones; check that it does)
+- [ ] **`status_int` bit strings**: each interface answers with 8 bits (for example `00000010`), but the app only reads the last two
+      (the two channels). Switch things at the machine (open the door, start, finish, cut power to the interface) and see which of
+      the **other bits** change. They may carry door open, door locked, fault or "cycle finished"
+- [ ] The app already decodes `fault`, `occupied`, `doorLocked`, `doorClosed` per machine (visible in the log as
+      `Machine … status update`): confirm that each of these four really follows the machine, and for which machines
+- [ ] `machine-started`, `door-opened` and `machine-issue` events: trigger each one on purpose and check what the app does with it
+- [ ] **Interface offline** (`active:"0"`): unplug one interface and check the machine turns "fault" in the app, in the kiosk and in the
+      central admin, and the operator is alerted
+- [ ] Does any machine report a **remaining time**, a **program**, a **cycle counter** or an **error code**? If yes: show it in the
+      admin/kiosk; if not, say so here, so we stop looking
+- [ ] Polarity per machine (`activation` high/low): confirm busy and free are not swapped on any machine (lavar 1 and lavar 5 read busy at rest)
+- [ ] Write down which signals we **do not use yet** and decide, one by one: show to the customer, show to the operator, alert on, ignore
+- [ ] Ask the vendor for the full list of machine and interface messages (also the open questions in `docs/SHOP-HARDWARE-AND-COMMUNICATIONS.md` §11)
+
 ## 6. Admin Start / End from the central admin
 
 - [ ] Hetzner admin → Operações → **Iniciar** on a wired, empty machine: it starts within ~5 s without payment;
