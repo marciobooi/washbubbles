@@ -15,6 +15,7 @@ import Setting from '../models/setting.js'
 import { mergeContent, CONTENT_SETTING_KEY } from '../views/landing.js'
 import { TRANSLATED_LANGS } from '../views/landingI18n.js'
 import { translateBatch, translatorEnabled } from './translator.js'
+import { bumpLandingVersion } from './landingCache.js'
 
 export const TRANSLATIONS_KEY = 'landingPage.translations'
 export const STATUS_KEY = 'landingPage.translationStatus'
@@ -50,6 +51,22 @@ export function applyTranslations(content, paths, translated) {
     node[path[path.length - 1]] = translated[n]
   })
   return out
+}
+
+/**
+ * Free machine translation sometimes changes a number ("dos 8 aos 20kg" came back as "10 to 20 kilos").
+ * A wrong size or price is worse than Portuguese text, so a sentence whose numbers differ from the
+ * original is not used: the Portuguese stays for that one sentence.
+ */
+export const numbersIn = (s) => (String(s).match(/\d+(?:[.,]\d+)?/g) || []).map((n) => n.replace(',', '.')).sort().join('|')
+export function guardNumbers(sources, translated) {
+  let kept = 0
+  const out = translated.map((t, i) => {
+    if (numbersIn(sources[i]) === numbersIn(t)) return t
+    kept += 1
+    return sources[i]
+  })
+  return { out, kept }
 }
 
 const hashOf = (strings) => crypto.createHash('sha1').update(JSON.stringify(strings)).digest('hex')
@@ -107,16 +124,20 @@ async function runOnce(tenantId, langs, translate) {
   const sourceHash = hashOf(strings)
   const failed = {}
   const done = []
+  const keptPt = {}
 
   for (const lang of langs) {
     try {
-      const translated = await translate(strings, { source: 'pt', target: lang })
+      const raw = await translate(strings, { source: 'pt', target: lang })
+      const { out: translated, kept } = guardNumbers(strings, raw)
       const content = applyTranslations(source, paths, translated)
       await Setting.updateOne(
         { tenantId, key: TRANSLATIONS_KEY },
-        { $set: { [`value.${lang}`]: { content, at: new Date(), sourceHash } } },
+        { $set: { [`value.${lang}`]: { content, at: new Date(), sourceHash, keptPortuguese: kept } } },
         { upsert: true },
       )
+      bumpLandingVersion() // the page can show it right away
+      if (kept) keptPt[lang] = kept
       done.push(lang)
     } catch (err) {
       failed[lang] = err.message
@@ -124,7 +145,7 @@ async function runOnce(tenantId, langs, translate) {
     }
   }
   const state = Object.keys(failed).length === 0 ? 'done' : (done.length ? 'partial' : 'error')
-  await setStatus(tenantId, { state, startedAt, finishedAt: new Date(), done, failed, sourceHash })
+  await setStatus(tenantId, { state, startedAt, finishedAt: new Date(), done, failed, keptPortuguese: keptPt, sourceHash })
 }
 
 /** Fire and forget — what the admin "save" does. Never throws into the request. */

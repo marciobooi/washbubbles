@@ -392,8 +392,17 @@ export function renderLandingPage(rawContent, { lang = 'pt', available = ['pt'] 
   const alternates = langs.length > 1
     ? langs.map((l) => `<link rel="alternate" hreflang="${UI[l].htmlLang}" href="${SITE_URL}${langPath(l)}">`).join('\n') + `\n<link rel="alternate" hreflang="x-default" href="${SITE_URL}/">`
     : ''
+  // A dropdown (native <details>: works without JavaScript). The links are real <a href> so every
+  // language page is also reachable by crawlers and by visitors with scripts blocked.
   const switcher = langs.length > 1
-    ? `<div class="lang-switch" role="navigation" aria-label="${escapeHtml(L.langAria)}">${langs.map((l) => `<a href="${langPath(l)}" hreflang="${UI[l].htmlLang}" lang="${UI[l].htmlLang}"${l === lang ? ' aria-current="true" class="is-current"' : ''}>${l.toUpperCase()}</a>`).join('')}</div>`
+    ? `<details class="lang-dd">
+        <summary aria-label="${escapeHtml(L.langAria)}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+          <span>${lang.toUpperCase()}</span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+        </summary>
+        <ul>${langs.map((l) => `<li><a href="${langPath(l)}" hreflang="${UI[l].htmlLang}" lang="${UI[l].htmlLang}"${l === lang ? ' aria-current="true"' : ''}>${escapeHtml(UI[l].name)}</a></li>`).join('')}</ul>
+      </details>`
     : ''
 
   return `<!DOCTYPE html>
@@ -502,11 +511,19 @@ img{ max-width:100%; display:block }
 .btn-login:hover{ transform:translateY(-2px); box-shadow:var(--shadow-btn-hover); background:linear-gradient(135deg,var(--primary-500),var(--primary-600)) }
 .btn-login:active{ transform:translateY(0) scale(.97) }
 .btn-login svg{ width:17px; height:17px }
-.lang-switch{ display:flex; align-items:center; gap:2px; margin-right:4px }
-.lang-switch a{ font:600 12px/1 var(--font-head); letter-spacing:.04em; color:var(--ink-soft); text-decoration:none; padding:7px 7px; border-radius:8px }
-.lang-switch a:hover{ background:rgba(255,255,255,.7); color:var(--ink) }
-.lang-switch a.is-current{ background:var(--primary-600); color:#fff }
-@media (max-width:520px){ .lang-switch a{ padding:6px 5px; font-size:11px } }
+.lang-dd{ position:relative }
+.lang-dd summary{ list-style:none; cursor:pointer; display:flex; align-items:center; gap:6px; padding:9px 12px; border-radius:999px; background:rgba(255,255,255,.8); border:1px solid rgba(15,42,39,.08); font:600 13px/1 var(--font-head); letter-spacing:.03em; color:var(--ink); user-select:none }
+.lang-dd summary::-webkit-details-marker{ display:none }
+.lang-dd summary:hover{ background:#fff }
+.lang-dd summary:focus-visible{ outline:2px solid var(--primary-500); outline-offset:2px }
+.lang-dd summary svg{ width:16px; height:16px }
+.lang-dd .chev{ width:13px; height:13px; transition:transform .2s ease }
+.lang-dd[open] .chev{ transform:rotate(180deg) }
+.lang-dd ul{ position:absolute; right:0; top:calc(100% + 8px); min-width:168px; margin:0; padding:6px; list-style:none; background:#fff; border-radius:14px; box-shadow:0 12px 32px -8px rgba(15,42,39,.28), 0 0 0 1px rgba(15,42,39,.06); z-index:70 }
+.lang-dd li a{ display:block; padding:10px 12px; border-radius:10px; color:var(--ink); text-decoration:none; font:500 14px/1.2 var(--font-body) }
+.lang-dd li a:hover{ background:var(--primary-50) }
+.lang-dd li a[aria-current]{ background:var(--primary-100); font-weight:600 }
+@media (max-width:520px){ .lang-dd summary{ padding:9px 10px } .lang-dd summary span{ display:none } }
 
 .nav-toggle{
   display:none; background:none; border:0; padding:8px; border-radius:8px; cursor:pointer;
@@ -1054,6 +1071,12 @@ footer .foot-links a:hover{ color:var(--primary-800) }
 
 <script>
 (function(){
+  // Language dropdown: close on outside click / Escape (it also works without this script).
+  var dd = document.querySelector('.lang-dd');
+  if (dd) {
+    document.addEventListener('click', function(e){ if (!dd.contains(e.target)) dd.removeAttribute('open'); });
+    document.addEventListener('keydown', function(e){ if (e.key === 'Escape') dd.removeAttribute('open'); });
+  }
   var toggle = document.getElementById('nav-toggle');
   if (toggle) {
     toggle.addEventListener('click', function(){

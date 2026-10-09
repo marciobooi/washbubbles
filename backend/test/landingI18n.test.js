@@ -6,7 +6,7 @@ import { resolveTenant, resetSoleTenantCache } from '../src/middleware/tenant.js
 import { renderLandingPage, renderSitemapXml, mergeContent, DEFAULT_CONTENT, CONTENT_SETTING_KEY } from '../src/views/landing.js'
 import { UI, LANGS, TRANSLATED_LANGS } from '../src/views/landingI18n.js'
 import { translateBatch, translatorEnabled } from '../src/services/translator.js'
-import { collectStrings, applyTranslations, translateLanding, getTranslations, getStatus, TRANSLATIONS_KEY } from '../src/services/landingTranslate.js'
+import { collectStrings, applyTranslations, translateLanding, getTranslations, getStatus, numbersIn, guardNumbers, TRANSLATIONS_KEY } from '../src/services/landingTranslate.js'
 import Setting from '../src/models/setting.js'
 import Tenant from '../src/models/tenant.js'
 import { startTestDb, stopTestDb } from './setup.test-helper.js'
@@ -94,7 +94,7 @@ describe('The page in other languages (views/landing.js)', () => {
     const html = renderLandingPage({})
     expect(html).to.include('<html lang="pt-PT">')
     expect(html).to.include('Como funciona')
-    expect(html).to.not.include('class="lang-switch"')
+    expect(html).to.not.include('class="lang-dd"')
     expect(html).to.not.include('hreflang')
   })
 
@@ -116,7 +116,10 @@ describe('The page in other languages (views/landing.js)', () => {
     expect(html).to.include('<link rel="alternate" hreflang="en" href="https://freshbubbles.pt/en">')
     expect(html).to.include('<link rel="alternate" hreflang="x-default" href="https://freshbubbles.pt/">')
     expect(html).to.not.include('hreflang="de"') // no German page yet
-    expect(html).to.match(/<a href="\/fr"[^>]*aria-current="true"[^>]*>FR<\/a>/)
+    expect(html).to.include('<details class="lang-dd">')
+    expect(html).to.match(/<a href="\/fr"[^>]*aria-current="true"[^>]*>Français<\/a>/)
+    expect(html).to.match(/<a href="\/en"[^>]*>English<\/a>/)
+    expect(html).to.match(/<summary[^>]*>[\s\S]*<span>FR<\/span>/)
   })
 
   it('an unknown language falls back to Portuguese instead of breaking', () => {
@@ -196,7 +199,7 @@ describe('Translating on save and serving /en /fr /de /es', function () {
     const pt = await request(app).get('/')
     expect(pt.text).to.include('<html lang="pt-PT">')
     expect(pt.text).to.include('Olá mundo')
-    expect(pt.text).to.include('class="lang-switch"')
+    expect(pt.text).to.include('class="lang-dd"')
     const map = await request(app).get('/sitemap.xml')
     expect(map.text).to.include('https://freshbubbles.pt/es')
   })
@@ -210,6 +213,51 @@ describe('Translating on save and serving /en /fr /de /es', function () {
 
   it('/ shows no language switcher before any translation exists', async () => {
     const res = await request(app).get('/')
-    expect(res.text).to.not.include('class="lang-switch"')
+    expect(res.text).to.not.include('class="lang-dd"')
+  })
+})
+
+describe('Numbers are never altered by the translator', () => {
+  it('compares numbers whatever the formatting, and ignores words', () => {
+    expect(numbersIn('dos 8 aos 20kg')).to.equal(numbersIn('from 8 to 20 kg'))
+    expect(numbersIn('4,5 estrelas')).to.equal(numbersIn('4.5 stars'))
+    expect(numbersIn('sem números')).to.equal('')
+  })
+
+  it('keeps the Portuguese for a sentence whose numbers changed, and uses the others', () => {
+    const src = ['Máquinas dos 8 aos 20kg', 'Coloque a roupa', 'Aberto das 07:00 às 23:30']
+    const bad = ['Machines from 10 to 20 kilos', 'Put the clothes in', 'Open from 07:00 to 23:30']
+    const { out, kept } = guardNumbers(src, bad)
+    expect(out).to.deep.equal(['Máquinas dos 8 aos 20kg', 'Put the clothes in', 'Open from 07:00 to 23:30'])
+    expect(kept).to.equal(1)
+  })
+})
+
+describe('A new translation shows on the page at once (no waiting for the cache)', function () {
+  let tenant, app
+  before(async () => {
+    await startTestDb()
+    tenant = await Tenant.create({ name: 'Landing Cache', slug: 'landing-cache' })
+    resetSoleTenantCache()
+    app = express(); app.use(express.json()); app.use(resolveTenant); app.use('/', publicRoutes)
+  })
+  after(async () => { await Setting.deleteMany({ tenantId: tenant._id }); await Tenant.deleteOne({ _id: tenant._id }); resetSoleTenantCache(); await stopTestDb() })
+
+  it('/en redirects before the translation exists and works right after it was stored', async () => {
+    _resetContentCacheForTests()
+    expect((await request(app).get('/en')).status).to.equal(302) // loads and caches "no translations"
+    await translateLanding(tenant._id, { translate: async (strings, { target }) => strings.map((s) => `[${target}] ${s}`) })
+    const after = await request(app).get('/en') // same second: must not be served from the old cache
+    expect(after.status).to.equal(200)
+    expect(after.text).to.include('[en] ')
+  })
+
+  it('a sentence whose numbers the translator changed stays Portuguese on the page, and is counted', async () => {
+    await Setting.deleteMany({ tenantId: tenant._id })
+    await Setting.create({ tenantId: tenant._id, key: CONTENT_SETTING_KEY, value: { hero: { subheading: 'Máquinas dos 8 aos 20kg.' } } })
+    await translateLanding(tenant._id, { translate: async (strings) => strings.map((s) => s.replace('8', '10')) })
+    const en = (await getTranslations(tenant._id)).en
+    expect(en.content.hero.subheading).to.equal('Máquinas dos 8 aos 20kg.')
+    expect(en.keptPortuguese).to.be.greaterThan(0)
   })
 })

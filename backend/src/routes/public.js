@@ -12,6 +12,7 @@ import { renderLandingPage, renderRobotsTxt, renderSitemapXml, mergeContent, CON
 import Setting from '../models/setting.js'
 import { withTenant } from '../services/tenant.js'
 import { TRANSLATIONS_KEY } from '../services/landingTranslate.js'
+import { landingVersion } from '../services/landingCache.js'
 import { TRANSLATED_LANGS } from '../views/landingI18n.js'
 
 const router = express.Router()
@@ -34,6 +35,7 @@ let cachedContent
 let cachedAt = 0
 // Stored translations of the admin's text (services/landingTranslate.js), cached the same way.
 let cachedTranslations = {}
+let cachedVersion = 0 // see services/landingCache.js: changes when content/translations were just saved
 
 // The logo is uploaded once, from the existing Branding tab (AdminSettings.jsx),
 // not re-uploaded here — the landing page just reads that same Setting and
@@ -47,10 +49,11 @@ export function _resetContentCacheForTests() {
   cachedContent = undefined
   cachedAt = 0
   cachedTranslations = {}
+  cachedVersion = 0
 }
 
 async function loadContent(req) {
-  if (cachedAt && Date.now() - cachedAt < CACHE_TTL_MS) return cachedContent
+  if (cachedAt && Date.now() - cachedAt < CACHE_TTL_MS && cachedVersion === landingVersion()) return cachedContent
   try {
     const SettingT = withTenant(Setting, req)
     const timeout = () => new Promise((_, reject) => setTimeout(() => reject(new Error('landing content DB read timed out')), DB_TIMEOUT_MS))
@@ -64,6 +67,7 @@ async function loadContent(req) {
     const logoUrl = logoDoc && logoDoc.value ? String(logoDoc.value) : null
     cachedContent = logoUrl ? { ...raw, brand: { ...(raw.brand || {}), logo: logoUrl } } : raw
     cachedAt = Date.now()
+    cachedVersion = landingVersion()
   } catch (err) {
     console.warn('[public] Failed to load landing page content, serving cached/default content:', err.message)
     // Leave cachedContent as-is (last known good, or undefined if none yet) —

@@ -27,6 +27,7 @@ import { broadcastMachines, broadcastMachine, listClients, disconnectClient } fr
 import { logAction } from '../services/auditLog.js'
 import { translateLandingSoon, translateLanding, getTranslations, getStatus } from '../services/landingTranslate.js'
 import { translatorEnabled } from '../services/translator.js'
+import { bumpLandingVersion } from '../services/landingCache.js'
 import { creditCard } from '../services/cardBalance.js'
 import AuditLog from '../models/auditLog.js'
 
@@ -536,6 +537,7 @@ router.post('/settings', requireAdmin, async (req, res) => {
   if (key === 'landingPage.content') {
     // The public page also exists in other languages: refresh them from what was just saved.
     // Runs in the background — the save does not wait for, or depend on, the translation service.
+    bumpLandingVersion() // the Portuguese page shows the new text at once
     translateLandingSoon(req.tenantId)
   }
   if (key === 'creditRefundSeconds') {
