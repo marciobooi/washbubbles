@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Palette, ShieldCheck, Wifi as WifiIcon, Bell, MessageCircle, SlidersHorizontal, Image as ImageIcon, Plus, Trash2, ArrowUp, ArrowDown, Globe, Eye, EyeOff } from 'lucide-react'
 import { DEFAULT_BANNERS } from '@/lib/defaultBanners'
 import { DEFAULT_LANDING_CONTENT } from '@/lib/defaultLandingContent'
+import LandingTranslations from '@/components/LandingTranslations'
 
 // Settings hidden from the raw "Avançado" list below — either because they
 // already have a dedicated, friendlier UI elsewhere (so a second raw/rawer
@@ -237,7 +238,7 @@ export default function AdminSettings(){
     setSavingLanding(true)
     try {
       await api.setSetting({ key: 'landingPage.content', value: landingContent })
-      toast({ title: 'Página inicial guardada', variant: 'success' })
+      toast({ title: 'Página inicial guardada', description: 'As traduções são atualizadas automaticamente (cerca de 1 minuto).', variant: 'success' })
     } catch (e) {
       console.error(e)
       toast({ title: 'Erro ao guardar a página inicial', variant: 'destructive' })
@@ -817,6 +818,7 @@ export default function AdminSettings(){
       {/* Public landing page (freshbubbles.pt) content */}
       {activeTab === 'landing' && (
       <div className="space-y-4">
+        <LandingTranslations />
         <Card>
           <CardHeader>
             <CardTitle>Hero</CardTitle>

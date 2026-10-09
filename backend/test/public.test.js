@@ -502,14 +502,23 @@ describe('mergeContent (views/landing.js) — the DB-down/malformed-data safety 
 })
 
 describe('index.js: PUBLIC_LANDING_PAGE gate (not the shop-kiosk POS app)', () => {
-  it('the route module exports exactly GET /, /robots.txt, /sitemap.xml — nothing that could shadow /api or /ws', () => {
+  it('the route module exports exactly GET /, the four language pages, /robots.txt, /sitemap.xml — nothing that could shadow /api or /ws', () => {
     const routes = publicRoutes.stack
       .filter((l) => l.route)
       .map((l) => ({ path: l.route.path, methods: Object.keys(l.route.methods) }))
     expect(routes).to.deep.equal([
       { path: '/', methods: ['get'] },
+      { path: '/:lang(en|fr|de|es)', methods: ['get'] },
       { path: '/robots.txt', methods: ['get'] },
       { path: '/sitemap.xml', methods: ['get'] },
     ])
+  })
+
+  it('the language route only matches those four codes, so it can never answer for /api, /ws, /admin or /uploads', async () => {
+    const app = express()
+    app.use(publicRoutes)
+    for (const p of ['/api', '/ws', '/admin', '/uploads', '/hardware-agent', '/english', '/EN2']) {
+      expect((await request(app).get(p)).status, p).to.equal(404)
+    }
   })
 })

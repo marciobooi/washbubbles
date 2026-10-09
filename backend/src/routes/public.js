@@ -8,9 +8,11 @@
  * already means there (the kiosk POS app, or nothing at all).
  */
 import express from 'express'
-import { renderLandingPage, renderRobotsTxt, renderSitemapXml, CONTENT_SETTING_KEY } from '../views/landing.js'
+import { renderLandingPage, renderRobotsTxt, renderSitemapXml, mergeContent, CONTENT_SETTING_KEY } from '../views/landing.js'
 import Setting from '../models/setting.js'
 import { withTenant } from '../services/tenant.js'
+import { TRANSLATIONS_KEY } from '../services/landingTranslate.js'
+import { TRANSLATED_LANGS } from '../views/landingI18n.js'
 
 const router = express.Router()
 
@@ -30,6 +32,8 @@ const CACHE_TTL_MS = 60_000
 const DB_TIMEOUT_MS = 1500
 let cachedContent
 let cachedAt = 0
+// Stored translations of the admin's text (services/landingTranslate.js), cached the same way.
+let cachedTranslations = {}
 
 // The logo is uploaded once, from the existing Branding tab (AdminSettings.jsx),
 // not re-uploaded here — the landing page just reads that same Setting and
@@ -42,6 +46,7 @@ const BRAND_LOGO_SETTING_KEY = 'branding.logo'
 export function _resetContentCacheForTests() {
   cachedContent = undefined
   cachedAt = 0
+  cachedTranslations = {}
 }
 
 async function loadContent(req) {
@@ -49,10 +54,12 @@ async function loadContent(req) {
   try {
     const SettingT = withTenant(Setting, req)
     const timeout = () => new Promise((_, reject) => setTimeout(() => reject(new Error('landing content DB read timed out')), DB_TIMEOUT_MS))
-    const [contentDoc, logoDoc] = await Promise.all([
+    const [contentDoc, logoDoc, translationsDoc] = await Promise.all([
       Promise.race([SettingT.findOne({ key: CONTENT_SETTING_KEY }).lean(), timeout()]),
       Promise.race([SettingT.findOne({ key: BRAND_LOGO_SETTING_KEY }).lean(), timeout()]),
+      Promise.race([SettingT.findOne({ key: TRANSLATIONS_KEY }).lean(), timeout()]),
     ])
+    cachedTranslations = (translationsDoc && translationsDoc.value && typeof translationsDoc.value === 'object') ? translationsDoc.value : {}
     const raw = (contentDoc && contentDoc.value) || {}
     const logoUrl = logoDoc && logoDoc.value ? String(logoDoc.value) : null
     cachedContent = logoUrl ? { ...raw, brand: { ...(raw.brand || {}), logo: logoUrl } } : raw
@@ -66,18 +73,36 @@ async function loadContent(req) {
   return cachedContent
 }
 
+/** Languages that currently have a stored translation (Portuguese is always there). */
+const availableLangs = () => ['pt', ...TRANSLATED_LANGS.filter((l) => cachedTranslations[l] && cachedTranslations[l].content)]
+
 router.get('/', async (req, res) => {
   res.set('Cache-Control', 'public, max-age=300') // 5 min — plain content, changes rarely
   const content = await loadContent(req)
-  res.type('html').send(renderLandingPage(content))
+  res.type('html').send(renderLandingPage(content, { lang: 'pt', available: availableLangs() }))
+})
+
+// The same page in another language: /en /fr /de /es. Text written by the admin comes from the stored
+// translation; the business facts (name, address, phone, hours, logo) are always the current ones.
+// No translation yet (or the service never ran) -> back to the Portuguese page rather than an empty one.
+router.get('/:lang(en|fr|de|es)', async (req, res) => {
+  const lang = req.params.lang
+  const content = await loadContent(req)
+  const stored = cachedTranslations[lang]
+  if (!stored || !stored.content) return res.redirect(302, '/')
+  res.set('Cache-Control', 'public, max-age=300')
+  res.set('Content-Language', lang)
+  const merged = { ...stored.content, brand: mergeContent(content).brand }
+  res.type('html').send(renderLandingPage(merged, { lang, available: availableLangs() }))
 })
 
 router.get('/robots.txt', (req, res) => {
   res.type('text/plain').send(renderRobotsTxt())
 })
 
-router.get('/sitemap.xml', (req, res) => {
-  res.type('application/xml').send(renderSitemapXml())
+router.get('/sitemap.xml', async (req, res) => {
+  await loadContent(req)
+  res.type('application/xml').send(renderSitemapXml(availableLangs()))
 })
 
 export default router

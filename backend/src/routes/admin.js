@@ -25,6 +25,8 @@ import SyncCommand from '../models/syncCommand.js'
 import DayClose from '../models/dayClose.js'
 import { broadcastMachines, broadcastMachine, listClients, disconnectClient } from '../wsServer.js'
 import { logAction } from '../services/auditLog.js'
+import { translateLandingSoon, translateLanding, getTranslations, getStatus } from '../services/landingTranslate.js'
+import { translatorEnabled } from '../services/translator.js'
 import { creditCard } from '../services/cardBalance.js'
 import AuditLog from '../models/auditLog.js'
 
@@ -474,6 +476,19 @@ router.post('/transactions', requireAdmin, async (req, res) => {
   res.json(s)
 })
 
+// Translations of the public page (freshbubbles.pt/en, /fr, /de, /es) — see services/landingTranslate.js
+router.get('/landing/translations', requireAdmin, async (req, res) => {
+  const [translations, status] = await Promise.all([getTranslations(req.tenantId), getStatus(req.tenantId)])
+  const langs = Object.fromEntries(Object.entries(translations).map(([l, v]) => [l, { at: v.at, sourceHash: v.sourceHash }]))
+  res.json({ enabled: translatorEnabled(), status, langs })
+})
+router.post('/landing/translate', requireAdmin, async (req, res) => {
+  if (!translatorEnabled()) return res.status(409).json({ error: 'Automatic translation is not configured on this server (TRANSLATE_URL)' })
+  translateLanding(req.tenantId).catch((err) => console.warn('[landing-translate]', err.message))
+  logAction(req, 'landing.translate_requested', 'Setting', 'landingPage.content', {})
+  res.status(202).json({ success: true })
+})
+
 // Settings (simple key/value store)
 router.get('/settings', requireAdmin, async (req, res) => {
   const SettingT = withTenant(Setting, req)
@@ -518,6 +533,11 @@ router.post('/settings', requireAdmin, async (req, res) => {
   const SettingT = withTenant(Setting, req)
   const s = await SettingT.findOneAndUpdate({ key }, { value }, { upsert: true, new: true })
   logAction(req, 'setting.update', 'Setting', key, { value })
+  if (key === 'landingPage.content') {
+    // The public page also exists in other languages: refresh them from what was just saved.
+    // Runs in the background — the save does not wait for, or depend on, the translation service.
+    translateLandingSoon(req.tenantId)
+  }
   if (key === 'creditRefundSeconds') {
     // On the shop PC the running kiosk uses it from now on (no restart). On the central server
     // there is no hardware; the shop picks it up with its next pull (services/downlink.js).

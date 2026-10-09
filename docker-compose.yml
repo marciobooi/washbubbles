@@ -18,6 +18,22 @@ services:
     ports:
       - "27018:27017"
 
+  # Free, self-hosted machine translation for the public page's admin-written text
+  # (services/translator.js). Internal only: no published port, the backend reaches it by name.
+  # The first start downloads the language models (a few hundred MB) into the volume; the
+  # languages are limited to the ones the page is served in, to keep memory use down.
+  libretranslate:
+    image: libretranslate/libretranslate:latest
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      LT_LOAD_ONLY: pt,en,fr,de,es
+      LT_DISABLE_WEB_UI: "true"
+      LT_UPDATE_MODELS: "false"
+    volumes:
+      - washbubbles_lt_models:/home/libretranslate/.local
+    mem_limit: 3g
+
   backend:
     build: ./backend
     restart: unless-stopped
@@ -60,6 +76,8 @@ services:
       # shop-kiosk install, whose "/" is the real point-of-sale UI.
       PUBLIC_LANDING_PAGE: "true"
       PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-https://freshbubbles.pt}
+      # Translation of the public page's text (see services/translator.js). Unset = no translation.
+      TRANSLATE_URL: http://libretranslate:5000
     depends_on:
       - mongo
     ports:
@@ -83,5 +101,6 @@ services:
       - "8081:80"
 
 volumes:
+  washbubbles_lt_models:
   washbubbles_mongo_data:
   washbubbles_uploads:

@@ -26,6 +26,8 @@
  * this. See docs/SHOP-HARDWARE-AND-COMMUNICATIONS.md §16.
  */
 
+import { UI, LANGS, fmt, langPath } from './landingI18n.js'
+
 const SITE_URL = process.env.PUBLIC_SITE_URL || 'https://freshbubbles.pt'
 const LOGIN_URL = '/admin/login'
 // Default until an admin uploads a different one — via the existing Branding
@@ -310,17 +312,17 @@ function bgBubble({ size = 80, pos, opacity = 0.5, speed = 0.08 }) {
   return `<span class="bg-bubble" style="width:${size}px; height:${size}px; ${pos}; opacity:${opacity}" data-parallax="${speed}" aria-hidden="true"></span>`
 }
 
-function jsonLd(content) {
+function jsonLd(content, L = UI.pt, pageUrl = SITE_URL) {
   const brand = content.brand
   const data = {
     '@context': 'https://schema.org',
     '@type': 'LocalBusiness',
     name: brand.name,
-    url: SITE_URL,
+    url: pageUrl,
     image: `${SITE_URL}${brand.logo}`,
     email: brand.email,
     telephone: brand.phone,
-    description: 'Lavandaria self-service, engomadoria, limpeza a seco e lavagem de tapetes em Loures. Recolha e entrega ao domicílio disponível.',
+    description: L.schemaDescription,
     priceRange: '€€',
     areaServed: 'Loures',
     address: {
@@ -370,31 +372,48 @@ function renderCustomSection(cs) {
   </section>`
 }
 
-export function renderLandingPage(rawContent) {
+/**
+ * @param rawContent  the page's content (already in the language to show)
+ * @param opts.lang   'pt' (default, served at "/") or a translated language ('en', 'fr', 'de', 'es')
+ * @param opts.available  the languages that currently have a page, for the switcher and hreflang links
+ */
+export function renderLandingPage(rawContent, { lang = 'pt', available = ['pt'] } = {}) {
+  if (!UI[lang]) lang = 'pt'
+  const L = UI[lang]
+  const hours = (tpl, b) => fmt(tpl, { open: b.hours.open, close: b.hours.close })
   const content = mergeContent(rawContent)
   const brand = content.brand
   const fullAddress = `${brand.address.street}, ${brand.address.postal} ${brand.address.city}, ${brand.address.country}`
   const mapsQuery = encodeURIComponent(fullAddress)
-  const title = `${brand.name} Loures — Lavandaria Self-Service, Engomadoria e Limpeza a Seco`
-  const description = `Lavandaria self-service em Loures: máquinas de lavar e secar, engomadoria, limpeza a seco, lavagem de tapetes e recolha ao domicílio. Avaliação ${brand.rating.value}/5 no Google.`
+  const title = fmt(L.title, { brand: brand.name })
+  const description = fmt(L.description, { rating: brand.rating.value })
+  const pageUrl = `${SITE_URL}${langPath(lang)}`
+  const langs = LANGS.filter((l) => l === 'pt' || available.includes(l))
+  const alternates = langs.length > 1
+    ? langs.map((l) => `<link rel="alternate" hreflang="${UI[l].htmlLang}" href="${SITE_URL}${langPath(l)}">`).join('\n') + `\n<link rel="alternate" hreflang="x-default" href="${SITE_URL}/">`
+    : ''
+  const switcher = langs.length > 1
+    ? `<div class="lang-switch" role="navigation" aria-label="${escapeHtml(L.langAria)}">${langs.map((l) => `<a href="${langPath(l)}" hreflang="${UI[l].htmlLang}" lang="${UI[l].htmlLang}"${l === lang ? ' aria-current="true" class="is-current"' : ''}>${l.toUpperCase()}</a>`).join('')}</div>`
+    : ''
 
   return `<!DOCTYPE html>
-<html lang="pt-PT">
+<html lang="${L.htmlLang}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>${escapeHtml(title)}</title>
 <meta name="description" content="${escapeHtml(description)}">
-<link rel="canonical" href="${SITE_URL}/">
+<link rel="canonical" href="${pageUrl}">
+${alternates}
 <meta name="robots" content="index, follow">
 <meta name="theme-color" content="#0d9488">
 
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="${escapeHtml(brand.name)}">
-<meta property="og:locale" content="pt_PT">
+<meta property="og:locale" content="${L.ogLocale}">
 <meta property="og:title" content="${escapeHtml(title)}">
 <meta property="og:description" content="${escapeHtml(description)}">
-<meta property="og:url" content="${SITE_URL}/">
+<meta property="og:url" content="${pageUrl}">
 <meta property="og:image" content="${SITE_URL}${escapeHtml(brand.logo)}">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="${escapeHtml(title)}">
@@ -406,7 +425,7 @@ export function renderLandingPage(rawContent) {
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet">
 
-<script type="application/ld+json">${jsonLd(content)}</script>
+<script type="application/ld+json">${jsonLd(content, L, pageUrl)}</script>
 
 <style>
 :root{
@@ -483,6 +502,11 @@ img{ max-width:100%; display:block }
 .btn-login:hover{ transform:translateY(-2px); box-shadow:var(--shadow-btn-hover); background:linear-gradient(135deg,var(--primary-500),var(--primary-600)) }
 .btn-login:active{ transform:translateY(0) scale(.97) }
 .btn-login svg{ width:17px; height:17px }
+.lang-switch{ display:flex; align-items:center; gap:2px; margin-right:4px }
+.lang-switch a{ font:600 12px/1 var(--font-head); letter-spacing:.04em; color:var(--ink-soft); text-decoration:none; padding:7px 7px; border-radius:8px }
+.lang-switch a:hover{ background:rgba(255,255,255,.7); color:var(--ink) }
+.lang-switch a.is-current{ background:var(--primary-600); color:#fff }
+@media (max-width:520px){ .lang-switch a{ padding:6px 5px; font-size:11px } }
 
 .nav-toggle{
   display:none; background:none; border:0; padding:8px; border-radius:8px; cursor:pointer;
@@ -812,27 +836,28 @@ footer .foot-links a:hover{ color:var(--primary-800) }
 </style>
 </head>
 <body>
-<a class="skip-link" href="#conteudo">Saltar para o conteúdo</a>
+<a class="skip-link" href="#conteudo">${escapeHtml(L.skip)}</a>
 
-<nav class="nav" aria-label="Navegação principal">
+<nav class="nav" aria-label="${escapeHtml(L.navAria)}">
   <div class="wrap">
     <a class="brand" href="#topo">
       <img class="brand-logo" src="${escapeHtml(brand.logo)}" alt="${escapeHtml(brand.name)}" width="36" height="36">
       <span class="brand-word">${escapeHtml(brand.name)}<small>${escapeHtml(brand.tagline)}</small></span>
     </a>
     <ul class="nav-links" id="nav-links">
-      ${content.steps.visible ? `<li><a href="#como-funciona">Como funciona</a></li>` : ''}
-      ${content.features.visible ? `<li><a href="#servicos">Serviços</a></li>` : ''}
+      ${content.steps.visible ? `<li><a href="#como-funciona">${escapeHtml(L.how)}</a></li>` : ''}
+      ${content.features.visible ? `<li><a href="#servicos">${escapeHtml(L.services)}</a></li>` : ''}
       ${content.customSections.filter((s) => s.visible !== false).map((s) => `<li><a href="#custom-${slugify(s.id || s.heading)}">${escapeHtml(s.heading)}</a></li>`).join('')}
-      ${content.reviews.visible ? `<li><a href="#avaliacoes">Avaliações</a></li>` : ''}
-      ${content.visit.visible ? `<li><a href="#visite-nos">Visite-nos</a></li>` : ''}
+      ${content.reviews.visible ? `<li><a href="#avaliacoes">${escapeHtml(L.reviews)}</a></li>` : ''}
+      ${content.visit.visible ? `<li><a href="#visite-nos">${escapeHtml(L.visit)}</a></li>` : ''}
     </ul>
     <div class="nav-right">
-      <a class="btn-login" href="${LOGIN_URL}" aria-label="Entrar — acesso reservado">
+      ${switcher}
+      <a class="btn-login" href="${LOGIN_URL}" aria-label="${escapeHtml(L.enterAria)}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>
-        <span class="btn-label">Entrar</span>
+        <span class="btn-label">${escapeHtml(L.enter)}</span>
       </a>
-      <button class="nav-toggle" id="nav-toggle" aria-expanded="false" aria-controls="nav-links" aria-label="Abrir menu">
+      <button class="nav-toggle" id="nav-toggle" aria-expanded="false" aria-controls="nav-links" aria-label="${escapeHtml(L.openMenu)}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
       </button>
     </div>
@@ -852,8 +877,8 @@ footer .foot-links a:hover{ color:var(--primary-800) }
         </div>
         <div class="hero-note">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
-          Aberto todos os dias, das ${escapeHtml(brand.hours.open)} às ${escapeHtml(brand.hours.close)}
-          <span class="rating-chip">${starIcon()} ${brand.rating.value} <span class="rating-count">(${brand.rating.count} no Google)</span></span>
+          ${escapeHtml(hours(L.openNote, brand))}
+          <span class="rating-chip">${starIcon()} ${brand.rating.value} <span class="rating-count">${escapeHtml(fmt(L.ratingCount, { n: brand.rating.count }))}</span></span>
         </div>
       </div>
       <div class="hero-art" aria-hidden="true">
@@ -925,8 +950,8 @@ footer .foot-links a:hover{ color:var(--primary-800) }
         <h2>${accentLastWord(content.cta.heading)}</h2>
         <p>${escapeHtml(content.cta.description)}</p>
         <div class="hero-cta">
-          <a class="btn-primary" href="#visite-nos">Visite-nos</a>
-          <a class="btn-ghost" href="mailto:${escapeHtml(brand.email)}">Fale connosco</a>
+          <a class="btn-primary" href="#visite-nos">${escapeHtml(L.ctaVisit)}</a>
+          <a class="btn-ghost" href="mailto:${escapeHtml(brand.email)}">${escapeHtml(L.ctaContact)}</a>
         </div>
       </div>
     </div>
@@ -947,11 +972,11 @@ footer .foot-links a:hover{ color:var(--primary-800) }
         ${content.reviews.items.map((r, i) => `
         <blockquote class="review-slide${i === 0 ? ' is-active' : ''}">
           <p>&ldquo;${escapeHtml(r.text)}&rdquo;</p>
-          <cite>${escapeHtml(r.author)} <span>· avaliação no Google</span></cite>
+          <cite>${escapeHtml(r.author)} <span>${escapeHtml(L.reviewSource)}</span></cite>
         </blockquote>`).join('')}
         ${content.reviews.items.length > 1 ? `
-        <div class="review-dots" role="tablist" aria-label="Avaliações">
-          ${content.reviews.items.map((_, i) => `<button type="button" class="review-dot${i === 0 ? ' is-active' : ''}" data-review-dot="${i}" aria-label="Avaliação ${i + 1}"></button>`).join('')}
+        <div class="review-dots" role="tablist" aria-label="${escapeHtml(L.reviewsAria)}">
+          ${content.reviews.items.map((_, i) => `<button type="button" class="review-dot${i === 0 ? ' is-active' : ''}" data-review-dot="${i}" aria-label="${escapeHtml(fmt(L.reviewN, { n: i + 1 }))}"></button>`).join('')}
         </div>` : ''}
       </div>
     </div>
@@ -971,20 +996,20 @@ footer .foot-links a:hover{ color:var(--primary-800) }
 
       <div class="visit reveal">
         <div class="visit-card">
-          <h3>Morada</h3>
+          <h3>${escapeHtml(L.address)}</h3>
           <div class="visit-row">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
             <a href="https://www.google.com/maps/search/?api=1&query=${mapsQuery}" target="_blank" rel="noopener noreferrer">${escapeHtml(fullAddress)}</a>
           </div>
           <div class="map-embed">
-            <iframe src="https://www.google.com/maps?q=${mapsQuery}&output=embed" title="Mapa — ${escapeHtml(fullAddress)}" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+            <iframe src="https://www.google.com/maps?q=${mapsQuery}&output=embed" title="${escapeHtml(L.mapTitle)} — ${escapeHtml(fullAddress)}" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
           </div>
         </div>
         <div class="visit-card">
-          <h3>Contacto &amp; horário</h3>
+          <h3>${escapeHtml(L.contactHours)}</h3>
           <div class="visit-row">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
-            <span>Todos os dias, das ${escapeHtml(brand.hours.open)} às ${escapeHtml(brand.hours.close)}</span>
+            <span>${escapeHtml(hours(L.everyDay, brand))}</span>
           </div>
           <div class="visit-row">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.362 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
@@ -1002,7 +1027,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
           ${content.visit.showLoginLink !== false ? `
           <div class="visit-row">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>
-            <a href="${LOGIN_URL}">Área reservada (equipa)</a>
+            <a href="${LOGIN_URL}">${escapeHtml(L.staffArea)}</a>
           </div>` : ''}
         </div>
       </div>
@@ -1017,13 +1042,13 @@ footer .foot-links a:hover{ color:var(--primary-800) }
       <span class="foot-brand-text">${escapeHtml(brand.name)}<small>${escapeHtml(brand.tagline)}</small></span>
     </div>
     <div class="foot-links">
-      ${content.steps.visible ? `<a href="#como-funciona">Como funciona</a>` : ''}
-      ${content.features.visible ? `<a href="#servicos">Serviços</a>` : ''}
+      ${content.steps.visible ? `<a href="#como-funciona">${escapeHtml(L.how)}</a>` : ''}
+      ${content.features.visible ? `<a href="#servicos">${escapeHtml(L.services)}</a>` : ''}
       ${content.customSections.filter((s) => s.visible !== false).map((s) => `<a href="#custom-${slugify(s.id || s.heading)}">${escapeHtml(s.heading)}</a>`).join('')}
-      ${content.reviews.visible ? `<a href="#avaliacoes">Avaliações</a>` : ''}
-      <a href="${LOGIN_URL}">Entrar</a>
+      ${content.reviews.visible ? `<a href="#avaliacoes">${escapeHtml(L.reviews)}</a>` : ''}
+      <a href="${LOGIN_URL}">${escapeHtml(L.enter)}</a>
     </div>
-    <p class="foot-copy">&copy; ${new Date().getFullYear()} ${escapeHtml(brand.name)}. Todos os direitos reservados.</p>
+    <p class="foot-copy">&copy; ${new Date().getFullYear()} ${escapeHtml(brand.name)}. ${escapeHtml(L.rights)}</p>
   </div>
 </footer>
 
@@ -1144,11 +1169,16 @@ export function renderRobotsTxt() {
   return `User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api\nSitemap: ${SITE_URL}/sitemap.xml\n`
 }
 
-export function renderSitemapXml() {
+export function renderSitemapXml(available = ['pt']) {
   const today = new Date().toISOString().slice(0, 10)
+  const langs = LANGS.filter((l) => l === 'pt' || available.includes(l))
+  const alt = langs.length > 1
+    ? langs.map((l) => `\n    <xhtml:link rel="alternate" hreflang="${UI[l].htmlLang}" href="${SITE_URL}${langPath(l)}"/>`).join('')
+    : ''
+  const urls = langs.map((l) => `  <url><loc>${SITE_URL}${langPath(l)}</loc><lastmod>${today}</lastmod><changefreq>monthly</changefreq><priority>${l === 'pt' ? '1.0' : '0.8'}</priority>${alt}</url>`).join('\n')
   return `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>${SITE_URL}/</loc><lastmod>${today}</lastmod><changefreq>monthly</changefreq><priority>1.0</priority></url>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+${urls}
 </urlset>
 `
 }
