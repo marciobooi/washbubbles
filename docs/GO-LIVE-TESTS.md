@@ -11,7 +11,7 @@ Committed and pushed, **not yet on the PC**:
 
 - [ ] Copy to `C:\washbubbles`: `backend/src/services/coinMachine.js`, `backend/src/services/middleware.js`,
       `backend/src/services/downlink.js`, `backend/src/routes/middleware.js`, `backend/src/routes/admin.js`,
-      `src/App.jsx`, `src/context/CartContext.jsx`, `src/pages/AdminPeripherals.jsx`, `src/pages/AdminSettings.jsx`
+      `src/App.jsx`, `src/context/CartContext.jsx`, `src/pages/AdminPeripherals.jsx`, `src/pages/AdminSettings.jsx`, `src/components/app-sidebar.jsx`
 - [ ] Rebuild the screen (`npm run build` with `VITE_KIOSK_API_KEY` taken from `backend\.env`), kill `node`
       (the boot task `WashBubbles Backend` restarts it), press F5 on the kiosk
 - [ ] Backend log shows `Low-level controller connected` and `[Downlink] in step with central`

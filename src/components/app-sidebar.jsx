@@ -48,6 +48,11 @@ export function AppSidebar(props) {
 
   const { role } = useAuth()
   const { branding } = useBranding() || {}
+  const DEFAULT_LOGO = '/geral/freshbubbleslogo.png'
+  // Logo files that failed to load. The saved logo is tried first, then the shop's default one; when both
+  // have failed (or nothing is configured) the plain gradient mark is shown. Each source is tried once.
+  const [failedLogos, setFailedLogos] = React.useState([])
+  const logoSrc = [branding?.logo, DEFAULT_LOGO].find((u) => u && !failedLogos.includes(u))
   let itemsToRender = navItems
     .filter(i => (i.roles || ['ADMIN', 'SUPERADMIN']).includes(role))
     .map((i) => ({ ...i, matchIndices: [] }))
@@ -67,8 +72,10 @@ export function AppSidebar(props) {
             App.jsx's topbar already reads — falls back to the plain
             gradient mark + "Admin" when nothing's been configured yet. */}
         <div className="flex items-center gap-2.5 px-2 pt-1 pb-3.5 min-w-0">
-          {branding?.logo ? (
-            <img src={branding.logo} alt="" className="h-8 w-8 shrink-0 rounded-[10px] object-cover" />
+          {/* The saved logo; if none is set (or its file cannot be loaded), the shop's own default logo, the
+              same one the public page falls back to; only if that fails too, the plain gradient mark. */}
+          {logoSrc ? (
+            <img src={logoSrc} alt="" onError={() => setFailedLogos((f) => (f.includes(logoSrc) ? f : [...f, logoSrc]))} className="h-8 w-8 shrink-0 rounded-[10px] object-cover" />
           ) : (
             <div className="h-8 w-8 shrink-0 rounded-[10px] bg-linear-to-br from-primary-300 to-primary-600" />
           )}

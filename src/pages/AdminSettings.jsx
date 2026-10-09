@@ -55,6 +55,9 @@ export default function AdminSettings(){
   // Branding helper state
   const [companyName, setCompanyName] = useState('')
   const [logoUrl, setLogoUrl] = useState('')
+  // True only when the admin deliberately empties the logo (Clear button, or deleting the text). Without this,
+  // pressing Save while the box is blank only because the form had not reloaded yet wiped the saved logo.
+  const [logoCleared, setLogoCleared] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [primaryColor, setPrimaryColor] = useState('')
   const [accentColor, setAccentColor] = useState('')
@@ -362,6 +365,7 @@ export default function AdminSettings(){
       const url = resp && resp.url ? String(resp.url) : (resp && resp.setting && resp.setting.value ? String(resp.setting.value) : '')
       if (url) {
         setLogoUrl(url)
+        setLogoCleared(false)
         toast({ title: 'Logo uploaded', variant: 'success' })
         try { window.dispatchEvent(new CustomEvent('branding:update', { detail: { logo: url } })) } catch { /* a listener that throws must not break the caller */ }
       } else {
@@ -380,7 +384,9 @@ export default function AdminSettings(){
     e.preventDefault()
     try {
       await api.setSetting({ key: 'branding.companyName', value: companyName })
-      await api.setSetting({ key: 'branding.logo', value: logoUrl })
+      // Never overwrite a saved logo with nothing unless the admin cleared it on purpose.
+      if (logoUrl || logoCleared) await api.setSetting({ key: 'branding.logo', value: logoUrl })
+      setLogoCleared(false)
       await api.setSetting({ key: 'branding.primaryColor', value: primaryColor || null })
       await api.setSetting({ key: 'branding.accentColor', value: accentColor || null })
       toast({ title: 'Branding updated', variant: 'success' })
@@ -621,7 +627,7 @@ export default function AdminSettings(){
                   id="logoUrl"
                   placeholder="/logo.png or https://..."
                   value={logoUrl}
-                  onChange={(e) => setLogoUrl(e.target.value)}
+                  onChange={(e) => { setLogoUrl(e.target.value); setLogoCleared(e.target.value === '') }}
                 />
                 <div className="flex items-center gap-2 mt-2">
                   <input
@@ -636,7 +642,8 @@ export default function AdminSettings(){
                     size="sm"
                     onClick={() => {
                       setLogoUrl('');
-                      toast({ title: 'Logo cleared', variant: 'success' });
+                      setLogoCleared(true);
+                      toast({ title: 'Logo cleared (press Save to apply)', variant: 'success' });
                       try { window.dispatchEvent(new CustomEvent('branding:update', { detail: { logo: null } })) } catch { /* a listener that throws must not break the caller */ }
                     }}
                     disabled={uploading}
