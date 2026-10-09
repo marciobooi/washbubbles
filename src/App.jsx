@@ -87,8 +87,21 @@ export default function App() {
   )
 }
 
+// "devolução em 1:45": ticks once a second, only while there is credit waiting to be paid back.
+function RefundCountdown({ at }) {
+  const [now, setNow] = React.useState(() => Date.now())
+  React.useEffect(() => {
+    if (!at) return undefined
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [at])
+  if (!at) return null
+  const s = Math.max(0, Math.ceil((at - now) / 1000))
+  return <span className="ml-2 text-sm font-medium text-white/90">· devolução em {Math.floor(s / 60)}:{String(s % 60).padStart(2, '0')}</span>
+}
+
 function AppInner() {
-  const { cart, clearCart, credit, resetCredit } = useCart()
+  const { cart, clearCart, credit, resetCredit, refundAt } = useCart()
   const { processPayment } = usePayment()
   const cartCount = cart.length
   const [cartOpen, setCartOpen] = React.useState(false)
@@ -534,6 +547,7 @@ function AppInner() {
                   aria-live="polite"
                 >
                   Crédito: {credit.toFixed(2)}€
+                  <RefundCountdown at={refundAt} />
                 </span>
               )}
 

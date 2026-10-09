@@ -4,6 +4,7 @@ import Client from './client.js'
 import Setting from '../models/setting.js'
 import Machine from '../models/machine.js'
 import Interface from '../models/interface.js'
+import Peripheral from '../models/peripheral.js'
 import Sale from '../models/sale.js'
 import Card from '../models/card.js'
 import { broadcastMachine, broadcastHardwareEvent } from '../wsServer.js'
@@ -54,6 +55,11 @@ class CoinMachine extends EventEmitter {
      * different tenant's machine on someone else's payment.
      */
     this.tenantId = options.tenantId || null
+
+    // Unspent cash is paid back after the kiosk has been left alone for a while (see refundCredit).
+    this.lastCreditActivity = Date.now()
+    this.refunding = null
+    this.refundTimer = null
   }
 
   /** Scope a filter to this machine's tenant. Fails closed if none is resolved. */
@@ -151,6 +157,7 @@ class CoinMachine extends EventEmitter {
       // Set up event handlers
       this.setupEventHandlers()
       
+      this.startCreditRefundWatch()
       this.running = true
       this.emit('started')
       
@@ -190,6 +197,7 @@ class CoinMachine extends EventEmitter {
     this.client.client.balance = r.balance
     this.client.client.bonus = r.bonus
     this.client.updateCredits()
+    this.touchCredit() // a fresh idle period before it is paid back
     console.warn(`[CashSession] Recovered €${r.balance.toFixed(2)} of inserted cash from before the restart`)
     await this.auditSystem('cash.session.recovered', { balance: r.balance, bonus: r.bonus, secondsAgo: Math.round(r.ageMs / 1000) })
     this.emit('session-recovered', { balance: r.balance, bonus: r.bonus })
@@ -212,6 +220,7 @@ class CoinMachine extends EventEmitter {
     this.uplink?.stop()
     this.downlink?.stop()
     this.remoteCommands?.stop()
+    this.stopCreditRefundWatch()
     // (the cash-session file is deliberately kept: money still in the session is restored on the next start)
     this.cashSub?.unsubscribe()
 
@@ -238,13 +247,15 @@ class CoinMachine extends EventEmitter {
       const rechargeCoinBonus = await Setting.findOne(this.scoped({ key: 'rechargeCoinBonus' }))
       const rechargeBillBonus = await Setting.findOne(this.scoped({ key: 'rechargeBillBonus' }))
       const autoCharge = await Setting.findOne(this.scoped({ key: 'autoCharge' }))
+      const creditRefundSeconds = await Setting.findOne(this.scoped({ key: 'creditRefundSeconds' }))
       
       this.settings = {
         coinEqTable: coinEqSetting?.value || [],
         billEqTable: billEqSetting?.value || [],
         rechargeCoinBonus: rechargeCoinBonus?.value || 0,
         rechargeBillBonus: rechargeBillBonus?.value || 0,
-        autoCharge: autoCharge?.value || false
+        autoCharge: autoCharge?.value || false,
+        creditRefundSeconds: creditRefundSeconds?.value ?? 120
       }
       
       console.log('Loaded coin/bill equivalence tables')
@@ -440,6 +451,7 @@ class CoinMachine extends EventEmitter {
     }
 
     this.client.addToBalance(mappedValue)
+    this.touchCredit()
     incrementCashDrawer(this.tenantId, mappedValue)
     this.emit('coin-inserted', {
       value: mappedValue,
@@ -480,6 +492,7 @@ class CoinMachine extends EventEmitter {
     }
     
     this.client.addToBalance(mappedValue)
+    this.touchCredit()
     incrementCashDrawer(this.tenantId, mappedValue)
     this.emit('bill-inserted', {
       value: mappedValue,
@@ -695,16 +708,105 @@ class CoinMachine extends EventEmitter {
     }
   }
 
+  // ---------------------------------------------------------------- credit refund
+
+  /** Seconds of nobody touching the kiosk after which unspent cash is paid back (0 = never). */
+  get creditRefundSeconds() {
+    const n = Number(this.settings?.creditRefundSeconds)
+    return Number.isFinite(n) && n >= 0 ? n : 120
+  }
+
+  /** The customer is still here: a coin/bill went in, the screen was touched, or cash was restored. */
+  touchCredit() {
+    this.lastCreditActivity = Date.now()
+  }
+
+  /** Whole seconds left before the unspent cash is paid back, or null when nothing is waiting. */
+  creditRefundCountdown() {
+    const s = this.client.getState()
+    if (!(s.balance > 0) || s.hasCard || this.creditRefundSeconds <= 0) return null
+    return Math.max(0, Math.ceil(this.creditRefundSeconds - (Date.now() - this.lastCreditActivity) / 1000))
+  }
+
+  startCreditRefundWatch(everyMs = 5000) {
+    this.stopCreditRefundWatch()
+    this.refundTimer = setInterval(() => { this.checkCreditRefund().catch(() => {}) }, everyMs)
+    this.refundTimer.unref?.()
+  }
+
+  stopCreditRefundWatch() {
+    clearInterval(this.refundTimer)
+    this.refundTimer = null
+  }
+
+  /** Pay the cash back once the kiosk has been left alone for `creditRefundSeconds`. */
+  async checkCreditRefund() {
+    const left = this.creditRefundCountdown()
+    if (left === null || left > 0) return null
+    return this.refundCredit({ reason: 'idle' })
+  }
+
+  /**
+   * Give the customer back the cash they inserted and did not spend, from the hoppers.
+   *
+   * A payout that comes up short is NOT forgotten: the unpaid part stays as credit (and stays
+   * saved, so a restart does not lose it), the kiosk is told, and the operator gets an audit
+   * entry with the exact amount owed. A customer who has a card loaded is left to the card
+   * flow, which moves the unspent cash onto the card when it is removed.
+   */
+  async refundCredit({ reason = 'manual' } = {}) {
+    if (this.refunding) return this.refunding
+    this.refunding = (async () => {
+      const state = this.client.getState()
+      const amount = roundMoney(state.balance)
+      if (!(amount > 0)) return { success: true, refunded: 0, remaining: 0 }
+      if (state.hasCard) return { success: false, skipped: 'card-loaded', refunded: 0, remaining: amount }
+
+      let dispensed = 0
+      let error = ''
+      try {
+        const hopper = await Peripheral.findOne(this.scoped({ type: 'hopper', enabled: true }))
+        if (!hopper) {
+          error = 'No hopper configured'
+        } else {
+          const result = await this.dispenseChange(hopper._id, amount)
+          dispensed = roundMoney(Math.min(amount, Math.max(0, Number(result?.dispensed ?? (result?.success === false ? 0 : amount)))))
+          if (result?.success === false) error = result.error || 'The hopper could not pay out the full amount'
+        }
+      } catch (err) {
+        error = err.message || 'Refund failed'
+      }
+
+      const remaining = roundMoney(amount - dispensed)
+      // Take back only what was really paid out; the rest stays as the customer's credit.
+      this.client.restoreBalances({ balance: remaining, balanceCard: state.balanceCard })
+      const details = { amount, refunded: dispensed, remaining, reason, error }
+      await this.auditSystem(remaining > 0 ? 'cash.refund.short' : 'cash.refund', details)
+      broadcastHardwareEvent(this.tenantId, remaining > 0 ? 'credit:refund-failed' : 'credit:refunded', details)
+      this.emit(remaining > 0 ? 'refund-short' : 'refunded', details)
+      if (remaining > 0) {
+        console.error(`[Refund] €${remaining.toFixed(2)} of €${amount.toFixed(2)} could NOT be paid back (${error}); kept as credit`)
+        this.touchCredit() // do not hammer a broken hopper every 5 s: try again after another idle period
+      } else {
+        console.log(`[Refund] €${dispensed.toFixed(2)} paid back (${reason})`)
+      }
+      return { success: remaining <= 0, refunded: dispensed, remaining, error }
+    })().finally(() => { this.refunding = null })
+    return this.refunding
+  }
+
   /**
    * Dispense change
    */
   async dispenseChange(hopperId, amount) {
     try {
-      await this.middleware.dispenseChange(hopperId, amount)
+      const result = await this.middleware.dispenseChange(hopperId, amount)
       
       this.emit('change-dispensed', { amount })
       
-      return { success: true }
+      // Pass the controller's real answer on. This used to return { success: true } whatever
+      // happened, so a hopper that came up short looked like a completed payout.
+      return { ...(result || {}), success: result?.success !== false }
     } catch (err) {
       console.error('Failed to dispense change:', err)
       throw err

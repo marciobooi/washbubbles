@@ -21,7 +21,24 @@ router.get('/client', requireKioskOrAdmin, (req, res) => {
  */
 router.get('/client/balance', requireKioskOrAdmin, (req, res) => {
   const summary = coinMachine.client.getBalanceSummary()
-  res.json(summary)
+  // Unspent cash is paid back after the kiosk is left alone; the page shows the countdown.
+  res.json({ ...summary, refundInSeconds: coinMachine.creditRefundCountdown(), refundAfterSeconds: coinMachine.creditRefundSeconds })
+})
+
+/**
+ * The customer is still here (screen touched): restart the refund countdown.
+ */
+router.post('/client/keepalive', requireKioskOrAdmin, (req, res) => {
+  coinMachine.touchCredit()
+  res.json({ refundInSeconds: coinMachine.creditRefundCountdown(), refundAfterSeconds: coinMachine.creditRefundSeconds })
+})
+
+/**
+ * Pay the unspent cash back now (operator). The kiosk does the same by itself after the idle time.
+ */
+router.post('/client/refund', requireAdmin, async (req, res) => {
+  const result = await coinMachine.refundCredit({ reason: 'manual' })
+  res.status(result.success ? 200 : 409).json(result)
 })
 
 /**

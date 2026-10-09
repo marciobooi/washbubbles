@@ -22,15 +22,42 @@ export const CartProvider = ({ children }) => {
   // cart window, so it shows from the moment the first coin lands — before any machine is
   // chosen — and survives opening and closing the cart.
   const [credit, setCredit] = useState(0)
+  // Unspent cash is paid back by the shop after the kiosk has been left alone. `refundAt` is
+  // when that will happen (ms), restarted by every coin/bill and every touch of the screen.
+  const [refundAfter, setRefundAfter] = useState(120)
+  const [refundAt, setRefundAt] = useState(null)
+  const refundAfterRef = React.useRef(120)
+  const restartCountdown = React.useCallback(() => setRefundAt(Date.now() + refundAfterRef.current * 1000), [])
+  const adoptRefundTiming = React.useCallback((s) => {
+    const after = Number(s?.refundAfterSeconds)
+    if (Number.isFinite(after) && after >= 0) { refundAfterRef.current = after; setRefundAfter(after) }
+    const left = Number(s?.refundInSeconds)
+    if (Number.isFinite(left) && s?.refundInSeconds !== null) setRefundAt(Date.now() + left * 1000)
+  }, [])
+
   useEffect(() => {
     return subscribe((data) => {
-      if (!data || data.type !== 'peripheral:credit') return
-      const amount = Number(data.payload?.amount)
-      if (!(amount > 0)) return
-      setCredit((c) => Math.round((c + amount) * 100) / 100)
-      import('@/components/ui/Toast').then(({ toast }) => toast({ title: `Dinheiro inserido: ${amount.toFixed(2)}€`, variant: 'success' })).catch(() => {})
+      if (!data || typeof data !== 'object') return
+      const toast = (opts) => import('@/components/ui/Toast').then((m) => m.toast(opts)).catch(() => {})
+      if (data.type === 'peripheral:credit') {
+        const amount = Number(data.payload?.amount)
+        if (!(amount > 0)) return
+        setCredit((c) => Math.round((c + amount) * 100) / 100)
+        restartCountdown()
+        toast({ title: `Dinheiro inserido: ${amount.toFixed(2)}€`, variant: 'success' })
+      } else if (data.type === 'credit:refunded') {
+        // The shop paid the unspent cash back from the hopper.
+        setCredit(0)
+        setRefundAt(null)
+        toast({ title: `Crédito devolvido: ${Number(data.payload?.refunded || 0).toFixed(2)}€`, description: 'Recolha as moedas na bandeja.', variant: 'success' })
+      } else if (data.type === 'credit:refund-failed') {
+        const left = Number(data.payload?.remaining || 0)
+        setCredit(Math.round(left * 100) / 100)
+        restartCountdown()
+        toast({ title: 'Não foi possível devolver todo o crédito', description: `Faltam ${left.toFixed(2)}€. Contacte o balcão.`, variant: 'destructive' })
+      }
     })
-  }, [])
+  }, [restartCountdown])
 
   // Cash already in the machine when this page loads (page reloaded, or coins put in before
   // it opened) — the backend is the one that actually holds it.
@@ -38,17 +65,40 @@ export const CartProvider = ({ children }) => {
     let alive = true
     api.request('/middleware/client/balance', { method: 'GET', expect: 'json', headers: kioskHeaders(), skipAuth: true })
       .then((s) => {
+        if (!alive) return
         const cash = Number(s?.cash)
-        if (alive && cash > 0) setCredit((c) => Math.max(c, Math.round(cash * 100) / 100))
+        if (cash > 0) setCredit((c) => Math.max(c, Math.round(cash * 100) / 100))
+        adoptRefundTiming(s)
       })
       .catch(() => { /* offline or not a shop PC: the badge simply starts at 0 */ })
     return () => { alive = false }
-  }, [])
+  }, [adoptRefundTiming])
+
+  // While there is credit, touching the screen means the customer is still here: tell the shop
+  // (so it does not pay the money back mid-choice) and restart the countdown. At most every 3 s.
+  useEffect(() => {
+    if (!(credit > 0)) { setRefundAt(null); return undefined }
+    let last = 0
+    const onTouch = () => {
+      const now = Date.now()
+      if (now - last < 3000) return
+      last = now
+      restartCountdown()
+      api.request('/middleware/client/keepalive', { method: 'POST', expect: 'json', headers: kioskHeaders(), skipAuth: true }).catch(() => {})
+    }
+    window.addEventListener('pointerdown', onTouch, true)
+    window.addEventListener('keydown', onTouch, true)
+    return () => {
+      window.removeEventListener('pointerdown', onTouch, true)
+      window.removeEventListener('keydown', onTouch, true)
+    }
+  }, [credit > 0, restartCountdown])
 
   // After a cash payment the money is spent: clear it here AND in the backend, otherwise it
   // would come back as phantom credit the next time the page loads.
   const resetCredit = () => {
     setCredit(0)
+    setRefundAt(null)
     api.request('/middleware/client/reset', { method: 'POST', expect: 'json', headers: kioskHeaders(), skipAuth: true }).catch(() => {})
   }
 
@@ -90,6 +140,6 @@ export const CartProvider = ({ children }) => {
     try { window.dispatchEvent(new CustomEvent('open-cart')) } catch (e) { console.warn('openCart event failed', e) }
   }
 
-  const value = { cart, addToCart, removeFromCart, clearCart, openCart, credit, resetCredit }
+  const value = { cart, addToCart, removeFromCart, clearCart, openCart, credit, resetCredit, refundAt, refundAfter }
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>
 }
