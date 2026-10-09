@@ -484,8 +484,14 @@ img{ max-width:100%; display:block }
 /* ---------- nav ---------- */
 .nav{
   position:sticky; top:0; z-index:100;
-  background:rgba(240,253,250,.72); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
   border-bottom:1px solid rgba(13,148,136,.10);
+}
+/* The nav's frosted glass lives on its own layer rather than on .nav itself: an element with
+   backdrop-filter is a "backdrop root", and anything inside it with its own backdrop-filter (the
+   language dropdown) could then only blur the nav, never the page behind. */
+.nav::before{
+  content:''; position:absolute; inset:0; z-index:-1; pointer-events:none;
+  background:rgba(240,253,250,.72); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
 }
 .nav .wrap{ display:flex; align-items:center; justify-content:space-between; height:72px; gap:16px }
 .brand{ display:flex; align-items:center; gap:10px; text-decoration:none; flex-shrink:0 }
@@ -517,7 +523,7 @@ img{ max-width:100%; display:block }
   list-style:none; cursor:pointer; user-select:none; display:flex; align-items:center; gap:7px;
   font-family:var(--font-body); font-weight:600; font-size:14.5px; color:var(--primary-800);
   padding:8.5px 14px 8.5px 13px; border-radius:999px;
-  background:rgba(240,253,250,.42); border:1.5px solid rgba(13,148,136,.28);
+  background:rgba(240,253,250,.72); border:1.5px solid rgba(13,148,136,.28);
   backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
   transition:background .2s ease, border-color .2s ease, transform .2s ease;
 }
@@ -529,8 +535,8 @@ img{ max-width:100%; display:block }
 .lang-dd[open] .chev{ transform:rotate(180deg) }
 .lang-dd ul{
   position:absolute; right:0; top:calc(100% + 10px); min-width:176px; margin:0; padding:6px; list-style:none; z-index:70;
-  background:rgba(240,253,250,.78); border:1px solid rgba(13,148,136,.16); border-radius:20px;
-  backdrop-filter:blur(18px) saturate(1.3); -webkit-backdrop-filter:blur(18px) saturate(1.3);
+  background:rgba(240,253,250,.72); border:1px solid rgba(13,148,136,.14); border-radius:20px;
+  backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
   box-shadow:0 14px 36px -10px rgba(13,148,136,.32), 0 2px 8px rgba(15,42,39,.06);
 }
 .lang-dd li a{
