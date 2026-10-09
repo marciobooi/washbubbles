@@ -85,6 +85,8 @@ come from the machines and the controller themselves, or from the maker or the P
 
 - [ ] **Write down the model and year of each of the 9 machines** (name plate on each) and enter brand + model in the admin
       (Máquinas), so the differences between models can be matched with the differences in their signals
+- [ ] Compare the real signals with `docs/KREBE-SKS-17G-UNVERIFIED.md` (an AI-written list of error codes, states and registers for the SKS-17 G:
+      **unverified**, only a list of things to look for; keep what is seen, throw away what is not)
 - [ ] **Ask Krebe-Tippo or the distributor** for the technical manual / interface description of each model (what the coin or
       pulse input expects, and what status signals the machine outputs). Older and newer models may signal differently
 - [ ] **Full-cycle recording, one machine of each kind** (a washer and a dryer): start it and keep the trace from start to finish.
