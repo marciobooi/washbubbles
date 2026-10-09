@@ -701,14 +701,40 @@ section{ padding:84px 0 }
 }
 
 /* how it works */
-.steps{ display:grid; grid-template-columns:repeat(3,1fr); gap:28px; counter-reset:step; position:relative }
-.steps::before{
-  content:''; position:absolute; top:44px; left:14%; right:14%; height:2px;
-  /* Coral, not teal — matches the squiggle/eyebrow-dot accent color instead
-     of introducing a third accent tone. */
-  background:repeating-linear-gradient(90deg,rgba(255,139,107,.4) 0 10px,transparent 10px 20px);
+.steps{
+  --gap:28px; --pad:26px;
+  display:grid; grid-template-columns:repeat(3,1fr); gap:var(--gap); counter-reset:step; position:relative;
+  isolation:isolate; /* the connectors (z-index:-1) stay inside this block, behind the cards' glass */
+  /* Coral dotted waves, one tiling-free SVG per direction. vector-effect keeps the dots round and evenly
+     spaced however far the SVG is stretched; preserveAspectRatio="none" lets one shape fit any card width. */
+  --wave-h:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 30' preserveAspectRatio='none'><path d='M0 15 C 6 0, 19 0, 25 15 S 44 30, 50 15 S 69 0, 75 15 S 94 30, 100 15' fill='none' stroke='%23ff8b6b' stroke-opacity='.85' stroke-width='3' stroke-linecap='round' stroke-dasharray='0.1 8' vector-effect='non-scaling-stroke'/></svg>");
+  --wave-turn:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'><path d='M100 0 C 100 40, 96 52, 88 52 S 76 40, 66 52 S 52 64, 44 52 S 30 40, 22 52 S 0 60, 0 100' fill='none' stroke='%23ff8b6b' stroke-opacity='.85' stroke-width='3' stroke-linecap='round' stroke-dasharray='0.1 8' vector-effect='non-scaling-stroke'/></svg>");
+  --wave-v:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 100' preserveAspectRatio='none'><path d='M15 0 C 28 12, 28 38, 15 50 S 2 88, 15 100' fill='none' stroke='%23ff8b6b' stroke-opacity='.85' stroke-width='3' stroke-linecap='round' stroke-dasharray='0.1 8' vector-effect='non-scaling-stroke'/></svg>");
 }
-.step{ position:relative; text-align:center; padding:0 8px }
+/* Each step is a frosted-glass card (the same glass as the nav bar). The glass is a pseudo-element
+   layer so that the connector lines, which sit one layer lower, show through it softly. */
+.step{ position:relative; text-align:center; padding:var(--pad) 22px 30px }
+.step::after{
+  content:''; position:absolute; inset:0; z-index:-1; pointer-events:none; border-radius:24px;
+  background:rgba(240,253,250,.72); border:1px solid rgba(13,148,136,.12);
+  box-shadow:var(--shadow-soft);
+  backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
+}
+/* The link to the next step: a dotted wave from this circle to the next one (same row)... */
+.step:not(:last-child)::before{
+  /* Above the glass of every card (so the dots are seen), but earlier in the tree than each card's own
+     numbered circle, which therefore paints on top of the line where they meet. */
+  content:''; position:absolute; z-index:0; pointer-events:none;
+  left:50%; top:calc(var(--pad) + 44px); width:calc(100% + var(--gap)); height:30px; transform:translateY(-50%);
+  background:var(--wave-h) center / 100% 100% no-repeat;
+}
+/* ...and where the row wraps (every 3rd card), from the bottom of this card down and across to the top
+   of the first card of the next row, so the chain 1-2-3-4-5 is never broken. */
+.step:nth-child(3n):not(:last-child)::before{
+  left:calc(50% - 2 * (100% + var(--gap))); width:calc(2 * (100% + var(--gap)));
+  top:100%; height:calc(var(--gap) + var(--pad)); transform:none;
+  background:var(--wave-turn) center / 100% 100% no-repeat;
+}
 .step-mark{ position:relative; width:88px; height:88px; margin:0 auto 22px }
 .step-mark .porthole{ width:100%; height:100% }
 .step-mark span{
@@ -847,8 +873,11 @@ footer .foot-links a:hover{ color:var(--primary-800) }
      without an explicit width, aspect-ratio has nothing to compute from and
      the whole box (and everything in it) collapses to 0x0. */
   .hero-art{ order:-1; width:100%; max-width:360px; margin:0 auto; aspect-ratio:4/3 }
-  .steps{ grid-template-columns:1fr; gap:36px }
-  .steps::before{ display:none }
+  .steps{ grid-template-columns:1fr; --gap:36px }
+  .step:not(:last-child)::before, .step:nth-child(3n):not(:last-child)::before{
+    left:calc(50% - 15px); width:30px; top:100%; height:calc(var(--gap) + var(--pad)); transform:none;
+    background:var(--wave-v) center / 100% 100% no-repeat;
+  }
   .features{ grid-template-columns:1fr 1fr }
   .visit{ grid-template-columns:1fr }
 }
@@ -944,7 +973,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
       <div class="steps">
         ${content.steps.items.map((s, i) => `
         <div class="step reveal" style="transition-delay:${i * 0.08}s">
-          <div class="step-mark" data-parallax="${i % 2 === 0 ? 0.06 : -0.06}">${porthole({ size: 88, spin: false })}<span aria-hidden="true">${i + 1}</span></div>
+          <div class="step-mark">${porthole({ size: 88, spin: false })}<span aria-hidden="true">${i + 1}</span></div>
           <h3>${escapeHtml(s.t)}</h3>
           <p>${escapeHtml(s.d)}</p>
         </div>`).join('')}

@@ -165,8 +165,10 @@ describe('Public front page (routes/public.js + views/landing.js)', () => {
     it('ships scroll-parallax layers, gated behind reduced-motion like the other animation', async () => {
       const res = await request(app).get('/')
       const parallaxAttrs = res.text.match(/data-parallax="[^"]*"/g) || []
-      // Hero glow + 4 portholes + 3 step-marks + 1 CTA watermark + 12 background bubbles = 21 layers.
-      expect(parallaxAttrs.length).to.be.at.least(21)
+      // Hero glow + 4 portholes + 1 CTA watermark + 12 background bubbles = 18 layers. (The numbered step
+      // circles used to drift too; they stay level now so the dotted waves between them meet them exactly.)
+      expect(parallaxAttrs.length).to.be.at.least(18)
+      expect(res.text).to.not.match(/class="step-mark"[^>]*data-parallax/)
       expect(res.text).to.match(/if \(!reduceMotion\) \{[\s\S]*data-parallax/)
     })
 
