@@ -43,6 +43,9 @@ switched on only when the admin is at the shop or at a quiet time, and then the 
 - [ ] **€5 bill**: insert one, read the code from the log (`bill-inserted`), add it to `billEqTable` in Hetzner, insert again
 - [ ] **€20 bill**: same
 - [ ] €50 note: same, only if the shop accepts it (otherwise leave it refused)
+- [ ] **The bill acceptor is an ICT XBA-32DNMEU6 (owner-confirmed): it keeps every note, it can never give one back.** So a customer's cash credit
+      is always repaid in coins, and the **hopper must always hold enough coins** for the bills it lets in (a €20 note can mean €20 in coins).
+      Decide: when the hopper stock is low, stop accepting the big notes (the acceptor can be told to refuse a denomination), or warn the operator earlier
 - [ ] Wrong/foreign note: acceptor rejects it and the kiosk shows the message (`peripheral:rejected`), nothing credited
 - [ ] Bill acceptor jam / stacker full: message shown, peripheral turns red in the central admin
 - [ ] The fallback table on a PC that never was online has **only** `"10"`; decide if more codes should be built in
