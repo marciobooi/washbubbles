@@ -62,11 +62,24 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
   // Check if cart contains recharge items
   const hasRecharge = rechargeTotal > 0
 
+  // A dryer is sold in blocks of 15 minutes and the customer picks how many with + / -. If the money is
+  // already there the cart used to pay the instant it opened, so the number was never chosen. For dryers
+  // nothing is paid until the customer presses "Confirmar", and changing the number asks again.
+  const needsConfirm = cart.some((i) => i.type === 'dry')
+  const cartSig = cart.map((i) => `${i.id}:${i.quantity || 1}`).join('|')
+  const [confirmedSig, setConfirmedSig] = React.useState(null)
+  const confirmed = !needsConfirm || confirmedSig === cartSig
+  const confirmedRef = React.useRef(true)
+  confirmedRef.current = confirmed
+  const pendingCardRef = React.useRef(null)
+
   // Listen for hardware events (coins, bills, cards)
   React.useEffect(() => {
     if (!open) {
       // Reset detection state when modal closes
       autoPaid.current = false
+      setConfirmedSig(null)
+      pendingCardRef.current = null
       setDetectedCardCode(null)
       setLocalSession(null)
       setCouponCode('')
@@ -130,10 +143,14 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
           setDetectedCardCode(cardCode)
           toast({ title: 'Cartão detetado', variant: 'success' })
           
-          // Auto-process card payment
-          setTimeout(() => {
-            handleCardPayAutomatic(cardCode)
-          }, 500)
+          // Auto-process card payment (a dryer waits for the customer's confirmation first)
+          if (!confirmedRef.current) {
+            pendingCardRef.current = cardCode
+          } else {
+            setTimeout(() => {
+              handleCardPayAutomatic(cardCode)
+            }, 500)
+          }
         }
       }
     })
@@ -145,11 +162,20 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
   // before or after the machine was chosen.
   React.useEffect(() => {
     if (!open || autoPaid.current) return
+    if (!confirmed) return
     if (total > 0 && credit >= total) {
       autoPaid.current = true
       setTimeout(() => handleCashConfirm(credit), 500)
     }
-  }, [open, credit, total])
+  }, [open, credit, total, confirmed])
+
+  // The customer confirmed: pay the card that was already presented, if any (cash is paid by the effect above).
+  function confirmCart() {
+    setConfirmedSig(cartSig)
+    const code = pendingCardRef.current || detectedCardCode
+    pendingCardRef.current = null
+    if (code && credit < total) setTimeout(() => handleCardPayAutomatic(code), 300)
+  }
 
   // Embedded hardware agent's own RFID tap, straight over IPC — no network
   // hop, works with the kiosk fully offline. Separate from the websocket
@@ -494,6 +520,16 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
                     <p className="text-lg text-neutral-500 mt-1">Faltam {(total - localSession.credits).toFixed(2)}€</p>
                   )}
                 </div>
+              )}
+
+              {needsConfirm && !confirmed && (credit >= total || detectedCardCode) && total > 0 && (
+                <button
+                  type="button"
+                  onClick={confirmCart}
+                  className="mt-4 w-full rounded-2xl bg-teal-600 text-white text-3xl font-bold py-6 shadow-lg active:scale-95"
+                >
+                  Confirmar e iniciar · {total.toFixed(2)}€
+                </button>
               )}
 
               <div className="flex gap-2 mt-4">
