@@ -30,7 +30,10 @@ if exist "backend\.env" (
 rem The boot-time task "WashBubbles Backend" runs the backend (hidden, as SYSTEM, from power-on). Only if that task does
 rem not exist at all do we start our own copy here. Starting one just because the health check ran a few seconds too
 rem early would leave a second backend, in a window, fighting the first for the port.
-schtasks /query /tn "WashBubbles Backend" >nul 2>&1
+rem A normal user cannot QUERY a task that runs as SYSTEM (schtasks /query then fails and this used to start a
+rem second, visible backend that fought the real one over the log file). Get-ScheduledTask can list it, and a backend
+rem that already answers on the port is never started a second time.
+powershell -NoProfile -Command "if(Get-ScheduledTask -TaskName 'WashBubbles Backend' -ErrorAction SilentlyContinue){exit 0}; if(Get-NetTCPConnection -LocalPort %PORT% -State Listen -ErrorAction SilentlyContinue){exit 0}; exit 1"
 if errorlevel 1 start "WashBubbles backend" /min cmd /c ""%~dp0scripts\run-backend.bat""
 
 echo Waiting for the backend on port %PORT% ...
