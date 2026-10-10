@@ -555,6 +555,12 @@ class CoinMachine extends EventEmitter {
   async handleCardRead(data) {
     const { cardNumber } = data
 
+    // A BLANK card at the reader (just dispensed after a purchase): write the purchase onto it now.
+    if (data.card && String(data.card.new) === 'true' && String(data.card.admin) !== 'true') {
+      await this.activatePendingCard()
+      return
+    }
+
     // Controller mode: the card carries its own balance and identity. Adopt an
     // unknown card, or settle any disagreement with our record, BEFORE loading it.
     if (data.card && this.cardSync?.enabled) {
@@ -585,6 +591,52 @@ class CoinMachine extends EventEmitter {
     } else {
       this.emit('card-invalid', { cardNumber })
       console.warn(`Invalid card: ${cardNumber}`)
+    }
+  }
+
+  /**
+   * Write a purchased card: put its id and balance on the blank card in the reader, then make it
+   * spendable. One write per card at a time (the kiosk screen may ask for the same thing).
+   */
+  async activateCard(code) {
+    this.activating = this.activating || new Map()
+    if (this.activating.has(code)) return this.activating.get(code)
+    const job = (async () => {
+      const card = await Card.findOne(this.scoped({ code }))
+      if (!card) throw new Error('Card not found')
+      if (card.status === 'blocked') throw new Error('Card is blocked')
+      const reader = await Peripheral.findOne(this.scoped({ type: 'rfid_reader', enabled: true }))
+      if (!reader) throw new Error('No RFID reader configured')
+      // Throws when it cannot verify the write: a card we never touched is never reported as written.
+      await this.middleware.writeCardData(reader._id, {
+        code: card.code, balance: card.balance, name: card.name, email: card.email, phone: card.phone, contribuinte: card.contribuinte,
+      })
+      card.status = 'active'
+      await card.save()
+      const CardPurchase = (await import('../models/cardPurchase.js')).default
+      await CardPurchase.findOneAndUpdate({ tenantId: this.tenantId, cardCode: code }, { cardWritten: true })
+      await this.auditSystem('card.activate', { code, balance: card.balance })
+      console.log(`[Card] ${code} written and activated with EUR ${Number(card.balance).toFixed(2)}`)
+      broadcastHardwareEvent(this.tenantId, 'rfid:card_detected', { cardCode: String(code), balance: card.balance })
+      return card
+    })().finally(() => { this.activating.delete(code) })
+    this.activating.set(code, job)
+    return job
+  }
+
+  /** A blank card was read: write the most recent purchase that is still waiting for its card. */
+  async activatePendingCard() {
+    const pending = await Card.findOne(this.scoped({ status: 'pending_write', createdAt: { $gte: new Date(Date.now() - 30 * 60_000) } })).sort({ createdAt: -1 })
+    if (!pending) {
+      console.warn('[Card] A blank card was presented and there is no purchase waiting for one')
+      this.emit('card-invalid', { cardNumber: null, reason: 'blank-card-no-purchase' })
+      return null
+    }
+    try {
+      return await this.activateCard(pending.code)
+    } catch (err) {
+      console.error(`[Card] could not write the purchased card ${pending.code}: ${err.message} (it stays pending, the customer can retry)`)
+      return null
     }
   }
 

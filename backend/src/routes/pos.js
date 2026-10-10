@@ -568,25 +568,13 @@ router.post('/card/write/:code', requireKiosk, async (req, res) => {
     const rfidReader = await PeripheralT.findOne({ type: 'rfid_reader', enabled: true })
     if (!rfidReader) return res.status(503).json({ error: 'No RFID reader configured' })
 
-    // writeCardData throws if it cannot verify the write — it no longer reports
-    // success for a card it never touched.
-    await coinMachine.middleware.writeCardData(rfidReader._id, {
-      code: card.code,          // the customer's id, as carried on the card
-      balance: card.balance,
-      name: card.name,
-      email: card.email,
-      phone: card.phone,
-      contribuinte: card.contribuinte,
-    })
+    // Already written (the shop writes a purchased card as soon as the blank card is read): nothing to do.
+    if (card.status === 'active') return res.json({ success: true, card, message: 'Cartão activado.' })
 
-    // Written and verified — the card is now usable.
-    card.status = 'active'
-    await card.save()
+    // One shared writer: throws if it cannot verify the write, never reports a card it did not touch.
+    const written = await coinMachine.activateCard(code)
 
-    const CardPurchase = (await import('../models/cardPurchase.js')).default
-    await withTenant(CardPurchase, req).findOneAndUpdate({ cardCode: code }, { cardWritten: true })
-
-    res.json({ success: true, card, message: 'Cartão activado.' })
+    res.json({ success: true, card: written, message: 'Cartão activado.' })
   } catch (e) {
     console.error('Card write error:', e)
     // The card stays `pending_write` so the customer can retry at the reader
