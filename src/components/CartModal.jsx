@@ -46,7 +46,15 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
   const [couponCode, setCouponCode] = React.useState('')
 
   // Separate purchase items (machines/services) from recharge items
-  const purchaseTotal = cart.reduce((s, i) => (i.type === 'Recarga de Cartão' ? s : s + (i.price || i.amount || 0)), 0)
+  // A machine costs its CASH price unless a card is really in the reader (then its card price).
+  // The cart item's plain `price` is the card price, so using it made every cash customer see
+  // (and auto-pay) the cheaper card amount.
+  const cardMode = Boolean(detectedCardCode)
+  const unitPrice = (i) => {
+    const v = cardMode ? (i.cardPrice ?? i.price) : (i.cashPrice ?? i.price)
+    return Number(v ?? i.amount ?? 0) || 0
+  }
+  const purchaseTotal = cart.reduce((s, i) => (i.type === 'Recarga de Cartão' ? s : s + unitPrice(i)), 0)
   const rechargeTotal = cart.reduce((s, i) => (i.type === 'Recarga de Cartão' ? s + (i.price || i.amount || 0) : s), 0)
   const total = purchaseTotal + rechargeTotal
 
@@ -106,6 +114,11 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
         const { reason } = data.payload || {}
         console.error('[CartModal] Hopper fault:', reason)
         toast({ title: 'Falha ao devolver troco', description: 'Por favor contacte o operador.', variant: 'destructive' })
+      }
+
+      // The card was taken out of the reader: back to the cash price.
+      if (data.type === 'rfid:card_removed') {
+        setDetectedCardCode(null)
       }
 
       // Handle RFID card detection

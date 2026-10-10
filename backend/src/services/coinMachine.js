@@ -542,6 +542,7 @@ class CoinMachine extends EventEmitter {
   async handleCardRemoved() {
     await this.client.resetCardInfo()
     this.emit('card-removed')
+    broadcastHardwareEvent(this.tenantId, 'rfid:card_removed', {})
     console.log('Card removed')
   }
 
