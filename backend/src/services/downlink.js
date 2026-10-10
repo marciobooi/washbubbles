@@ -73,7 +73,9 @@ export class Downlink extends EventEmitter {
     tenantId,
     url = process.env.SYNC_SERVER_URL,
     apiKey = process.env.SYNC_API_KEY,
-    intervalMs = 5 * 60_000,
+    // Hetzner is the source of truth: a change made there (admin or straight in the database) must reach
+    // the shop quickly. DOWNLINK_INTERVAL_MS overrides it; admin changes also trigger an immediate pull.
+    intervalMs = Number(process.env.DOWNLINK_INTERVAL_MS) || 30_000,
     timeoutMs = 15_000,
     fetchImpl = globalThis.fetch,
     resources = RESOURCES,
