@@ -156,6 +156,7 @@ class CoinMachine extends EventEmitter {
           start_machine: (p) => this.adminStartMachine(p.machineId),
           end_machine: (p) => this.adminEndMachine(p.machineId),
           set_service: (p) => this.setMachineService(p.machineId, p.outOfService, p.status),
+          sync_now: async () => { await this.downlink?.pullAll?.(); return { success: true } },
         },
       })
       this.remoteCommands.start()

@@ -67,4 +67,17 @@ describe('Machine out of service (admin Offline button)', function () {
     expect((await Machine.findById(a._id)).status).to.equal('working')
     expect((await Machine.findById(b._id)).status).to.equal('offline')
   })
+
+  it('a change made on the central server asks the shop to pull at once, once at a time', async () => {
+    const SyncCommand = (await import('../src/models/syncCommand.js')).default
+    const m = await Machine.create({ tenantId: admin.tenantId, name: 'Lavar 6', type: 'wash', weight: 0 })
+    for (const w of [8, 9]) {
+      const r = await request(app).put(`/api/admin/machines/${m._id}`).set('Authorization', `Bearer ${adminToken}`).send({ weight: w })
+      expect(r.status).to.equal(200)
+    }
+    await new Promise((r) => setTimeout(r, 150))
+    expect((await Machine.findById(m._id)).weight).to.equal(9)
+    const pending = await SyncCommand.find({ tenantId: admin.tenantId, type: 'sync_now', status: 'pending' })
+    expect(pending).to.have.length(1)
+  })
 })

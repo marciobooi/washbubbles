@@ -39,6 +39,28 @@ const router = express.Router()
 // requireStaffRead or requireTechnician below.
 router.use(requireAnyStaff)
 
+// A change to what the shop must follow (machines, prices, settings, interfaces, peripherals) is
+// made here on the central server. Tell the shop to pull it NOW instead of waiting for its
+// 5-minute pull. No-op on a server that has the hardware itself, and never more than one
+// pending request per kiosk.
+const SHOP_CONFIG_PATHS = /^\/(machines|prices|settings|interfaces|peripherals)(\/|$)/
+router.use((req, res, next) => {
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next()
+  res.on('finish', () => {
+    if (res.statusCode >= 300 || !SHOP_CONFIG_PATHS.test(req.path) || /\/(start|end|service)$/.test(req.path)) return
+    ;(async () => {
+      const { default: coinMachine } = await import('../services/coinMachine.js')
+      if (coinMachine.running || !req.tenantId) return
+      const kiosks = await User.find({ tenantId: req.tenantId, role: 'KIOSK' }).select('_id').lean()
+      for (const k of kiosks) {
+        const waiting = await SyncCommand.exists({ tenantId: req.tenantId, kioskId: k._id, type: 'sync_now', status: 'pending' })
+        if (!waiting) await SyncCommand.create({ tenantId: req.tenantId, kioskId: k._id, type: 'sync_now', payload: {} })
+      }
+    })().catch((e) => console.error('[admin] could not queue the shop sync', e.message))
+  })
+  next()
+})
+
 // list machines
 router.get('/machines', async (req, res) => {
   const MachineT = withTenant(Machine, req)
