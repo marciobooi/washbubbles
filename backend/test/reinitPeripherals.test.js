@@ -39,10 +39,11 @@ describe('Re-initialise controller peripherals after (re)connect', () => {
     await mw.reinitPeripherals(['all'])
     expect(sent[0].per).to.deep.equal([
       { protocol: 'ccTalk', type: 'bill-acceptor', addr: '40', baudRate: '9600' },
-      { protocol: 'ccTalk', type: 'coin-acceptor', addr: '2', baudRate: '9600' },
       { protocol: 'ccTalk', type: 'hopper', addr: '3', baudRate: '9600' },
+      { protocol: 'ccTalk', type: 'coin-acceptor', addr: '2', baudRate: '9600' },
       { protocol: 'rs232', type: 'printer', addr: '', baudRate: '9600' },
       { protocol: 'spi', type: 'rfid-rw', addr: '' },
+      { protocol: 'pulse', type: 'card-dispenser', addr: '22' },
     ])
   })
 

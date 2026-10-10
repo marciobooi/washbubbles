@@ -633,9 +633,10 @@ class Middleware extends EventEmitter {
    */
   async reinitPeripherals(types = ['bill_acceptor']) {
     const BUS = ['bill_acceptor', 'coin_acceptor', 'hopper']
-    // The card dispenser is built into the controller (its "22" is an INTERFACE id): it has no entry of
-    // its own, and sending one made the controller list it twice and drop the printer.
-    const ALL = [...BUS, 'printer', 'rfid_reader']
+    // Same order the controller itself lists them in: bill, hopper, coin, printer, RFID, card dispenser.
+    // (The printer and the RFID reader carry an EMPTY address; sent without one the printer was
+    // registered as a second card dispenser.)
+    const ALL = ['bill_acceptor', 'hopper', 'coin_acceptor', 'printer', 'rfid_reader', 'card_dispenser']
     if (!types || types.length === 0) return { sent: false, reason: 'nothing requested' }
     types = types.includes('all') ? ALL : BUS
     if (!this.lowLevel?.isConnected) return { sent: false, reason: 'not connected' }
@@ -661,6 +662,9 @@ class Middleware extends EventEmitter {
       if (protocol === 'ccTalk' || protocol === 'rs232') entry.baudRate = String(p.baudRate || 9600)
       per.push(entry)
     }
+    // Always in the controller's own order, whatever order the peripherals were attached in.
+    const rank = (e) => types.findIndex((ty) => TYPE_KEY[ty] === e.type)
+    per.sort((x, y) => rank(x) - rank(y))
     if (per.length === 0) return { sent: false, reason: 'nothing to re-initialise' }
     const sent = this.sendPackage({ op: 'config_per', per })
     console.log(`[HW] re-initialising ${per.map((e) => e.type + '@' + (e.addr || '-')).join(', ')} (config_per, ${sent ? 'sent' : 'NOT sent'})`)
