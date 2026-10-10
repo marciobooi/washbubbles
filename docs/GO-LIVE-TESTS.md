@@ -41,7 +41,7 @@ switched on only when the admin is at the shop or at a quiet time, and then the 
       was never confirmed
 - [x] **€5 bill** (code `5`, credited and refunded as coins, 2026-10-10): insert one, read the code from the log (`bill-inserted`), add it to `billEqTable` in Hetzner, insert again
 - [x] **€20 bill** (code `20`, credited and refunded as 20 EUR in coins, 2026-10-10): same
-- [ ] €50 note: same, only if the shop accepts it (otherwise leave it refused)
+- [ ] €50 note: **the shop does not accept it** (owner 2026-10-10), so it has no code in the table. Still to test: insert one and check the acceptor itself spits it back instead of stacking it (a stacked unmapped note = customer loses EUR 50 with no credit; fix is on the acceptor, disable the 50 channel)
 - [ ] **The bill acceptor is an ICT XBA-32DNMEU6 (owner-confirmed): it keeps every note, it can never give one back.** So a customer's cash credit
       is always repaid in coins, and the **hopper must always hold enough coins** for the bills it lets in (a €20 note can mean €20 in coins).
       Decide: when the hopper stock is low, stop accepting the big notes (the acceptor can be told to refuse a denomination), or warn the operator earlier
