@@ -595,8 +595,11 @@ class Middleware extends EventEmitter {
       t.unref?.()
     })
     // Bring the peripherals the controller switches off back to life (LOWLEVEL_REINIT_ON_CONNECT,
-    // comma separated peripheral types; "none" disables). Default: OFF. Sending config_per to the shop controller left the coin acceptor dead; it must not be re-enabled without the exact format.
-    let want = String(process.env.LOWLEVEL_REINIT_ON_CONNECT ?? 'none').split(',').map((s) => s.trim()).filter((s) => s && s !== 'none')
+    // comma separated peripheral types, or "all"; "none" disables). Default: all. The controller switches the bill
+    // acceptor off when the program goes away and only re-enables it when the configuration is sent again.
+    // The list REPLACES the controller's own, so it is always the complete set, with the controller's own
+    // protocol spelling (ccTalk / pulse / rs232 / spi): lowercase "cctalk" was accepted but never initialised.
+    let want = String(process.env.LOWLEVEL_REINIT_ON_CONNECT ?? 'all').split(',').map((s) => s.trim()).filter((s) => s && s !== 'none')
     // One-shot recovery: an operator drops data/reinit-once.json ({"types":["all"]}); it is read and deleted.
     try {
       const fs = await import('fs')
