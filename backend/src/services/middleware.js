@@ -633,7 +633,9 @@ class Middleware extends EventEmitter {
    */
   async reinitPeripherals(types = ['bill_acceptor']) {
     const BUS = ['bill_acceptor', 'coin_acceptor', 'hopper']
-    const ALL = [...BUS, 'card_dispenser', 'printer', 'rfid_reader']
+    // The card dispenser is built into the controller (its "22" is an INTERFACE id): it has no entry of
+    // its own, and sending one made the controller list it twice and drop the printer.
+    const ALL = [...BUS, 'printer', 'rfid_reader']
     if (!types || types.length === 0) return { sent: false, reason: 'nothing requested' }
     types = types.includes('all') ? ALL : BUS
     if (!this.lowLevel?.isConnected) return { sent: false, reason: 'not connected' }
@@ -654,13 +656,17 @@ class Middleware extends EventEmitter {
       const bus = BUS.includes(p.type)
       if (bus && !addr) continue // a bus device needs its bus address
       const entry = { protocol, type: TYPE_KEY[p.type] }
-      if (addr) entry.addr = addr
+      // Printer and RFID reader sit on no bus address: the controller's own entry carries an empty one.
+      entry.addr = addr
       if (protocol === 'ccTalk' || protocol === 'rs232') entry.baudRate = String(p.baudRate || 9600)
       per.push(entry)
     }
     if (per.length === 0) return { sent: false, reason: 'nothing to re-initialise' }
     const sent = this.sendPackage({ op: 'config_per', per })
-    console.log(`[HW] re-initialising ${per.map((e) => e.type + '@' + e.addr).join(', ')} (config_per, ${sent ? 'sent' : 'NOT sent'})`)
+    console.log(`[HW] re-initialising ${per.map((e) => e.type + '@' + (e.addr || '-')).join(', ')} (config_per, ${sent ? 'sent' : 'NOT sent'})`)
+    // Read back what the controller now has registered.
+    const back = setTimeout(() => { if (this.lowLevel?.isConnected) this.sendPackage({ op: 'status_per' }) }, 3000)
+    back.unref?.()
     return { sent: Boolean(sent), per }
   }
 
