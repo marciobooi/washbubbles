@@ -595,8 +595,8 @@ class Middleware extends EventEmitter {
       t.unref?.()
     })
     // Bring the peripherals the controller switches off back to life (LOWLEVEL_REINIT_ON_CONNECT,
-    // comma separated peripheral types; "none" disables). Default: the bill acceptor.
-    const want = String(process.env.LOWLEVEL_REINIT_ON_CONNECT ?? 'bill_acceptor,coin_acceptor,hopper').split(',').map((s) => s.trim()).filter((s) => s && s !== 'none')
+    // comma separated peripheral types; "none" disables). Default: OFF. Sending config_per to the shop controller left the coin acceptor dead; it must not be re-enabled without the exact format.
+    const want = String(process.env.LOWLEVEL_REINIT_ON_CONNECT ?? 'none').split(',').map((s) => s.trim()).filter((s) => s && s !== 'none')
     if (want.length) {
       const t = setTimeout(() => { this.reinitPeripherals(want).catch((e) => console.error('[HW] re-init failed:', e.message)) }, quiet + steps.length * gap + 500)
       t.unref?.()
