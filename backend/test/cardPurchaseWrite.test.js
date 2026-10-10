@@ -43,13 +43,17 @@ describe('Card purchase: the blank card is written as soon as it is read', funct
     await purchase()
     await coinMachine.handleCardRead({ cardNumber: '-637069136', card: { cardId: '-637069136', new: 'true', name: ' ', nif: ' ', balance: ' ', admin: 'false' } })
     expect(written).to.have.length(1)
-    expect(written[0].code).to.equal('2588185743')
+    // the card takes the id its chip already carries (the controller ignores a generated one)
+    expect(written[0].code).to.equal('-637069136')
     expect(written[0].balance).to.equal(5)
-    const card = await Card.findOne({ code: '2588185743' })
+    const card = await Card.findOne({ code: '-637069136' })
     expect(card.status).to.equal('active')
-    expect((await CardPurchase.findOne({ cardCode: '2588185743' })).cardWritten).to.equal(true)
-    // and no bogus empty card was adopted from the blank card's made-up id
-    expect(await Card.findOne({ code: '-637069136' })).to.equal(null)
+    expect(card.balance).to.equal(5)
+    expect(card.metadata.previousCode).to.equal('2588185743')
+    expect(await Card.findOne({ code: '2588185743' })).to.equal(null) // one card, not two
+    expect(await Card.countDocuments({ tenantId: tenant._id })).to.equal(1)
+    const bought = await CardPurchase.findOne({ cardCode: '-637069136' })
+    expect(bought.cardWritten).to.equal(true)
   })
 
   it('a blank card with no purchase waiting writes nothing', async () => {
@@ -62,6 +66,8 @@ describe('Card purchase: the blank card is written as soon as it is read', funct
     await purchase()
     coinMachine.middleware = { writeCardData: async () => { throw new Error('write not verified') } }
     await coinMachine.handleCardRead({ cardNumber: '-5', card: { cardId: '-5', new: 'true', admin: 'false' } })
-    expect((await Card.findOne({ code: '2588185743' })).status).to.equal('pending_write')
+    const stuck = await Card.findOne({ tenantId: tenant._id })
+    expect(stuck.status).to.equal('pending_write')
+    expect(stuck.balance).to.equal(5)
   })
 })

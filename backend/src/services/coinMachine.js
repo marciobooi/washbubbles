@@ -543,6 +543,7 @@ class CoinMachine extends EventEmitter {
    * Handle card removed event
    */
   async handleCardRemoved() {
+    this.currentBlank = null
     await this.client.resetCardInfo()
     this.emit('card-removed')
     broadcastHardwareEvent(this.tenantId, 'rfid:card_removed', {})
@@ -557,7 +558,8 @@ class CoinMachine extends EventEmitter {
 
     // A BLANK card at the reader (just dispensed after a purchase): write the purchase onto it now.
     if (data.card && String(data.card.new) === 'true' && String(data.card.admin) !== 'true') {
-      await this.activatePendingCard()
+      this.currentBlank = String(data.card.cardId)
+      await this.activatePendingCard(this.currentBlank)
       return
     }
 
@@ -625,7 +627,7 @@ class CoinMachine extends EventEmitter {
   }
 
   /** A blank card was read: write the most recent purchase that is still waiting for its card. */
-  async activatePendingCard() {
+  async activatePendingCard(chipId = null) {
     const pending = await Card.findOne(this.scoped({ status: 'pending_write', createdAt: { $gte: new Date(Date.now() - 30 * 60_000) } })).sort({ createdAt: -1 })
     if (!pending) {
       console.warn('[Card] A blank card was presented and there is no purchase waiting for one')
@@ -633,6 +635,22 @@ class CoinMachine extends EventEmitter {
       return null
     }
     try {
+      // The chip keeps the id its reader gave it and ignores the one we generate. The purchase takes the
+      // chip's id as its code from here on; otherwise the next read finds an unknown id and adopts a
+      // second, separate card.
+      if (chipId && String(chipId) !== String(pending.code)) {
+        const taken = await Card.findOne(this.scoped({ code: String(chipId) }))
+        if (taken) throw new Error(`the card id ${chipId} already belongs to another card`)
+        const oldCode = pending.code
+        pending.code = String(chipId)
+        pending.metadata = { ...(pending.metadata || {}), previousCode: oldCode }
+        pending.markModified('metadata')
+        await pending.save()
+        const CardPurchase = (await import('../models/cardPurchase.js')).default
+        await CardPurchase.updateMany({ tenantId: this.tenantId, cardCode: oldCode }, { cardCode: String(chipId) })
+        await Sale.updateMany({ tenantId: this.tenantId, cardCode: oldCode }, { cardCode: String(chipId) })
+        console.log(`[Card] purchase ${oldCode} now uses the chip's own id ${chipId}`)
+      }
       return await this.activateCard(pending.code)
     } catch (err) {
       console.error(`[Card] could not write the purchased card ${pending.code}: ${err.message} (it stays pending, the customer can retry)`)

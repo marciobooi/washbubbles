@@ -442,6 +442,17 @@ router.post('/card/purchase', requireKiosk, async (req, res) => {
       metadata: localId ? { localId: String(localId) } : undefined,
     })
 
+    // The cash inserted for this purchase is spent: take it out of the session. Left in, it was moved
+    // onto the new card when the card was removed (a EUR 5 card ended up with EUR 10).
+    try {
+      const st = coinMachine.client?.client
+      if (st) {
+        st.balance = roundMoney(Math.max(0, (st.balance || 0) - insertedAmount))
+        coinMachine.client.updateCredits()
+        coinMachine.client.notifySubscribers()
+      }
+    } catch (e) { console.error('[pos] could not clear the session cash after the card purchase:', e.message) }
+
     const cardPurchase = await CardPurchaseT.create({
       cardId: card._id,
       cardCode,
@@ -561,7 +572,8 @@ router.post('/card/write/:code', requireKiosk, async (req, res) => {
     const CardT = withTenant(Card, req)
     const PeripheralT = withTenant(Peripheral, req)
 
-    const card = await CardT.findOne({ code })
+    // The purchase may have been re-keyed to the chip's own id: the kiosk still holds the id it was given.
+    const card = (await CardT.findOne({ code })) || (await CardT.findOne({ 'metadata.previousCode': code }))
     if (!card) return res.status(404).json({ error: 'Card not found' })
     if (card.status === 'blocked') return res.status(409).json({ error: 'Card is blocked' })
 
@@ -571,8 +583,16 @@ router.post('/card/write/:code', requireKiosk, async (req, res) => {
     // Already written (the shop writes a purchased card as soon as the blank card is read): nothing to do.
     if (card.status === 'active') return res.json({ success: true, card, message: 'Cartão activado.' })
 
-    // One shared writer: throws if it cannot verify the write, never reports a card it did not touch.
-    const written = await coinMachine.activateCard(code)
+    // The write needs the blank card to be AT the reader (so the card takes its own id).
+    if (!coinMachine.currentBlank) {
+      return res.status(409).json({
+        error: 'Present the new card at the reader first',
+        retryable: true,
+        message: 'Coloque o cartão novo no leitor e tente outra vez.',
+      })
+    }
+    const written = await coinMachine.activatePendingCard(coinMachine.currentBlank)
+    if (!written) throw new Error('The card could not be written')
 
     res.json({ success: true, card: written, message: 'Cartão activado.' })
   } catch (e) {
