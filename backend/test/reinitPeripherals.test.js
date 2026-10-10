@@ -11,7 +11,7 @@ describe('Re-initialise controller peripherals after (re)connect', () => {
     return { mw, sent }
   }
 
-  it('sends only the bill acceptor\'s own entry (ccTalk, its address, 9600)', async () => {
+  it('always carries the whole ccTalk bus (a partial list would unregister the rest)', async () => {
     const { mw, sent } = build([
       { type: 'bill_acceptor', protocol: 'cctalk', address: '40' },
       { type: 'coin_acceptor', protocol: 'cctalk', address: '2' },
@@ -20,7 +20,11 @@ describe('Re-initialise controller peripherals after (re)connect', () => {
     const r = await mw.reinitPeripherals(['bill_acceptor'])
     expect(r.sent).to.equal(true)
     expect(sent).to.have.length(1)
-    expect(sent[0]).to.deep.equal({ op: 'config_per', per: [{ protocol: 'cctalk', addr: '40', type: 'bill-acceptor', baudRate: '9600' }] })
+    expect(sent[0]).to.deep.equal({ op: 'config_per', per: [
+      { protocol: 'cctalk', addr: '40', type: 'bill-acceptor', baudRate: '9600' },
+      { protocol: 'cctalk', addr: '2', type: 'coin-acceptor', baudRate: '9600' },
+      { protocol: 'cctalk', addr: '3', type: 'hopper', baudRate: '9600' },
+    ] })
   })
 
   it('does nothing when the controller is not connected, or there is nothing to address', async () => {

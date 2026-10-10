@@ -596,7 +596,7 @@ class Middleware extends EventEmitter {
     })
     // Bring the peripherals the controller switches off back to life (LOWLEVEL_REINIT_ON_CONNECT,
     // comma separated peripheral types; "none" disables). Default: the bill acceptor.
-    const want = String(process.env.LOWLEVEL_REINIT_ON_CONNECT ?? 'bill_acceptor').split(',').map((s) => s.trim()).filter((s) => s && s !== 'none')
+    const want = String(process.env.LOWLEVEL_REINIT_ON_CONNECT ?? 'bill_acceptor,coin_acceptor,hopper').split(',').map((s) => s.trim()).filter((s) => s && s !== 'none')
     if (want.length) {
       const t = setTimeout(() => { this.reinitPeripherals(want).catch((e) => console.error('[HW] re-init failed:', e.message)) }, quiet + steps.length * gap + 500)
       t.unref?.()
@@ -610,11 +610,15 @@ class Middleware extends EventEmitter {
    * Found on the shop controller: the bill acceptor is switched off whenever the program that talks to
    * the controller goes away, and a new connection does not switch it back on. The legacy system never
    * had the problem because it (re)configured the peripherals when it connected; this app only listened.
-   * Only the listed types are touched, and with the values this shop's own records hold.
-   *
-   * @param types e.g. ['bill_acceptor']
+   * IMPORTANT: `config_per` REPLACES the controller's whole peripheral list. Sending only the bill
+   * acceptor once left the coin acceptor and the hopper unregistered (no coins credited). So this always
+   * carries the COMPLETE set of ccTalk bus devices (bill acceptor, coin acceptor, hopper), whatever
+   * `types` says; `types` only decides whether anything is sent at all.
    */
   async reinitPeripherals(types = ['bill_acceptor']) {
+    const BUS = ['bill_acceptor', 'coin_acceptor', 'hopper']
+    if (!types || types.length === 0) return { sent: false, reason: 'nothing requested' }
+    types = BUS
     if (!this.lowLevel?.isConnected) return { sent: false, reason: 'not connected' }
     const TYPE_KEY = {
       bill_acceptor: 'bill-acceptor', coin_acceptor: 'coin-acceptor', hopper: 'hopper',
