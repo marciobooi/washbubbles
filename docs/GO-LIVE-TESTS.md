@@ -5,17 +5,15 @@ Shop PC `a8-max` (Windows 11), controller `192.168.2.201:16852` on the PC's **"E
 Tick a box only after it was *seen working at the machine*, not when the code merely passes tests.
 Written 2026-10-09. Related: `docs/SHOP-HARDWARE-AND-COMMUNICATIONS.md` §9, §11, §14.
 
-## 0. Before anything: put the latest code on the PC (it was off)
+## 0. Before anything: put the latest code on the PC
 
-Committed and pushed, **not yet on the PC**:
+Done 2026-10-10 (PC on, SSH over Tailscale): everything tracked in git copied to `C:\washbubbles`, dependencies installed, screen rebuilt, backend restarted.
 
-- [ ] Copy to `C:\washbubbles`: `backend/src/services/coinMachine.js`, `backend/src/services/middleware.js`,
-      `backend/src/services/downlink.js`, `backend/src/routes/middleware.js`, `backend/src/routes/admin.js`,
-      `src/App.jsx`, `src/context/CartContext.jsx`, `src/pages/AdminPeripherals.jsx`, `src/pages/AdminSettings.jsx`, `src/components/app-sidebar.jsx`
-- [ ] Rebuild the screen (`npm run build` with `VITE_KIOSK_API_KEY` taken from `backend\.env`), kill `node`
-      (the boot task `WashBubbles Backend` restarts it), press F5 on the kiosk
-- [ ] Backend log shows `Low-level controller connected` and `[Downlink] in step with central`
-- [ ] **Hopper has coins in it** (the database said 0). Note how many and of which value
+- [x] Latest code on the PC (all 274 tracked files; the PC matches commit `116e07c` or later)
+- [x] Screen rebuilt with the kiosk key, backend restarted by the boot task
+- [x] Backend log shows `Low-level controller connected` and `[Downlink] in step with central`
+- [ ] **Hopper has coins in it**: note how many and of which values (owner to check at the machine)
+- [ ] Press F5 on the kiosk (or restart Edge) so it runs the new screen
 
 ## 0a. Operating rule: only one PC at a time
 
@@ -57,9 +55,9 @@ switched on only when the admin is at the shop or at a quiet time, and then the 
 
 ## 3. Refund of unspent cash (new, never run on hardware)
 
-- [ ] Insert one coin, touch nothing: after **2:00** the hopper pays it back; toast "Crédito devolvido"; badge disappears;
-      log `[Refund] … paid back (idle)`; audit entry `cash.refund`
-- [ ] Countdown "devolução em m:ss" is visible and counts down
+- [x] Insert one coin, touch nothing: after **2:00** the hopper pays it back; toast "Crédito devolvido"; badge disappears;
+      log `[Refund] … paid back (idle)`; audit entry `cash.refund`  — **seen 2026-10-10**: €1 coin (code 7) → 2 min → `get-change 100` → `no-change 0` → refund paid, audit `cash.refund`; the owner saw the timer and the money come back
+- [x] Countdown "devolução em m:ss" is visible and counts down  — seen 2026-10-10 (owner)
 - [ ] Touching the screen restarts the countdown (keepalive); a coin/bill restarts it too
 - [ ] Reload the page (F5) with credit inside: the badge comes back with the right amount and the right countdown
 - [ ] **Short payout**: with an empty/low hopper the part that cannot be paid stays as credit, the screen says to

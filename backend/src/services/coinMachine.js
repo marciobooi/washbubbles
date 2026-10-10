@@ -795,10 +795,10 @@ class CoinMachine extends EventEmitter {
       broadcastHardwareEvent(this.tenantId, remaining > 0 ? 'credit:refund-failed' : 'credit:refunded', details)
       this.emit(remaining > 0 ? 'refund-short' : 'refunded', details)
       if (remaining > 0) {
-        console.error(`[Refund] €${remaining.toFixed(2)} of €${amount.toFixed(2)} could NOT be paid back (${error}); kept as credit`)
+        console.error(`[Refund] EUR ${remaining.toFixed(2)} of EUR ${amount.toFixed(2)} could NOT be paid back (${error}); kept as credit`)
         this.touchCredit() // do not hammer a broken hopper every 5 s: try again after another idle period
       } else {
-        console.log(`[Refund] €${dispensed.toFixed(2)} paid back (${reason})`)
+        console.log(`[Refund] EUR ${dispensed.toFixed(2)} paid back (${reason})`)
       }
       return { success: remaining <= 0, refunded: dispensed, remaining, error }
     })().finally(() => { this.refunding = null })

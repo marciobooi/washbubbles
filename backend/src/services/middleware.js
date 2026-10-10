@@ -720,7 +720,7 @@ class Middleware extends EventEmitter {
 
       // The controller picks the coins itself (it only receives the total). Log what a biggest-coins-first payout would
       // be, so the real payout can be compared with it at the machine (docs/GO-LIVE-TESTS.md §4).
-      console.log(`[HW] get-change €${target.toFixed(2)} sent; biggest coins first would be ${this.describeBigFirst(target)}`)
+      console.log(`[HW] get-change EUR ${target.toFixed(2)} sent; biggest coins first would be ${this.describeBigFirst(target)}`)
 
       // Send first, then register the waiter in the same tick: replies are only
       // delivered on a later event-loop turn, so none can be missed.
@@ -1803,8 +1803,8 @@ class Middleware extends EventEmitter {
       .map((value, i) => ({ value, n: plan.counts[i] }))
       .filter((p) => p.n > 0)
       .sort((x, y) => y.value - x.value)
-      .map((p) => `${p.n}×€${p.value.toFixed(2)}`)
-    const rest = plan.unpayable > 0 ? ` (€${plan.unpayable.toFixed(2)} cannot be made from these coins)` : ''
+      .map((p) => `${p.n} x EUR ${p.value.toFixed(2)}`)
+    const rest = plan.unpayable > 0 ? ` (EUR ${plan.unpayable.toFixed(2)} cannot be made from these coins)` : ''
     return (parts.join(' + ') || 'nothing') + rest
   }
 

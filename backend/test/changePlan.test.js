@@ -89,8 +89,8 @@ describe('Change through the controller: what the log says a biggest-first payou
   it('describes it in the shop\'s own coins, for comparing with what really falls at the machine', () => {
     const mw = new Middleware()
     mw.coinEqTable = { 4: 0.1, 5: 0.2, 6: 0.5, 7: 1, 8: 2 }
-    expect(mw.describeBigFirst(3.8)).to.equal('1×€2.00 + 1×€1.00 + 1×€0.50 + 1×€0.20 + 1×€0.10')
-    expect(mw.describeBigFirst(5)).to.equal('2×€2.00 + 1×€1.00')
+    expect(mw.describeBigFirst(3.8)).to.equal('1 x EUR 2.00 + 1 x EUR 1.00 + 1 x EUR 0.50 + 1 x EUR 0.20 + 1 x EUR 0.10')
+    expect(mw.describeBigFirst(5)).to.equal('2 x EUR 2.00 + 1 x EUR 1.00')
     expect(mw.describeBigFirst(0.05)).to.include('cannot be made')
     mw.coinEqTable = null
     expect(mw.describeBigFirst(1)).to.equal('(coin values unknown)')
