@@ -39,6 +39,7 @@ export default function Pos() {
   // Real card state — populated when the user taps their RFID card
   const [currentCard, setCurrentCard] = React.useState(null) // { code, balance, name, ... }
   const [transactions, setTransactions] = React.useState([])
+  const removeTimer = React.useRef(null)
 
   // Load card balance + history from backend
   async function loadCard(code) {
@@ -67,12 +68,15 @@ export default function Pos() {
     const unsub = subscribe((message) => {
       if (!message || typeof message !== 'object') return
       // The card was taken out of the reader: the window must not keep showing it.
+      // The reader bounces removed/inserted while a card sits in it, so wait a moment: only a card that
+      // is really gone closes the window and sends the customer back to the home screen.
       if (message.type === 'rfid:card_removed') {
-        setCurrentCard(null)
-        setTransactions([])
+        clearTimeout(removeTimer.current)
+        removeTimer.current = setTimeout(() => closeCard(), 3000)
         return
       }
       if (message.type === 'rfid:card_detected') {
+        clearTimeout(removeTimer.current)
         const code = message.payload?.cardCode
         if (code) {
           toast({ title: 'Cartão detetado', variant: 'success' })
@@ -80,7 +84,7 @@ export default function Pos() {
         }
       }
     })
-    return unsub
+    return () => { clearTimeout(removeTimer.current); unsub() }
   }, [])
 
 
