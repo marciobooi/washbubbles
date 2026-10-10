@@ -59,7 +59,7 @@ switched on only when the admin is at the shop or at a quiet time, and then the 
 - [x] Insert one coin, touch nothing: after **2:00** the hopper pays it back; toast "Crédito devolvido"; badge disappears;
       log `[Refund] … paid back (idle)`; audit entry `cash.refund`  — **seen 2026-10-10**: €1 coin (code 7) → 2 min → `get-change 100` → `no-change 0` → refund paid, audit `cash.refund`; the owner saw the timer and the money come back
 - [x] Countdown "devolução em m:ss" is visible and counts down  — seen 2026-10-10 (owner)
-- [ ] Touching the screen restarts the countdown (keepalive); a coin/bill restarts it too
+- [x] Touching the screen restarts the countdown (keepalive); a coin/bill restarts it too — touch confirmed by owner 2026-10-10
 - [ ] Reload the page (F5) with credit inside: the badge comes back with the right amount and the right countdown
 - [ ] **Short payout**: with an empty/low hopper the part that cannot be paid stays as credit, the screen says to
       contact the counter, audit `cash.refund.short` shows the amount owed
