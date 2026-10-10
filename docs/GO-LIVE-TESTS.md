@@ -46,6 +46,11 @@ switched on only when the admin is at the shop or at a quiet time, and then the 
 - [ ] **The bill acceptor is an ICT XBA-32DNMEU6 (owner-confirmed): it keeps every note, it can never give one back.** So a customer's cash credit
       is always repaid in coins, and the **hopper must always hold enough coins** for the bills it lets in (a €20 note can mean €20 in coins).
       Decide: when the hopper stock is low, stop accepting the big notes (the acceptor can be told to refuse a denomination), or warn the operator earlier
+      **Idea from the owner:** with the hopper low, a big note is only worth accepting when a machine is already chosen, because then only
+      `note + credit − price` has to come back in coins (with nothing chosen, the whole note might). Two things are missing before this can be built:
+      (1) a way to **refuse a note before it goes in** (nothing in our code or the docs: the controller's list of messages has no "inhibit"; test/ask
+      the vendor, because a stacked note cannot be refused afterwards), and (2) a **live count of the coins in the hopper** (today only the operator's
+      day-close count; the app tracks stock only for hoppers it drives itself). Without (1) the guard can only warn on screen and alert the operator
 - [ ] Wrong/foreign note: acceptor rejects it and the kiosk shows the message (`peripheral:rejected`), nothing credited
 - [ ] Bill acceptor jam / stacker full: message shown, peripheral turns red in the central admin
 - [ ] The fallback table on a PC that never was online has **only** `"10"`; decide if more codes should be built in
