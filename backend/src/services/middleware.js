@@ -594,6 +594,47 @@ class Middleware extends EventEmitter {
       const t = setTimeout(() => { if (this.lowLevel?.isConnected) this.sendPackage(pkg) }, quiet + i * gap)
       t.unref?.()
     })
+    // Bring the peripherals the controller switches off back to life (LOWLEVEL_REINIT_ON_CONNECT,
+    // comma separated peripheral types; "none" disables). Default: the bill acceptor.
+    const want = String(process.env.LOWLEVEL_REINIT_ON_CONNECT ?? 'bill_acceptor').split(',').map((s) => s.trim()).filter((s) => s && s !== 'none')
+    if (want.length) {
+      const t = setTimeout(() => { this.reinitPeripherals(want).catch((e) => console.error('[HW] re-init failed:', e.message)) }, quiet + steps.length * gap + 500)
+      t.unref?.()
+    }
+  }
+
+  /**
+   * Re-initialise controller-attached peripherals by re-sending THEIR OWN entry of the peripheral
+   * configuration (`config_per`), exactly what the legacy PC pushed at every start.
+   *
+   * Found on the shop controller: the bill acceptor is switched off whenever the program that talks to
+   * the controller goes away, and a new connection does not switch it back on. The legacy system never
+   * had the problem because it (re)configured the peripherals when it connected; this app only listened.
+   * Only the listed types are touched, and with the values this shop's own records hold.
+   *
+   * @param types e.g. ['bill_acceptor']
+   */
+  async reinitPeripherals(types = ['bill_acceptor']) {
+    if (!this.lowLevel?.isConnected) return { sent: false, reason: 'not connected' }
+    const TYPE_KEY = {
+      bill_acceptor: 'bill-acceptor', coin_acceptor: 'coin-acceptor', hopper: 'hopper',
+      card_dispenser: 'card-dispenser', printer: 'printer', rfid_reader: 'rfid-rw',
+    }
+    const per = []
+    for (const conn of this.connections.values()) {
+      const p = conn.peripheral
+      if (!conn.gateway || !p || p.enabled === false || !types.includes(p.type) || !TYPE_KEY[p.type]) continue
+      const protocol = String(p.protocol || 'cctalk').toLowerCase()
+      const addr = String(p.address ?? '').trim()
+      if (!addr) continue // nothing to address on the controller bus
+      const entry = { protocol, addr, type: TYPE_KEY[p.type] }
+      if (protocol === 'cctalk' || protocol === 'rs232') entry.baudRate = String(p.baudRate || 9600)
+      per.push(entry)
+    }
+    if (per.length === 0) return { sent: false, reason: 'nothing to re-initialise' }
+    const sent = this.sendPackage({ op: 'config_per', per })
+    console.log(`[HW] re-initialising ${per.map((e) => e.type + '@' + e.addr).join(', ')} (config_per, ${sent ? 'sent' : 'NOT sent'})`)
+    return { sent: Boolean(sent), per }
   }
 
   async onLowLevelDisconnected() {
