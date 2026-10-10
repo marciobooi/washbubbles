@@ -48,9 +48,9 @@ describe('Coin and bill recognition with no internet', function () {
     const out = credits(mw)
     await mw.loadEquivalenceTables()
     mw.handleGatewayCredit({ data: '3' }, false)
-    mw.handleGatewayCredit({ data: '20' }, true)
+    mw.handleGatewayCredit({ data: '50' }, true) // the EUR 50 note has never been measured
     expect(out.inserted).to.deep.equal([])
-    expect(out.rejected).to.deep.equal(['3', '20'])
+    expect(out.rejected).to.deep.equal(['3', '50'])
   })
 
   it('a table stored in the database always wins over the built-in codes', async () => {

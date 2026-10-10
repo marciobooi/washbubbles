@@ -166,7 +166,7 @@ function isPcscSuccess(resp) {
  * Only used when the database holds no table at all, e.g. a new PC that is offline on day one.
  */
 export const SHOP_COIN_CODES = { '4': 0.1, '5': 0.2, '6': 0.5, '7': 1, '8': 2 }
-export const SHOP_BILL_CODES = { '10': 10 }
+export const SHOP_BILL_CODES = { '5': 5, '10': 10, '20': 20 }
 
 class Middleware extends EventEmitter {
   constructor() {
@@ -435,7 +435,7 @@ class Middleware extends EventEmitter {
         }
         if (empty(this.billEqTable)) {
           this.billEqTable = { ...SHOP_BILL_CODES }
-          console.warn('[HW] No bill table stored - using the built-in shop code (10 = 10.00)')
+          console.warn('[HW] No bill table stored - using the built-in shop codes (5, 10, 20 = EUR 5, 10, 20)')
         }
       }
     } catch (err) {

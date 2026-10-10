@@ -39,8 +39,8 @@ switched on only when the admin is at the shop or at a quiet time, and then the 
 - [ ] **€10 bill is credited**: put the note in again (it was swallowed uncredited while being read); log must say
       `Bill accepted: €10.00` and the badge goes up by €10. The table (`billEqTable`: `"10"`→10) was saved but this
       was never confirmed
-- [ ] **€5 bill**: insert one, read the code from the log (`bill-inserted`), add it to `billEqTable` in Hetzner, insert again
-- [ ] **€20 bill**: same
+- [x] **€5 bill** (code `5`, credited and refunded as coins, 2026-10-10): insert one, read the code from the log (`bill-inserted`), add it to `billEqTable` in Hetzner, insert again
+- [x] **€20 bill** (code `20`, credited and refunded as 20 EUR in coins, 2026-10-10): same
 - [ ] €50 note: same, only if the shop accepts it (otherwise leave it refused)
 - [ ] **The bill acceptor is an ICT XBA-32DNMEU6 (owner-confirmed): it keeps every note, it can never give one back.** So a customer's cash credit
       is always repaid in coins, and the **hopper must always hold enough coins** for the bills it lets in (a €20 note can mean €20 in coins).
@@ -52,7 +52,7 @@ switched on only when the admin is at the shop or at a quiet time, and then the 
       day-close count; the app tracks stock only for hoppers it drives itself). Without (1) the guard can only warn on screen and alert the operator
 - [ ] Wrong/foreign note: acceptor rejects it and the kiosk shows the message (`peripheral:rejected`), nothing credited
 - [ ] Bill acceptor jam / stacker full: message shown, peripheral turns red in the central admin
-- [ ] The fallback table on a PC that never was online has **only** `"10"`; decide if more codes should be built in
+- [x] The fallback table on a PC that never was online now holds `"5"`, `"10"`, `"20"` (was only `"10"`); decide if more codes should be built in
 
 ## 3. Refund of unspent cash (new, never run on hardware)
 
