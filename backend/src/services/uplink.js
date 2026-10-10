@@ -21,6 +21,7 @@ import EventEmitter from 'events'
 import SyncOutbox from '../models/syncOutbox.js'
 import Card, { onCardChanged } from '../models/card.js'
 import Peripheral from '../models/peripheral.js'
+import Machine from '../models/machine.js'
 import modelEvents from './modelEvents.js'
 
 const MAX_ATTEMPTS = 10
@@ -73,7 +74,9 @@ export class Uplink extends EventEmitter {
     OutboxModel = SyncOutbox,
     CardModel = Card,
     PeripheralModel = Peripheral,
+    MachineModel = Machine,
     statusIntervalMs = 60_000,
+    machineStatusIntervalMs = 5_000,
   }) {
     super()
     this.tenantId = tenantId
@@ -87,6 +90,11 @@ export class Uplink extends EventEmitter {
     this.Outbox = OutboxModel
     this.Card = CardModel
     this.Peripheral = PeripheralModel
+    this.Machine = MachineModel
+    this.machineStatusIntervalMs = machineStatusIntervalMs
+    this.machineTimer = null
+    this.lastMachineSig = ''
+    this.lastMachinePushAt = 0
     this.statusIntervalMs = statusIntervalMs
     this.statusTimer = null
     this.lastStatusSig = ''
@@ -143,12 +151,17 @@ export class Uplink extends EventEmitter {
     this.statusTimer.unref?.()
     this.statusSoon = setTimeout(() => this.pushPeripheralStatus().catch(() => {}), 20_000)
     this.statusSoon.unref?.()
+    // Occupied / free / fault of each machine, so the central admin sees what the shop sees.
+    this.machineTimer = setInterval(() => this.pushMachineStatus().catch(() => {}), this.machineStatusIntervalMs)
+    this.machineTimer.unref?.()
     console.log(`[Uplink] enabled -> ${this.url}`)
   }
 
   stop() {
     clearInterval(this.timer)
     clearInterval(this.statusTimer)
+    clearInterval(this.machineTimer)
+    this.machineTimer = null
     clearTimeout(this.statusSoon)
     this.statusTimer = null
     this.timer = null
@@ -260,6 +273,25 @@ export class Uplink extends EventEmitter {
    * Sent when something changed, and at least every 5 minutes as a heartbeat. Offline or
    * rejected is simply tried again next time; nothing is queued.
    */
+  /** Live machine state (a state, not an event: sent as-is, only when it changed). */
+  async pushMachineStatus() {
+    if (!this.enabled || this.authFailed) return false
+    const rows = await this.Machine.find({ tenantId: this.tenantId }).select('_id status statusText').lean()
+    if (rows.length === 0) return false
+    const machines = rows.map((r) => ({ id: String(r._id), status: r.status, statusText: r.statusText || '' }))
+    const sig = JSON.stringify(machines)
+    if (sig === this.lastMachineSig && Date.now() - this.lastMachinePushAt < 5 * 60_000) return false
+    try {
+      await this.post('/sync/push/machine-status', { machines })
+      this.lastMachineSig = sig
+      this.lastMachinePushAt = Date.now()
+      return true
+    } catch (err) {
+      this.lastMachineSig = '' // send again next time
+      return false
+    }
+  }
+
   async pushPeripheralStatus() {
     if (!this.enabled || this.authFailed) return false
     const rows = await this.Peripheral.find({ tenantId: this.tenantId }).select('_id status').lean()

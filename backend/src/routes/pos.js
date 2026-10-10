@@ -104,7 +104,7 @@ router.post('/sale', requireKiosk, async (req, res) => {
   if (machine.status === 'working') {
     return res.status(409).json({ error: 'Machine already in use' })
   }
-  if (machine.outOfService || machine.status === 'offline') {
+  if (machine.outOfService || machine.status === 'offline' || machine.status === 'fault') {
     return res.status(409).json({ error: 'Machine out of service' })
   }
 
@@ -746,7 +746,7 @@ router.post('/cards/:code/spend', requireKiosk, async (req, res) => {
     const m = await MachineT.findById(machineId)
     if (!m) return res.status(404).json({ error: 'Machine not found' })
     if (m.status === 'working') return res.status(409).json({ error: 'Machine already in use' })
-    if (m.outOfService || m.status === 'offline') return res.status(409).json({ error: 'Machine out of service' })
+    if (m.outOfService || m.status === 'offline' || m.status === 'fault') return res.status(409).json({ error: 'Machine out of service' })
   }
 
   if (card.status === 'pending_write') {

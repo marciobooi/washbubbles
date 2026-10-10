@@ -155,7 +155,7 @@ class CoinMachine extends EventEmitter {
         handlers: {
           start_machine: (p) => this.adminStartMachine(p.machineId),
           end_machine: (p) => this.adminEndMachine(p.machineId),
-          set_service: (p) => this.setMachineService(p.machineId, p.outOfService),
+          set_service: (p) => this.setMachineService(p.machineId, p.outOfService, p.status),
         },
       })
       this.remoteCommands.start()
@@ -928,12 +928,14 @@ class CoinMachine extends EventEmitter {
   }
 
   /** Central admin took a machine out of service (or back): apply it at once, the pull is only the backstop. */
-  async setMachineService(machineId, outOfService) {
+  async setMachineService(machineId, outOfService, status) {
     const machine = await Machine.findOne(this.scoped({ _id: machineId }))
     if (!machine) throw new Error('Machine not found')
     machine.outOfService = Boolean(outOfService)
-    machine.status = machine.outOfService ? 'offline' : 'free'
-    machine.statusText = machine.outOfService ? 'Fora de servi\u00e7o' : ''
+    const want = status === 'fault' ? 'fault' : 'offline'
+    machine.serviceStatus = machine.outOfService ? want : null
+    machine.status = machine.outOfService ? want : 'free'
+    machine.statusText = machine.outOfService ? (want === 'fault' ? 'Avariada' : 'Fora de servi\u00e7o') : ''
     await machine.save()
     this.machines.set(machine.intId || machine._id, machine.toObject())
     await broadcastMachine(machine)
@@ -955,7 +957,7 @@ class CoinMachine extends EventEmitter {
     if (!iface || !machine.port) throw new Error(`${machine.name} has no interface/port configured`)
     if (iface.status !== 'active') throw new Error(`Interface ${iface.name} is not active (status: ${iface.status})`)
     if (machine.status === 'working') throw new Error(`${machine.name} is already running`)
-    if (machine.outOfService || machine.status === 'offline') throw new Error(`${machine.name} is out of service`)
+    if (machine.outOfService || machine.status === 'offline' || machine.status === 'fault') throw new Error(`${machine.name} is out of service`)
 
     // Throws if the controller is not connected — nothing is marked running in that case.
     await this.middleware.sendMachineActivation(machine, iface)
@@ -1243,9 +1245,10 @@ class CoinMachine extends EventEmitter {
 
       // Out of service is the operator's call: hardware readings must not bring it back.
       if (machine.outOfService) {
-        if (machine.status !== 'offline') {
-          machine.status = 'offline'
-          machine.statusText = 'Fora de servi\u00e7o'
+        const want = machine.serviceStatus === 'fault' ? 'fault' : 'offline'
+        if (machine.status !== want) {
+          machine.status = want
+          machine.statusText = want === 'fault' ? 'Avariada' : 'Fora de servi\u00e7o'
           await machine.save()
           this.machines.set(machine.intId || machine._id, machine.toObject())
           await broadcastMachine(machine)

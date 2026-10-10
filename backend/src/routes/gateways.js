@@ -65,7 +65,7 @@ async function resolveMachineLines(items, MachineT, PriceT, method, coupon = nul
     if (machine.status === 'working') {
       return { ok: false, status: 409, error: { error: 'Machine already in use', machineId: machine._id } }
     }
-    if (machine.outOfService || machine.status === 'offline') {
+    if (machine.outOfService || machine.status === 'offline' || machine.status === 'fault') {
       return { ok: false, status: 409, error: { error: 'Machine out of service', machineId: machine._id } }
     }
     if (lines.some((l) => String(l.machine._id) === String(machine._id))) {

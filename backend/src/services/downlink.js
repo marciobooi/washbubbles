@@ -181,7 +181,9 @@ export class Downlink extends EventEmitter {
     if (name === 'machines') {
       // `status` is runtime state and is never pulled, but "out of service" is the operator's decision
       // made on the central server: the shop must show it and refuse the sale.
-      await Model.updateMany({ tenantId: tenant, outOfService: true, status: { $ne: 'offline' } },
+      await Model.updateMany({ tenantId: tenant, outOfService: true, serviceStatus: 'fault', status: { $ne: 'fault' } },
+        { $set: { status: 'fault', statusText: 'Avariada' } })
+      await Model.updateMany({ tenantId: tenant, outOfService: true, serviceStatus: { $ne: 'fault' }, status: { $ne: 'offline' } },
         { $set: { status: 'offline', statusText: 'Fora de servi\u00e7o' } })
       await Model.updateMany({ tenantId: tenant, outOfService: { $ne: true }, status: 'offline' },
         { $set: { status: 'free', statusText: '' } })

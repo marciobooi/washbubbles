@@ -326,6 +326,36 @@ router.post('/push/peripheral-status', async (req, res) => {
   }
 })
 
+/**
+ * POST /api/sync/push/machine-status
+ * The shop reports whether each machine is free, occupied or faulty. A machine the operator took
+ * out of service on this server keeps that state: the operator's word wins over the shop's reading.
+ */
+router.post('/push/machine-status', async (req, res) => {
+  try {
+    const list = Array.isArray(req.body?.machines) ? req.body.machines.slice(0, 100) : []
+    const allowed = new Set(['free', 'working', 'reserved', 'fault', 'offline'])
+    const MachineT = withTenant(Machine, req)
+    let updated = 0
+    for (const x of list) {
+      if (!x || !mongoose.isValidObjectId(x.id) || !allowed.has(x.status)) continue
+      const doc = await MachineT.findOneAndUpdate(
+        { _id: x.id, outOfService: { $ne: true }, $or: [{ status: { $ne: x.status } }, { statusText: { $ne: String(x.statusText || '') } }] },
+        { status: x.status, statusText: String(x.statusText || '').slice(0, 80) },
+        { new: true },
+      )
+      if (doc) {
+        updated++
+        try { const { broadcastMachine } = await import('../wsServer.js'); await broadcastMachine(doc) } catch { /* wsServer may not be loaded */ }
+      }
+    }
+    res.json({ success: true, updated })
+  } catch (err) {
+    console.error('[Sync] Push machine-status error:', err)
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
 // ─── Remote Commands: POS Pulls from Server ───
 
 /**

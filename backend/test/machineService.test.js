@@ -6,7 +6,7 @@ import {
 
 describe('Machine out of service (admin Offline button)', function () {
   this.timeout(20000)
-  let app, admin, adminToken, Machine, Interface
+  let app, admin, kiosk, adminToken, kioskToken, Machine, Interface
 
   before(async () => {
     await startTestDb()
@@ -17,8 +17,9 @@ describe('Machine out of service (admin Offline button)', function () {
   after(async () => { await stopTestDb() })
   beforeEach(async () => {
     await clearTestDb()
-    ;({ admin } = await seedTenantAndUsers())
+    ;({ admin, kiosk } = await seedTenantAndUsers())
     adminToken = signToken(admin)
+    kioskToken = signToken(kiosk)
   })
 
   it('sending only the status keeps the machine\'s interface, port, weight and polarity', async () => {
@@ -43,5 +44,27 @@ describe('Machine out of service (admin Offline button)', function () {
     const back = await Machine.findById(m._id)
     expect(back.outOfService).to.equal(false)
     expect(back.port).to.equal(1)
+  })
+
+  it('Avariada also takes it out of service and keeps the reason', async () => {
+    const m = await Machine.create({ tenantId: admin.tenantId, name: 'Lavar 3', type: 'wash', weight: 8 })
+    await request(app).put(`/api/admin/machines/${m._id}`).set('Authorization', `Bearer ${adminToken}`).send({ status: 'fault', statusText: 'Avariada' })
+    const f = await Machine.findById(m._id)
+    expect(f.outOfService).to.equal(true)
+    expect(f.serviceStatus).to.equal('fault')
+    await request(app).put(`/api/admin/machines/${m._id}`).set('Authorization', `Bearer ${adminToken}`).send({ status: 'free' })
+    expect((await Machine.findById(m._id)).outOfService).to.equal(false)
+  })
+
+  it('the shop reports occupied / free to central, but never overrides an out-of-service set by the operator', async () => {
+    const tenantId = admin.tenantId
+    const a = await Machine.create({ tenantId, name: 'Lavar 4', type: 'wash', weight: 8 })
+    const b = await Machine.create({ tenantId, name: 'Lavar 5', type: 'wash', weight: 8, status: 'offline', outOfService: true, serviceStatus: 'offline' })
+    const res = await request(app).post('/api/sync/push/machine-status').set('Authorization', `Bearer ${kioskToken}`)
+      .send({ machines: [{ id: String(a._id), status: 'working', statusText: 'Ocupado' }, { id: String(b._id), status: 'free', statusText: 'Livre' }, { id: 'nope', status: 'free' }] })
+    expect(res.status).to.equal(200)
+    expect(res.body.updated).to.equal(1)
+    expect((await Machine.findById(a._id)).status).to.equal('working')
+    expect((await Machine.findById(b._id)).status).to.equal('offline')
   })
 })

@@ -171,13 +171,16 @@ router.put('/machines/:id', requireAdmin, async (req, res) => {
   }
   
   const MachineT = withTenant(Machine, req)
-  const before = await MachineT.findById(req.params.id).select('outOfService').lean()
+  const before = await MachineT.findById(req.params.id).select('outOfService serviceStatus').lean()
   // Only the fields that were SENT are changed. The Offline / Avariar buttons send just
   // { status, statusText }; writing every field blanked the machine's interface, port and weight.
   const has = (k) => Object.prototype.hasOwnProperty.call(req.body, k)
   const set = {}
   for (const k of ['name', 'number', 'brand', 'model', 'serialNumber', 'status', 'statusText']) if (has(k)) set[k] = req.body[k]
-  if (has('status')) set.outOfService = status === 'offline' // only an operator's "Offline" takes it out of service
+  if (has('status')) { // the operator's "Offline" / "Avariada" take it out of service; anything else brings it back
+    set.outOfService = status === 'offline' || status === 'fault'
+    set.serviceStatus = set.outOfService ? status : null
+  }
   if (has('weight')) set.weight = weight || 0
   if (has('type')) set.type = type
   if (has('icon') || has('type')) set.icon = icon || (type === 'dry' ? '/drymachine/S1.png' : '/washingmashine/L1.png')
@@ -191,14 +194,14 @@ router.put('/machines/:id', requireAdmin, async (req, res) => {
   try { await broadcastMachine(m) } catch (e) { console.error('[admin] broadcastMachine error', e) }
   logAction(req, 'machine.update', 'Machine', m._id, { name: m.name })
   // Out of service changed on the central server: tell the shop now instead of waiting for the next pull.
-  if (before && Boolean(before.outOfService) !== Boolean(m.outOfService)) {
+  if (before && (Boolean(before.outOfService) !== Boolean(m.outOfService) || (before.serviceStatus || null) !== (m.serviceStatus || null))) {
     try {
       const { default: coinMachine } = await import('../services/coinMachine.js')
       if (!coinMachine.running) {
         const kiosks = await User.find({ tenantId: req.tenantId, role: 'KIOSK' }).select('_id').lean()
         const SyncCommandT = withTenant(SyncCommand, req)
         for (const k of kiosks) {
-          await SyncCommandT.create({ kioskId: k._id, type: 'set_service', payload: { machineId: String(m._id), outOfService: Boolean(m.outOfService) } })
+          await SyncCommandT.create({ kioskId: k._id, type: 'set_service', payload: { machineId: String(m._id), outOfService: Boolean(m.outOfService), status: m.serviceStatus || (m.outOfService ? 'offline' : 'free') } })
         }
       }
     } catch (e) { console.error('[admin] could not queue the out-of-service command', e.message) }
