@@ -231,6 +231,20 @@ router.post('/cash/pay', requireKiosk, async (req, res) => {
     rechargeLines.push({ amount: parsed.value, item: r })
   }
 
+  // A cash recharge puts the money ON a card. It used to record only a sale: the cash was taken, the
+  // sale showed a recharge, and the card never got a cent. Resolve the card now, before any money moves:
+  // the code the kiosk sent, or the card that is in the reader.
+  let rechargeCard = null
+  const CardT = withTenant(Card, req)
+  if (rechargeLines.length) {
+    const inReader = coinMachine.client?.getState?.() || {}
+    const code = String(req.body.cardCode || (inReader.hasCard ? inReader.cardNumber : '') || '').trim()
+    if (!code) return res.status(409).json({ error: 'Insert the card in the reader to recharge it' })
+    rechargeCard = await CardT.findOne({ code })
+    if (!rechargeCard) return res.status(404).json({ error: 'Card not found', cardCode: code })
+    if (rechargeCard.status !== 'active') return res.status(409).json({ error: 'Card is not active', status: rechargeCard.status })
+  }
+
   const resolved = await resolveMachineLines(items.filter((i) => !isRecharge(i)), MachineT, withTenant(Price, req), 'cash', coupon)
   if (!resolved.ok) return res.status(resolved.status).json(resolved.error)
 
@@ -241,7 +255,23 @@ router.post('/cash/pay', requireKiosk, async (req, res) => {
   const sales = []
   for (const line of rechargeLines) {
     // cash/pay handler — recharge method must be 'cash', not 'card'
-    sales.push(await SaleT.create({ amount: line.amount, items: line.item, method: 'cash', batchId, inserted: line.amount, change: 0, type: 'recharge' }))
+    const credited = await creditCard(CardT, { _id: rechargeCard._id }, line.amount)
+    if (!credited) return res.status(409).json({ error: 'Card disappeared during the recharge', cardCode: rechargeCard.code })
+    sales.push(await SaleT.create({ amount: line.amount, items: line.item, method: 'cash', batchId, inserted: line.amount, change: 0, type: 'recharge', cardId: rechargeCard._id, cardCode: rechargeCard.code }))
+  }
+  if (rechargeCard) {
+    // The card in the reader must show the new balance, and the chip must follow the database.
+    try {
+      const fresh = await CardT.findById(rechargeCard._id)
+      const st = coinMachine.client?.client
+      if (fresh && st && st.hasCard && String(st.cardNumber) === String(fresh.code)) {
+        st.balanceCard = roundMoney(fresh.balance)
+        st.initBalance = roundMoney(fresh.balance)
+        coinMachine.client.updateCredits()
+        coinMachine.client.notifySubscribers()
+      }
+      coinMachine.cardSync?.push?.(String(rechargeCard.code))?.catch?.((e) => console.error('[gateways] card write-back failed:', e.message))
+    } catch (e) { console.error('[gateways] could not refresh the card after the recharge:', e.message) }
   }
 
   // Then machine sales — attach inserted/change to first machine sale

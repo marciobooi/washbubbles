@@ -80,4 +80,25 @@ describe('Machine out of service (admin Offline button)', function () {
     const pending = await SyncCommand.find({ tenantId: admin.tenantId, type: 'sync_now', status: 'pending' })
     expect(pending).to.have.length(1)
   })
+
+  it('a cash recharge credits the card (it used to record only a sale and leave the card alone)', async () => {
+    const Card = (await import('../src/models/card.js')).default
+    const Sale = (await import('../src/models/sale.js')).default
+    await Card.create({ tenantId: admin.tenantId, code: 'CASH-RECH', balance: 4.7, status: 'active' })
+    const res = await request(app).post('/api/gateways/cash/pay').set('Authorization', `Bearer ${kioskToken}`)
+      .send({ items: [{ type: 'Recarga de Cartão', id: 'recharge-1', amount: 10 }], inserted: 10, batchId: 'b-rech', cardCode: 'CASH-RECH' })
+    expect(res.status).to.equal(200)
+    expect((await Card.findOne({ code: 'CASH-RECH' })).balance).to.equal(14.7)
+    const sale = await Sale.findOne({ batchId: 'b-rech' })
+    expect(sale.type).to.equal('recharge')
+    expect(sale.cardCode).to.equal('CASH-RECH')
+  })
+
+  it('a cash recharge with no card refuses and takes nothing', async () => {
+    const Sale = (await import('../src/models/sale.js')).default
+    const res = await request(app).post('/api/gateways/cash/pay').set('Authorization', `Bearer ${kioskToken}`)
+      .send({ items: [{ type: 'Recarga de Cartão', id: 'recharge-2', amount: 10 }], inserted: 10, batchId: 'b-none' })
+    expect(res.status).to.equal(409)
+    expect(await Sale.countDocuments({ batchId: 'b-none' })).to.equal(0)
+  })
 })
