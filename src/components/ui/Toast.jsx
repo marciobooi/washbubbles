@@ -8,7 +8,17 @@ export function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={{}}>
       {children}
-      <Toaster position="top-right" richColors toastOptions={{ duration: 3500 }} />
+      {/* Top middle, just under the header, and big: the kiosk is read from a distance. */}
+      <Toaster
+        position="top-center"
+        offset="104px"
+        richColors
+        style={{ "--width": "min(92vw, 640px)" }}
+        toastOptions={{
+          duration: 4500,
+          style: { fontSize: "1.6rem", lineHeight: 1.3, padding: "22px 26px", fontWeight: 600, borderRadius: "16px" },
+        }}
+      />
     </ToastContext.Provider>
   )
 }
