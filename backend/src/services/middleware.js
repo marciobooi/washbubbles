@@ -617,6 +617,8 @@ class Middleware extends EventEmitter {
       const t = setTimeout(() => { this.reinitPeripherals(want).catch((e) => console.error('[HW] re-init failed:', e.message)) }, quiet + steps.length * gap + 500)
       t.unref?.()
     }
+    const t2 = setTimeout(() => { this.sendOnceFromFile() }, quiet + steps.length * gap + 6000)
+    t2.unref?.()
   }
 
   /**
@@ -672,6 +674,31 @@ class Middleware extends EventEmitter {
     const back = setTimeout(() => { if (this.lowLevel?.isConnected) this.sendPackage({ op: 'status_per' }) }, 3000)
     back.unref?.()
     return { sent: Boolean(sent), per }
+  }
+
+  /**
+   * Diagnostics: send a handful of packages once, read from data/send-once.json
+   * ({"packages":[{"op":"machine-reserved","data":{"id":"11","chn":"1"}}], "delayMs":8000}), then delete the file.
+   * Only for testing on the shop controller with someone watching; not an application feature.
+   */
+  async sendOnceFromFile() {
+    try {
+      const fs = await import('fs')
+      const path = await import('path')
+      const url = await import('url')
+      const dir = process.env.DATA_DIR || path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '../../data')
+      const file = path.join(dir, 'send-once.json')
+      if (!fs.existsSync(file)) return
+      const j = JSON.parse(fs.readFileSync(file, 'utf8'))
+      fs.rmSync(file, { force: true })
+      const delay = Number(j.delayMs) || 8000
+      for (const pkg of (Array.isArray(j.packages) ? j.packages : [])) {
+        if (!pkg || typeof pkg.op !== 'string') continue
+        console.log('[HW] send-once ->', JSON.stringify(pkg))
+        this.sendPackage(pkg)
+        await new Promise((r) => setTimeout(r, delay))
+      }
+    } catch (e) { console.error('[HW] send-once failed:', e.message) }
   }
 
   async onLowLevelDisconnected() {
