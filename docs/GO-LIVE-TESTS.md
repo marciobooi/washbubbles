@@ -212,3 +212,6 @@ Both went dead with the controller still reporting `status 0 / active 1`; unplug
 
 ### Note 2026-10-10: card reader flapping
 With a card sitting in the reader the controller reports `card-removed` / `card-inserted` every few seconds. This is what exposed the stale-save bug. Same family as the bill acceptor going silent; ask the installer/vendor. Also open: a recharge made while the card is in must refresh the session copy (the save is now delta-based, so nothing is lost, but the screen balance can lag until the card is re-read).
+
+### Note 2026-10-10 (night): the peripherals are on RJ45 cables, not USB
+Owner finding: the bill acceptor, coin acceptor and the other peripherals connect to the controller with RJ45 (network-style) cables, not USB. The "unplug and replug" that wakes the acceptor / reader is therefore a connector or cable contact. Check, in order: both ends reseated and clicked, a known-good short cable for the acceptor, no kinks/pinches, away from mains. The earlier steps (USB port change, Windows USB power saving, keep-alive) were aimed at the wrong thing and are harmless but were not the cause. Keep a note of WHICH cable wakes it each time.
