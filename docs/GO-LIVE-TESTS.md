@@ -76,7 +76,7 @@ switched on only when the admin is at the shop or at a quiet time, and then the 
 - [ ] `hopperCoinValue`/`hopperMaxDispenseCoins` are right for the coins actually loaded
 - [ ] Hopper stock counter (`hopperConfig.currentCount`) goes down after payouts and survives a restart/pull
 
-- [ ] **Which coins does the controller pay?** In the shop the app only sends the total to the controller (`get-change`, in cents) and the
+- [ ] **Which coins does the controller pay?** (2026-10-10 owner, EUR 10 refund: total exact, but the mix of coins was random, not biggest-first; the controller chooses, ask the vendor for a per-coin / priority option) In the shop the app only sends the total to the controller (`get-change`, in cents) and the
       controller chooses the coins, so "biggest coins first" has to be seen at the machine. For each of €0.30, €1.70, €3.80, €5.00 and €9.90:
       insert that much cash, use the operator refund (`POST /api/middleware/client/refund`), and write down which coins fell. The backend log
       prints `biggest coins first would be …` for each request: compare the two. If the controller does not pay biggest-first, find out
