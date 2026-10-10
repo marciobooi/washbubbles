@@ -885,17 +885,22 @@ class CoinMachine extends EventEmitter {
     const iface = machine.interfaceId
     if (!iface || !machine.port) throw new Error(`${machine.name} has no interface/port configured`)
     if (iface.status !== 'active') throw new Error(`Interface ${iface.name} is not active (status: ${iface.status})`)
-    // Throws when the controller is not connected: the caller then charges nothing.
-    await this.middleware.sendMachineActivation(machine, iface)
     const n = Math.max(1, Math.floor(blocks))
+    // How the blocks reach the machine:
+    //  batch (default, what the old program does): ONE command carrying n impulses; the machine adds
+    //    the time itself;
+    //  staggered: one impulse now, one more every `tImp` minutes (DRYER_IMPULSE_MODE=staggered).
+    const staggered = String(process.env.DRYER_IMPULSE_MODE || 'batch').toLowerCase() === 'staggered' && n > 1
+    // Throws when the controller is not connected: the caller then charges nothing.
+    await this.middleware.sendMachineActivation(machine, iface, staggered ? 1 : n)
     const minutes = await this.cycleMinutes(machine, n)
     machine.busyUntil = new Date(Date.now() + minutes * 60_000)
     machine.sawBusy = false
-    machine.pendingImpulses = n - 1
-    machine.nextImpulseAt = n > 1 ? new Date(Date.now() + this.gapMinutes(machine) * 60_000) : null
+    machine.pendingImpulses = staggered ? n - 1 : 0
+    machine.nextImpulseAt = staggered ? new Date(Date.now() + this.gapMinutes(machine) * 60_000) : null
     machine.startedAt = new Date()
     await machine.save()
-    console.log(`[Cycle] ${machine.name} started (block 1 of ${n}); next impulse ${machine.nextImpulseAt ? 'at ' + machine.nextImpulseAt.toISOString() : 'none'}`)
+    console.log(`[Cycle] ${machine.name} started: ${staggered ? 'block 1 of ' + n + ', next impulse at ' + machine.nextImpulseAt.toISOString() : n + ' impulse(s) sent at once'}`)
     return { success: true, blocks: n }
   }
 

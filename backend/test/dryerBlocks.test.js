@@ -8,6 +8,7 @@ describe('Dryer blocks: one impulse now, one more every block', function () {
   this.timeout(20000)
   let app, tenant, kiosk, kioskToken, Machine, Interface, Price, Sale, coinMachine
   let sent
+  let impulses
   const saved = {}
 
   before(async () => {
@@ -25,12 +26,14 @@ describe('Dryer blocks: one impulse now, one more every block', function () {
     ;({ tenant, kiosk } = await seedTenantAndUsers())
     kioskToken = signToken(kiosk)
     sent = []
+    impulses = []
+    delete process.env.DRYER_IMPULSE_MODE
     saved.tenantId = coinMachine.tenantId
     saved.running = coinMachine.running
     saved.middleware = coinMachine.middleware
     coinMachine.tenantId = tenant._id
     coinMachine.running = true
-    coinMachine.middleware = { sendMachineActivation: async (m) => { sent.push(m.name); if (coinMachine.__fail) throw new Error('controller offline') } }
+    coinMachine.middleware = { sendMachineActivation: async (m, iface, n) => { sent.push(m.name); impulses.push(n); if (coinMachine.__fail) throw new Error('controller offline') } }
     coinMachine.__fail = false
   })
   afterEach(() => {
@@ -54,7 +57,7 @@ describe('Dryer blocks: one impulse now, one more every block', function () {
     expect(coinMachine.blocksFor({ type: 'wash' }, { quantity: 5 })).to.equal(1)
   })
 
-  it('cash: 3 blocks cost 3 x the price, send ONE impulse now and keep two pending', async () => {
+  it('cash: 3 blocks cost 3 x the price and go to the machine as ONE command with 3 impulses', async () => {
     const m = await dryer()
     const res = await request(app).post('/api/gateways/cash/pay').set('Authorization', `Bearer ${kioskToken}`)
       .send({ items: [{ _id: m._id, quantity: 3 }], inserted: 10, batchId: 'b-dry' })
@@ -62,11 +65,23 @@ describe('Dryer blocks: one impulse now, one more every block', function () {
     expect(res.body.total).to.equal(6)
     expect(res.body.change).to.equal(4)
     expect(sent).to.deep.equal(['Secar 7'])
+    expect(impulses).to.deep.equal([3])
     const after = await Machine.findById(m._id)
-    expect(after.pendingImpulses).to.equal(2)
-    expect(after.nextImpulseAt).to.be.instanceOf(Date)
+    expect(after.pendingImpulses).to.equal(0)
+    expect(after.nextImpulseAt).to.equal(null)
+    expect(after.busyUntil).to.be.instanceOf(Date) // the clock still holds it for 3 x 15 min
     const sale = await Sale.findOne({ batchId: 'b-dry' })
     expect(sale.amount).to.equal(6)
+  })
+
+  it('staggered mode: one impulse now and one more per block', async () => {
+    process.env.DRYER_IMPULSE_MODE = 'staggered'
+    const m = await dryer()
+    await coinMachine.startPaidMachine(m._id, 3)
+    expect(impulses).to.deep.equal([1])
+    const cur = await Machine.findById(m._id)
+    expect(cur.pendingImpulses).to.equal(2)
+    expect(cur.nextImpulseAt).to.be.instanceOf(Date)
   })
 
   it('the tick sends the next block only when its time has come, and stops after the last', async () => {

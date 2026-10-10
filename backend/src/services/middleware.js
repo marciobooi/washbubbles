@@ -816,11 +816,12 @@ class Middleware extends EventEmitter {
   }
 
   /** Activate a machine channel through the controller (`activate-machine`). */
-  async activateViaGateway(machine, iface) {
+  async activateViaGateway(machine, iface, impulses = null) {
     const item = {
       id: String(iface.address),
       chn: String(machine.port),
-      impulses: String(parseInt(machine.impulses, 10) || 1),
+      // A dryer bought for n blocks gets n impulses in ONE command (what the old program does).
+      impulses: String(parseInt(impulses, 10) || parseInt(machine.impulses, 10) || 1),
     }
     // `send` only proves the frame reached the socket. The legacy kiosk does not
     // get an activation acknowledgement either — it relies on `status_int`.
@@ -2201,13 +2202,13 @@ class Middleware extends EventEmitter {
    * Send machine activation pulse through Interface hardware
    * Uses interface address, port, tOn/tOff timing for pulse control
    */
-  async sendMachineActivation(machine, iface) {
+  async sendMachineActivation(machine, iface, impulsesOverride = null) {
     if (!iface) {
       throw new Error('Interface not configured for this machine')
     }
 
     // Interface lives behind the controller: it takes an op, not raw KITSEC bytes.
-    if (this.lowLevel && !isSerialPath(iface.address)) return this.activateViaGateway(machine, iface)
+    if (this.lowLevel && !isSerialPath(iface.address)) return this.activateViaGateway(machine, iface, impulsesOverride)
 
     const { address, tOn, tOff } = iface
     const { port, activation, impulses } = machine
