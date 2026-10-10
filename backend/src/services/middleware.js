@@ -529,8 +529,16 @@ class Middleware extends EventEmitter {
     this.lowLevel.start()
 
     if (cfg.pollMs > 0) {
-      this.statusPollTimer = setInterval(() => this.requestStatus(), cfg.pollMs)
+      // Interface (machine) status often; PERIPHERAL status (it makes the controller query the bill
+      // acceptor, reader, hopper... on its bus) only rarely. On the old PC the acceptor and reader
+      // never dropped out; this app's once-a-minute peripheral query is the extra load on them.
+      this.statusPollTimer = setInterval(() => this.requestStatus({ per: false }), cfg.pollMs)
       this.statusPollTimer.unref?.()
+      const perMs = process.env.LOWLEVEL_PER_POLL_MS !== undefined ? Number(process.env.LOWLEVEL_PER_POLL_MS) : 10 * 60_000
+      if (perMs > 0) {
+        this.perPollTimer = setInterval(() => { if (this.lowLevel?.isConnected) this.sendPackage({ op: 'status_per' }) }, perMs)
+        this.perPollTimer.unref?.()
+      }
     }
     console.log(`[HW] Low-level gateway enabled: ${cfg.host}:${cfg.port}`)
     return true
@@ -594,8 +602,9 @@ class Middleware extends EventEmitter {
   }
 
   /** Ask the controller for peripheral and interface health (both read-only). */
-  requestStatus() {
+  requestStatus({ per = true } = {}) {
     if (!this.lowLevel?.isConnected) return false
+    if (!per) return this.sendPackage({ op: 'status_int' })
     this.sendPackage({ op: 'status_per' })
     // Not back-to-back: on the shop controller the peripheral-status reply never came when
     // both requests were sent together (the interface-status one always did).
@@ -2014,6 +2023,8 @@ class Middleware extends EventEmitter {
     this.reconnectTimers.clear()
 
     clearInterval(this.statusPollTimer)
+    clearInterval(this.perPollTimer)
+    this.perPollTimer = null
     clearTimeout(this.busyPollTimer)
     clearTimeout(this.statusSoonTimer)
     this.statusPollTimer = this.busyPollTimer = this.statusSoonTimer = null

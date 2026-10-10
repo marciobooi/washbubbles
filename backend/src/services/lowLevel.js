@@ -25,9 +25,8 @@ export const LOWLEVEL_DEFAULT_HOST = '192.168.2.201'
 export const LOWLEVEL_DEFAULT_PORT = 16852
 
 /** Legacy keep-alive cadence: every 90 s, but only if the app was silent for 2 min. */
-// The legacy bridge pinged every 90 s. The acceptor / reader were observed going dead "after a while",
-// so the ping is a little more frequent here (it is a harmless question). LOWLEVEL_KEEPALIVE_MS overrides.
-export const KEEPALIVE_CHECK_MS = Number(process.env.LOWLEVEL_KEEPALIVE_MS) || 30 * 1000
+// The legacy bridge pinged every 90 s when idle. Same cadence here; LOWLEVEL_KEEPALIVE_MS overrides.
+export const KEEPALIVE_CHECK_MS = Number(process.env.LOWLEVEL_KEEPALIVE_MS) || 90 * 1000
 export const KEEPALIVE_IDLE_MS = 2 * 60 * 1000
 export const RECONNECT_MS = 5 * 1000
 

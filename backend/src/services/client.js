@@ -245,14 +245,25 @@ class Client extends EventEmitter {
       return null
     }
 
+    // Apply only what THIS session changed (spent from the card), as a delta on whatever the card
+    // holds now. The old code wrote the in-memory balance over the database: a recharge made through
+    // the API while the card sat in the reader (database +10) was then erased by the next save,
+    // when the reader reported the card removed. The customer paid 10 and kept 4.70.
+    const mem = roundMoney(this.client.balanceCard)
+    const base = roundMoney(this.client.initBalance ?? mem)
+    const delta = roundMoney(mem - base)
     const card = await Card.findOneAndUpdate(
       { code: this.client.cardNumber },
-      { $set: { balance: roundMoney(this.client.balanceCard), bonus: roundMoney(this.client.bonus), updatedAt: new Date() } },
+      { $inc: { balance: delta }, $set: { bonus: roundMoney(this.client.bonus), updatedAt: new Date() } },
       { new: true }
     )
     if (!card) {
       throw new Error(`Card ${this.client.cardNumber} no longer exists — balance not saved`)
     }
+    // Memory now follows the database, so a later save has nothing stale to apply.
+    this.client.balanceCard = roundMoney(card.balance)
+    this.client.initBalance = roundMoney(card.balance)
+    this.updateCredits()
 
     this.emit('card-saved', { code: card.code, balance: card.balance })
     return card
