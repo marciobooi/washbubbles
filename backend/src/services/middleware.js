@@ -563,7 +563,8 @@ class Middleware extends EventEmitter {
     console.log(`[HW] ${peripheral.name} (${peripheral.type}) attached via low-level controller`)
     // One status query answers for every peripheral, so coalesce the burst that
     // startup produces (one attach per peripheral) into a single request pair.
-    if (this.lowLevel?.isConnected && !this.statusSoonTimer) {
+    // (Not while the gentle connect sequence is running: it asks the same questions, one at a time.)
+    if (this.lowLevel?.isConnected && !this.statusSoonTimer && Date.now() >= (this.connectBusyUntil || 0)) {
       this.statusSoonTimer = setTimeout(() => { this.statusSoonTimer = null; this.requestStatus() }, 300)
       this.statusSoonTimer.unref?.()
     }
@@ -582,10 +583,17 @@ class Middleware extends EventEmitter {
     this.lastLinkError = null
     console.log('[HW] Low-level controller connected')
     this.emit('low-level-connected')
-    // Same opening questions the legacy kiosk asks; all are read-only queries.
-    this.requestStatus()
-    this.sendPackage({ op: 'get-version' })
-    this.sendPackage({ op: 'has-card' })
+    // Same opening questions the legacy kiosk asks (all read-only), but ONE AT A TIME after a quiet
+    // moment. They used to go out in one burst within a few milliseconds; this controller is known to
+    // drop replies to back-to-back requests, and the bill acceptor was found dead after each restart.
+    const quiet = Number(process.env.LOWLEVEL_CONNECT_QUIET_MS) || 2000
+    const gap = Number(process.env.LOWLEVEL_CONNECT_GAP_MS) || 1500
+    const steps = [{ op: 'status_per' }, { op: 'status_int' }, { op: 'get-version' }, { op: 'has-card' }]
+    this.connectBusyUntil = Date.now() + quiet + steps.length * gap + 500
+    steps.forEach((pkg, i) => {
+      const t = setTimeout(() => { if (this.lowLevel?.isConnected) this.sendPackage(pkg) }, quiet + i * gap)
+      t.unref?.()
+    })
   }
 
   async onLowLevelDisconnected() {
