@@ -154,8 +154,8 @@ come from the machines and the controller themselves, or from the maker or the P
 
 ## 8. Cards (RFID reader and dispenser — never tested)
 
-- [ ] Present a card: it is read (`card-inserted`, `has-card`), balance shown
-- [ ] Recharge a card with cash; balance written to the card **and** to the database, and synced to Hetzner
+- [x] Present a card: it is read (`card-inserted`), balance shown (owner 2026-10-10, after the kiosk got `rfid:card_detected`)
+- [x] Recharge a card with cash; balance written to the card **and** to the database, and synced to Hetzner — chip write seen: `write-card` 1470 -> `201 ok`, card 14.70, Hetzner 14.70 (2026-10-10; the first attempt lost the EUR 10 to a stale save, fixed in fa4dc70, credited by hand with audit `card.manual_credit`)
 - [ ] Buy a new card: the dispenser releases one, it is written (`write-card` 201) and activated
 - [ ] Card removed mid-way: no double credit, unspent cash goes onto the card
 - [ ] Blocked / `pending_write` card: the right message
@@ -209,3 +209,6 @@ Owner changed a USB connection and the acceptor worked again (EUR 10 credited an
 
 ### Note 2026-10-10 (evening): bill acceptor and card reader going silent
 Both went dead with the controller still reporting `status 0 / active 1`; unplugging and replugging the USB woke them. Tried, in order: acceptor moved from a blue (USB 3.0) port to a black (USB 2.0) port; Windows power saving off on the PC (USB selective suspend, adapter power management, Green Ethernet); controller keep-alive `has-card` now every 30 s regardless of other traffic (our status polling used to suppress it). After these the owner reported a run working fine. NOT proven which one fixed it. If it returns: note which device, the time, the acceptor LED pattern (dark or N blinks) and whether the cash box is seated; then suspect the acceptor power supply / controller USB hub.
+
+### Note 2026-10-10: card reader flapping
+With a card sitting in the reader the controller reports `card-removed` / `card-inserted` every few seconds. This is what exposed the stale-save bug. Same family as the bill acceptor going silent; ask the installer/vendor. Also open: a recharge made while the card is in must refresh the session copy (the save is now delta-based, so nothing is lost, but the screen balance can lag until the card is re-read).
