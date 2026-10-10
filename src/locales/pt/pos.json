@@ -17,7 +17,8 @@
   },
   "status": {
     "free": "Livre",
-    "occupied": "Ocupado"
+    "occupied": "Ocupado",
+    "offline": "Fora de serviço"
   },
   "machines": {
     "select": "Selecionar máquina de {{type}}",

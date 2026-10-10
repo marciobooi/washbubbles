@@ -7,7 +7,7 @@ import Interface from '../models/interface.js'
 import Peripheral from '../models/peripheral.js'
 import Sale from '../models/sale.js'
 import Card from '../models/card.js'
-import { broadcastMachine, broadcastHardwareEvent } from '../wsServer.js'
+import { broadcastMachine, broadcastMachines, broadcastHardwareEvent } from '../wsServer.js'
 import { roundMoney } from '../utils/money.js'
 import { isChannelBusy } from './lowLevel.js'
 import { CardSync } from './cardSync.js'
@@ -125,6 +125,8 @@ class CoinMachine extends EventEmitter {
       this.downlink.on('synced', () => {
         this.loadSettings().catch(() => {})
         this.middleware.loadEquivalenceTables?.().catch?.(() => {})
+        // An operator may have taken a machine out of service (or back) on the central server.
+        broadcastMachines?.().catch?.(() => {})
         // Keep a copy of the pictures the settings mention (logo, banners) so they also show offline.
         prefetchUploads({ SettingModel: Setting, tenantId: this.tenantId, uploadDir }).catch(() => {})
       })
@@ -938,6 +940,7 @@ class CoinMachine extends EventEmitter {
     if (!iface || !machine.port) throw new Error(`${machine.name} has no interface/port configured`)
     if (iface.status !== 'active') throw new Error(`Interface ${iface.name} is not active (status: ${iface.status})`)
     if (machine.status === 'working') throw new Error(`${machine.name} is already running`)
+    if (machine.outOfService || machine.status === 'offline') throw new Error(`${machine.name} is out of service`)
 
     // Throws if the controller is not connected — nothing is marked running in that case.
     await this.middleware.sendMachineActivation(machine, iface)
@@ -1220,6 +1223,18 @@ class CoinMachine extends EventEmitter {
 
       if (!machine) {
         console.warn(`No machine found for Interface ${interfaceId} Port ${port}`)
+        return
+      }
+
+      // Out of service is the operator's call: hardware readings must not bring it back.
+      if (machine.outOfService) {
+        if (machine.status !== 'offline') {
+          machine.status = 'offline'
+          machine.statusText = 'Fora de servi\u00e7o'
+          await machine.save()
+          this.machines.set(machine.intId || machine._id, machine.toObject())
+          await broadcastMachine(machine)
+        }
         return
       }
 

@@ -17,7 +17,8 @@
   },
   "status": {
     "free": "Frei",
-    "occupied": "Beschäftigt"
+    "occupied": "Beschäftigt",
+    "offline": "Außer Betrieb"
   },
   "machines": {
     "select": "{{type}} auswählen",

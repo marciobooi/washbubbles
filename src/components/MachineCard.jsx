@@ -32,6 +32,7 @@ export default function MachineCard({ m, frames, onSelect = () => {} }) {
   const seed = Array.from(String(uniqueId)).reduce((s, c) => s * 31 + c.charCodeAt(0), 0)
   const frame = useFrameAnimation(frames, 300, { seed })
   const isFree = m.status === 'free'
+  const isOffline = m.status === 'offline' || m.outOfService === true
   const borderClass = isFree ? 'border-2 border-green-500' : 'border-2 border-red-500'
   const interactiveClass = isFree
     ? 'cursor-pointer active:scale-95 active:shadow-lg hover:shadow-lg transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-primary-400'
@@ -72,7 +73,7 @@ export default function MachineCard({ m, frames, onSelect = () => {} }) {
       </div>
       <div className="flex items-center gap-2">
         <div className={`w-3 h-3 rounded-full ${isFree ? 'bg-green-500' : 'bg-red-500'}`} />
-        <div className="text-2xl font-medium">{t(`status.${isFree ? 'free' : 'occupied'}`)}</div>
+        <div className="text-2xl font-medium">{t(`status.${isFree ? 'free' : isOffline ? 'offline' : 'occupied'}`)}</div>
       </div>
     </div>
   )

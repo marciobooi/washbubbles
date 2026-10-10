@@ -178,6 +178,14 @@ export class Downlink extends EventEmitter {
       return { updateOne: { filter: { _id }, update: { $set: rest }, upsert: true } }
     })
     await Model.bulkWrite(ops, { ordered: true })
+    if (name === 'machines') {
+      // `status` is runtime state and is never pulled, but "out of service" is the operator's decision
+      // made on the central server: the shop must show it and refuse the sale.
+      await Model.updateMany({ tenantId: tenant, outOfService: true, status: { $ne: 'offline' } },
+        { $set: { status: 'offline', statusText: 'Fora de servi\u00e7o' } })
+      await Model.updateMany({ tenantId: tenant, outOfService: { $ne: true }, status: 'offline' },
+        { $set: { status: 'free', statusText: '' } })
+    }
     this.counts[name] = docs.length
   }
 

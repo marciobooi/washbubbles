@@ -47,6 +47,24 @@ describe('Downlink — central server is the source of truth', function () {
     })
   })
 
+  it('an operator taking a machine out of service on the central server shows on this site, and coming back clears it', async () => {
+    await mk().pullAll()
+    const id = central.data.machines[0]._id
+    expect((await Machine.findById(id)).status).to.equal('free')
+
+    central.data.machines[0] = { ...central.data.machines[0], outOfService: true, status: 'offline' }
+    await mk().pullAll()
+    let m = await Machine.findById(id)
+    expect(m.outOfService).to.equal(true)
+    expect(m.status).to.equal('offline')
+
+    central.data.machines[0] = { ...central.data.machines[0], outOfService: false, status: 'free' }
+    await mk().pullAll()
+    m = await Machine.findById(id)
+    expect(m.outOfService).to.equal(false)
+    expect(m.status).to.equal('free')
+  })
+
   it('is disabled without URL and key, and makes no calls', async () => {
     const d = new Downlink({ tenantId: tenant._id, url: '', apiKey: '', fetchImpl: central.fetch })
     expect(await d.pullAll()).to.equal(false)

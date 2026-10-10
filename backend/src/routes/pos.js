@@ -104,6 +104,9 @@ router.post('/sale', requireKiosk, async (req, res) => {
   if (machine.status === 'working') {
     return res.status(409).json({ error: 'Machine already in use' })
   }
+  if (machine.outOfService || machine.status === 'offline') {
+    return res.status(409).json({ error: 'Machine out of service' })
+  }
 
   // If card specified and method is card, deduct from card balance.
   // Atomic: the sufficiency check and the debit are one update, so two kiosks
@@ -743,6 +746,7 @@ router.post('/cards/:code/spend', requireKiosk, async (req, res) => {
     const m = await MachineT.findById(machineId)
     if (!m) return res.status(404).json({ error: 'Machine not found' })
     if (m.status === 'working') return res.status(409).json({ error: 'Machine already in use' })
+    if (m.outOfService || m.status === 'offline') return res.status(409).json({ error: 'Machine out of service' })
   }
 
   if (card.status === 'pending_write') {

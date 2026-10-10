@@ -66,6 +66,8 @@ router.post('/machines', requireAdmin, async (req, res) => {
   const machine = await MachineT.create({
     name, number, brand, model, serialNumber,
     status, statusText,
+    // Only an operator's "Offline" takes a machine out of service; anything else brings it back.
+    ...(status !== undefined ? { outOfService: status === 'offline' } : {}),
     weight: weight || 0,
     type: type || 'wash',
     icon: finalIcon,
