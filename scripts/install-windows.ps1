@@ -204,8 +204,11 @@ try {
     HOST = '127.0.0.1'
     SERVE_FRONTEND = 'true'
     LOWLEVEL_ENABLED = 'true'
-    LOWLEVEL_HOST = $ControllerHost
-    LOWLEVEL_PORT = "$ControllerPort"
+    # The backend talks to the local hardware bridge (which owns the one connection to the controller).
+    LOWLEVEL_HOST = '127.0.0.1'
+    LOWLEVEL_PORT = '16853'
+    CONTROLLER_HOST = $ControllerHost
+    CONTROLLER_PORT = "$ControllerPort"
   }
   $have = Read-DotEnv $EnvFile
   $add = @()
@@ -323,6 +326,14 @@ try {
       $bPrincipal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
       Register-ScheduledTask -TaskName 'WashBubbles Backend' -Action $bAction -Trigger $bTrigger -Settings $settings -Principal $bPrincipal -Force | Out-Null
       Ok "task 'WashBubbles Backend' runs the backend at boot (no login needed)"
+
+      # The hardware bridge owns the controller connection and starts BEFORE the backend (no delay), so the
+      # backend can be restarted or updated without the controller seeing a disconnect.
+      $runBridge = Join-Path $Root 'scripts\run-bridge.bat'
+      $brAction = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument "/c `"$runBridge`"" -WorkingDirectory $Root
+      $brTrigger = New-ScheduledTaskTrigger -AtStartup
+      Register-ScheduledTask -TaskName 'WashBubbles Bridge' -Action $brAction -Trigger $brTrigger -Settings $settings -Principal $bPrincipal -Force | Out-Null
+      Ok "task 'WashBubbles Bridge' keeps the controller connection at boot"
     }
   }
 

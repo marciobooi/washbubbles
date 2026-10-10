@@ -395,6 +395,37 @@ class CoinMachine extends EventEmitter {
       this.handleHopperFault(data)
     })
     this.subscriptions.push(hopperFaultSub)
+
+    // The hardware bridge keeps the controller session alive across restarts of this program; it tells us
+    // when the session is brand new or lost, which is when the bill acceptor may have been switched off.
+    const bridgeSub = this.middleware.subscribe('bridge-status', (s) => {
+      this.handleBridgeStatus(s).catch((e) => console.error('[Bridge] status handling failed:', e.message))
+    })
+    this.subscriptions.push(bridgeSub)
+  }
+
+  /** Warn the operator when the controller session is new or lost (the bill acceptor may be off). */
+  async handleBridgeStatus(s) {
+    const now = Date.now()
+    let subject = null
+    let message = null
+    if (s.controller === 'disconnected') {
+      subject = 'Controlador desligado'
+      message = 'A ligação ao controlador do hardware perdeu-se. Moedas, notas e cartões não funcionam até voltar.'
+    } else if (s.controller === 'connected' && Number(s.sessionAgeMs) < 5 * 60_000) {
+      subject = 'Controlador reiniciado - verificar leitor de notas'
+      message = 'A sessão com o controlador é nova. O leitor de notas pode ter ficado desligado: se a luz estiver apagada, volte a ligar o cabo do leitor.'
+    }
+    if (!subject) return
+    if (this.lastBridgeAlert && now - this.lastBridgeAlert.at < 10 * 60_000 && this.lastBridgeAlert.subject === subject) return
+    this.lastBridgeAlert = { at: now, subject }
+    console.warn(`[Bridge] ${subject}`)
+    await this.auditSystem('controller.session', { controller: s.controller, sessionAgeMs: s.sessionAgeMs })
+    broadcastHardwareEvent(this.tenantId, 'controller:session', { controller: s.controller, fresh: subject.startsWith('Controlador reiniciado') })
+    try {
+      const { sendAlertForTenant } = await import('./alerts.js')
+      await sendAlertForTenant(this.tenantId, subject, message)
+    } catch (e) { console.error('[Bridge] alert not sent:', e.message) }
   }
 
   /**

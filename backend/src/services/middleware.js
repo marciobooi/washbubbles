@@ -599,7 +599,7 @@ class Middleware extends EventEmitter {
     // acceptor off when the program goes away and only re-enables it when the configuration is sent again.
     // The list REPLACES the controller's own, so it is always the complete set, with the controller's own
     // protocol spelling (ccTalk / pulse / rs232 / spi): lowercase "cctalk" was accepted but never initialised.
-    let want = String(process.env.LOWLEVEL_REINIT_ON_CONNECT ?? 'all').split(',').map((s) => s.trim()).filter((s) => s && s !== 'none')
+    let want = String(process.env.LOWLEVEL_REINIT_ON_CONNECT ?? 'none').split(',').map((s) => s.trim()).filter((s) => s && s !== 'none')
     // One-shot recovery: an operator drops data/reinit-once.json ({"types":["all"]}); it is read and deleted.
     try {
       const fs = await import('fs')
@@ -2397,6 +2397,9 @@ class Middleware extends EventEmitter {
       case 'card-removed':
         this.lastCard = null
         this.emit('card-removed', pkg.data)
+        break
+      case 'bridge-status': // from the local hardware bridge, not from the controller
+        this.emit('bridge-status', pkg)
         break
       case 'has-card':
         if (isReply) {
