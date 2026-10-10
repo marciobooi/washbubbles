@@ -66,6 +66,12 @@ export default function Pos() {
     connect()
     const unsub = subscribe((message) => {
       if (!message || typeof message !== 'object') return
+      // The card was taken out of the reader: the window must not keep showing it.
+      if (message.type === 'rfid:card_removed') {
+        setCurrentCard(null)
+        setTransactions([])
+        return
+      }
       if (message.type === 'rfid:card_detected') {
         const code = message.payload?.cardCode
         if (code) {
