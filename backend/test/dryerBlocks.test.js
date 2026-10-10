@@ -106,4 +106,52 @@ describe('Dryer blocks: one impulse now, one more every block', function () {
     expect(await Sale.countDocuments({ batchId: 'b-fail' })).to.equal(0)
     expect((await Machine.findById(m._id)).status).to.equal('free')
   })
+
+  describe('time block when the signal never shows the machine running', () => {
+    const idle = (m) => ({ interfaceId: m.interfaceId, port: m.port, status: { fault: false, occupied: false, doorLocked: false, doorClosed: true } })
+    const busy = (m) => ({ interfaceId: m.interfaceId, port: m.port, status: { fault: false, occupied: true, doorLocked: false, doorClosed: true } })
+
+    it('a paid start sets the paid time; idle readings do not free it before then', async () => {
+      const m = await dryer()
+      await coinMachine.startPaidMachine(m._id, 2)
+      let cur = await Machine.findById(m._id)
+      expect(cur.busyUntil.getTime()).to.be.within(Date.now() + 29 * 60_000, Date.now() + 31 * 60_000) // 2 x 15 min
+      expect(cur.sawBusy).to.equal(false)
+      await Machine.updateOne({ _id: m._id }, { status: 'working' })
+      for (let i = 0; i < 6; i++) await coinMachine.handleMachineStatusUpdate(idle(cur))
+      cur = await Machine.findById(m._id)
+      expect(cur.status).to.equal('working') // held by the clock
+    })
+
+    it('the clock frees it when the paid time is over and no signal ever said running', async () => {
+      const m = await dryer()
+      await Machine.updateOne({ _id: m._id }, { status: 'working', busyUntil: new Date(Date.now() - 1000), sawBusy: false, pendingImpulses: 0 })
+      await coinMachine.tickImpulses()
+      const cur = await Machine.findById(m._id)
+      expect(cur.status).to.equal('free')
+      expect(cur.busyUntil).to.equal(null)
+    })
+
+    it('when the line DID show it running, the signal decides (freed after the idle readings)', async () => {
+      const m = await dryer()
+      await coinMachine.startPaidMachine(m._id, 1)
+      await Machine.updateOne({ _id: m._id }, { status: 'working' })
+      let cur = await Machine.findById(m._id)
+      await coinMachine.handleMachineStatusUpdate(busy(cur)) // the line goes busy: signal works
+      cur = await Machine.findById(m._id)
+      expect(cur.sawBusy).to.equal(true)
+      for (let i = 0; i < 4; i++) await coinMachine.handleMachineStatusUpdate(idle(cur))
+      cur = await Machine.findById(m._id)
+      expect(cur.status).to.equal('free')
+    })
+
+    it('a washer is held for its price duration', async () => {
+      const iface = await Interface.create({ tenantId: tenant._id, name: 'INT 1', address: 11, serialNumber: 'S11', status: 'active' })
+      await Price.create({ tenantId: tenant._id, type: 'wash', weight: 8, cashPrice: 5, cardPrice: 4.5, duration: 40 })
+      const w = await Machine.create({ tenantId: tenant._id, name: 'Lavar 6', type: 'wash', weight: 8, interfaceId: iface._id, port: 2 })
+      await coinMachine.startPaidMachine(w._id, 1)
+      const cur = await Machine.findById(w._id)
+      expect(cur.busyUntil.getTime()).to.be.within(Date.now() + 39 * 60_000, Date.now() + 41 * 60_000)
+    })
+  })
 })

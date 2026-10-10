@@ -16,6 +16,10 @@ const machineSchema = new Schema({
   outOfService: { type: Boolean, default: false },
   // Dryer blocks bought and not yet started: one impulse starts the first block, one more is sent
   // every `tImp` minutes until this reaches 0. Stored so a restart or power cut does not lose it.
+  // Time block: how long the paid cycle should last. If the machine's signal never shows it running
+  // (dead line, offline interface), it is held as busy until then instead of being freed at once.
+  busyUntil: { type: Date, default: null },
+  sawBusy: { type: Boolean, default: false },
   pendingImpulses: { type: Number, default: 0 },
   nextImpulseAt: { type: Date, default: null },
   serviceStatus: { type: String, enum: ['offline', 'fault', null], default: null }, // which one: "Offline" or "Avariada"

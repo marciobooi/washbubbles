@@ -6,6 +6,7 @@ import Machine from '../models/machine.js'
 import Interface from '../models/interface.js'
 import Peripheral from '../models/peripheral.js'
 import Sale from '../models/sale.js'
+import Price from '../models/price.js'
 import Card from '../models/card.js'
 import { broadcastMachine, broadcastMachines, broadcastHardwareEvent } from '../wsServer.js'
 import { roundMoney } from '../utils/money.js'
@@ -786,12 +787,25 @@ class CoinMachine extends EventEmitter {
     // Throws when the controller is not connected: the caller then charges nothing.
     await this.middleware.sendMachineActivation(machine, iface)
     const n = Math.max(1, Math.floor(blocks))
+    const minutes = await this.cycleMinutes(machine, n)
+    machine.busyUntil = new Date(Date.now() + minutes * 60_000)
+    machine.sawBusy = false
     machine.pendingImpulses = n - 1
     machine.nextImpulseAt = n > 1 ? new Date(Date.now() + this.gapMinutes(machine) * 60_000) : null
     machine.startedAt = new Date()
     await machine.save()
     console.log(`[Cycle] ${machine.name} started (block 1 of ${n}); next impulse ${machine.nextImpulseAt ? 'at ' + machine.nextImpulseAt.toISOString() : 'none'}`)
     return { success: true, blocks: n }
+  }
+
+  /** How long a paid cycle lasts: dryers n x tImp; washers the price row's duration, else a default. */
+  async cycleMinutes(machine, blocks = 1) {
+    if ((machine.type || 'wash') === 'dry') return blocks * this.gapMinutes(machine)
+    try {
+      const row = await Price.findOne(this.scoped({ type: machine.type || 'wash', weight: machine.weight })).lean()
+      if (Number(row?.duration) > 0) return Number(row.duration)
+    } catch { /* fall through to the default */ }
+    return Number(process.env.WASH_DEFAULT_MINUTES) || 60
   }
 
   startImpulseScheduler(everyMs = 10_000) {
@@ -811,6 +825,17 @@ class CoinMachine extends EventEmitter {
     this.impulseBusy = true
     let sent = 0
     try {
+      // Time block over: a machine whose signal never showed it running is freed now (no signal can).
+      const expired = await Machine.find(this.scoped({
+        status: 'working', busyUntil: { $lte: now }, sawBusy: { $ne: true }, pendingImpulses: { $not: { $gt: 0 } },
+      }))
+      for (const m of expired) {
+        m.status = 'free'; m.statusText = 'Livre'; m.busyUntil = null; m.sawBusy = false
+        m.startedAt = null; m.currentProgram = null; m.reserved = false; m.reservedBy = null
+        await m.save()
+        try { await broadcastMachine(m) } catch { /* cosmetic */ }
+        console.log(`[Cycle] ${m.name}: paid time is over, freed by the clock (its signal never showed it running)`)
+      }
       const due = await Machine.find(this.scoped({ pendingImpulses: { $gt: 0 }, nextImpulseAt: { $lte: now } })).populate('interfaceId')
       for (const machine of due) {
         const iface = machine.interfaceId
@@ -1083,6 +1108,8 @@ class CoinMachine extends EventEmitter {
     machine.reservedBy = null
     machine.pendingImpulses = 0
     machine.nextImpulseAt = null
+    machine.busyUntil = null
+    machine.sawBusy = false
     await machine.save()
     try { await broadcastMachine(machine) } catch { /* see above */ }
     return { success: true }
@@ -1353,6 +1380,9 @@ class CoinMachine extends EventEmitter {
 
       console.log(`Machine ${machine.name} status update:`, status)
 
+      // The signal does work for this machine: from now on it, not the clock, decides when it is free.
+      if (status.occupied && machine.busyUntil && !machine.sawBusy) machine.sawBusy = true
+
       // Update machine status based on hardware signals
       let machineStatus = machine.status
       let statusText = ''
@@ -1383,7 +1413,12 @@ class CoinMachine extends EventEmitter {
         const seen = (this.idleReadings.get(key) || 0) + 1
         this.idleReadings.set(key, seen)
 
-        if (seen < IDLE_READINGS_TO_FREE) {
+        const heldByClock = machine.busyUntil && machine.busyUntil > new Date() && !machine.sawBusy
+        if (heldByClock) {
+          // Paid for, and the line has not shown it running: do not free it before the paid time is over.
+          statusText = 'Ocupado'
+          machineStatus = 'working'
+        } else if (seen < IDLE_READINGS_TO_FREE) {
           // Not confident yet — leave it running and wait for confirmation.
           statusText = 'Running'
           machineStatus = 'working'
@@ -1401,6 +1436,8 @@ class CoinMachine extends EventEmitter {
           machine.reserved = false
           machine.reservedBy = null
           machine.startedAt = null
+          machine.busyUntil = null
+          machine.sawBusy = false
           // Turns the existing-but-otherwise-dead `cycle` counter into a
           // real running total (see maintenance.js / Round D).
           machine.cycle = (machine.cycle || 0) + 1
