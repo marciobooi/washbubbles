@@ -596,7 +596,20 @@ class Middleware extends EventEmitter {
     })
     // Bring the peripherals the controller switches off back to life (LOWLEVEL_REINIT_ON_CONNECT,
     // comma separated peripheral types; "none" disables). Default: OFF. Sending config_per to the shop controller left the coin acceptor dead; it must not be re-enabled without the exact format.
-    const want = String(process.env.LOWLEVEL_REINIT_ON_CONNECT ?? 'none').split(',').map((s) => s.trim()).filter((s) => s && s !== 'none')
+    let want = String(process.env.LOWLEVEL_REINIT_ON_CONNECT ?? 'none').split(',').map((s) => s.trim()).filter((s) => s && s !== 'none')
+    // One-shot recovery: an operator drops data/reinit-once.json ({"types":["all"]}); it is read and deleted.
+    try {
+      const fs = await import('fs')
+      const path = await import('path')
+      const url = await import('url')
+      const dir = process.env.DATA_DIR || path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '../../data')
+      const file = path.join(dir, 'reinit-once.json')
+      if (fs.existsSync(file)) {
+        const j = JSON.parse(fs.readFileSync(file, 'utf8'))
+        fs.rmSync(file, { force: true })
+        if (Array.isArray(j.types) && j.types.length) want = j.types
+      }
+    } catch (e) { console.error('[HW] reinit-once file ignored:', e.message) }
     if (want.length) {
       const t = setTimeout(() => { this.reinitPeripherals(want).catch((e) => console.error('[HW] re-init failed:', e.message)) }, quiet + steps.length * gap + 500)
       t.unref?.()
@@ -617,8 +630,9 @@ class Middleware extends EventEmitter {
    */
   async reinitPeripherals(types = ['bill_acceptor']) {
     const BUS = ['bill_acceptor', 'coin_acceptor', 'hopper']
+    const ALL = [...BUS, 'card_dispenser', 'printer', 'rfid_reader']
     if (!types || types.length === 0) return { sent: false, reason: 'nothing requested' }
-    types = BUS
+    types = types.includes('all') ? ALL : BUS
     if (!this.lowLevel?.isConnected) return { sent: false, reason: 'not connected' }
     const TYPE_KEY = {
       bill_acceptor: 'bill-acceptor', coin_acceptor: 'coin-acceptor', hopper: 'hopper',
@@ -628,11 +642,17 @@ class Middleware extends EventEmitter {
     for (const conn of this.connections.values()) {
       const p = conn.peripheral
       if (!conn.gateway || !p || p.enabled === false || !types.includes(p.type) || !TYPE_KEY[p.type]) continue
-      const protocol = String(p.protocol || 'cctalk').toLowerCase()
+      // The controller's own spelling (docs/SHOP-HARDWARE-AND-COMMUNICATIONS.md §9): ccTalk / pulse / rs232 / spi.
+      const raw = String(p.protocol || '').toLowerCase()
+      const protocol = p.type === 'rfid_reader' ? 'spi'
+        : p.type === 'printer' ? 'rs232'
+        : ({ cctalk: 'ccTalk', pulse: 'pulse', rs232: 'rs232', spi: 'spi', mdb: 'MDB' }[raw] || 'ccTalk')
       const addr = String(p.address ?? '').trim()
-      if (!addr) continue // nothing to address on the controller bus
-      const entry = { protocol, addr, type: TYPE_KEY[p.type] }
-      if (protocol === 'cctalk' || protocol === 'rs232') entry.baudRate = String(p.baudRate || 9600)
+      const bus = BUS.includes(p.type)
+      if (bus && !addr) continue // a bus device needs its bus address
+      const entry = { protocol, type: TYPE_KEY[p.type] }
+      if (addr) entry.addr = addr
+      if (protocol === 'ccTalk' || protocol === 'rs232') entry.baudRate = String(p.baudRate || 9600)
       per.push(entry)
     }
     if (per.length === 0) return { sent: false, reason: 'nothing to re-initialise' }

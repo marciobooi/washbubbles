@@ -21,10 +21,30 @@ describe('Re-initialise controller peripherals after (re)connect', () => {
     expect(r.sent).to.equal(true)
     expect(sent).to.have.length(1)
     expect(sent[0]).to.deep.equal({ op: 'config_per', per: [
-      { protocol: 'cctalk', addr: '40', type: 'bill-acceptor', baudRate: '9600' },
-      { protocol: 'cctalk', addr: '2', type: 'coin-acceptor', baudRate: '9600' },
-      { protocol: 'cctalk', addr: '3', type: 'hopper', baudRate: '9600' },
+      { protocol: 'ccTalk', type: 'bill-acceptor', addr: '40', baudRate: '9600' },
+      { protocol: 'ccTalk', type: 'coin-acceptor', addr: '2', baudRate: '9600' },
+      { protocol: 'ccTalk', type: 'hopper', addr: '3', baudRate: '9600' },
     ] })
+  })
+
+  it('all sends the complete list with the controller own protocol names', async () => {
+    const { mw, sent } = build([
+      { type: 'bill_acceptor', protocol: 'cctalk', address: '40' },
+      { type: 'coin_acceptor', protocol: 'cctalk', address: '2' },
+      { type: 'hopper', protocol: 'cctalk', address: '3' },
+      { type: 'card_dispenser', protocol: 'pulse', address: '22' },
+      { type: 'printer', protocol: 'rs232', address: '' },
+      { type: 'rfid_reader', protocol: 'pulse', address: '' },
+    ])
+    await mw.reinitPeripherals(['all'])
+    expect(sent[0].per).to.deep.equal([
+      { protocol: 'ccTalk', type: 'bill-acceptor', addr: '40', baudRate: '9600' },
+      { protocol: 'ccTalk', type: 'coin-acceptor', addr: '2', baudRate: '9600' },
+      { protocol: 'ccTalk', type: 'hopper', addr: '3', baudRate: '9600' },
+      { protocol: 'pulse', type: 'card-dispenser', addr: '22' },
+      { protocol: 'rs232', type: 'printer', baudRate: '9600' },
+      { protocol: 'spi', type: 'rfid-rw' },
+    ])
   })
 
   it('does nothing when the controller is not connected, or there is nothing to address', async () => {
