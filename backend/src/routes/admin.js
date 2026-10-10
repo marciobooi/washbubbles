@@ -170,22 +170,39 @@ router.put('/machines/:id', requireAdmin, async (req, res) => {
     }
   }
   
-  const finalIcon = icon || (type === 'dry' ? '/drymachine/S1.png' : '/washingmashine/L1.png')
   const MachineT = withTenant(Machine, req)
-  const m = await MachineT.findByIdAndUpdate(req.params.id, {
-    name, number, brand, model, serialNumber,
-    status, statusText,
-    weight: weight || 0,
-    type, icon: finalIcon,
-    interfaceId: interfaceId || null,
-    port: port || null,
-    activation: activation || 'high',
-    tImp: type === 'dry' && tImp != null ? Number(tImp) : null
-  }, { new: true })
+  const before = await MachineT.findById(req.params.id).select('outOfService').lean()
+  // Only the fields that were SENT are changed. The Offline / Avariar buttons send just
+  // { status, statusText }; writing every field blanked the machine's interface, port and weight.
+  const has = (k) => Object.prototype.hasOwnProperty.call(req.body, k)
+  const set = {}
+  for (const k of ['name', 'number', 'brand', 'model', 'serialNumber', 'status', 'statusText']) if (has(k)) set[k] = req.body[k]
+  if (has('status')) set.outOfService = status === 'offline' // only an operator's "Offline" takes it out of service
+  if (has('weight')) set.weight = weight || 0
+  if (has('type')) set.type = type
+  if (has('icon') || has('type')) set.icon = icon || (type === 'dry' ? '/drymachine/S1.png' : '/washingmashine/L1.png')
+  if (has('interfaceId')) set.interfaceId = interfaceId || null
+  if (has('port')) set.port = port || null
+  if (has('activation')) set.activation = activation || 'high'
+  if (has('tImp') || has('type')) set.tImp = type === 'dry' && tImp != null ? Number(tImp) : null
+  const m = await MachineT.findByIdAndUpdate(req.params.id, { $set: set }, { new: true })
   if (!m) return res.status(404).json({ error: 'Machine not found' })
   // broadcast single updated machine to clients (more efficient)
   try { await broadcastMachine(m) } catch (e) { console.error('[admin] broadcastMachine error', e) }
   logAction(req, 'machine.update', 'Machine', m._id, { name: m.name })
+  // Out of service changed on the central server: tell the shop now instead of waiting for the next pull.
+  if (before && Boolean(before.outOfService) !== Boolean(m.outOfService)) {
+    try {
+      const { default: coinMachine } = await import('../services/coinMachine.js')
+      if (!coinMachine.running) {
+        const kiosks = await User.find({ tenantId: req.tenantId, role: 'KIOSK' }).select('_id').lean()
+        const SyncCommandT = withTenant(SyncCommand, req)
+        for (const k of kiosks) {
+          await SyncCommandT.create({ kioskId: k._id, type: 'set_service', payload: { machineId: String(m._id), outOfService: Boolean(m.outOfService) } })
+        }
+      }
+    } catch (e) { console.error('[admin] could not queue the out-of-service command', e.message) }
+  }
   res.json(m)
 })
 

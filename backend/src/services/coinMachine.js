@@ -155,6 +155,7 @@ class CoinMachine extends EventEmitter {
         handlers: {
           start_machine: (p) => this.adminStartMachine(p.machineId),
           end_machine: (p) => this.adminEndMachine(p.machineId),
+          set_service: (p) => this.setMachineService(p.machineId, p.outOfService),
         },
       })
       this.remoteCommands.start()
@@ -924,6 +925,20 @@ class CoinMachine extends EventEmitter {
       console.error('Failed to activate machine:', err)
       throw err
     }
+  }
+
+  /** Central admin took a machine out of service (or back): apply it at once, the pull is only the backstop. */
+  async setMachineService(machineId, outOfService) {
+    const machine = await Machine.findOne(this.scoped({ _id: machineId }))
+    if (!machine) throw new Error('Machine not found')
+    machine.outOfService = Boolean(outOfService)
+    machine.status = machine.outOfService ? 'offline' : 'free'
+    machine.statusText = machine.outOfService ? 'Fora de servi\u00e7o' : ''
+    await machine.save()
+    this.machines.set(machine.intId || machine._id, machine.toObject())
+    await broadcastMachine(machine)
+    console.log(`[Service] ${machine.name} is now ${machine.outOfService ? 'OUT of service' : 'back in service'} (central admin)`)
+    return { success: true }
   }
 
   /**
