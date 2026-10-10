@@ -35,9 +35,21 @@ export const CartProvider = ({ children }) => {
     if (Number.isFinite(left) && s?.refundInSeconds !== null) setRefundAt(Date.now() + left * 1000)
   }, [])
 
+  // Make the badge match what the shop really holds (used after a reconnect and while credit is showing).
+  const syncFromShop = React.useCallback(() => {
+    return api.request('/middleware/client/balance', { method: 'GET', expect: 'json', headers: kioskHeaders(), skipAuth: true })
+      .then((s) => {
+        const cash = Math.round((Number(s?.cash) || 0) * 100) / 100
+        setCredit(cash)
+        if (cash > 0) adoptRefundTiming(s); else setRefundAt(null)
+      })
+      .catch(() => {})
+  }, [adoptRefundTiming])
+
   useEffect(() => {
     return subscribe((data) => {
       if (!data || typeof data !== 'object') return
+      if (data.type === 'ws:open') { syncFromShop(); return }
       const toast = (opts) => import('@/components/ui/Toast').then((m) => m.toast(opts)).catch(() => {})
       if (data.type === 'peripheral:credit') {
         const amount = Number(data.payload?.amount)
@@ -57,7 +69,7 @@ export const CartProvider = ({ children }) => {
         toast({ title: 'Não foi possível devolver todo o crédito', description: `Faltam ${left.toFixed(2)}€. Contacte o balcão.`, variant: 'destructive' })
       }
     })
-  }, [restartCountdown])
+  }, [restartCountdown, syncFromShop])
 
   // Cash already in the machine when this page loads (page reloaded, or coins put in before
   // it opened) — the backend is the one that actually holds it.
@@ -93,6 +105,13 @@ export const CartProvider = ({ children }) => {
       window.removeEventListener('keydown', onTouch, true)
     }
   }, [credit > 0, restartCountdown])
+
+  // Safety net: while credit shows, ask the shop every 10 s, so a missed message can never leave a stale badge.
+  useEffect(() => {
+    if (!(credit > 0)) return undefined
+    const t = setInterval(() => { syncFromShop() }, 10000)
+    return () => clearInterval(t)
+  }, [credit > 0, syncFromShop])
 
   // After a cash payment the money is spent: clear it here AND in the backend, otherwise it
   // would come back as phantom credit the next time the page loads.

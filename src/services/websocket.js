@@ -4,6 +4,9 @@
 */
 
 let socket = null
+let wantOpen = false
+let retryMs = 1000
+let retryTimer = null
 const listeners = new Set()
 
 // Same-origin ws(s)://<host>/ws — not localhost:3000 — so a missing
@@ -15,7 +18,8 @@ function defaultWsUrl() {
 }
 
 export function connect(url = import.meta.env.VITE_HW_BRIDGE_URL || defaultWsUrl()) {
-  if (socket && socket.readyState === WebSocket.OPEN) return socket
+  wantOpen = true
+  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return socket
 
   // Credentials are no longer put in the URL — a JWT or apiKey there ends up
   // in server/proxy access logs and anywhere the URL gets copied (browser
@@ -28,6 +32,9 @@ export function connect(url = import.meta.env.VITE_HW_BRIDGE_URL || defaultWsUrl
 
   socket.addEventListener('open', () => {
     console.info('[ws] connected to', url)
+    retryMs = 1000
+    // Lets the screen re-read what it may have missed while the link was down (e.g. a backend restart).
+    listeners.forEach((cb) => cb({ type: 'ws:open' }))
     if (token) {
       console.info('[ws] authenticating with token')
       socket.send(JSON.stringify({ type: 'auth', token }))
@@ -51,6 +58,12 @@ export function connect(url = import.meta.env.VITE_HW_BRIDGE_URL || defaultWsUrl
 
   socket.addEventListener('close', () => {
     console.info('[ws] closed')
+    // The shop backend restarts (updates, power cuts): without this the kiosk stays deaf until F5.
+    if (wantOpen) {
+      clearTimeout(retryTimer)
+      retryTimer = setTimeout(() => connect(url), retryMs)
+      retryMs = Math.min(retryMs * 2, 10000)
+    }
   })
 
   socket.addEventListener('error', (e) => {
@@ -61,6 +74,8 @@ export function connect(url = import.meta.env.VITE_HW_BRIDGE_URL || defaultWsUrl
 }
 
 export function disconnect() {
+  wantOpen = false
+  clearTimeout(retryTimer)
   if (socket) {
     socket.close()
     socket = null
