@@ -14,6 +14,8 @@ import { CardSync } from './cardSync.js'
 import { Uplink } from './uplink.js'
 import { Downlink } from './downlink.js'
 import { RemoteCommands } from './remoteCommands.js'
+import { prefetchUploads } from './uploadsCache.js'
+import { uploadDir } from '../routes/admin.js'
 import { CashSessionStore } from './cashSession.js'
 import AuditLog from '../models/auditLog.js'
 import { reportFault } from './maintenance.js'
@@ -123,6 +125,8 @@ class CoinMachine extends EventEmitter {
       this.downlink.on('synced', () => {
         this.loadSettings().catch(() => {})
         this.middleware.loadEquivalenceTables?.().catch?.(() => {})
+        // Keep a copy of the pictures the settings mention (logo, banners) so they also show offline.
+        prefetchUploads({ SettingModel: Setting, tenantId: this.tenantId, uploadDir }).catch(() => {})
       })
       await this.downlink.pullAll()
       this.downlink.start()

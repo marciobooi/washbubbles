@@ -8,6 +8,7 @@ import cors from 'cors'
 import { connectMongo } from './db.js'
 import authRoutes from './routes/auth.js'
 import adminRoutes, { uploadDir } from './routes/admin.js'
+import { uploadsFetchThrough } from './services/uploadsCache.js'
 import posRoutes from './routes/pos.js'
 import { initWebSocket, broadcastHardwareEvent } from './wsServer.js'
 import hardwareAgentServer from './hardwareAgentServer.js'
@@ -78,6 +79,9 @@ app.get('/api/health', (req, res) => res.json({ ok: true }))
 // all; the shop-kiosk single-process build had the same gap. Mounted here,
 // once, so every deployment mode actually serves what it just wrote.
 app.use('/uploads', express.static(uploadDir))
+// A shop PC does not hold the pictures uploaded on the central server: fetch a missing one once and keep it
+// (no-op on the central server itself, which has no SYNC_SERVER_URL). See services/uploadsCache.js.
+app.use('/uploads', uploadsFetchThrough({ uploadDir }))
 
 // Server-rendered public front page (real HTML in the first response, for
 // crawlers/link-previews) — the cloud/public deployment only. The shop-kiosk

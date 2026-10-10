@@ -306,7 +306,9 @@ try {
     $bat = Join-Path $Root 'start-kiosk.bat'
     if ($DryRun) { Todo "register scheduled task 'WashBubbles Kiosk' for $KioskUser -> $bat" }
     else {
-      $action = New-ScheduledTaskAction -Execute 'cmd.exe' -Argument "/c `"$bat`"" -WorkingDirectory $Root
+      # Hidden: a visible console window on top of the kiosk screen is not wanted. PowerShell starts the batch file with no window.
+      $hiddenCmd = "Start-Process -WindowStyle Hidden -FilePath cmd.exe -ArgumentList '/c','`"$bat`"'"
+      $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -WindowStyle Hidden -Command `"$hiddenCmd`"" -WorkingDirectory $Root
       $trigger = New-ScheduledTaskTrigger -AtLogOn -User $KioskUser
       $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -ExecutionTimeLimit ([TimeSpan]::Zero)
       Register-ScheduledTask -TaskName 'WashBubbles Kiosk' -Action $action -Trigger $trigger -Settings $settings -User $KioskUser -RunLevel Limited -Force | Out-Null
