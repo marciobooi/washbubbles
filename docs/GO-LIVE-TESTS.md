@@ -215,3 +215,11 @@ With a card sitting in the reader the controller reports `card-removed` / `card-
 
 ### Note 2026-10-10 (night): the peripherals are on RJ45 cables, not USB
 Owner finding: the bill acceptor, coin acceptor and the other peripherals connect to the controller with RJ45 (network-style) cables, not USB. The "unplug and replug" that wakes the acceptor / reader is therefore a connector or cable contact. Check, in order: both ends reseated and clicked, a known-good short cable for the acceptor, no kinks/pinches, away from mains. The earlier steps (USB port change, Windows USB power saving, keep-alive) were aimed at the wrong thing and are harmless but were not the cause. Keep a note of WHICH cable wakes it each time.
+
+### Note 2026-10-11: hardware bridge (bill acceptor survives backend restarts)
+- The controller switches the bill acceptor off when the connected program goes away; only a power reset revives it. A separate program (`WashBubbles Bridge`, `backend/src/hardwareBridge.js`) now owns the one controller connection; the backend talks to it on 127.0.0.1:16853.
+- Verified on the shop PC: backend restarted, light stayed on, notes accepted. Alerts to the operator: controller session new (<5 min) or lost.
+- Still true: a PC reboot or power cut ends the controller session; re-seat the acceptor cable afterwards.
+- Restart ONLY the backend (`src\index.js`), never every node process.
+- Controller peripheral list: see memory `reference-controller-config-per` (replace semantics, `ccTalk` spelling, six entries in order). Printer still reports error -1 (real settings unknown).
+- Open: printer settings (baud/address), dryer 2-block paid test, Secar 10 signal wiring, Lavar 1/6 interface+port.
