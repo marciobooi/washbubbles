@@ -206,3 +206,6 @@ time. When a code is unknown I read it and save it in Hetzner's tables; I never 
 
 ### Note 2026-10-10: acceptor light went off / note not pulled in
 Owner changed a USB connection and the acceptor worked again (EUR 10 credited and refunded). The log shows the controller link dropping and reconnecting around then; a loose USB link is the likely cause. Watch for it coming back.
+
+### Note 2026-10-10 (evening): bill acceptor and card reader going silent
+Both went dead with the controller still reporting `status 0 / active 1`; unplugging and replugging the USB woke them. Tried, in order: acceptor moved from a blue (USB 3.0) port to a black (USB 2.0) port; Windows power saving off on the PC (USB selective suspend, adapter power management, Green Ethernet); controller keep-alive `has-card` now every 30 s regardless of other traffic (our status polling used to suppress it). After these the owner reported a run working fine. NOT proven which one fixed it. If it returns: note which device, the time, the acceptor LED pattern (dark or N blinks) and whether the cash box is seated; then suspect the acceptor power supply / controller USB hub.
