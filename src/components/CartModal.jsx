@@ -390,7 +390,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
                   <div className="flex items-center justify-between">
                     <div className="font-semibold text-neutral-800 pr-6">{i.name || i.type}</div>
                     <div className="text-lg font-bold text-neutral-800">
-                      {(i.price || i.amount || 0).toFixed(2)}€
+                      {(i.type === 'Recarga de Cartão' ? (i.price || i.amount || 0) : unitPrice(i)).toFixed(2)}€
                     </div>
                   </div>
                 </div>
