@@ -24,7 +24,7 @@ function getTxIcon(type) {
 
 // `onRecharge` used to be accepted here and never called — Pos.jsx passed a real
 // handler that could therefore never fire. The cart-based flow superseded it.
-export default function CardModal({ open, onClose, transactions = [], balance = 0 }) {
+export default function CardModal({ open, onClose, transactions = [], balance = 0, card = null }) {
   const { addToCart } = useCart()
   const { t } = useTranslation('pos')
   const [selectedAmount, setSelectedAmount] = useState(10)
@@ -127,7 +127,7 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
                 <div className="flex flex-col justify-center gap-4 border-r border-neutral-100 pr-4">
                   <div className="flex flex-col">
                     <span className="text-neutral-400 text-xs uppercase tracking-wider font-bold mb-1">{t('card.idLabel')}</span>
-                    <span className="font-mono font-bold text-neutral-700 text-lg">**** 8821</span>
+                    <span className="font-mono font-bold text-neutral-700 text-lg">{card?.code ? `**** ${String(card.code).slice(-4)}` : '—'}</span>
                   </div>
                   <div>
                     <span className="inline-flex items-center px-3 py-1 bg-green-50 text-green-700 border border-green-200 rounded-full text-xs font-bold shadow-sm gap-1.5">

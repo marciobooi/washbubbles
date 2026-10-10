@@ -80,6 +80,12 @@ export default function Pos() {
 
   function openCard() {
     setCardOpen(true)
+    // A card already in the reader (read before this window opened): load it now.
+    const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
+    const kioskKey = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
+    api.request('/middleware/client', { method: 'GET', headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined, skipAuth: true, expect: 'json' })
+      .then((s) => { if (s?.hasCard && s?.cardNumber) loadCard(s.cardNumber) })
+      .catch(() => {})
     if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('modal-open'))
   }
 
@@ -137,7 +143,7 @@ export default function Pos() {
         </div>
         <BuyCardModal open={buyCardOpen} onClose={closeBuyCard} />
 
-        <CardModal open={cardOpen} onClose={closeCard} transactions={transactions} balance={currentCard?.balance ?? 0} />
+        <CardModal open={cardOpen} onClose={closeCard} transactions={transactions} balance={Number(currentCard?.balance) || 0} card={currentCard} />
 
         
         <div className="fixed bottom-0 left-0 right-0 pointer-events-none z-0">
