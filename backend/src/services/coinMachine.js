@@ -575,6 +575,9 @@ class CoinMachine extends EventEmitter {
     if (loaded) {
       this.emit('card-loaded', { client: this.client.getState() })
       console.log(`Card loaded: ${cardNumber}, Balance: €${this.client.getState().balanceCard.toFixed(2)}`)
+      // The kiosk screens load the card (balance, history) and auto-pay from this message. The old hardware
+      // agent sent it; the controller path never did, so the screen showed no balance for a card in the reader.
+      broadcastHardwareEvent(this.tenantId, 'rfid:card_detected', { cardCode: String(cardNumber), balance: this.client.getState().balanceCard })
     } else {
       this.emit('card-invalid', { cardNumber })
       console.warn(`Invalid card: ${cardNumber}`)
