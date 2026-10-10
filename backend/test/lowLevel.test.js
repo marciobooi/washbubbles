@@ -156,23 +156,18 @@ describe('LowLevelLink (TCP)', () => {
     expect(link.isConnected).to.equal(true)
   })
 
-  it('keep-alive: pings has-card only when the app has been idle, and does not count as activity', async () => {
-    link = new LowLevelLink({ host: '127.0.0.1', port: ctrl.port, keepAliveCheckMs: 10_000, keepAliveIdleMs: 50 })
+  it('keep-alive: pings has-card on every tick even while the app is busy', async () => {
+    link = new LowLevelLink({ host: '127.0.0.1', port: ctrl.port, keepAliveCheckMs: 10_000 })
     link.start()
     await tick(60)
 
-    link.send({ op: 'status_int' }) // recent app traffic
-    link.keepAliveTick()
-    await tick()
-    expect(ctrl.received.join('')).to.not.include('has-card')
-
-    await tick(80) // now idle for > keepAliveIdleMs
+    link.send({ op: 'status_int' }) // recent app traffic must not suppress the ping
     link.keepAliveTick()
     await tick()
     expect(ctrl.received.join('')).to.include('has-card')
 
     const before = ctrl.received.join('').split('has-card').length
-    link.keepAliveTick() // ping must not have reset the idle clock
+    link.keepAliveTick()
     await tick()
     expect(ctrl.received.join('').split('has-card').length).to.equal(before + 1)
   })

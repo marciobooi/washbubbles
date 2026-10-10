@@ -25,7 +25,9 @@ export const LOWLEVEL_DEFAULT_HOST = '192.168.2.201'
 export const LOWLEVEL_DEFAULT_PORT = 16852
 
 /** Legacy keep-alive cadence: every 90 s, but only if the app was silent for 2 min. */
-export const KEEPALIVE_CHECK_MS = 90 * 1000
+// The legacy bridge pinged every 90 s. The acceptor / reader were observed going dead "after a while",
+// so the ping is a little more frequent here (it is a harmless question). LOWLEVEL_KEEPALIVE_MS overrides.
+export const KEEPALIVE_CHECK_MS = Number(process.env.LOWLEVEL_KEEPALIVE_MS) || 30 * 1000
 export const KEEPALIVE_IDLE_MS = 2 * 60 * 1000
 export const RECONNECT_MS = 5 * 1000
 
@@ -270,13 +272,14 @@ export class LowLevelLink extends EventEmitter {
   }
 
   /**
-   * The legacy bridge's "activation message": a `has-card` ping when nothing else
-   * has been sent for a while. Cheap, side-effect free (it only asks whether the
-   * dispenser has cards), and keeps the controller from treating the PC as idle.
+   * The legacy bridge's "activation message": a `has-card` ping, cheap and side-effect free
+   * (it only asks whether the dispenser has cards). It is sent on EVERY tick, whatever else
+   * the app sent. It used to be skipped while the app had been busy within the last 2 minutes,
+   * but this app polls status every minute, so the ping practically never went out and the
+   * bill acceptor / card reader went dead after a while (replug fixed it).
    */
   keepAliveTick() {
     if (!this.connected) return
-    if (Date.now() - this.lastAppSendAt < this.keepAliveIdleMs) return
     this.send({ op: 'has-card' }, { keepAlive: true })
   }
 }
