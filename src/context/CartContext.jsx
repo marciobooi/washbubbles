@@ -15,6 +15,9 @@ const CartContext = createContext()
 
 export const useCart = () => useContext(CartContext)
 
+// Longest dryer purchase in blocks (8 x 15 min = 2 h). The server clamps to the same limit.
+const MAX_BLOCKS = 8
+
 export const CartProvider = ({ children }) => {
   const [cart, setCart] = useState([])
 
@@ -146,6 +149,15 @@ export const CartProvider = ({ children }) => {
     setCart((c) => [...c, normalized])
   }
 
+  // Dryers are sold in blocks of `tImp` minutes (15): the customer picks how many, 1..MAX_BLOCKS.
+  function setQuantity(id, q) {
+    setCart((c) => c.map((i) => {
+      if (i.id !== id || i.type !== 'dry') return i
+      const n = Math.max(1, Math.min(MAX_BLOCKS, Math.floor(Number(q)) || 1))
+      return { ...i, quantity: n }
+    }))
+  }
+
   function removeFromCart(id) {
     setCart((c) => c.filter((i) => i.id !== id))
   }
@@ -159,6 +171,6 @@ export const CartProvider = ({ children }) => {
     try { window.dispatchEvent(new CustomEvent('open-cart')) } catch (e) { console.warn('openCart event failed', e) }
   }
 
-  const value = { cart, addToCart, removeFromCart, clearCart, openCart, credit, resetCredit, refundAt, refundAfter }
+  const value = { cart, addToCart, setQuantity, removeFromCart, clearCart, openCart, credit, resetCredit, refundAt, refundAfter }
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>
 }

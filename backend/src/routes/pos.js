@@ -11,6 +11,7 @@ import { creditCard, debitCard, SPENDABLE } from '../services/cardBalance.js'
 import { cardLookupLimiter, adminPinLimiter } from '../middleware/rateLimits.js'
 import crypto from 'crypto'
 import coinMachine from '../services/coinMachine.js'
+import { promoIsActive } from './gateways.js'
 import { sendAlert } from '../services/alerts.js'
 import { sendMail } from '../services/mailer.js'
 import { renderEmailHtml, escapeHtml } from '../services/emailTemplate.js'
@@ -754,12 +755,36 @@ router.post('/cards/:code/spend', requireKiosk, async (req, res) => {
   }
   if (card.status === 'blocked') return res.status(409).json({ error: 'Card is blocked' })
 
-  const debited = await debitCard(CardT, { _id: card._id }, price)
+  // A machine's price comes from the Price table (per block for dryers), not from the number the
+  // kiosk sent: this terminal is public.
+  let blocks = 1
+  let chargePrice = price
+  if (machineId) {
+    const m = await MachineT.findById(machineId)
+    blocks = coinMachine.blocksFor(m, Array.isArray(items) ? items[0] : items)
+    const row = await withTenant(Price, req).findOne({ type: m.type || 'wash', weight: m.weight })
+    if (row) {
+      const unit = promoIsActive(row) && row.promoCardPrice != null ? row.promoCardPrice : row.cardPrice
+      if (unit > 0) chargePrice = roundMoney(unit * blocks)
+    }
+  }
+
+  // Start the machine BEFORE the card is debited: if it cannot start nothing is charged.
+  if (machineId) {
+    try {
+      await coinMachine.startPaidMachine(machineId, blocks)
+    } catch (e) {
+      console.error('[pos] machine did not start:', e.message)
+      return res.status(502).json({ error: 'A máquina não arrancou. Nada foi cobrado.', detail: e.message })
+    }
+  }
+
+  const debited = await debitCard(CardT, { _id: card._id }, chargePrice)
   if (!debited) return res.status(400).json({ error: 'Insufficient balance', balance: card.balance })
   card = debited
 
   const SaleT = withTenant(Sale, req)
-  const sale = await SaleT.create({ machineId, amount: price, items, method: 'card', batchId, type: 'payment', cardId: card._id, cardCode: card.code })
+  const sale = await SaleT.create({ machineId, amount: chargePrice, items, method: 'card', batchId, type: 'payment', cardId: card._id, cardCode: card.code })
 
   // Update machine state if relevant
   if (machineId) {

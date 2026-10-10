@@ -31,7 +31,7 @@ import Peripheral from '../models/peripheral.js'
 export const MACHINE_RUNTIME_FIELDS = [
   'status', 'statusText', 'cycle', 'reserved', 'reservedBy', 'reservedAt',
   'reservationDuration', 'currentProgram', 'startedAt', 'estimatedEndTime',
-  'runningDuration', 'lastServicedAt',
+  'runningDuration', 'lastServicedAt', 'pendingImpulses', 'nextImpulseAt',
 ]
 
 /** Peripheral fields owned by this site: live status from the controller, and the hopper's coin stock. */

@@ -14,6 +14,10 @@ const machineSchema = new Schema({
   // Taken out of service by the operator (admin "Offline"). Unlike `status` this is configuration:
   // it travels from the central server to the shop and the hardware poll never clears it.
   outOfService: { type: Boolean, default: false },
+  // Dryer blocks bought and not yet started: one impulse starts the first block, one more is sent
+  // every `tImp` minutes until this reaches 0. Stored so a restart or power cut does not lose it.
+  pendingImpulses: { type: Number, default: 0 },
+  nextImpulseAt: { type: Date, default: null },
   serviceStatus: { type: String, enum: ['offline', 'fault', null], default: null }, // which one: "Offline" or "Avariada"
   cycle: { type: Number, default: 0 },
   weight: { type: Number, default: 0 }, // kg - used to lookup price from Price collection

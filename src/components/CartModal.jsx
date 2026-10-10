@@ -8,7 +8,7 @@ import * as websocket from '@/services/websocket'
 import * as localApi from '@/services/local-api'
 
 export default function CartModal({ open, onClose, onPay = () => {}, onClear = () => {} }) {
-  const { cart, removeFromCart, clearCart, credit } = useCart()
+  const { cart, removeFromCart, clearCart, credit, setQuantity } = useCart()
   const [showCash, setShowCash] = React.useState(false)
   // Staff-only manual payment, for when the coin acceptor or card reader is down.
   // Gated behind the operator's admin PIN so a customer cannot self-serve a wash.
@@ -52,7 +52,8 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
   const cardMode = Boolean(detectedCardCode)
   const unitPrice = (i) => {
     const v = cardMode ? (i.cardPrice ?? i.price) : (i.cashPrice ?? i.price)
-    return Number(v ?? i.amount ?? 0) || 0
+    const qty = i.type === 'dry' ? Math.max(1, Math.min(8, Math.floor(Number(i.quantity)) || 1)) : 1
+    return Math.round((Number(v ?? i.amount ?? 0) || 0) * qty * 100) / 100
   }
   const purchaseTotal = cart.reduce((s, i) => (i.type === 'Recarga de Cartão' ? s : s + unitPrice(i)), 0)
   const rechargeTotal = cart.reduce((s, i) => (i.type === 'Recarga de Cartão' ? s + (i.price || i.amount || 0) : s), 0)
@@ -388,11 +389,37 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
                     </svg>
                   </button>
                   <div className="flex items-center justify-between">
-                    <div className="font-semibold text-neutral-800 pr-6">{i.name || i.type}</div>
+                    <div className="font-semibold text-neutral-800 pr-6">
+                      {i.name || i.type}
+                      {i.type === 'dry' && (
+                        <div className="text-sm font-normal text-neutral-500">
+                          {(Number(i.quantity) || 1)} × {Number(i.tImp) || 15} min = {(Number(i.quantity) || 1) * (Number(i.tImp) || 15)} min
+                        </div>
+                      )}
+                    </div>
                     <div className="text-lg font-bold text-neutral-800">
                       {(i.type === 'Recarga de Cartão' ? (i.price || i.amount || 0) : unitPrice(i)).toFixed(2)}€
                     </div>
                   </div>
+                  {i.type === 'dry' && (
+                    <div className="mt-3 flex items-center justify-center gap-6">
+                      <button
+                        type="button"
+                        aria-label="Menos 15 minutos"
+                        disabled={(Number(i.quantity) || 1) <= 1}
+                        onClick={(e) => { e.stopPropagation(); setQuantity(i.id, (Number(i.quantity) || 1) - 1) }}
+                        className="w-14 h-14 rounded-full bg-white border-2 border-teal-600 text-teal-700 text-3xl font-bold disabled:opacity-30 active:scale-95"
+                      >−</button>
+                      <div className="text-2xl font-bold text-neutral-800 min-w-[3ch] text-center">{Number(i.quantity) || 1}</div>
+                      <button
+                        type="button"
+                        aria-label="Mais 15 minutos"
+                        disabled={(Number(i.quantity) || 1) >= 8}
+                        onClick={(e) => { e.stopPropagation(); setQuantity(i.id, (Number(i.quantity) || 1) + 1) }}
+                        className="w-14 h-14 rounded-full bg-teal-600 text-white text-3xl font-bold disabled:opacity-30 active:scale-95"
+                      >+</button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

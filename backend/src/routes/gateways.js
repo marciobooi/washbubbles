@@ -24,7 +24,7 @@ function isRecharge(item) {
 }
 
 /** Is a promo row active right now? Mirrors the kiosk's `pos-engine.getPrice`. */
-function promoIsActive(price, now = new Date()) {
+export function promoIsActive(price, now = new Date()) {
   if (!price.promoActive) return false
   const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
   if (Array.isArray(price.promoDays) && price.promoDays.length && !price.promoDays.includes(days[now.getDay()])) {
@@ -84,10 +84,13 @@ async function resolveMachineLines(items, MachineT, PriceT, method, coupon = nul
     if (!(price > 0)) {
       return { ok: false, status: 409, error: { error: 'Machine has no price configured', machineId: machine._id } }
     }
+    // Dryers are sold in blocks of `tImp` minutes: the price is per block, the customer picks how many.
+    const blocks = coinMachine.blocksFor(machine, it)
+    price = roundMoney(price * blocks)
     if (coupon && (coupon.appliesTo === 'both' || coupon.appliesTo === (machine.type || 'wash'))) {
       price = applyCouponDiscount(price, coupon)
     }
-    lines.push({ machine, price, item: it })
+    lines.push({ machine, price, item: it, blocks })
   }
   return { ok: true, lines, total: roundMoney(lines.reduce((s, l) => s + l.price, 0)) }
 }
@@ -167,7 +170,23 @@ router.post('/card/pay', requireKiosk, async (req, res) => {
   // ── Apply ──
   // One atomic $inc for the whole batch (recharges credited, machines debited),
   // guarded so a concurrent spend elsewhere cannot push the balance negative.
-  const net = roundMoney(rechargeTotal - resolved.total)
+  // Start the machine(s) before the card is touched: one that cannot start is not charged.
+  const startedLines = []
+  const failedLines = []
+  for (const l of resolved.lines) {
+    try {
+      await coinMachine.startPaidMachine(l.machine._id, l.blocks)
+      startedLines.push(l)
+    } catch (e) {
+      console.error(`[gateways] ${l.machine.name} did not start: ${e.message}`)
+      failedLines.push({ machine: l.machine.name, machineId: l.machine._id, error: e.message })
+    }
+  }
+  if (resolved.lines.length && startedLines.length === 0) {
+    return res.status(502).json({ error: 'A máquina não arrancou. Nada foi cobrado.', failed: failedLines })
+  }
+  const chargedTotal = roundMoney(startedLines.reduce((s, l) => s + l.price, 0))
+  const net = roundMoney(rechargeTotal - chargedTotal)
   const updatedCard = await applyCardDelta(CardT, { _id: card._id }, net)
   if (!updatedCard) {
     return res.status(409).json({ error: 'Card balance changed concurrently; please retry', balance: card.balance })
@@ -179,8 +198,8 @@ router.post('/card/pay', requireKiosk, async (req, res) => {
     sales.push(await SaleT.create({ amount: line.amount, items: line.item, method: 'card', batchId, inserted: line.amount, change: 0, type: 'recharge', cardId: card._id, cardCode: card.code }))
   }
 
-  for (const { machine, price, item } of resolved.lines) {
-    const sale = await SaleT.create({ machineId: machine._id, amount: price, items: [item], method: 'card', batchId, type: 'payment', cardId: card._id, cardCode: card.code })
+  for (const { machine, price, item, blocks } of startedLines) {
+    const sale = await SaleT.create({ machineId: machine._id, amount: price, items: [{ ...item, quantity: blocks }], method: 'card', batchId, type: 'payment', cardId: card._id, cardCode: card.code })
     sales.push(sale)
 
     // Only mark the machine busy if it is still free — a second kiosk may have
@@ -250,7 +269,25 @@ router.post('/cash/pay', requireKiosk, async (req, res) => {
 
   const total = roundMoney(resolved.total + rechargeLines.reduce((s, l) => s + l.amount, 0))
   if (insertedNum < total) return res.status(400).json({ error: 'Insufficient cash', total, inserted: insertedNum })
-  const change = roundMoney(insertedNum - total)
+
+  // Start the machine(s) FIRST. If the controller cannot start one, that one is not charged and
+  // the customer is told; the cash they inserted stays as their credit. (Nothing is recorded yet.)
+  const startedLines = []
+  const failedLines = []
+  for (const l of resolved.lines) {
+    try {
+      await coinMachine.startPaidMachine(l.machine._id, l.blocks)
+      startedLines.push(l)
+    } catch (e) {
+      console.error(`[gateways] ${l.machine.name} did not start: ${e.message}`)
+      failedLines.push({ machine: l.machine.name, machineId: l.machine._id, error: e.message })
+    }
+  }
+  if (resolved.lines.length && startedLines.length === 0) {
+    return res.status(502).json({ error: 'A máquina não arrancou. Nada foi cobrado.', failed: failedLines })
+  }
+  const chargedTotal = roundMoney(startedLines.reduce((s, l) => s + l.price, 0) + rechargeLines.reduce((s, l) => s + l.amount, 0))
+  const change = roundMoney(insertedNum - chargedTotal)
 
   const sales = []
   for (const line of rechargeLines) {
@@ -276,7 +313,7 @@ router.post('/cash/pay', requireKiosk, async (req, res) => {
 
   // Then machine sales — attach inserted/change to first machine sale
   let assigned = false
-  for (const { machine, price, item } of resolved.lines) {
+  for (const { machine, price, item, blocks } of startedLines) {
     let saleInserted = 0
     let saleChange = 0
     if (!assigned) {
@@ -285,7 +322,7 @@ router.post('/cash/pay', requireKiosk, async (req, res) => {
       assigned = true
     }
 
-    const sale = await SaleT.create({ machineId: machine._id, amount: price, items: [item], method: 'cash', batchId, inserted: saleInserted, change: saleChange, type: 'payment' })
+    const sale = await SaleT.create({ machineId: machine._id, amount: price, items: [{ ...item, quantity: blocks }], method: 'cash', batchId, inserted: saleInserted, change: saleChange, type: 'payment' })
     sales.push(sale)
 
     const updated = await MachineT.findOneAndUpdate(
@@ -325,11 +362,11 @@ router.post('/cash/pay', requireKiosk, async (req, res) => {
     }
   }
 
-  if (coupon && resolved.lines.length) {
+  if (coupon && startedLines.length) {
     await redeemCoupon(req.tenantId, coupon.code).catch((e) => console.error('[gateways] Failed to redeem coupon:', e.message))
   }
 
-  res.json({ success: true, sales, total, inserted: insertedNum, change, changeDispensed, changeError })
+  res.json({ success: true, sales, total: chargedTotal, inserted: insertedNum, change, changeDispensed, changeError, failed: failedLines })
 })
 
 export default router

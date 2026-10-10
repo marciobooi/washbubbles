@@ -172,6 +172,7 @@ class CoinMachine extends EventEmitter {
       this.setupEventHandlers()
       
       this.startCreditRefundWatch()
+      this.startImpulseScheduler()
       this.running = true
       this.emit('started')
       
@@ -235,6 +236,7 @@ class CoinMachine extends EventEmitter {
     this.downlink?.stop()
     this.remoteCommands?.stop()
     this.stopCreditRefundWatch()
+    this.stopImpulseScheduler?.()
     // (the cash-session file is deliberately kept: money still in the session is restored on the next start)
     this.cashSub?.unsubscribe()
 
@@ -752,6 +754,92 @@ class CoinMachine extends EventEmitter {
     this.refundTimer.unref?.()
   }
 
+  // ---------------------------------------------------------------- dryer blocks
+
+  /** Longest dryer purchase, in blocks of `tImp` minutes (8 x 15 = 2 h). */
+  get maxBlocks() { return Number(process.env.MAX_DRYER_BLOCKS) || 8 }
+
+  /** Blocks the customer asked for on this cart line: dryers only, whole numbers, clamped. */
+  blocksFor(machine, item) {
+    if ((machine?.type || 'wash') !== 'dry') return 1
+    const q = Math.floor(Number(item?.quantity ?? item?.qty ?? 1))
+    return Number.isFinite(q) && q >= 1 ? Math.min(q, this.maxBlocks) : 1
+  }
+
+  /** Minutes between impulses for this machine (dryers carry `tImp`, 15 by default). */
+  gapMinutes(machine) {
+    return Number(machine?.tImp) > 0 ? Number(machine.tImp) : 15
+  }
+
+  /**
+   * Start a PAID machine on the hardware: send the first impulse and remember how many blocks
+   * are still to come. Throws (nothing marked, nothing charged by the caller) when the machine
+   * cannot be started. A no-op where there is no hardware (the central server).
+   */
+  async startPaidMachine(machineId, blocks = 1) {
+    if (!this.running) return { skipped: true }
+    const machine = await Machine.findOne(this.scoped({ _id: machineId })).populate('interfaceId')
+    if (!machine) throw new Error('Machine not found')
+    const iface = machine.interfaceId
+    if (!iface || !machine.port) throw new Error(`${machine.name} has no interface/port configured`)
+    if (iface.status !== 'active') throw new Error(`Interface ${iface.name} is not active (status: ${iface.status})`)
+    // Throws when the controller is not connected: the caller then charges nothing.
+    await this.middleware.sendMachineActivation(machine, iface)
+    const n = Math.max(1, Math.floor(blocks))
+    machine.pendingImpulses = n - 1
+    machine.nextImpulseAt = n > 1 ? new Date(Date.now() + this.gapMinutes(machine) * 60_000) : null
+    machine.startedAt = new Date()
+    await machine.save()
+    console.log(`[Cycle] ${machine.name} started (block 1 of ${n}); next impulse ${machine.nextImpulseAt ? 'at ' + machine.nextImpulseAt.toISOString() : 'none'}`)
+    return { success: true, blocks: n }
+  }
+
+  startImpulseScheduler(everyMs = 10_000) {
+    this.stopImpulseScheduler()
+    this.impulseTimer = setInterval(() => { this.tickImpulses().catch((e) => console.error('[Cycle] tick failed:', e.message)) }, everyMs)
+    this.impulseTimer.unref?.()
+  }
+
+  stopImpulseScheduler() {
+    clearInterval(this.impulseTimer)
+    this.impulseTimer = null
+  }
+
+  /** Send the next block's impulse to every machine whose time has come. Retries while the controller is away. */
+  async tickImpulses(now = new Date()) {
+    if (this.impulseBusy) return 0
+    this.impulseBusy = true
+    let sent = 0
+    try {
+      const due = await Machine.find(this.scoped({ pendingImpulses: { $gt: 0 }, nextImpulseAt: { $lte: now } })).populate('interfaceId')
+      for (const machine of due) {
+        const iface = machine.interfaceId
+        try {
+          if (!iface || !machine.port) throw new Error('no interface/port')
+          await this.middleware.sendMachineActivation(machine, iface)
+          machine.pendingImpulses = Math.max(0, machine.pendingImpulses - 1)
+          machine.nextImpulseAt = machine.pendingImpulses > 0 ? new Date(Date.now() + this.gapMinutes(machine) * 60_000) : null
+          machine.status = 'working'
+          machine.statusText = 'Ocupado'
+          await machine.save()
+          sent++
+          console.log(`[Cycle] ${machine.name}: next block sent, ${machine.pendingImpulses} to go`)
+        } catch (err) {
+          console.error(`[Cycle] ${machine.name}: could not send the next block (${err.message}); will retry`)
+          const lateMin = (Date.now() - new Date(machine.nextImpulseAt).getTime()) / 60_000
+          if (lateMin >= 5 && !machine.__alerted) {
+            machine.__alerted = true
+            await this.auditSystem('machine.block.late', { machine: machine.name, pending: machine.pendingImpulses, lateMinutes: Math.round(lateMin), error: err.message })
+            broadcastHardwareEvent(this.tenantId, 'machine:block-late', { machine: machine.name, pending: machine.pendingImpulses })
+          }
+        }
+      }
+    } finally {
+      this.impulseBusy = false
+    }
+    return sent
+  }
+
   stopCreditRefundWatch() {
     clearInterval(this.refundTimer)
     this.refundTimer = null
@@ -993,6 +1081,8 @@ class CoinMachine extends EventEmitter {
     machine.currentProgram = null
     machine.reserved = false
     machine.reservedBy = null
+    machine.pendingImpulses = 0
+    machine.nextImpulseAt = null
     await machine.save()
     try { await broadcastMachine(machine) } catch { /* see above */ }
     return { success: true }
@@ -1278,6 +1368,9 @@ class CoinMachine extends EventEmitter {
       } else if (!status.doorClosed) {
         statusText = 'Door open'
         // Don't change status, just update text
+      } else if (status.doorClosed && machineStatus === 'working' && machine.pendingImpulses > 0) {
+        // Between two blocks of a dryer the signal goes idle; the customer has paid for more.
+        statusText = 'Ocupado'
       } else if (status.doorClosed && machineStatus === 'working') {
         // Machine finished — door closed and not occupied.
         //
