@@ -30,7 +30,7 @@
   },
   "step5": {
     "title": "Étape 5 : Paiement 💳",
-    "option1": "<0>Carte fidélité</0> - Réduction de 0,50€ par article",
+    "option1": "<0>Carte fidélité</0> - Réduction de 0,50€ par lavage et 0,20€ par séchage",
     "option2": "<0>Espèces</0> - Paiement traditionnel",
     "note": "⚠️ <em>Les recharges de carte sont disponibles uniquement en espèces.</em>"
   },
@@ -48,6 +48,7 @@
     "close": "Fermer",
     "last": "Terminer",
     "next": "Suivant",
+    "nextLabelWithProgress": "Suivant (Étape {step} sur {steps})",
     "skip": "Passer le tutoriel"
   }
 }

@@ -30,7 +30,7 @@
   },
   "step5": {
     "title": "Passo 5: Pagamento 💳",
-    "option1": "<0>Cartão Fidelidade</0> - Desconto de 0,50€ por item",
+    "option1": "<0>Cartão Fidelidade</0> - Desconto de 0,50€ por lavagem e 0,20€ por secagem",
     "option2": "<0>Dinheiro</0> - Pagamento tradicional",
     "note": "⚠️ <em>Para recargas de cartão, apenas Dinheiro está disponível.</em>"
   },
@@ -48,6 +48,7 @@
     "close": "Fechar",
     "last": "Concluir",
     "next": "Próximo",
+    "nextLabelWithProgress": "Próximo (Passo {step} de {steps})",
     "skip": "Saltar Tutorial"
   }
 }

@@ -30,7 +30,7 @@
   },
   "step5": {
     "title": "Schritt 5: Zahlung 💳",
-    "option1": "<0>Treuekarte</0> - 0,50€ Rabatt pro Artikel",
+    "option1": "<0>Treuekarte</0> - 0,50€ Rabatt pro Waschgang und 0,20€ pro Trocknung",
     "option2": "<0>Bargeld</0> - Traditionelle Zahlung",
     "note": "⚠️ <em>Kartennachladungen sind nur mit Bargeld möglich.</em>"
   },
@@ -48,6 +48,7 @@
     "close": "Schließen",
     "last": "Fertigstellen",
     "next": "Weiter",
+    "nextLabelWithProgress": "Weiter (Schritt {step} von {steps})",
     "skip": "Tutorial überspringen"
   }
 }

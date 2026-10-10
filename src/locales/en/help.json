@@ -30,7 +30,7 @@
   },
   "step5": {
     "title": "Step 5: Payment 💳",
-    "option1": "<0>Loyalty Card</0> - €0.50 discount per item",
+    "option1": "<0>Loyalty Card</0> - €0.50 off each wash and €0.20 off each dry",
     "option2": "<0>Cash</0> - Traditional payment",
     "note": "⚠️ <em>Card top-ups are only available via Cash.</em>"
   },
@@ -48,6 +48,7 @@
     "close": "Close",
     "last": "Finish",
     "next": "Next",
+    "nextLabelWithProgress": "Next (Step {step} of {steps})",
     "skip": "Skip Tutorial"
   }
 }

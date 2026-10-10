@@ -95,7 +95,7 @@ export default function HelpTutorial({ run, onClose }) {
           <div className="space-y-2 text-neutral-700">
             <p><Trans ns="help" i18nKey="step5.option1" components={[<strong />]} /></p>
             <p><Trans ns="help" i18nKey="step5.option2" components={[<strong />]} /></p>
-            <p className="mt-3"><Trans ns="help" i18nKey="step5.note" /></p>
+            <p className="mt-3"><Trans ns="help" i18nKey="step5.note" components={{ em: <em /> }} /></p>
           </div>
         </div>
       ),
@@ -242,6 +242,7 @@ export default function HelpTutorial({ run, onClose }) {
           close: t('buttons.close'),
           last: t('buttons.last'),
           next: t('buttons.next'),
+          nextLabelWithProgress: t('buttons.nextLabelWithProgress'),
           skip: t('buttons.skip'),
         }}
       />
