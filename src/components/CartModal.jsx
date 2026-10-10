@@ -372,7 +372,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
             {/* Items List */}
             <div className="space-y-3">
               {cart.map((i) => (
-                <div key={i.id} className="bg-neutral-50 p-4 rounded-lg relative group">
+                <div key={i.id} className="bg-neutral-50 p-6 rounded-xl relative group">
                   <button 
                     onClick={(e) => {
                       e.stopPropagation()
@@ -389,34 +389,34 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
                     </svg>
                   </button>
                   <div className="flex items-center justify-between">
-                    <div className="font-semibold text-neutral-800 pr-6">
+                    <div className="text-2xl font-semibold text-neutral-800 pr-8">
                       {i.name || i.type}
                       {i.type === 'dry' && (
-                        <div className="text-sm font-normal text-neutral-500">
+                        <div className="text-xl font-normal text-neutral-500">
                           {(Number(i.quantity) || 1)} × {Number(i.tImp) || 15} min = {(Number(i.quantity) || 1) * (Number(i.tImp) || 15)} min
                         </div>
                       )}
                     </div>
-                    <div className="text-lg font-bold text-neutral-800">
+                    <div className="text-3xl font-bold text-neutral-800">
                       {(i.type === 'Recarga de Cartão' ? (i.price || i.amount || 0) : unitPrice(i)).toFixed(2)}€
                     </div>
                   </div>
                   {i.type === 'dry' && (
-                    <div className="mt-3 flex items-center justify-center gap-6">
+                    <div className="mt-4 flex items-center justify-center gap-10">
                       <button
                         type="button"
                         aria-label="Menos 15 minutos"
                         disabled={(Number(i.quantity) || 1) <= 1}
                         onClick={(e) => { e.stopPropagation(); setQuantity(i.id, (Number(i.quantity) || 1) - 1) }}
-                        className="w-14 h-14 rounded-full bg-white border-2 border-teal-600 text-teal-700 text-3xl font-bold disabled:opacity-30 active:scale-95"
+                        className="w-20 h-20 rounded-full bg-white border-4 border-teal-600 text-teal-700 text-5xl font-bold disabled:opacity-30 active:scale-95"
                       >−</button>
-                      <div className="text-2xl font-bold text-neutral-800 min-w-[3ch] text-center">{Number(i.quantity) || 1}</div>
+                      <div className="text-5xl font-bold text-neutral-800 min-w-[3ch] text-center">{Number(i.quantity) || 1}</div>
                       <button
                         type="button"
                         aria-label="Mais 15 minutos"
                         disabled={(Number(i.quantity) || 1) >= 8}
                         onClick={(e) => { e.stopPropagation(); setQuantity(i.id, (Number(i.quantity) || 1) + 1) }}
-                        className="w-14 h-14 rounded-full bg-teal-600 text-white text-3xl font-bold disabled:opacity-30 active:scale-95"
+                        className="w-20 h-20 rounded-full bg-teal-600 text-white text-5xl font-bold disabled:opacity-30 active:scale-95"
                       >+</button>
                     </div>
                   )}
@@ -428,37 +428,37 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
 
             {/* Coupon code */}
             <div className="pt-3">
-              <label htmlFor="cart-coupon-code" className="text-xs text-neutral-500">Código promocional</label>
+              <label htmlFor="cart-coupon-code" className="text-lg text-neutral-500">Código promocional</label>
               <input
                 id="cart-coupon-code"
                 type="text"
                 value={couponCode}
                 onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
                 placeholder="Opcional"
-                className="mt-1 w-full border rounded px-3 py-2 text-sm uppercase"
+                className="mt-2 w-full border rounded-lg px-4 py-3 text-xl uppercase"
               />
             </div>
 
             {/* Total */}
             <div className="flex items-center justify-between pt-4 border-t-2 border-neutral-200">
               <div>
-                <div className="text-sm text-neutral-500">Total a pagar</div>
-                <div className="text-2xl font-bold text-neutral-800">{purchaseTotal.toFixed(2)}€</div>
-                {hasRecharge && <div className="text-sm text-neutral-600">Saldo no carrinho: <span className="font-semibold">{rechargeTotal.toFixed(2)}€</span></div>}
-                {cardError && <div className="text-sm text-red-600 font-semibold mt-2">{cardError}</div>}
+                <div className="text-xl text-neutral-500">Total a pagar</div>
+                <div className="text-4xl font-bold text-neutral-800">{purchaseTotal.toFixed(2)}€</div>
+                {hasRecharge && <div className="text-xl text-neutral-600">Saldo no carrinho: <span className="font-semibold">{rechargeTotal.toFixed(2)}€</span></div>}
+                {cardError && <div className="text-xl text-red-600 font-semibold mt-2">{cardError}</div>}
               </div>
 
-              <div className="text-3xl font-bold text-teal-600">{total.toFixed(2)}€</div>
+              <div className="text-5xl font-bold text-teal-600">{total.toFixed(2)}€</div>
             </div>
 
             {/* Auto-detection waiting state */}
             <div className="flex flex-col gap-4 py-6 text-center">
               <div className="flex items-center justify-center gap-3">
                 <div className="w-3 h-3 bg-teal-600 rounded-full animate-pulse"></div>
-                <p className="text-lg font-semibold text-neutral-700">Aguardando pagamento...</p>
+                <p className="text-3xl font-semibold text-neutral-700">Aguardando pagamento...</p>
               </div>
               
-              <div className="space-y-2 text-sm text-neutral-600">
+              <div className="space-y-3 text-xl text-neutral-600">
                 <p className="flex items-center justify-center gap-2">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -475,10 +475,10 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
 
               {cashInserted > 0 && (
                 <div className="mt-3 p-4 bg-teal-50 rounded-xl">
-                  <p className="text-sm text-neutral-600">Dinheiro inserido</p>
-                  <p className="text-2xl font-bold text-teal-700">{cashInserted.toFixed(2)}€</p>
+                  <p className="text-xl text-neutral-600">Dinheiro inserido</p>
+                  <p className="text-4xl font-bold text-teal-700">{cashInserted.toFixed(2)}€</p>
                   {cashInserted < total && (
-                    <p className="text-xs text-neutral-500 mt-1">Faltam {(total - cashInserted).toFixed(2)}€</p>
+                    <p className="text-lg text-neutral-500 mt-1">Faltam {(total - cashInserted).toFixed(2)}€</p>
                   )}
                 </div>
               )}
@@ -488,10 +488,10 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
                   websocket pipeline tracked by cashInserted above. */}
               {localApi.isElectron && localSession && localSession.credits > 0 && (
                 <div className="mt-3 p-4 bg-teal-50 rounded-xl">
-                  <p className="text-sm text-neutral-600">Crédito inserido</p>
-                  <p className="text-2xl font-bold text-teal-700">{localSession.credits.toFixed(2)}€</p>
+                  <p className="text-xl text-neutral-600">Crédito inserido</p>
+                  <p className="text-4xl font-bold text-teal-700">{localSession.credits.toFixed(2)}€</p>
                   {localSession.credits < total && (
-                    <p className="text-xs text-neutral-500 mt-1">Faltam {(total - localSession.credits).toFixed(2)}€</p>
+                    <p className="text-lg text-neutral-500 mt-1">Faltam {(total - localSession.credits).toFixed(2)}€</p>
                   )}
                 </div>
               )}
@@ -499,7 +499,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
               <div className="flex gap-2 mt-4">
                 <button
                   onClick={onClose}
-                  className="flex-1 px-6 py-3 rounded-xl bg-neutral-100 text-neutral-700 hover:bg-neutral-200 font-semibold transition-all"
+                  className="flex-1 px-6 py-5 rounded-xl text-2xl bg-neutral-100 text-neutral-700 hover:bg-neutral-200 font-semibold transition-all"
                 >
                   Cancelar
                 </button>
@@ -507,7 +507,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
                   <button
                     onClick={handleCashOut}
                     disabled={cashingOut}
-                    className="flex-1 px-6 py-3 rounded-xl bg-amber-100 text-amber-800 hover:bg-amber-200 font-semibold transition-all disabled:opacity-50"
+                    className="flex-1 px-6 py-5 rounded-xl text-2xl bg-amber-100 text-amber-800 hover:bg-amber-200 font-semibold transition-all disabled:opacity-50"
                   >
                     {cashingOut ? 'A devolver…' : `Levantar troco (${localSession.cashBalance.toFixed(2)}€)`}
                   </button>
@@ -518,7 +518,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
                   understated so customers do not reach for it by default. */}
               <button
                 onClick={() => { setPinError(null); setShowPinPrompt(true) }}
-                className="mx-auto mt-2 text-xs text-neutral-400 hover:text-neutral-600 underline underline-offset-4"
+                className="mx-auto mt-3 text-lg text-neutral-400 hover:text-neutral-600 underline underline-offset-4"
               >
                 Pagamento manual (staff)
               </button>
