@@ -28,6 +28,12 @@ describe('Legal texts: Portuguese in, automatic translations stored for the kios
     expect(out.split('\n')).to.deep.equal(['## [en] 1. Âmbito', '- [en] ponto um', '', '[en] Texto'])
   })
 
+  it('uses the shop dictionary: a phrase in it is rendered exactly as written there', async () => {
+    const glossary = [{ pt: 'Livro de Reclamações', en: 'Complaints Book', fr: '', de: '', es: '' }]
+    const out = await translateText('Use o Livro de Reclamações', 'en', fake, glossary)
+    expect(out).to.contain('Complaints Book')
+  })
+
   it('translates privacy and terms into en/fr/de and remembers the Portuguese they came from', async () => {
     await Setting.create({ tenantId: tenant._id, key: 'legal.info', value: { privacy: { pt: '## A\ntexto' }, terms: { pt: '## B\n- regra' } } })
     await translateLegal(tenant._id, { translate: fake })

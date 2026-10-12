@@ -7,6 +7,7 @@
  */
 import Setting from '../models/setting.js'
 import { translateBatch, translatorEnabled } from './translator.js'
+import { loadGlossary, translateWithGlossary } from './landingGlossary.js'
 
 export const INFO_KEY = 'legal.info'
 export const TRANSLATIONS_KEY = 'legal.translations'
@@ -18,13 +19,15 @@ const setStatus = (tenantId, value) =>
   Setting.updateOne({ tenantId, key: STATUS_KEY }, { $set: { value } }, { upsert: true })
 
 /** "## Title" / "- item" keep their marker; only the words are translated. */
-export async function translateText(text, target, translate = translateBatch) {
+export async function translateText(text, target, translate = translateBatch, glossary = []) {
   const lines = String(text).split('\n')
   const parts = lines.map((l) => {
     const m = /^(##\s+|-\s+)?(.*)$/.exec(l)
     return { marker: m[1] || '', body: m[2] }
   })
-  const done = await translate(parts.map((p) => p.body), { source: 'pt', target })
+  const bodies = parts.map((p) => p.body)
+  // the shop's own dictionary (the same one the landing page uses) wins over the machine translation
+  const { out: done } = await translateWithGlossary(bodies, target, glossary, (list) => translate(list, { source: 'pt', target }))
   return parts.map((p, i) => (p.body.trim() ? p.marker + done[i] : p.marker + p.body)).join('\n')
 }
 
@@ -49,20 +52,22 @@ async function runOnce(tenantId, translate) {
   await setStatus(tenantId, { state: 'running', startedAt })
   const infoDoc = await Setting.findOne({ tenantId, key: INFO_KEY }).lean()
   const info = (infoDoc && infoDoc.value) || {}
+  const { entries: glossary } = await loadGlossary(Setting, tenantId)
   const result = {}
   const failed = {}
   for (const docName of DOCS) {
     const pt = info[docName] && typeof info[docName].pt === 'string' ? info[docName].pt : ''
     if (!pt.trim()) continue
     result[docName] = { pt } // the Portuguese this translation belongs to
-    for (const lang of LEGAL_LANGS) {
+    // all languages at the same time: one press of the button, everything translated
+    await Promise.all(LEGAL_LANGS.map(async (lang) => {
       try {
-        result[docName][lang] = await translateText(pt, lang, translate)
+        result[docName][lang] = await translateText(pt, lang, translate, glossary)
       } catch (err) {
         failed[`${docName}.${lang}`] = err.message
         console.warn(`[legal-translate] ${docName} ${lang} failed: ${err.message}`)
       }
-    }
+    }))
   }
   const okCount = Object.values(result).reduce((n, d) => n + LEGAL_LANGS.filter((l) => d[l]).length, 0)
   if (okCount > 0) {

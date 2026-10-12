@@ -76,7 +76,6 @@ export default function AdminSettings(){
 
   // Legal / GDPR texts shown in the kiosk footer (setting legal.info, public)
   const [legal, setLegal] = useState(DEFAULT_LEGAL)
-  const [legalLang, setLegalLang] = useState('pt')
   const [savingLegal, setSavingLegal] = useState(false)
   const [legalStatus, setLegalStatus] = useState({ state: 'never' })
   const [legalTranslations, setLegalTranslations] = useState({})
@@ -160,16 +159,6 @@ export default function AdminSettings(){
       console.error(err)
       toast({ title: 'Erro ao guardar', variant: 'destructive' })
     } finally { setSavingLegal(false) }
-  }
-
-  async function retranslateLegal() {
-    try {
-      await api.request('/admin/legal/translate', { method: 'POST', expect: 'json' })
-      setLegalStatus((s) => ({ ...s, state: 'running' }))
-      followLegalTranslation()
-    } catch (err) {
-      toast({ title: 'Não foi possível traduzir', description: err?.message || String(err), variant: 'destructive' })
-    }
   }
 
   async function loadBannerSettings() {
@@ -1451,36 +1440,21 @@ export default function AdminSettings(){
               (por exemplo horário, videovigilância — se tiver câmaras tem de informar —, avarias, peças esquecidas, reembolsos) e, se possível, reveja-os com quem trata do RGPD.
             </p>
 
-            {/* automatic translations: read only, made by the server from the Portuguese above */}
-            <div className="rounded-lg border bg-neutral-50 p-4 space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-semibold">Traduções automáticas</span>
-                <span className={`text-xs px-2 py-0.5 rounded-full ${legalStatus.state === 'running' ? 'bg-amber-100 text-amber-800' : legalStatus.state === 'done' ? 'bg-emerald-100 text-emerald-800' : legalStatus.state === 'never' ? 'bg-neutral-200 text-neutral-700' : 'bg-red-100 text-red-800'}`}>
-                  {legalStatus.state === 'running' ? 'A traduzir…' : legalStatus.state === 'done' ? 'Atualizadas' : legalStatus.state === 'partial' ? 'Parcial' : legalStatus.state === 'never' ? 'Ainda não traduzido' : 'Erro'}
-                </span>
-                {legalStatus.finishedAt && <span className="text-xs text-neutral-500">{new Date(legalStatus.finishedAt).toLocaleString('pt-PT')}</span>}
-                <Button type="button" size="sm" variant="outline" disabled={savingLegal || legalStatus.state === 'running'} onClick={retranslateLegal}>Traduzir outra vez</Button>
-              </div>
-              {legalStatus.translatorEnabled === false && (
-                <p className="text-xs text-red-700">O tradutor automático não está configurado neste servidor (TRANSLATE_URL): sem ele o quiosque usa o inglês modelo e o português.</p>
-              )}
-              <div className="flex gap-2">
-                {LEGAL_LANGS.filter((l) => l.code !== 'pt').map((l) => (
-                  <button key={l.code} type="button" onClick={() => setLegalLang(l.code)}
-                    className={`px-3 py-1 rounded-lg text-xs border ${legalLang === l.code ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-neutral-700'}`}>{l.label}</button>
-                ))}
-              </div>
-              {['privacy', 'terms'].map((k) => (
-                <div key={k}>
-                  <div className="text-xs font-semibold text-neutral-600 mb-1">{k === 'privacy' ? 'Política de Privacidade' : 'Termos e Regras'} — {LEGAL_LANGS.find((l) => l.code === (legalLang === 'pt' ? 'en' : legalLang))?.label}</div>
-                  <pre className="whitespace-pre-wrap text-xs bg-white border rounded-md p-3 max-h-48 overflow-auto font-sans">
-                    {(legalTranslations[k] && legalTranslations[k].pt === legal[k].pt && legalTranslations[k][legalLang === 'pt' ? 'en' : legalLang]) || '(ainda sem tradução para este texto — guarde para traduzir)'}
-                  </pre>
-                </div>
-              ))}
+            {/* one button: saves and translates into every language; this line only reports how it went */}
+            <div className="flex flex-wrap items-center gap-3">
+              <Button type="submit" disabled={savingLegal || legalStatus.state === 'running'}>
+                {savingLegal || legalStatus.state === 'running' ? 'A traduzir para inglês, francês, alemão e espanhol…' : 'Guardar e traduzir'}
+              </Button>
+              <span className="text-sm text-neutral-600">
+                {legalStatus.state === 'done' && `Traduzido (EN, FR, DE, ES)${legalStatus.finishedAt ? ' — ' + new Date(legalStatus.finishedAt).toLocaleString('pt-PT') : ''}`}
+                {legalStatus.state === 'partial' && 'Algumas línguas falharam — carregue outra vez em Guardar e traduzir'}
+                {legalStatus.state === 'error' && 'Não foi possível traduzir — carregue outra vez em Guardar e traduzir'}
+                {legalStatus.state === 'never' && 'Ainda não traduzido'}
+              </span>
             </div>
-
-            <Button type="submit" disabled={savingLegal}>{savingLegal ? 'A guardar…' : 'Guardar e traduzir'}</Button>
+            {legalStatus.translatorEnabled === false && (
+              <p className="text-xs text-red-700">O tradutor automático não está configurado neste servidor (TRANSLATE_URL).</p>
+            )}
           </form>
         </CardContent>
       </Card>
