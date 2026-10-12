@@ -32,6 +32,8 @@ export default function Pos() {
   const [currentCard, setCurrentCard] = React.useState(null) // { code, balance, name, ... }
   const [transactions, setTransactions] = React.useState([])
   const removeTimer = React.useRef(null)
+  // Is the card that triggered the load still in the reader? Set on insert, cleared on removal.
+  const cardInReader = React.useRef(false)
   // Bubbles while the card's data comes from the server (the customer has just put the card in).
   const [cardLoading, setCardLoading] = React.useState(0)
 
@@ -69,6 +71,7 @@ export default function Pos() {
       // is really gone closes the window and sends the customer back to the home screen.
       if (message.type === 'rfid:card_removed') {
         clearTimeout(removeTimer.current)
+        cardInReader.current = false
         removeTimer.current = setTimeout(() => closeCard(), 3000)
         return
       }
@@ -76,8 +79,10 @@ export default function Pos() {
         clearTimeout(removeTimer.current)
         const code = message.payload?.cardCode
         if (code) {
+          cardInReader.current = true
           toast({ title: i18n.t('cardDetected', { ns: 'cart' }), variant: 'success' })
-          loadCard(code).then(() => setCardOpen(true))
+          // The card may be taken out while its data is still coming: then there is nothing to show.
+          loadCard(code).then(() => { if (cardInReader.current) setCardOpen(true) })
         }
       }
     })
