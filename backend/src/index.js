@@ -89,6 +89,7 @@ app.use('/uploads', uploadsFetchThrough({ uploadDir }))
 // shadowed by this; the two are mutually exclusive by what each deployment sets.
 if (process.env.PUBLIC_LANDING_PAGE === 'true') {
   // The website's own copy of its fonts (Inter, Poppins): visitors never contact Google for them.
+  app.use('/og', express.static(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public/og'), { maxAge: '7d' }))
   app.use('/fonts', express.static(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public/fonts'), { maxAge: '365d', immutable: true }))
   app.use('/', publicRoutes)
   console.log('Public front page enabled at /')

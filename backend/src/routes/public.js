@@ -43,6 +43,9 @@ let cachedTranslations = {}
 let cachedPrices = []
 // The legal texts (legal.info + their translations), cached with the rest
 let cachedLegal = mergeLegal(null, null)
+// When the page content / the legal texts last changed (setting updatedAt), for the sitemap's lastmod
+let cachedLastmod = null
+let cachedLegalLastmod = null
 let cachedVersion = 0 // see services/landingCache.js: changes when content/translations were just saved
 
 // The logo is uploaded once, from the existing Branding tab (AdminSettings.jsx),
@@ -72,6 +75,8 @@ async function loadContent(req) {
       Promise.race([SettingT.findOne({ key: 'legal.translations' }).lean(), timeout()]),
     ])
     cachedLegal = mergeLegal(legalDoc && legalDoc.value, legalTrDoc && legalTrDoc.value)
+    const newest = (...docs) => docs.map((d) => d && (d.updatedAt || (d._id && d._id.getTimestamp && d._id.getTimestamp()))).filter(Boolean).sort((a, b) => new Date(b) - new Date(a))[0] || null
+    cachedLegalLastmod = newest(legalDoc, legalTrDoc)
     const [contentDoc, logoDoc, translationsDoc] = await Promise.all([
       Promise.race([SettingT.findOne({ key: CONTENT_SETTING_KEY }).lean(), timeout()]),
       Promise.race([SettingT.findOne({ key: BRAND_LOGO_SETTING_KEY }).lean(), timeout()]),
@@ -90,6 +95,7 @@ async function loadContent(req) {
         return { type: p.type, weight: p.weight, duration: p.duration ?? null, tImp: g ? (g.tImp ?? null) : null, cash: p.cashPrice, card: p.cardPrice, machines: g ? g.n : 0 }
       })
       .filter((p) => p.machines > 0)
+    cachedLastmod = newest(contentDoc, translationsDoc, logoDoc)
     cachedTranslations = (translationsDoc && translationsDoc.value && typeof translationsDoc.value === 'object') ? translationsDoc.value : {}
     const raw = (contentDoc && contentDoc.value) || {}
     const logoUrl = logoDoc && logoDoc.value ? String(logoDoc.value) : null
@@ -147,7 +153,7 @@ router.get('/robots.txt', (req, res) => {
 
 router.get('/sitemap.xml', async (req, res) => {
   await loadContent(req)
-  res.type('application/xml').send(renderSitemapXml(availableLangs()))
+  res.type('application/xml').send(renderSitemapXml(availableLangs(), { lastmod: cachedLastmod, legalLastmod: cachedLegalLastmod }))
 })
 
 export default router

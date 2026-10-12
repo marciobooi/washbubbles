@@ -83,7 +83,7 @@ describe('Public front page (routes/public.js + views/landing.js)', () => {
       for (const tag of ['og:title', 'og:description', 'og:image', 'og:url', 'og:type']) {
         expect(res.text, tag).to.include(`property="${tag}"`)
       }
-      expect(res.text).to.include('name="twitter:card" content="summary"')
+      expect(res.text).to.include('name="twitter:card" content="summary_large_image"')
     })
 
     it('ships valid JSON-LD LocalBusiness structured data with the real, confirmed business facts', async () => {
@@ -101,7 +101,7 @@ describe('Public front page (routes/public.js + views/landing.js)', () => {
         addressCountry: 'PT',
       })
       expect(data.openingHoursSpecification).to.include({ opens: '07:00', closes: '23:30' })
-      expect(data.aggregateRating).to.deep.equal({ '@type': 'AggregateRating', ratingValue: 4.5, reviewCount: 11 })
+      expect(data.aggregateRating).to.equal(undefined) // self-serving rating markup is not published
       expect(data.sameAs).to.deep.equal(['https://www.instagram.com/freshbubblesloures/'])
       // Never guessed: no lat/lng, no fabricated review text.
       expect(data).to.not.have.property('geo')
@@ -350,7 +350,7 @@ describe('Public front page (routes/public.js + views/landing.js)', () => {
       const m = res.text.match(/<script type="application\/ld\+json">(.*?)<\/script>/s)
       const data = JSON.parse(m[1])
       expect(data.telephone).to.equal('+351 999 888 777')
-      expect(data.aggregateRating).to.deep.equal({ '@type': 'AggregateRating', ratingValue: 4.8, reviewCount: 42 })
+      expect(data.aggregateRating).to.equal(undefined)
     })
 
     it('derives the tel: href from the saved phone number rather than a separately stored field', async () => {

@@ -347,11 +347,8 @@ function jsonLd(content, L = UI.pt, pageUrl = SITE_URL) {
       opens: brand.hours.open,
       closes: brand.hours.close,
     },
-    aggregateRating: {
-      '@type': 'AggregateRating',
-      ratingValue: brand.rating.value,
-      reviewCount: brand.rating.count,
-    },
+    // No aggregateRating: the stars are the business's own reading of its Google reviews, which Google treats as
+    // self-serving markup (not eligible for rich results) — the rating stays visible on the page, not in the markup.
     sameAs: brand.social.map((s) => s.url),
   }
   // Business facts are admin text now, not a fixed literal — JSON.stringify
@@ -478,11 +475,14 @@ ${alternates}
 <meta property="og:title" content="${escapeHtml(title)}">
 <meta property="og:description" content="${escapeHtml(description)}">
 <meta property="og:url" content="${pageUrl}">
-<meta property="og:image" content="${SITE_URL}${escapeHtml(brand.logo)}">
-<meta name="twitter:card" content="summary">
+<meta property="og:image" content="${SITE_URL}/og/freshbubbles.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="${escapeHtml(brand.name)}">
+<meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${escapeHtml(title)}">
 <meta name="twitter:description" content="${escapeHtml(description)}">
-<meta name="twitter:image" content="${SITE_URL}${escapeHtml(brand.logo)}">
+<meta name="twitter:image" content="${SITE_URL}/og/freshbubbles.png">
 
 <link rel="icon" href="${escapeHtml(brand.logo)}" type="image/png">
 <link rel="preload" href="/fonts/inter_v20_UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2" as="font" type="font/woff2" crossorigin>
@@ -1495,18 +1495,20 @@ export function renderRobotsTxt() {
   return `User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api\nSitemap: ${SITE_URL}/sitemap.xml\n`
 }
 
-export function renderSitemapXml(available = ['pt']) {
-  const today = new Date().toISOString().slice(0, 10)
+export function renderSitemapXml(available = ['pt'], { lastmod = null, legalLastmod = null } = {}) {
+  // The real date of the last change (content / legal texts), not today's: a crawler uses it to decide what to re-read.
+  const day = (d) => (d ? new Date(d).toISOString().slice(0, 10) : '')
+  const tag = (d) => (day(d) ? `<lastmod>${day(d)}</lastmod>` : '')
   const langs = LANGS.filter((l) => l === 'pt' || available.includes(l))
   const alt = langs.length > 1
     ? langs.map((l) => `\n    <xhtml:link rel="alternate" hreflang="${UI[l].htmlLang}" href="${SITE_URL}${langPath(l)}"/>`).join('')
     : ''
-  const urls = langs.map((l) => `  <url><loc>${SITE_URL}${langPath(l)}</loc><lastmod>${today}</lastmod><changefreq>monthly</changefreq><priority>${l === 'pt' ? '1.0' : '0.8'}</priority>${alt}</url>`).join('\n')
+  const urls = langs.map((l) => `  <url><loc>${SITE_URL}${langPath(l)}</loc>${tag(lastmod)}<changefreq>monthly</changefreq><priority>${l === 'pt' ? '1.0' : '0.8'}</priority>${alt}</url>`).join('\n')
   // the legal pages, with their language alternates
   const legalUrls = ['privacy', 'terms', 'cookies'].map((doc) => {
     const p = (l) => `${SITE_URL}${langPath(l) === '/' ? '' : langPath(l)}/legal/${doc}`
     const altL = langs.length > 1 ? langs.map((l) => `\n    <xhtml:link rel="alternate" hreflang="${UI[l].htmlLang}" href="${p(l)}"/>`).join('') : ''
-    return langs.map((l) => `  <url><loc>${p(l)}</loc><lastmod>${today}</lastmod><changefreq>yearly</changefreq><priority>0.3</priority>${altL}</url>`).join('\n')
+    return langs.map((l) => `  <url><loc>${p(l)}</loc>${tag(legalLastmod || lastmod)}<changefreq>yearly</changefreq><priority>0.3</priority>${altL}</url>`).join('\n')
   }).join('\n')
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
