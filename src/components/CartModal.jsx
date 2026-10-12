@@ -395,170 +395,268 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
           </div>
         ) : (
           <>
-            {/* Items List */}
-            <div className="space-y-3">
-              {cart.map((i) => (
-                <div key={i.id} className="bg-neutral-50 p-6 rounded-xl relative group">
-                  <button 
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      // Remove item and close modal only if it was the last item
-                      const remaining = cart.filter((x) => x.id !== i.id).length
-                      removeFromCart(i.id)
-                      if (remaining === 0) onClose()
-                    }}
-                    className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full w-7 h-7 flex items-center justify-center shadow-lg transition-all active:scale-90"
-                    aria-label="Remover item"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                  <div className="flex items-center justify-between">
-                    <div className="text-2xl font-semibold text-neutral-800 pr-8">
-                      {i.name || i.type}
-                      {i.type === 'dry' && (
-                        <div className="text-xl font-normal text-neutral-500">
-                          {(Number(i.quantity) || 1)} × {Number(i.tImp) || 15} min = {(Number(i.quantity) || 1) * (Number(i.tImp) || 15)} min
+            {/* ---- Payment window (design of 2026-10-12) ---- */}
+            {(() => {
+              const machineItems = cart.filter((i) => i.type !== 'Recarga de Cartão')
+              const single = machineItems.length === 1 && !hasRecharge ? machineItems[0] : null
+              const paid = Math.round(credit * 100) / 100
+              const remaining = Math.max(0, Math.round((total - paid) * 100) / 100)
+              const change = Math.max(0, Math.round((paid - total) * 100) / 100)
+              const percent = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0
+              const enough = total > 0 && paid >= total
+              const waitingConfirm = needsConfirm && !confirmed && (enough || detectedCardCode)
+              const label = enough
+                ? (waitingConfirm ? 'DINHEIRO SUFICIENTE · CONFIRME' : 'PAGAMENTO CONCLUÍDO!')
+                : paid > 0 ? 'A RECEBER DINHEIRO...' : 'AGUARDANDO PAGAMENTO'
+              const eur = (n) => `${Number(n).toFixed(2).replace('.', ',')}€`
+              const gapOf = (i) => Number(i.tImp) || 15
+              const qtyOf = (i) => (i.type === 'dry' ? Math.max(1, Math.min(8, Math.floor(Number(i.quantity)) || 1)) : 1)
+              const perCycle = (i) => unitPrice({ ...i, quantity: 1 })
+              const badge = (i) => {
+                const n = i.number ?? (String(i.name || '').match(/\d+/) || [''])[0]
+                return n === '' || n == null ? '•' : String(n)
+              }
+
+              return (
+                <>
+                  {/* Header */}
+                  <header className="flex items-center justify-between border-b border-slate-100 pb-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 rounded-2xl bg-teal-500 text-white font-bold flex items-center justify-center text-3xl shadow-sm ring-4 ring-teal-50">
+                        {single ? badge(single) : '🛒'}
+                      </div>
+                      <div>
+                        <h1 className="text-4xl font-bold tracking-tight text-slate-900">
+                          {single ? (single.name || single.type) : 'Carrinho'}
+                        </h1>
+                        <p className="text-xl font-semibold text-slate-600 mt-1">
+                          {single
+                            ? (single.type === 'dry' ? `Duração base: ${gapOf(single)} min por ciclo` : `${single.weight ? single.weight + ' kg' : 'Lavagem'}`)
+                            : `${cart.length} itens`}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      aria-label="Fechar janela"
+                      type="button"
+                      onClick={onClose}
+                      className="w-16 h-16 rounded-full bg-slate-100 text-slate-400 hover:text-rose-500 hover:bg-rose-50 active:scale-95 flex items-center justify-center"
+                    >
+                      <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                    </button>
+                  </header>
+
+                  {/* Items */}
+                  {cart.map((i) => {
+                    const isDry = i.type === 'dry'
+                    const q = qtyOf(i)
+                    const gap = gapOf(i)
+                    return (
+                      <section key={i.id} className="space-y-4">
+                        {!single && (
+                          <div className="flex items-center justify-between bg-slate-50 rounded-2xl px-5 py-4">
+                            <div className="text-2xl font-semibold text-slate-800">{i.name || i.type}</div>
+                            <div className="flex items-center gap-4">
+                              <div className="text-3xl font-bold text-slate-800">{(i.type === 'Recarga de Cartão' ? (i.price || i.amount || 0) : unitPrice(i)).toFixed(2)}€</div>
+                              <button
+                                type="button"
+                                aria-label="Remover item"
+                                onClick={() => {
+                                  const left = cart.filter((x) => x.id !== i.id).length
+                                  removeFromCart(i.id)
+                                  if (left === 0) onClose()
+                                }}
+                                className="w-12 h-12 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center active:scale-90"
+                              >
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {isDry && (
+                          <>
+                            <div>
+                              <span className="inline-block text-lg text-emerald-800 font-bold bg-emerald-100/80 px-3 py-1 rounded-md mb-3">Escolhas rápidas</span>
+                              <div className="grid grid-cols-3 gap-3">
+                                {[1, 2, 3].map((n) => (
+                                  <button
+                                    key={n}
+                                    type="button"
+                                    onClick={() => setQuantity(i.id, n)}
+                                    className={`relative min-h-[96px] py-4 px-2 rounded-2xl border-2 flex flex-col items-center justify-center gap-1 shadow-sm active:scale-95 transition-all ${q === n ? 'border-teal-500 bg-teal-50 ring-2 ring-teal-500/10' : 'border-slate-200 bg-white hover:border-teal-400'}`}
+                                  >
+                                    {n === 2 && <span className="absolute -top-3 bg-teal-600 text-[13px] text-white px-3 py-0.5 rounded-full font-bold uppercase tracking-tight">Mais usado</span>}
+                                    <span className="text-3xl font-extrabold text-slate-800">{n * gap} min</span>
+                                    <span className={`text-xl font-semibold ${q === n ? 'text-teal-700' : 'text-slate-400'}`}>{eur(perCycle(i) * n)}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <div className="bg-teal-50/60 border border-teal-100 rounded-2xl p-5 flex items-center justify-between gap-4">
+                              <button
+                                type="button"
+                                aria-label="Diminuir tempo"
+                                disabled={q <= 1}
+                                onClick={() => setQuantity(i.id, q - 1)}
+                                className="w-24 h-24 rounded-2xl border-2 border-slate-200 bg-white text-slate-700 flex items-center justify-center shadow-sm active:scale-90 disabled:opacity-30 shrink-0"
+                              >
+                                <svg className="w-10 h-10" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path d="M5 12h14" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                              </button>
+                              <div className="flex-1 flex flex-col items-center text-center select-none">
+                                <span className="text-lg font-bold text-teal-800 uppercase tracking-wider">Tempo selecionado</span>
+                                <span className="text-6xl font-extrabold text-slate-900 tabular-nums leading-tight">{q * gap} min</span>
+                                <span className="mt-1 flex items-center gap-2 text-xl font-semibold text-slate-600">
+                                  <span className="bg-white border border-teal-100 px-3 py-0.5 rounded-full text-teal-800 font-bold">{q} {q === 1 ? 'ciclo' : 'ciclos'} ({gap} min/ciclo)</span>
+                                  <span className="text-slate-400">•</span>
+                                  <span>{eur(perCycle(i))}/ciclo</span>
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                aria-label="Aumentar tempo"
+                                disabled={q >= 8}
+                                onClick={() => setQuantity(i.id, q + 1)}
+                                className="w-24 h-24 rounded-2xl border-2 border-slate-200 bg-white text-slate-700 flex items-center justify-center shadow-sm active:scale-90 disabled:opacity-30 shrink-0"
+                              >
+                                <svg className="w-10 h-10" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path d="M12 5v14m-7-7h14" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </section>
+                    )
+                  })}
+
+                  {/* Promo code (collapsed) */}
+                  <details className="group border-t border-slate-100 pt-4">
+                    <summary className="flex items-center justify-between text-2xl font-bold text-teal-900 cursor-pointer list-none select-none py-2">
+                      <span>Tens um código promocional? <span className="text-slate-600 font-medium">(opcional)</span></span>
+                      <svg className="w-7 h-7 text-slate-600 group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                    </summary>
+                    <div className="pt-3 flex items-center gap-3">
+                      <input
+                        id="cart-coupon-code"
+                        type="text"
+                        value={couponCode}
+                        onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                        placeholder="INSERIR CÓDIGO"
+                        className="w-full h-16 bg-slate-50 text-2xl text-slate-800 placeholder-slate-400 font-medium uppercase tracking-wider rounded-xl border border-slate-200 px-4 outline-none focus:border-teal-500"
+                      />
+                    </div>
+                  </details>
+
+                  {/* Total */}
+                  <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-2xl p-6 text-white shadow-md flex items-center justify-between">
+                    <div>
+                      <span className="text-xl font-semibold text-emerald-400 block tracking-wide uppercase">Total a pagar</span>
+                      <span className="text-xl text-slate-200 font-medium">
+                        {hasRecharge ? `Inclui recarga de ${rechargeTotal.toFixed(2)}€` : 'Moedas e notas aceites'}
+                      </span>
+                      {cardError && <span className="block text-xl text-rose-300 font-semibold mt-1">{cardError}</span>}
+                    </div>
+                    <span className="text-6xl font-extrabold tracking-tight tabular-nums">{eur(total)}</span>
+                  </div>
+
+                  {/* Payment status */}
+                  <div className="bg-teal-50/70 border border-teal-100 rounded-2xl p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="relative flex h-4 w-4">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500" />
+                        </span>
+                        <span className="text-2xl font-bold uppercase tracking-wider text-emerald-800">{label}</span>
+                      </div>
+                      <span className="text-lg font-bold text-slate-500 uppercase tracking-wider bg-white/80 border border-emerald-100 px-3 py-1 rounded-full">Notas &amp; Moedas</span>
+                    </div>
+
+                    <div className="bg-white/95 border border-emerald-200/60 rounded-xl p-4 flex items-center gap-4">
+                      <div className="w-16 h-16 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0 border border-emerald-100">
+                        <svg className="w-9 h-9 text-emerald-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect height="12" rx="2" width="20" x="2" y="6" /><circle cx="12" cy="12" r="3" /><path d="M6 12h.01M18 12h.01" strokeLinecap="round" /></svg>
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold text-slate-800">Insira moedas ou notas na ranhura</p>
+                        <p className="text-xl font-semibold text-slate-600 mt-0.5">Notas de 5€, 10€, 20€ e moedas de 0,10€ a 2€ · ou aproxime o cartão</p>
+                      </div>
+                    </div>
+
+                    <div className="bg-white border-2 border-emerald-200/80 rounded-xl p-5 space-y-4">
+                      <div className="grid grid-cols-2 gap-4 divide-x divide-slate-100">
+                        <div className="pr-3">
+                          <span className="text-lg font-bold text-slate-500 uppercase tracking-wider block">Total inserido</span>
+                          <span className="text-5xl font-bold text-slate-800 tracking-tight tabular-nums">{eur(paid)}</span>
                         </div>
+                        <div className="pl-5">
+                          <span className="text-lg font-bold text-slate-500 uppercase tracking-wider block">{change > 0 ? 'Troco' : 'Falta pagar'}</span>
+                          <span className={`text-5xl font-bold tracking-tight tabular-nums ${enough ? 'text-emerald-600' : 'text-slate-900'}`}>{change > 0 ? eur(change) : eur(remaining)}</span>
+                        </div>
+                      </div>
+                      <div className="space-y-2 pt-3 border-t border-slate-100">
+                        <div className="flex justify-between items-center text-xl font-bold text-slate-600">
+                          <span>Progresso do pagamento</span>
+                          <span className="tabular-nums">{percent}%</span>
+                        </div>
+                        <div className="w-full h-5 bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200/80">
+                          <div className="h-full bg-emerald-500 rounded-full transition-all duration-300" style={{ width: `${percent}%` }} />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Dryer: nothing is paid until the customer has chosen the cycles and confirms */}
+                    {waitingConfirm && total > 0 && (
+                      <button
+                        type="button"
+                        onClick={confirmCart}
+                        className="w-full rounded-2xl bg-teal-600 text-white text-3xl font-bold py-6 shadow-lg active:scale-95"
+                      >
+                        Confirmar e iniciar · {eur(total)}
+                      </button>
+                    )}
+
+                    {/* Local (offline) session credit of the embedded agent; electron kiosks only */}
+                    {localApi.isElectron && localSession && localSession.credits > 0 && (
+                      <div className="p-4 bg-white rounded-xl">
+                        <p className="text-xl text-neutral-600">Crédito inserido</p>
+                        <p className="text-4xl font-bold text-teal-700">{localSession.credits.toFixed(2)}€</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="space-y-3 pt-1">
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        onClick={onClose}
+                        className="flex-1 min-h-[72px] rounded-xl text-2xl bg-slate-100 text-slate-700 hover:bg-slate-200 font-bold transition-all active:scale-[0.99]"
+                      >
+                        Cancelar
+                      </button>
+                      {localApi.isElectron && localSession && localSession.cashBalance > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleCashOut}
+                          disabled={cashingOut}
+                          className="flex-1 min-h-[72px] rounded-xl text-2xl bg-amber-100 text-amber-800 hover:bg-amber-200 font-bold transition-all disabled:opacity-50"
+                        >
+                          {cashingOut ? 'A devolver…' : `Levantar troco (${localSession.cashBalance.toFixed(2)}€)`}
+                        </button>
                       )}
                     </div>
-                    <div className="text-3xl font-bold text-neutral-800">
-                      {(i.type === 'Recarga de Cartão' ? (i.price || i.amount || 0) : unitPrice(i)).toFixed(2)}€
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setPinError(null); setShowPinPrompt(true) }}
+                      className="w-full min-h-[64px] rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xl inline-flex items-center justify-center gap-3 active:scale-[0.99]"
+                    >
+                      <svg className="w-6 h-6 text-slate-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                      Pagamento manual (staff / ajuda)
+                    </button>
                   </div>
-                  {i.type === 'dry' && (
-                    <div className="mt-4 flex items-center justify-center gap-10">
-                      <button
-                        type="button"
-                        aria-label="Menos 15 minutos"
-                        disabled={(Number(i.quantity) || 1) <= 1}
-                        onClick={(e) => { e.stopPropagation(); setQuantity(i.id, (Number(i.quantity) || 1) - 1) }}
-                        className="w-20 h-20 rounded-full bg-white border-4 border-teal-600 text-teal-700 text-5xl font-bold disabled:opacity-30 active:scale-95"
-                      >−</button>
-                      <div className="text-5xl font-bold text-neutral-800 min-w-[3ch] text-center">{Number(i.quantity) || 1}</div>
-                      <button
-                        type="button"
-                        aria-label="Mais 15 minutos"
-                        disabled={(Number(i.quantity) || 1) >= 8}
-                        onClick={(e) => { e.stopPropagation(); setQuantity(i.id, (Number(i.quantity) || 1) + 1) }}
-                        className="w-20 h-20 rounded-full bg-teal-600 text-white text-5xl font-bold disabled:opacity-30 active:scale-95"
-                      >+</button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-
-
-            {/* Coupon code */}
-            <div className="pt-3">
-              <label htmlFor="cart-coupon-code" className="text-lg text-neutral-500">Código promocional</label>
-              <input
-                id="cart-coupon-code"
-                type="text"
-                value={couponCode}
-                onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                placeholder="Opcional"
-                className="mt-2 w-full border rounded-lg px-4 py-3 text-xl uppercase"
-              />
-            </div>
-
-            {/* Total */}
-            <div className="flex items-center justify-between pt-4 border-t-2 border-neutral-200">
-              <div>
-                <div className="text-xl text-neutral-500">Total a pagar</div>
-                <div className="text-4xl font-bold text-neutral-800">{purchaseTotal.toFixed(2)}€</div>
-                {hasRecharge && <div className="text-xl text-neutral-600">Saldo no carrinho: <span className="font-semibold">{rechargeTotal.toFixed(2)}€</span></div>}
-                {cardError && <div className="text-xl text-red-600 font-semibold mt-2">{cardError}</div>}
-              </div>
-
-              <div className="text-5xl font-bold text-teal-600">{total.toFixed(2)}€</div>
-            </div>
-
-            {/* Auto-detection waiting state */}
-            <div className="flex flex-col gap-4 py-6 text-center">
-              <div className="flex items-center justify-center gap-3">
-                <div className="w-3 h-3 bg-teal-600 rounded-full animate-pulse"></div>
-                <p className="text-3xl font-semibold text-neutral-700">Aguardando pagamento...</p>
-              </div>
-              
-              <div className="space-y-3 text-xl text-neutral-600">
-                <p className="flex items-center justify-center gap-2">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span>Insira moedas ou notas</span>
-                </p>
-                <p className="flex items-center justify-center gap-2">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 6h18M5 14h.01M9 14h6" />
-                  </svg>
-                  <span>Aproxime o cartão</span>
-                </p>
-              </div>
-
-              {cashInserted > 0 && (
-                <div className="mt-3 p-4 bg-teal-50 rounded-xl">
-                  <p className="text-xl text-neutral-600">Dinheiro inserido</p>
-                  <p className="text-4xl font-bold text-teal-700">{cashInserted.toFixed(2)}€</p>
-                  {cashInserted < total && (
-                    <p className="text-lg text-neutral-500 mt-1">Faltam {(total - cashInserted).toFixed(2)}€</p>
-                  )}
-                </div>
-              )}
-
-              {/* Local (offline) session credit — updates live as coins land
-                  on the embedded hardware agent, independent of the legacy
-                  websocket pipeline tracked by cashInserted above. */}
-              {localApi.isElectron && localSession && localSession.credits > 0 && (
-                <div className="mt-3 p-4 bg-teal-50 rounded-xl">
-                  <p className="text-xl text-neutral-600">Crédito inserido</p>
-                  <p className="text-4xl font-bold text-teal-700">{localSession.credits.toFixed(2)}€</p>
-                  {localSession.credits < total && (
-                    <p className="text-lg text-neutral-500 mt-1">Faltam {(total - localSession.credits).toFixed(2)}€</p>
-                  )}
-                </div>
-              )}
-
-              {needsConfirm && !confirmed && (credit >= total || detectedCardCode) && total > 0 && (
-                <button
-                  type="button"
-                  onClick={confirmCart}
-                  className="mt-4 w-full rounded-2xl bg-teal-600 text-white text-3xl font-bold py-6 shadow-lg active:scale-95"
-                >
-                  Confirmar e iniciar · {total.toFixed(2)}€
-                </button>
-              )}
-
-              <div className="flex gap-2 mt-4">
-                <button
-                  onClick={onClose}
-                  className="flex-1 px-6 py-5 rounded-xl text-2xl bg-neutral-100 text-neutral-700 hover:bg-neutral-200 font-semibold transition-all"
-                >
-                  Cancelar
-                </button>
-                {localApi.isElectron && localSession && localSession.cashBalance > 0 && (
-                  <button
-                    onClick={handleCashOut}
-                    disabled={cashingOut}
-                    className="flex-1 px-6 py-5 rounded-xl text-2xl bg-amber-100 text-amber-800 hover:bg-amber-200 font-semibold transition-all disabled:opacity-50"
-                  >
-                    {cashingOut ? 'A devolver…' : `Levantar troco (${localSession.cashBalance.toFixed(2)}€)`}
-                  </button>
-                )}
-              </div>
-
-              {/* Staff fallback for when the hardware is down. Deliberately
-                  understated so customers do not reach for it by default. */}
-              <button
-                onClick={() => { setPinError(null); setShowPinPrompt(true) }}
-                className="mx-auto mt-3 text-lg text-neutral-400 hover:text-neutral-600 underline underline-offset-4"
-              >
-                Pagamento manual (staff)
-              </button>
-            </div>
+                </>
+              )
+            })()}
           </>
         )}
       </div>

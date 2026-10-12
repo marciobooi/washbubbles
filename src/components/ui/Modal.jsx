@@ -14,7 +14,7 @@ export default function Modal({ open, onClose, children, title, hideClose = fals
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div role="dialog" aria-modal="true" aria-label={title} className="relative bg-white rounded-xl shadow-2xl max-w-3xl w-full z-10 p-6">
+      <div role="dialog" aria-modal="true" aria-label={title} className="relative bg-white rounded-xl shadow-2xl max-w-3xl w-full z-10 p-6 max-h-[96vh] overflow-y-auto">
         {!hideClose && (
           <button aria-label="Fechar" onClick={onClose} className="absolute right-3 top-3 text-neutral-600 hover:text-neutral-900">✕</button>
         )}

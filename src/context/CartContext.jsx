@@ -11,7 +11,7 @@ function kioskHeaders() {
   } catch { return undefined }
 }
 
-const CartContext = createContext()
+export const CartContext = createContext()
 
 export const useCart = () => useContext(CartContext)
 
