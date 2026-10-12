@@ -78,7 +78,8 @@ export default function AdminSettings(){
   const [legal, setLegal] = useState(DEFAULT_LEGAL)
   const [legalLang, setLegalLang] = useState('pt')
   const [savingLegal, setSavingLegal] = useState(false)
-  const [translatingLegal, setTranslatingLegal] = useState(false)
+  const [legalStatus, setLegalStatus] = useState({ state: 'never' })
+  const [legalTranslations, setLegalTranslations] = useState({})
 
   // Staff & maintenance helper state
   const [adminPin, setAdminPin] = useState('')
@@ -116,10 +117,29 @@ export default function AdminSettings(){
     } catch (e) { console.warn('loadBranding failed', e) }
   }
 
+  async function loadLegalStatus() {
+    try {
+      const r = await api.request('/admin/legal/status', { method: 'GET', expect: 'json' })
+      setLegalStatus({ ...(r.status || { state: 'never' }), translatorEnabled: r.translatorEnabled })
+      setLegalTranslations(r.translations || {})
+      return r.status?.state
+    } catch (e) { return null }
+  }
+
+  // The server translates in the background; follow it until it finishes (a couple of minutes at most).
+  async function followLegalTranslation() {
+    for (let i = 0; i < 60; i++) {
+      await new Promise((r) => setTimeout(r, 4000))
+      const state = await loadLegalStatus()
+      if (state && state !== 'running') return
+    }
+  }
+
   async function loadLegal() {
     try {
       const saved = await api.getSetting('legal.info').catch(() => null)
       setLegal(mergeLegal(saved && saved.value))
+      loadLegalStatus()
     } catch (e) { console.warn('loadLegal failed', e) }
   }
 
@@ -130,33 +150,26 @@ export default function AdminSettings(){
     }
     setSavingLegal(true)
     try {
-      await api.setSetting({ key: 'legal.info', value: legal })
-      toast({ title: 'Textos legais guardados', description: 'O quiosque mostra-os no rodapé do ecrã inicial.', variant: 'success' })
+      // only the Portuguese is authored; the other languages are produced by the server
+      const value = { ...legal, privacy: { pt: legal.privacy.pt }, terms: { pt: legal.terms.pt } }
+      await api.setSetting({ key: 'legal.info', value })
+      toast({ title: 'Textos legais guardados', description: 'A traduzir para inglês, francês e alemão…', variant: 'success' })
+      setLegalStatus((s) => ({ ...s, state: 'running' }))
+      followLegalTranslation()
     } catch (err) {
       console.error(err)
       toast({ title: 'Erro ao guardar', variant: 'destructive' })
     } finally { setSavingLegal(false) }
   }
 
-  // Fills English / French / German from the Portuguese text with the server's free translator.
-  // Nothing is saved until Save is pressed, so the result can be read and corrected first.
-  async function translateLegal() {
-    const texts = {}
-    if (legal.privacy.pt.trim()) texts.privacy = legal.privacy.pt
-    if (legal.terms.pt.trim()) texts.terms = legal.terms.pt
-    if (!Object.keys(texts).length) return toast({ title: 'Escreva primeiro o texto em português', variant: 'destructive' })
-    setTranslatingLegal(true)
+  async function retranslateLegal() {
     try {
-      const r = await api.request('/admin/legal/translate', { method: 'POST', json: { texts, langs: ['en', 'fr', 'de'] }, expect: 'json' })
-      setLegal((l) => ({
-        ...l,
-        privacy: { ...l.privacy, ...(r.translations?.privacy || {}) },
-        terms: { ...l.terms, ...(r.translations?.terms || {}) },
-      }))
-      toast({ title: 'Traduzido', description: 'Reveja os textos e carregue em Guardar.', variant: 'success' })
+      await api.request('/admin/legal/translate', { method: 'POST', expect: 'json' })
+      setLegalStatus((s) => ({ ...s, state: 'running' }))
+      followLegalTranslation()
     } catch (err) {
       toast({ title: 'Não foi possível traduzir', description: err?.message || String(err), variant: 'destructive' })
-    } finally { setTranslatingLegal(false) }
+    }
   }
 
   async function loadBannerSettings() {
@@ -1403,7 +1416,7 @@ export default function AdminSettings(){
       <Card>
         <CardHeader>
           <CardTitle>Legal / RGPD</CardTitle>
-          <CardDescription>Aparece no rodapé do quiosque (Privacidade, Termos, Livro de Reclamações) e na compra de cartão</CardDescription>
+          <CardDescription>Escreva só em português: ao guardar, o servidor traduz sozinho para inglês, francês e alemão e o quiosque vai buscar o texto na língua do cliente</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={saveLegal} className="space-y-5 max-w-3xl">
@@ -1416,50 +1429,58 @@ export default function AdminSettings(){
               ))}
             </div>
 
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                {LEGAL_LANGS.map((l) => (
-                  <button key={l.code} type="button" onClick={() => setLegalLang(l.code)}
-                    className={`px-3 py-1.5 rounded-lg text-sm border ${legalLang === l.code ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-neutral-700'}`}>
-                    {l.label}{l.code !== 'pt' && !legal.privacy[l.code] ? ' (usa português)' : ''}
-                  </button>
-                ))}
-                <Button type="button" size="sm" variant="outline" disabled={translatingLegal} onClick={translateLegal}>
-                  {translatingLegal ? 'A traduzir…' : 'Traduzir do português (automático)'}
-                </Button>
-              </div>
-
-              <div>
-                <Label htmlFor="legal-privacy">Política de Privacidade (RGPD)</Label>
-                <textarea id="legal-privacy" rows={12} className="w-full rounded-md border p-3 text-sm"
-                  value={legal.privacy[legalLang] || ''}
-                  onChange={(e) => setLegal((l) => ({ ...l, privacy: { ...l.privacy, [legalLang]: e.target.value } }))} />
-                <p className="text-xs text-muted-foreground mt-1">
-                  O texto em português é um <b>modelo</b> escrito a partir dos dados que o sistema guarda (cartão, saldo e movimentos, nome, email, telefone, NIF e vendas).
-                  Reveja-o com quem trata do RGPD antes de o considerar definitivo. Uma língua em branco usa o português.
-                </p>
-                {legalLang === 'pt' && (
-                  <button type="button" className="text-xs underline text-primary-700 mt-1" onClick={() => setLegal((l) => ({ ...l, privacy: { ...l.privacy, pt: DEFAULT_PRIVACY_PT } }))}>Repor o texto modelo</button>
-                )}
-              </div>
-
-              <div>
-                <Label htmlFor="legal-terms">Termos e Regras de Utilização</Label>
-                <textarea id="legal-terms" rows={8} className="w-full rounded-md border p-3 text-sm"
-                  value={legal.terms[legalLang] || ''}
-                  onChange={(e) => setLegal((l) => ({ ...l, terms: { ...l.terms, [legalLang]: e.target.value } }))} />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Formato: uma linha que começa por <code>## </code> é um título de secção e uma linha que começa por <code>- </code> é um ponto de lista.
-                  Modelo para uma lavandaria self-service em Portugal; confirme o que se aplica ao seu espaço antes de o publicar
-                  (por exemplo: horário, videovigilância — se tiver câmaras tem de informar —, o que fazer em caso de avaria e peças esquecidas).
-                </p>
-                {legalLang === 'pt' && (
-                  <button type="button" className="text-xs underline text-primary-700 mt-1" onClick={() => setLegal((l) => ({ ...l, terms: { ...l.terms, pt: DEFAULT_TERMS_PT } }))}>Repor o texto modelo</button>
-                )}
-              </div>
+            <div>
+              <Label htmlFor="legal-privacy">Política de Privacidade (RGPD) — português</Label>
+              <textarea id="legal-privacy" rows={14} className="w-full rounded-md border p-3 text-sm"
+                value={legal.privacy.pt || ''}
+                onChange={(e) => setLegal((l) => ({ ...l, privacy: { ...l.privacy, pt: e.target.value } }))} />
+              <button type="button" className="text-xs underline text-primary-700 mt-1" onClick={() => setLegal((l) => ({ ...l, privacy: { ...l.privacy, pt: DEFAULT_PRIVACY_PT } }))}>Repor o texto modelo</button>
             </div>
 
-            <Button type="submit" disabled={savingLegal}>{savingLegal ? 'A guardar…' : 'Guardar'}</Button>
+            <div>
+              <Label htmlFor="legal-terms">Termos e Regras de Utilização — português</Label>
+              <textarea id="legal-terms" rows={14} className="w-full rounded-md border p-3 text-sm"
+                value={legal.terms.pt || ''}
+                onChange={(e) => setLegal((l) => ({ ...l, terms: { ...l.terms, pt: e.target.value } }))} />
+              <button type="button" className="text-xs underline text-primary-700 mt-1" onClick={() => setLegal((l) => ({ ...l, terms: { ...l.terms, pt: DEFAULT_TERMS_PT } }))}>Repor o texto modelo</button>
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              Formato: uma linha que começa por <code>## </code> é um título de secção e uma linha que começa por <code>- </code> é um ponto de lista.
+              Os textos são <b>modelos</b> para uma lavandaria self-service em Portugal: confirme o que se aplica ao seu espaço antes de os publicar
+              (por exemplo horário, videovigilância — se tiver câmaras tem de informar —, avarias, peças esquecidas, reembolsos) e, se possível, reveja-os com quem trata do RGPD.
+            </p>
+
+            {/* automatic translations: read only, made by the server from the Portuguese above */}
+            <div className="rounded-lg border bg-neutral-50 p-4 space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-semibold">Traduções automáticas</span>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${legalStatus.state === 'running' ? 'bg-amber-100 text-amber-800' : legalStatus.state === 'done' ? 'bg-emerald-100 text-emerald-800' : legalStatus.state === 'never' ? 'bg-neutral-200 text-neutral-700' : 'bg-red-100 text-red-800'}`}>
+                  {legalStatus.state === 'running' ? 'A traduzir…' : legalStatus.state === 'done' ? 'Atualizadas' : legalStatus.state === 'partial' ? 'Parcial' : legalStatus.state === 'never' ? 'Ainda não traduzido' : 'Erro'}
+                </span>
+                {legalStatus.finishedAt && <span className="text-xs text-neutral-500">{new Date(legalStatus.finishedAt).toLocaleString('pt-PT')}</span>}
+                <Button type="button" size="sm" variant="outline" disabled={savingLegal || legalStatus.state === 'running'} onClick={retranslateLegal}>Traduzir outra vez</Button>
+              </div>
+              {legalStatus.translatorEnabled === false && (
+                <p className="text-xs text-red-700">O tradutor automático não está configurado neste servidor (TRANSLATE_URL): sem ele o quiosque usa o inglês modelo e o português.</p>
+              )}
+              <div className="flex gap-2">
+                {LEGAL_LANGS.filter((l) => l.code !== 'pt').map((l) => (
+                  <button key={l.code} type="button" onClick={() => setLegalLang(l.code)}
+                    className={`px-3 py-1 rounded-lg text-xs border ${legalLang === l.code ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-neutral-700'}`}>{l.label}</button>
+                ))}
+              </div>
+              {['privacy', 'terms'].map((k) => (
+                <div key={k}>
+                  <div className="text-xs font-semibold text-neutral-600 mb-1">{k === 'privacy' ? 'Política de Privacidade' : 'Termos e Regras'} — {LEGAL_LANGS.find((l) => l.code === (legalLang === 'pt' ? 'en' : legalLang))?.label}</div>
+                  <pre className="whitespace-pre-wrap text-xs bg-white border rounded-md p-3 max-h-48 overflow-auto font-sans">
+                    {(legalTranslations[k] && legalTranslations[k].pt === legal[k].pt && legalTranslations[k][legalLang === 'pt' ? 'en' : legalLang]) || '(ainda sem tradução para este texto — guarde para traduzir)'}
+                  </pre>
+                </div>
+              ))}
+            </div>
+
+            <Button type="submit" disabled={savingLegal}>{savingLegal ? 'A guardar…' : 'Guardar e traduzir'}</Button>
           </form>
         </CardContent>
       </Card>

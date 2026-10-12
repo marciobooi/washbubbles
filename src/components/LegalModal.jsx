@@ -11,9 +11,14 @@ export function useLegal() {
   const [info, setInfo] = useState(cache || mergeLegal(null))
   useEffect(() => {
     let alive = true
-    api.getPublicSetting('legal.info')
-      .then((r) => { const m = mergeLegal(r && r.value); cache = m; if (alive) setInfo(m) })
-      .catch(() => {})
+    Promise.all([
+      api.getPublicSetting('legal.info').catch(() => null),
+      api.getPublicSetting('legal.translations').catch(() => null),
+    ]).then(([info, tr]) => {
+      const m = mergeLegal(info && info.value, tr && tr.value)
+      cache = m
+      if (alive) setInfo(m)
+    })
     return () => { alive = false }
   }, [])
   return info

@@ -161,14 +161,24 @@ export const DEFAULT_LEGAL = {
   terms: { pt: DEFAULT_TERMS_PT, en: DEFAULT_TERMS_EN, fr: '', de: '' },
 }
 
-/** Merge what the server saved onto the defaults (a missing field never leaves the page empty). */
-export function mergeLegal(saved) {
+/**
+ * What the kiosk shows. `saved` is the admin's Portuguese (setting legal.info); `translations` is what the
+ * server's translator produced from it (setting legal.translations). A translation is used only if it was made
+ * from exactly the Portuguese text that is saved now; otherwise the language falls back to the built-in text for
+ * it (en) and then to Portuguese, so an outdated translation is never shown.
+ */
+export function mergeLegal(saved, translations) {
   const s = saved && typeof saved === 'object' ? saved : {}
-  // a language the admin left empty falls back to the default text for that language, then to Portuguese
+  const tr = translations && typeof translations === 'object' ? translations : {}
   const text = (k) => {
     const mine = s[k] && typeof s[k] === 'object' ? s[k] : {}
-    const out = {}
-    for (const l of ['pt', 'en', 'fr', 'de']) out[l] = mine[l] && String(mine[l]).trim() ? mine[l] : DEFAULT_LEGAL[k][l]
+    const pt = mine.pt && String(mine.pt).trim() ? mine.pt : DEFAULT_LEGAL[k].pt
+    const fresh = tr[k] && tr[k].pt === pt ? tr[k] : null
+    const out = { pt }
+    for (const l of ['en', 'fr', 'de']) {
+      // a language the admin typed by hand (older saves) still counts; then the server translation; then the built-in text
+      out[l] = (mine[l] && String(mine[l]).trim()) || (fresh && fresh[l]) || (pt === DEFAULT_LEGAL[k].pt ? DEFAULT_LEGAL[k][l] : '')
+    }
     return out
   }
   return { ...DEFAULT_LEGAL, ...s, privacy: text('privacy'), terms: text('terms') }
