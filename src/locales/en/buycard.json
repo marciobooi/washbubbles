@@ -48,5 +48,6 @@
   "writeFallback": "The card could not be written. Check that it is inserted properly and try again.",
   "closeWindow": "Close window",
   "cardLabel": "FreshBubbles card",
-  "fillHint": "Lets you recover your balance if the card is lost and link invoices automatically."
+  "fillHint": "Lets you recover your balance if the card is lost and link invoices automatically.",
+  "privacyLink": "View Privacy Policy (GDPR)"
 }

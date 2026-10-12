@@ -183,5 +183,12 @@
   "amountLess": "Decrease amount",
   "amountMore": "Increase amount",
   "loading": "Loading…",
-  "cardLoading": "Reading your card…"
+  "cardLoading": "Reading your card…",
+  "legalPrivacy": "Privacy Policy (GDPR)",
+  "legalPrivacyShort": "Privacy",
+  "legalTerms": "Terms and Conditions",
+  "legalTermsShort": "Terms",
+  "legalComplaints": "Complaints Book",
+  "legalComplaintsHint": "Point your phone camera at the QR code to open the online Complaints Book.",
+  "legalController": "Controller"
 }

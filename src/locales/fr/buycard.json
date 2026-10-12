@@ -48,5 +48,6 @@
   "writeFallback": "Impossible d'écrire la carte. Vérifiez qu'elle est bien insérée et réessayez.",
   "closeWindow": "Fermer la fenêtre",
   "cardLabel": "Carte FreshBubbles",
-  "fillHint": "Permet de récupérer le solde en cas de perte et d’associer les factures automatiquement."
+  "fillHint": "Permet de récupérer le solde en cas de perte et d’associer les factures automatiquement.",
+  "privacyLink": "Voir la politique de confidentialité (RGPD)"
 }

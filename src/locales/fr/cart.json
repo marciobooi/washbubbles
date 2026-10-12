@@ -183,5 +183,12 @@
   "amountLess": "Diminuer le montant",
   "amountMore": "Augmenter le montant",
   "loading": "Chargement…",
-  "cardLoading": "Lecture de la carte…"
+  "cardLoading": "Lecture de la carte…",
+  "legalPrivacy": "Politique de confidentialité (RGPD)",
+  "legalPrivacyShort": "Confidentialité",
+  "legalTerms": "Conditions générales",
+  "legalTermsShort": "Conditions",
+  "legalComplaints": "Livre de réclamations",
+  "legalComplaintsHint": "Pointez l’appareil photo de votre téléphone vers le code QR pour ouvrir le livre de réclamations en ligne.",
+  "legalController": "Responsable"
 }

@@ -5,10 +5,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Palette, ShieldCheck, Wifi as WifiIcon, Bell, MessageCircle, SlidersHorizontal, Image as ImageIcon, Plus, Trash2, ArrowUp, ArrowDown, Globe, Eye, EyeOff } from 'lucide-react'
+import { Scale, Palette, ShieldCheck, Wifi as WifiIcon, Bell, MessageCircle, SlidersHorizontal, Image as ImageIcon, Plus, Trash2, ArrowUp, ArrowDown, Globe, Eye, EyeOff } from 'lucide-react'
 import { DEFAULT_BANNERS } from '@/lib/defaultBanners'
 import { DEFAULT_LANDING_CONTENT } from '@/lib/defaultLandingContent'
 import LandingTranslations from '@/components/LandingTranslations'
+import { DEFAULT_LEGAL, DEFAULT_PRIVACY_PT, LEGAL_LANGS, mergeLegal } from '@/lib/defaultLegal'
 
 // Settings hidden from the raw "Avançado" list below — either because they
 // already have a dedicated, friendlier UI elsewhere (so a second raw/rawer
@@ -28,6 +29,7 @@ const HIDDEN_ADVANCED_KEYS = new Set([
   'hopperCoinValue', 'hopperMaxDispenseCoins', 'creditRefundSeconds',
   'branding.companyName', 'branding.logo', 'branding.primaryColor', 'branding.accentColor',
   'banners',
+  'legal.info',
   'landingPage.content',
   'wifi.enabled',
   'whatsapp.enabled',
@@ -38,6 +40,7 @@ const TABS = [
   { id: 'branding', label: 'Branding', Icon: Palette },
   { id: 'banner', label: 'Banner', Icon: ImageIcon },
   { id: 'landing', label: 'Página Inicial', Icon: Globe },
+  { id: 'legal', label: 'Legal / RGPD', Icon: Scale },
   { id: 'staff', label: 'Staff & Manutenção', Icon: ShieldCheck },
   { id: 'wifi', label: 'WiFi', Icon: WifiIcon },
   { id: 'alerts', label: 'Alertas', Icon: Bell },
@@ -70,6 +73,12 @@ export default function AdminSettings(){
   // Public landing page (freshbubbles.pt) content helper state
   const [landingContent, setLandingContent] = useState(DEFAULT_LANDING_CONTENT)
   const [savingLanding, setSavingLanding] = useState(false)
+
+  // Legal / GDPR texts shown in the kiosk footer (setting legal.info, public)
+  const [legal, setLegal] = useState(DEFAULT_LEGAL)
+  const [legalLang, setLegalLang] = useState('pt')
+  const [savingLegal, setSavingLegal] = useState(false)
+  const [translatingLegal, setTranslatingLegal] = useState(false)
 
   // Staff & maintenance helper state
   const [adminPin, setAdminPin] = useState('')
@@ -105,6 +114,49 @@ export default function AdminSettings(){
       setPrimaryColor(primary && primary.value ? String(primary.value) : '')
       setAccentColor(accent && accent.value ? String(accent.value) : '')
     } catch (e) { console.warn('loadBranding failed', e) }
+  }
+
+  async function loadLegal() {
+    try {
+      const saved = await api.getSetting('legal.info').catch(() => null)
+      setLegal(mergeLegal(saved && saved.value))
+    } catch (e) { console.warn('loadLegal failed', e) }
+  }
+
+  async function saveLegal(e) {
+    e && e.preventDefault()
+    if (legal.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(legal.email)) {
+      return toast({ title: 'Email inválido', variant: 'destructive' })
+    }
+    setSavingLegal(true)
+    try {
+      await api.setSetting({ key: 'legal.info', value: legal })
+      toast({ title: 'Textos legais guardados', description: 'O quiosque mostra-os no rodapé do ecrã inicial.', variant: 'success' })
+    } catch (err) {
+      console.error(err)
+      toast({ title: 'Erro ao guardar', variant: 'destructive' })
+    } finally { setSavingLegal(false) }
+  }
+
+  // Fills English / French / German from the Portuguese text with the server's free translator.
+  // Nothing is saved until Save is pressed, so the result can be read and corrected first.
+  async function translateLegal() {
+    const texts = {}
+    if (legal.privacy.pt.trim()) texts.privacy = legal.privacy.pt
+    if (legal.terms.pt.trim()) texts.terms = legal.terms.pt
+    if (!Object.keys(texts).length) return toast({ title: 'Escreva primeiro o texto em português', variant: 'destructive' })
+    setTranslatingLegal(true)
+    try {
+      const r = await api.request('/admin/legal/translate', { method: 'POST', json: { texts, langs: ['en', 'fr', 'de'] }, expect: 'json' })
+      setLegal((l) => ({
+        ...l,
+        privacy: { ...l.privacy, ...(r.translations?.privacy || {}) },
+        terms: { ...l.terms, ...(r.translations?.terms || {}) },
+      }))
+      toast({ title: 'Traduzido', description: 'Reveja os textos e carregue em Guardar.', variant: 'success' })
+    } catch (err) {
+      toast({ title: 'Não foi possível traduzir', description: err?.message || String(err), variant: 'destructive' })
+    } finally { setTranslatingLegal(false) }
   }
 
   async function loadBannerSettings() {
@@ -295,7 +347,7 @@ export default function AdminSettings(){
     } catch (e) { console.warn('loadWhatsappSettings failed', e) }
   }
 
-  useEffect(() => { load(); loadBranding(); loadBannerSettings(); loadLandingContent(); loadStaffSettings(); loadWifiSettings(); loadAlertsSettings(); loadWhatsappSettings() }, [])
+  useEffect(() => { load(); loadBranding(); loadLegal(); loadBannerSettings(); loadLandingContent(); loadStaffSettings(); loadWifiSettings(); loadAlertsSettings(); loadWhatsappSettings() }, [])
 
   // While WhatsApp is enabled but not yet connected, poll for the QR code /
   // connection state — same "poll a status endpoint while pairing" idea the
@@ -1341,6 +1393,65 @@ export default function AdminSettings(){
             <Button type="submit" size="sm" disabled={savingWifi}>
               {savingWifi ? 'A guardar…' : 'Guardar'}
             </Button>
+          </form>
+        </CardContent>
+      </Card>
+      )}
+
+      {/* Legal / GDPR */}
+      {activeTab === 'legal' && (
+      <Card>
+        <CardHeader>
+          <CardTitle>Legal / RGPD</CardTitle>
+          <CardDescription>Aparece no rodapé do quiosque (Privacidade, Termos, Livro de Reclamações) e na compra de cartão</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={saveLegal} className="space-y-5 max-w-3xl">
+            <div className="grid sm:grid-cols-2 gap-3">
+              {[['company', 'Entidade responsável (nome legal)'], ['nif', 'NIF'], ['address', 'Morada'], ['phone', 'Telefone de contacto'], ['email', 'Email de contacto (direitos RGPD)'], ['complaintsUrl', 'Endereço do Livro de Reclamações online']].map(([k, label]) => (
+                <div key={k} className={k === 'address' || k === 'complaintsUrl' ? 'sm:col-span-2' : ''}>
+                  <Label htmlFor={`legal-${k}`}>{label}</Label>
+                  <Input id={`legal-${k}`} value={legal[k] || ''} onChange={(e) => setLegal((l) => ({ ...l, [k]: e.target.value }))} />
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                {LEGAL_LANGS.map((l) => (
+                  <button key={l.code} type="button" onClick={() => setLegalLang(l.code)}
+                    className={`px-3 py-1.5 rounded-lg text-sm border ${legalLang === l.code ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-neutral-700'}`}>
+                    {l.label}{l.code !== 'pt' && !legal.privacy[l.code] ? ' (vazio)' : ''}
+                  </button>
+                ))}
+                <Button type="button" size="sm" variant="outline" disabled={translatingLegal} onClick={translateLegal}>
+                  {translatingLegal ? 'A traduzir…' : 'Traduzir do português (automático)'}
+                </Button>
+              </div>
+
+              <div>
+                <Label htmlFor="legal-privacy">Política de Privacidade (RGPD)</Label>
+                <textarea id="legal-privacy" rows={12} className="w-full rounded-md border p-3 text-sm"
+                  value={legal.privacy[legalLang] || ''}
+                  onChange={(e) => setLegal((l) => ({ ...l, privacy: { ...l.privacy, [legalLang]: e.target.value } }))} />
+                <p className="text-xs text-muted-foreground mt-1">
+                  O texto em português é um <b>modelo</b> escrito a partir dos dados que o sistema guarda (nome, email, telefone, NIF, saldo e movimentos do cartão).
+                  Reveja-o com quem trata do RGPD antes de o considerar definitivo. Uma língua em branco usa o português.
+                </p>
+                {legalLang === 'pt' && (
+                  <button type="button" className="text-xs underline text-primary-700 mt-1" onClick={() => setLegal((l) => ({ ...l, privacy: { ...l.privacy, pt: DEFAULT_PRIVACY_PT } }))}>Repor o texto modelo</button>
+                )}
+              </div>
+
+              <div>
+                <Label htmlFor="legal-terms">Termos e Condições (opcional — só aparece no quiosque se tiver texto em português)</Label>
+                <textarea id="legal-terms" rows={8} className="w-full rounded-md border p-3 text-sm"
+                  value={legal.terms[legalLang] || ''}
+                  onChange={(e) => setLegal((l) => ({ ...l, terms: { ...l.terms, [legalLang]: e.target.value } }))} />
+              </div>
+            </div>
+
+            <Button type="submit" disabled={savingLegal}>{savingLegal ? 'A guardar…' : 'Guardar'}</Button>
           </form>
         </CardContent>
       </Card>

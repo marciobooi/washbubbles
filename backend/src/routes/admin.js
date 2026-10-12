@@ -26,6 +26,7 @@ import DayClose from '../models/dayClose.js'
 import { broadcastMachines, broadcastMachine, listClients, disconnectClient } from '../wsServer.js'
 import { logAction } from '../services/auditLog.js'
 import { translateLandingSoon, translateLanding, getTranslations, getStatus } from '../services/landingTranslate.js'
+import { translateBatch } from '../services/translator.js'
 import { translatorEnabled } from '../services/translator.js'
 import { bumpLandingVersion } from '../services/landingCache.js'
 import { loadGlossary, sanitizeGlossary, GLOSSARY_KEY } from '../services/landingGlossary.js'
@@ -528,6 +529,32 @@ router.get('/landing/translations', requireAdmin, async (req, res) => {
   const langs = Object.fromEntries(Object.entries(translations).map(([l, v]) => [l, { at: v.at, sourceHash: v.sourceHash }]))
   res.json({ enabled: translatorEnabled(), status, langs })
 })
+// Translate the legal texts the admin wrote in Portuguese (privacy, terms) with the same free translator as the
+// landing page. Returns the translations; nothing is saved until the admin presses Save on the page.
+router.post('/legal/translate', requireAdmin, async (req, res) => {
+  if (!translatorEnabled()) return res.status(503).json({ error: 'O tradutor automático não está configurado neste servidor' })
+  const texts = req.body && typeof req.body.texts === 'object' && req.body.texts ? req.body.texts : {}
+  const langs = (Array.isArray(req.body?.langs) ? req.body.langs : ['en', 'fr', 'de']).filter((l) => ['en', 'fr', 'de', 'es'].includes(l))
+  const out = {}
+  try {
+    for (const [key, text] of Object.entries(texts)) {
+      if (typeof text !== 'string' || !text.trim()) continue
+      // translate paragraph by paragraph so layout and the service's size limits are respected
+      const paragraphs = text.split('\n')
+      out[key] = {}
+      for (const lang of langs) {
+        const done = await translateBatch(paragraphs, { source: 'pt', target: lang })
+        out[key][lang] = done.join('\n')
+      }
+    }
+    logAction(req, 'legal.translated', 'Setting', 'legal.info', { keys: Object.keys(out), langs })
+    res.json({ translations: out })
+  } catch (e) {
+    console.warn('[legal-translate]', e.message)
+    res.status(502).json({ error: 'Não foi possível traduzir agora: ' + e.message })
+  }
+})
+
 router.post('/landing/translate', requireAdmin, async (req, res) => {
   if (!translatorEnabled()) return res.status(409).json({ error: 'Automatic translation is not configured on this server (TRANSLATE_URL)' })
   translateLanding(req.tenantId).catch((err) => console.warn('[landing-translate]', err.message))

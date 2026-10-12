@@ -48,5 +48,6 @@
   "writeFallback": "Não foi possível gravar o cartão. Verifique que está bem inserido e tente novamente.",
   "closeWindow": "Fechar janela",
   "cardLabel": "Cartão FreshBubbles",
-  "fillHint": "Permite recuperar o saldo em caso de extravio e associar faturas automáticas."
+  "fillHint": "Permite recuperar o saldo em caso de extravio e associar faturas automáticas.",
+  "privacyLink": "Ver Política de Privacidade (RGPD)"
 }

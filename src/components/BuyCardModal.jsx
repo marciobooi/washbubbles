@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import Modal from './ui/Modal'
 import Loading from './ui/loading'
+import LegalModal from './LegalModal'
 import { CreditCard, User, Mail, Phone, FileText, CheckCircle2, Wifi, ArrowRight } from 'lucide-react'
 import { toast } from './ui/Toast'
 import api from '@/services/api'
@@ -21,6 +22,7 @@ export default function BuyCardModal({ open, onClose }) {
   const { credit } = useCart() // the cash really inserted (the shop's session), not a button
   const eur = (n) => `${Number(n).toFixed(2).replace('.', i18n.language === 'en' ? '.' : ',')}€`
   const [step, setStep] = useState(STEPS.FORM)
+  const [showPrivacy, setShowPrivacy] = useState(false)
   const [loading, setLoading] = useState(false)
   
   // Form data (all optional)
@@ -484,6 +486,7 @@ export default function BuyCardModal({ open, onClose }) {
                 />
                 <span className="text-lg font-medium text-slate-700">{t('marketing')}</span>
               </label>
+              <button type="button" onClick={() => setShowPrivacy(true)} className="self-start px-3 py-2 text-lg font-semibold text-[#00875A] underline underline-offset-4">{t('privacyLink')}</button>
             </div>
 
             <div className="grid grid-cols-2 gap-4 mt-6 pt-6 border-t border-slate-200/80">
@@ -641,6 +644,7 @@ export default function BuyCardModal({ open, onClose }) {
       <div className="p-3">
         {renderStepContent()}
       </div>
+      <LegalModal open={showPrivacy} kind="privacy" onClose={() => setShowPrivacy(false)} />
     </Modal>
   )
 }

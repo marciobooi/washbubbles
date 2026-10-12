@@ -59,6 +59,17 @@ describe('What the kiosk fetches and shows agrees with what the server charges',
     expect(res.body.saving.wash).to.equal(0.8) // the most it saves on any wash machine
   })
 
+  it('the legal/GDPR text saved by the admin is readable by the kiosk without logging in', async () => {
+    const Setting = (await import('../src/models/setting.js')).default
+    await Setting.create({ tenantId: tenant._id, key: 'legal.info', value: { company: 'Fresh Bubbles Lda', privacy: { pt: 'Texto' } } })
+    const res = await request(app).get('/api/pos/settings/legal.info')
+    expect(res.status).to.equal(200)
+    expect(res.body.value.company).to.equal('Fresh Bubbles Lda')
+    // a key outside the public prefixes is still hidden
+    const secret = await request(app).get('/api/pos/settings/adminPin')
+    expect(secret.status).to.equal(404)
+  })
+
   it('kiosk and server agree on when a promo is active (days, hours, empty days = every day)', () => {
     // Wednesday 2026-10-14 12:30 local time
     const wed = new Date(2026, 9, 14, 12, 30)

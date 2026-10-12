@@ -48,5 +48,6 @@
   "writeFallback": "Die Karte konnte nicht beschrieben werden. Prüfen Sie, ob sie richtig eingelegt ist, und versuchen Sie es erneut.",
   "closeWindow": "Fenster schließen",
   "cardLabel": "FreshBubbles-Karte",
-  "fillHint": "Ermöglicht die Wiederherstellung des Guthabens bei Verlust und die automatische Zuordnung von Rechnungen."
+  "fillHint": "Ermöglicht die Wiederherstellung des Guthabens bei Verlust und die automatische Zuordnung von Rechnungen.",
+  "privacyLink": "Datenschutzerklärung ansehen (DSGVO)"
 }

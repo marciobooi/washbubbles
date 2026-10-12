@@ -8,6 +8,8 @@ import BuyCardModal from '../components/BuyCardModal'
 import { toast } from '@/components/ui/Toast'
 import Banner from '../components/Banner'
 import Loading from '../components/ui/loading'
+import LegalModal, { useLegal } from '../components/LegalModal'
+import { legalText } from '@/lib/defaultLegal'
 import api from '@/services/api'
 import { useTranslation } from 'react-i18next'
 import { connect, subscribe } from '@/services/websocket'
@@ -32,6 +34,8 @@ export default function Pos() {
   const [currentCard, setCurrentCard] = React.useState(null) // { code, balance, name, ... }
   const [transactions, setTransactions] = React.useState([])
   const removeTimer = React.useRef(null)
+  const legal = useLegal()
+  const [legalKind, setLegalKind] = React.useState(null) // 'privacy' | 'terms' | 'complaints' | null
   // Is the card that triggered the load still in the reader? Set on insert, cleared on removal.
   const cardInReader = React.useRef(false)
   // Bubbles while the card's data comes from the server (the customer has just put the card in).
@@ -166,13 +170,27 @@ export default function Pos() {
         <CardModal open={cardOpen} onClose={closeCard} transactions={transactions} balance={Number(currentCard?.balance) || 0} card={currentCard} />
 
         
-        <div className="fixed bottom-0 left-0 right-0 z-10 bg-white/80 backdrop-blur-md border-t border-emerald-100/80 py-5 px-10 flex items-center justify-between text-xl font-medium text-slate-600">
-          <span className="flex items-center gap-3">
+        <div className="fixed bottom-0 left-0 right-0 z-10 bg-white/90 backdrop-blur-md border-t border-emerald-100/80 px-8 py-4 flex items-center justify-between gap-4 text-lg font-medium text-slate-600">
+          <span className="flex items-center gap-3 shrink-0">
             <span className="w-3.5 h-3.5 rounded-full bg-emerald-500 ring-4 ring-emerald-200" />
             <span className="font-bold text-slate-800">{t('home.ready')}</span>
           </span>
-          <span className="text-slate-500">{t('home.touch')}</span>
+          <div className="flex items-center gap-2">
+            {legalText(legal.privacy, 'pt') && (
+              <button type="button" onClick={() => setLegalKind('privacy')} className="h-14 px-4 rounded-xl text-emerald-800 font-semibold active:bg-emerald-50">{i18n.t('legalPrivacyShort', { ns: 'cart' })}</button>
+            )}
+            {legalText(legal.terms, 'pt') && (
+              <button type="button" onClick={() => setLegalKind('terms')} className="h-14 px-4 rounded-xl text-emerald-800 font-semibold active:bg-emerald-50">{i18n.t('legalTermsShort', { ns: 'cart' })}</button>
+            )}
+            {legal.complaintsUrl && (
+              <button type="button" onClick={() => setLegalKind('complaints')} className="h-14 px-4 rounded-xl text-emerald-800 font-semibold active:bg-emerald-50">{i18n.t('legalComplaints', { ns: 'cart' })}</button>
+            )}
+          </div>
+          {(legal.phone || legal.email) && (
+            <span className="shrink-0 text-slate-500">{[legal.phone, legal.email].filter(Boolean).join(' · ')}</span>
+          )}
         </div>
+        <LegalModal open={Boolean(legalKind)} kind={legalKind} onClose={() => setLegalKind(null)} />
       </div>
       </div>
     </>

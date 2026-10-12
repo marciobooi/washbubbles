@@ -183,5 +183,12 @@
   "amountLess": "Diminuir valor",
   "amountMore": "Aumentar valor",
   "loading": "A carregar…",
-  "cardLoading": "A ler o cartão…"
+  "cardLoading": "A ler o cartão…",
+  "legalPrivacy": "Política de Privacidade (RGPD)",
+  "legalPrivacyShort": "Privacidade",
+  "legalTerms": "Termos e Condições",
+  "legalTermsShort": "Termos",
+  "legalComplaints": "Livro de Reclamações",
+  "legalComplaintsHint": "Aponte a câmara do telemóvel para o código QR para abrir o Livro de Reclamações online.",
+  "legalController": "Responsável"
 }
