@@ -110,7 +110,8 @@ export default function Machines() {
       }
     }
     
-    addToCart(machineWithPrice)
+    // Already in the basket: the cart context shows the warning, so no "added" banner here
+    if (addToCart(machineWithPrice) === false) return
     // Don't auto-open cart; show the banner with a button to view it
     const base = Number(m.tImp) || 15
     const price = Number(machineWithPrice.cashPrice ?? machineWithPrice.price ?? 0)

@@ -137,7 +137,7 @@ export const CartProvider = ({ children }) => {
       if (already) {
         // Dynamic import to avoid eager dependency on Toast provider at module load
         import('@/components/ui/Toast').then(({ toast }) => toast({ title: i18n.t('alreadyInCart', { ns: 'cart' }), description: i18n.t('alreadyInCartHint', { ns: 'cart' }), variant: 'warning' })).catch(() => {})
-        return
+        return false
       }
     }
 
@@ -148,6 +148,7 @@ export const CartProvider = ({ children }) => {
     const normalized = { ...item, id, productId: baseId }
 
     setCart((c) => [...c, normalized])
+    return true
   }
 
   // Dryers are sold in blocks of `tImp` minutes (15): the customer picks how many, 1..MAX_BLOCKS.

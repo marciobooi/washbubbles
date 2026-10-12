@@ -12,6 +12,9 @@ export function ToastProvider({ children }) {
       {/* Top middle, just under the header, and big: the kiosk is read from a distance. */}
       <Toaster
         position="top-center"
+        expand
+        visibleToasts={4}
+        gap={12}
         offset="104px"
         richColors
         style={{ "--width": "min(94vw, 780px)" }}
@@ -51,8 +54,8 @@ export function showToast({ variant = 'info', title, description, badge, action,
       style={{ width: '100%', touchAction: 'manipulation', boxShadow: `0 24px 48px -12px rgba(15,23,42,.18), 0 8px 24px -6px ${tone.glow}` }}
       className={`bg-white/95 backdrop-blur-md rounded-full border overflow-hidden ${tone.border}`}
     >
-      <div className="px-5 py-3 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-4 min-w-0">
+      <div className="px-7 py-5 flex items-center justify-between gap-6">
+        <div className="flex items-center gap-5 min-w-0">
           <div className={`shrink-0 w-14 h-14 rounded-2xl text-white flex items-center justify-center font-bold text-2xl shadow-sm ${tone.badge}`}>
             {badge || (
               <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth="2.75" viewBox="0 0 24 24"><path d={tone.icon} strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -60,17 +63,17 @@ export function showToast({ variant = 'info', title, description, badge, action,
           </div>
           <div className="flex flex-col text-left min-w-0">
             <div className="flex items-center gap-2">
-              <span className="font-bold text-slate-900 text-xl leading-tight tracking-tight">{title}</span>
+              <span className="font-bold text-slate-900 text-xl leading-snug tracking-tight">{title}</span>
               {badge ? (
                 <span className={`shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-full ${tone.chip}`}>
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d={tone.icon} strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </span>
               ) : null}
             </div>
-            {description ? <p className="text-base text-slate-500 font-medium leading-snug">{description}</p> : null}
+            {description ? <p className="text-base text-slate-500 font-medium leading-snug mt-1">{description}</p> : null}
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-3 shrink-0">
           {action ? (
             <button
               type="button"
