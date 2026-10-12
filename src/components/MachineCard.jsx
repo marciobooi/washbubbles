@@ -1,11 +1,11 @@
 import React from 'react'
-import useFrameAnimation from '../hooks/useFrameAnimation'
+import { WasherIcon, DryerIcon } from './icons/MachineIcons'
 import { useTranslation } from 'react-i18next'
 import api from '@/services/api'
 import { isPromoActive, getEffectivePrice } from '@/lib/promo'
 import { Tag, Check } from 'lucide-react'
 
-export default function MachineCard({ m, frames, inCart = false, onSelect = () => {} }) {
+export default function MachineCard({ m, inCart = false, onSelect = () => {} }) {
   const { t, i18n } = useTranslation('pos')
   const [priceData, setPriceData] = React.useState(null)
 
@@ -29,8 +29,6 @@ export default function MachineCard({ m, frames, inCart = false, onSelect = () =
   }, [m.type, m.weight])
 
   const uniqueId = m._id || m.id || ''
-  const seed = Array.from(String(uniqueId)).reduce((s, c) => s * 31 + c.charCodeAt(0), 0)
-  const frame = useFrameAnimation(frames, 300, { seed })
   const isFree = m.status === 'free'
   const isOffline = m.status === 'offline' || m.status === 'fault' || m.outOfService === true
   // A machine already in the basket stays tappable: the tap takes it out again.
@@ -65,7 +63,7 @@ export default function MachineCard({ m, frames, inCart = false, onSelect = () =
     >
       <div className="flex items-center gap-7 min-w-0">
         <div className={`relative shrink-0 w-32 h-32 rounded-3xl flex items-center justify-center ${frameClass}`}>
-          {frame && <img src={frame} alt="" className="w-24 h-24 object-contain tealFilter" />}
+          {(m.type === 'dry' ? <DryerIcon className="w-24 h-24" animated={!isOffline} /> : <WasherIcon className="w-24 h-24" animated={!isOffline} />)}
           {inCart && (
             <span className="absolute -top-2.5 -right-2.5 bg-emerald-600 text-white rounded-full p-1.5 shadow-md">
               <Check className="w-5 h-5" strokeWidth={3.5} />

@@ -8,22 +8,10 @@ import api from '@/services/api'
 import { connect, subscribe } from '@/services/websocket'
 import { useCart } from '../context/CartContext'
 import { useTranslation } from 'react-i18next'
-import washL1 from '@/assets/washingmashine/L1.png'
-import washL2 from '@/assets/washingmashine/L2.png'
-import washL3 from '@/assets/washingmashine/L3.png'
-import washL4 from '@/assets/washingmashine/L4.png'
-import dryS1 from '@/assets/drymachine/S1.png'
-import dryS2 from '@/assets/drymachine/S2.png'
-import dryS3 from '@/assets/drymachine/S3.png'
-import dryS4 from '@/assets/drymachine/S4.png'
 export default function Machines() {
   const [searchParams] = useSearchParams()
   const type = searchParams.get('type') || 'wash'
   const navigate = useNavigate()
-
-  const frames = type === 'wash'
-    ? [washL1, washL2, washL3, washL4]
-    : [dryS1, dryS2, dryS3, dryS4]
 
   const [machines, setMachines] = React.useState([])
   const [loading, setLoading] = React.useState(true)
@@ -170,7 +158,7 @@ export default function Machines() {
       ) : (
         <div className="grid gap-6">
           {machines.map((m) => (
-            <MachineCard key={m._id || m.id} m={m} frames={frames} inCart={Boolean(inCartItem(m))} onSelect={toggle} />
+            <MachineCard key={m._id || m.id} m={m} inCart={Boolean(inCartItem(m))} onSelect={toggle} />
           ))}
         </div>
       )}

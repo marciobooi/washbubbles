@@ -1,9 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { useCart } from '../context/CartContext'
 import { useTranslation } from 'react-i18next'
-import washIcon from '@/assets/washingmashine/L1.png'
-import dryIcon from '@/assets/drymachine/S1.png'
-import cardIcon from '@/assets/card/card.png'
+import { WasherIcon, DryerIcon, CardIcon } from './icons/MachineIcons'
 
 function formatDate(iso) {
   const d = new Date(iso)
@@ -17,9 +15,9 @@ function formatTime(iso) {
 
 function getTxIcon(type) {
   const t = type.toLowerCase()
-  if (t.includes('lavagem')) return washIcon
-  if (t.includes('secagem')) return dryIcon
-  return cardIcon
+  if (t.includes('lavagem') || t.includes('wash')) return WasherIcon
+  if (t.includes('secagem') || t.includes('dry')) return DryerIcon
+  return CardIcon
 }
 
 // `onRecharge` used to be accepted here and never called — Pos.jsx passed a real
@@ -93,7 +91,7 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
       <div className="bg-white shadow-sm px-6 py-4 flex items-center justify-between shrink-0 z-10">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-primary-50 rounded-xl">
-            <img src={cardIcon} alt="Card" className="w-8 h-8 object-contain" />
+            <CardIcon className="w-9 h-9" />
           </div>
           <h2 className="text-2xl font-bold text-neutral-800 tracking-tight">{t('card.title')}</h2>
         </div>
@@ -257,11 +255,7 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
                       <div key={tx.id} className="group bg-white p-4 rounded-2xl border border-neutral-100 border-primary-200 shadow-md transition-all duration-200 flex items-center gap-5">
                         {/* Icon Box */}
                         <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${isPositive ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'}`}>
-                          <img 
-                            src={getTxIcon(tx.type)} 
-                            alt="" 
-                            className="w-9 h-9 object-contain tealFilter"
-                          />
+                          {React.createElement(getTxIcon(tx.type), { className: 'w-10 h-10', animated: false })}
                         </div>
 
                         {/* Details */}

@@ -1,0 +1,22 @@
+/* Animated kiosk icons (own artwork): washer, dryer, card, cards. Animation only while .wbi-on is set. */
+.wbi .wbi-drum { transform-origin: 50px 56px; }
+.wbi .wbi-fan { transform-origin: 50px 56px; }
+.wbi-on .wbi-drum { animation: wbi-spin 3s linear infinite; }
+.wbi-on .wbi-fan { animation: wbi-spin 1.6s linear infinite; }
+.wbi-on .wbi-bubble { animation: wbi-rise 2s ease-in-out infinite; }
+.wbi-on .wbi-b2 { animation-delay: -.7s; }
+.wbi-on .wbi-b3 { animation-delay: -1.3s; }
+.wbi-on .wbi-heat { animation: wbi-heat 2.2s ease-in-out infinite; }
+.wbi-on .wbi-h2 { animation-delay: -.7s; }
+.wbi-on .wbi-h3 { animation-delay: -1.4s; }
+.wbi-on .wbi-shine { animation: wbi-shine 3.2s ease-in-out infinite; }
+.wbi-on .wbi-float { animation: wbi-float 3s ease-in-out infinite; }
+.wbi-on .wbi-float2 { animation: wbi-float 3s ease-in-out infinite; animation-delay: -1.2s; }
+@keyframes wbi-spin { to { transform: rotate(360deg); } }
+@keyframes wbi-rise { 0%,100% { transform: translateY(5px); opacity: .3; } 50% { transform: translateY(-5px); opacity: 1; } }
+@keyframes wbi-heat { 0% { transform: translateY(6px); opacity: 0; } 50% { opacity: .9; } 100% { transform: translateY(-8px); opacity: 0; } }
+@keyframes wbi-shine { 0%, 55% { transform: translateX(-60px) skewX(-20deg); } 100% { transform: translateX(120px) skewX(-20deg); } }
+@keyframes wbi-float { 0%,100% { transform: translateY(2px); } 50% { transform: translateY(-3px); } }
+@media (prefers-reduced-motion: reduce) {
+  .wbi-on .wbi-drum, .wbi-on .wbi-fan, .wbi-on .wbi-bubble, .wbi-on .wbi-heat, .wbi-on .wbi-shine, .wbi-on .wbi-float, .wbi-on .wbi-float2 { animation: none; }
+}

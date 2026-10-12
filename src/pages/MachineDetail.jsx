@@ -1,21 +1,11 @@
 import React from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
-import useFrameAnimation from '../hooks/useFrameAnimation'
+import { WasherIcon, DryerIcon } from '@/components/icons/MachineIcons'
 import Wave from '../components/ui/wave'
 import api from '@/services/api'
 import { isPromoActive, getEffectivePrice } from '@/lib/promo'
 import { Tag } from 'lucide-react'
-import washL1 from '@/assets/washingmashine/L1.png'
-import washL2 from '@/assets/washingmashine/L2.png'
-import washL3 from '@/assets/washingmashine/L3.png'
-import washL4 from '@/assets/washingmashine/L4.png'
-import dryS1 from '@/assets/drymachine/S1.png'
-import dryS2 from '@/assets/drymachine/S2.png'
-import dryS3 from '@/assets/drymachine/S3.png'
-import dryS4 from '@/assets/drymachine/S4.png'
 
-const WASH_FRAMES = [washL1, washL2, washL3, washL4]
-const DRY_FRAMES = [dryS1, dryS2, dryS3, dryS4]
 
 export default function MachineDetail() {
   const { id } = useParams()
@@ -24,7 +14,6 @@ export default function MachineDetail() {
   const navigate = useNavigate()
 
   const [machine, setMachine] = React.useState(null)
-  const [frames, setFrames] = React.useState([])
   const [priceData, setPriceData] = React.useState(null)
 
   // Fetch machine from backend if possible
@@ -35,7 +24,6 @@ export default function MachineDetail() {
         const data = await api.getMachine(id)
         if (mounted && data && data._id) {
           setMachine(data)
-          setFrames(data.type === 'wash' ? WASH_FRAMES : DRY_FRAMES)
           
           // Fetch price data based on machine type and weight
           if (data.type && data.weight) {
@@ -63,7 +51,6 @@ export default function MachineDetail() {
           const found = list.find((m) => (m._id || m.id) === id)
           if (found) {
             setMachine(found)
-            setFrames(found.type === 'wash' ? WASH_FRAMES : DRY_FRAMES)
             return
           }
         }
@@ -73,20 +60,13 @@ export default function MachineDetail() {
       }
 
       // final small fallback
-      const fallback = { id: id || 'm1', name: 'Maquina', weight: 12, price: 3.5, status: 'free', statusText: 'Livre', type, icon: type === 'wash' ? washL1 : dryS1 }
+      const fallback = { id: id || 'm1', name: 'Maquina', weight: 12, price: 3.5, status: 'free', statusText: 'Livre', type }
       setMachine(fallback)
-      setFrames(type === 'wash' ? WASH_FRAMES : DRY_FRAMES)
     }
     load()
     return () => { mounted = false }
   }, [id])
 
-  const seed = React.useMemo(() => {
-    if (!machine) return 0
-    return Array.from(String(machine._id || machine.id)).reduce((s, c) => s * 31 + c.charCodeAt(0), 0)
-  }, [machine])
-
-  const frame = useFrameAnimation(frames, 300, { seed })
 
   // Calculate effective prices
   const cashPrice = priceData ? getEffectivePrice(priceData, 'cash') : (machine?.price || 0)
@@ -97,7 +77,7 @@ export default function MachineDetail() {
     <div className='flex-1 container mx-auto p-4'>
     <div className="relative pb-[12vh] z-10">
       <div className="glass-card p-6 flex flex-col items-center gap-4">
-        {frame && <img src={frame} alt={machine?.name} className="w-40 h-40 object-contain" />}
+        {machine?.type === 'dry' ? <DryerIcon className="w-40 h-40" title={machine?.name} /> : <WasherIcon className="w-40 h-40" title={machine?.name} />}
         <div className="text-2xl font-semibold">{machine?.name}</div>
         <div className="text-neutral-600 flex flex-wrap items-center gap-2 justify-center">
           <span>{machine?.weight} kg</span>

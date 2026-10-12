@@ -6,8 +6,7 @@ import * as ws from '@/services/websocket'
 import Modal from '@/components/ui/Modal'
 import { Pencil, Trash2, Plus, Check, X, Wrench } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import washL1 from '@/assets/washingmashine/L1.png'
-import dryS1 from '@/assets/drymachine/S1.png'
+import { WasherIcon, DryerIcon } from '@/components/icons/MachineIcons'
 import { useAuth } from '@/context/AuthContext'
 
 export default function AdminMachines(){
@@ -329,7 +328,7 @@ export default function AdminMachines(){
                         moved these assets into src/assets/ for bundling — that path
                         404s now. Kiosk pages already ignore the stored value entirely
                         and pick by type; do the same here instead of trusting it. */}
-                    <img src={m.type === 'dry' ? dryS1 : washL1} alt="" className="h-8 w-8 object-contain" />
+                    {m.type === 'dry' ? <DryerIcon animated={false} className="h-8 w-8" /> : <WasherIcon animated={false} className="h-8 w-8" />}
                     <div>{m.name}</div>
                   </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{m.type === 'wash' ? 'Lavagem' : 'Secagem'}</td>
@@ -465,7 +464,7 @@ export default function AdminMachines(){
                 <div className="flex justify-center">
                   {/* Same stale-path issue as the table row above — always derive
                       from the form's own `type`, never the stored `editing.icon`. */}
-                  <img src={type === 'dry' ? dryS1 : washL1} alt="preview" className={`h-12 w-12 object-contain rounded transition-transform duration-300 ${animating ? 'scale-95 opacity-60' : 'scale-100 opacity-100'} tealFilter`} aria-hidden />
+                  <span className={`block h-12 w-12 transition-transform duration-300 ${animating ? 'scale-95 opacity-60' : 'scale-100 opacity-100'}`}>{type === 'dry' ? <DryerIcon /> : <WasherIcon />}</span>
                 </div>
               </div>
             </div>
