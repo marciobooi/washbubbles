@@ -115,11 +115,9 @@ export const DEFAULT_CONTENT = {
     eyebrow: 'Visite-nos',
     heading: 'Onde estamos',
     description: 'Em Loures, aberta todos os dias.',
-    // The nav/footer already link to /admin/login — this is a second, more
-    // prominent copy of that link sitting inside the public contact card.
-    // Admin-toggleable since a marketing page for customers doesn't always
-    // want to advertise a staff-only link that prominently.
-    showLoginLink: true,
+    // The public page never links to the staff area (removed on purpose); the field stays only so older saved
+    // content still loads.
+    showLoginLink: false,
   },
   // Its own section, not part of Visite-nos — testimonials aren't contact
   // info. One real, attributed review only — never invent text for the
@@ -1061,10 +1059,6 @@ footer .foot-links a:hover{ color:var(--primary-800) }
     </ul>
     <div class="nav-right">
       ${switcher}
-      <a class="btn-login" href="${LOGIN_URL}" aria-label="${escapeHtml(L.enterAria)}">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>
-        <span class="btn-label">${escapeHtml(L.enter)}</span>
-      </a>
       <button class="nav-toggle" id="nav-toggle" aria-expanded="false" aria-controls="nav-links" aria-label="${escapeHtml(L.openMenu)}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
       </button>
@@ -1269,11 +1263,6 @@ footer .foot-links a:hover{ color:var(--primary-800) }
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${socialIconPath(s.name)}"/></svg>
             <a href="${escapeHtml(s.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(s.name)}</a>
           </div>`).join('')}
-          ${content.visit.showLoginLink !== false ? `
-          <div class="visit-row">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/></svg>
-            <a href="${LOGIN_URL}">${escapeHtml(L.staffArea)}</a>
-          </div>` : ''}
         </div>
       </div>
     </div>
@@ -1292,7 +1281,6 @@ footer .foot-links a:hover{ color:var(--primary-800) }
       ${showPrices ? `<a href="#precos">${escapeHtml(L.prices)}</a>` : ''}
       ${content.customSections.filter((s) => s.visible !== false).map((s) => `<a href="#custom-${slugify(s.id || s.heading)}">${escapeHtml(s.heading)}</a>`).join('')}
       ${content.reviews.visible ? `<a href="#avaliacoes">${escapeHtml(L.reviews)}</a>` : ''}
-      <a href="${LOGIN_URL}">${escapeHtml(L.enter)}</a>
     </div>
     <div class="foot-legal">
       <a href="${langPath(lang) === '/' ? '' : langPath(lang)}/legal/privacy">${escapeHtml(L.privacyLink)}</a>
@@ -1492,7 +1480,7 @@ function featureIcon(i) {
 }
 
 export function renderRobotsTxt() {
-  return `User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api\nSitemap: ${SITE_URL}/sitemap.xml\n`
+  return `User-agent: *\nAllow: /\nDisallow: /api\nSitemap: ${SITE_URL}/sitemap.xml\n`
 }
 
 export function renderSitemapXml(available = ['pt'], { lastmod = null, legalLastmod = null } = {}) {

@@ -1192,17 +1192,6 @@ export default function AdminSettings(){
               <Input value={landingContent.visit.description} onChange={(e) => updateSectionField('visit', 'description', e.target.value)} />
             </div>
 
-            <div className="flex items-center justify-between border rounded-lg p-3">
-              <div>
-                <p className="text-sm font-medium">Ligação "Área reservada (equipa)"</p>
-                <p className="text-xs text-muted-foreground">Um segundo acesso à área de equipa, dentro do cartão de contacto — o menu já tem um em cima.</p>
-              </div>
-              <Button type="button" variant="outline" size="sm" onClick={() => updateSectionField('visit', 'showLoginLink', !landingContent.visit.showLoginLink)}>
-                {landingContent.visit.showLoginLink !== false
-                  ? (<><Eye className="h-4 w-4 mr-2" />Visível</>)
-                  : (<><EyeOff className="h-4 w-4 mr-2" />Oculto</>)}
-              </Button>
-            </div>
           </CardContent>
         </Card>
 

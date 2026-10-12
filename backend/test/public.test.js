@@ -107,9 +107,10 @@ describe('Public front page (routes/public.js + views/landing.js)', () => {
       expect(data).to.not.have.property('geo')
     })
 
-    it('has a login link in the nav pointing at the real admin login route', async () => {
+    it('does not advertise the staff login anywhere on the public page (nav, footer, visit card)', async () => {
       const res = await request(app).get('/')
-      expect(res.text).to.match(/<nav[\s\S]*?href="\/admin\/login"[\s\S]*?Entrar/)
+      expect(res.text).to.not.include('href="/admin/login"')
+      expect(res.text).to.not.include('btn-login"')
     })
 
     it('never invents facts not given: no fabricated review quote beyond the one real one supplied', async () => {
@@ -226,7 +227,7 @@ describe('Public front page (routes/public.js + views/landing.js)', () => {
       expect(res.status).to.equal(200)
       expect(res.headers['content-type']).to.match(/text\/plain/)
       expect(res.text).to.include('Allow: /')
-      expect(res.text).to.include('Disallow: /admin')
+      expect(res.text).to.not.include('Disallow: /admin') // the staff area is not announced; it is noindex instead
       expect(res.text).to.include('Disallow: /api')
       expect(res.text).to.include('Sitemap: https://freshbubbles.pt/sitemap.xml')
     })
@@ -301,14 +302,6 @@ describe('Public front page (routes/public.js + views/landing.js)', () => {
       expect(navMatch).to.include('<a href="#custom-promo">Semana da Lã</a>')
       expect(footMatch).to.include('<a href="#custom-promo">Semana da Lã</a>')
       expect(navMatch).to.not.include('draft')
-    })
-
-    it('hides the "Área reservada" link when saved as not visible', async () => {
-      await Setting.create({ tenantId: tenant._id, key: CONTENT_SETTING_KEY, value: { visit: { showLoginLink: false } } })
-      const res = await asThisTenant()
-      expect(res.text).to.not.include('Área reservada (equipa)')
-      // The nav's own login button is untouched — this only hides the second copy.
-      expect(res.text).to.include('Entrar')
     })
 
     it('drops a custom section with no heading — a half-filled draft never ships blank markup', async () => {

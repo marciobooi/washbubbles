@@ -74,7 +74,7 @@ export const DEFAULT_LANDING_CONTENT = {
     eyebrow: 'Visite-nos',
     heading: 'Onde estamos',
     description: 'Em Loures, aberta todos os dias.',
-    showLoginLink: true,
+    showLoginLink: false,
   },
   reviews: {
     visible: true,
