@@ -530,7 +530,7 @@ router.get('/landing/translations', requireAdmin, async (req, res) => {
   res.json({ enabled: translatorEnabled(), status, langs })
 })
 // Legal texts: the admin writes Portuguese only; saving them (setting legal.info, below) starts the automatic
-// translation into en/fr/de in the background. These two endpoints let the page show progress or ask again.
+// translation into en/fr/de/es in the background. These two endpoints let the page show progress or ask again.
 router.get('/legal/status', requireAdmin, async (req, res) => {
   res.json(await getLegalStatus(req.tenantId))
 })

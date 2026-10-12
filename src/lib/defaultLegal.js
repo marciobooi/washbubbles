@@ -8,6 +8,7 @@ export const LEGAL_LANGS = [
   { code: 'en', label: 'English' },
   { code: 'fr', label: 'Français' },
   { code: 'de', label: 'Deutsch' },
+  { code: 'es', label: 'Español' },
 ]
 
 export const DEFAULT_PRIVACY_PT = `## 1. Quem é o responsável
@@ -157,8 +158,8 @@ export const DEFAULT_LEGAL = {
   phone: '',
   email: '',
   complaintsUrl: 'https://www.livroreclamacoes.pt',
-  privacy: { pt: DEFAULT_PRIVACY_PT, en: DEFAULT_PRIVACY_EN, fr: '', de: '' },
-  terms: { pt: DEFAULT_TERMS_PT, en: DEFAULT_TERMS_EN, fr: '', de: '' },
+  privacy: { pt: DEFAULT_PRIVACY_PT, en: DEFAULT_PRIVACY_EN, fr: '', de: '', es: '' },
+  terms: { pt: DEFAULT_TERMS_PT, en: DEFAULT_TERMS_EN, fr: '', de: '', es: '' },
 }
 
 /**
@@ -175,7 +176,7 @@ export function mergeLegal(saved, translations) {
     const pt = mine.pt && String(mine.pt).trim() ? mine.pt : DEFAULT_LEGAL[k].pt
     const fresh = tr[k] && tr[k].pt === pt ? tr[k] : null
     const out = { pt }
-    for (const l of ['en', 'fr', 'de']) {
+    for (const l of ['en', 'fr', 'de', 'es']) {
       // a language the admin typed by hand (older saves) still counts; then the server translation; then the built-in text
       out[l] = (mine[l] && String(mine[l]).trim()) || (fresh && fresh[l]) || (pt === DEFAULT_LEGAL[k].pt ? DEFAULT_LEGAL[k][l] : '')
     }

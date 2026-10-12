@@ -36,6 +36,7 @@ describe('Legal texts: Portuguese in, automatic translations stored for the kios
     expect(st.translations.privacy.pt).to.equal('## A\ntexto')
     expect(st.translations.privacy.fr).to.equal('## [fr] A\n[fr] texto')
     expect(st.translations.terms.de).to.equal('## [de] B\n- [de] regra')
+    expect(st.translations.privacy.es).to.equal('## [es] A\n[es] texto')
   })
 
   it('a language that fails keeps its earlier translation of the same Portuguese', async () => {

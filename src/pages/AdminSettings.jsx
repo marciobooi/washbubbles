@@ -153,7 +153,7 @@ export default function AdminSettings(){
       // only the Portuguese is authored; the other languages are produced by the server
       const value = { ...legal, privacy: { pt: legal.privacy.pt }, terms: { pt: legal.terms.pt } }
       await api.setSetting({ key: 'legal.info', value })
-      toast({ title: 'Textos legais guardados', description: 'A traduzir para inglês, francês e alemão…', variant: 'success' })
+      toast({ title: 'Textos legais guardados', description: 'A traduzir para inglês, francês, alemão e espanhol…', variant: 'success' })
       setLegalStatus((s) => ({ ...s, state: 'running' }))
       followLegalTranslation()
     } catch (err) {
@@ -1416,7 +1416,7 @@ export default function AdminSettings(){
       <Card>
         <CardHeader>
           <CardTitle>Legal / RGPD</CardTitle>
-          <CardDescription>Escreva só em português: ao guardar, o servidor traduz sozinho para inglês, francês e alemão e o quiosque vai buscar o texto na língua do cliente</CardDescription>
+          <CardDescription>Escreva só em português: ao guardar, o servidor traduz sozinho para inglês, francês, alemão e espanhol e o quiosque vai buscar o texto na língua do cliente</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={saveLegal} className="space-y-5 max-w-3xl">

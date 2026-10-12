@@ -11,7 +11,7 @@ import { translateBatch, translatorEnabled } from './translator.js'
 export const INFO_KEY = 'legal.info'
 export const TRANSLATIONS_KEY = 'legal.translations'
 export const STATUS_KEY = 'legal.translationStatus'
-export const LEGAL_LANGS = ['en', 'fr', 'de']
+export const LEGAL_LANGS = ['en', 'fr', 'de', 'es']
 const DOCS = ['privacy', 'terms']
 
 const setStatus = (tenantId, value) =>
