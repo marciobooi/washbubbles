@@ -20,7 +20,7 @@ Cookies são pequenos ficheiros que um site pode guardar no seu navegador.
 Este site não define cookies próprios e não usa cookies de análise, de publicidade nem de rastreio. Não precisamos, por isso, de lhe pedir consentimento para cookies.
 
 ## Serviços de terceiros
-- Tipos de letra (Google Fonts): para mostrar o texto, o seu navegador pede os tipos de letra aos servidores da Google, que ficam a conhecer o seu endereço IP. Não são guardados cookies.
+Os tipos de letra são servidos por este próprio site. O único serviço de terceiros é:
 - Mapa (Google Maps): só é carregado se carregar em "Mostrar mapa". Ao carregá-lo, a Google pode guardar cookies no seu navegador, nos termos da política da Google.
 
 ## Como controlar cookies
@@ -38,7 +38,7 @@ Cookies are small files a website can store in your browser.
 This website does not set its own cookies and does not use analytics, advertising or tracking cookies. So we do not need to ask for your consent to cookies.
 
 ## Third-party services
-- Fonts (Google Fonts): to display the text, your browser requests the fonts from Google's servers, which then see your IP address. No cookies are stored.
+The fonts are served by this website itself. The only third-party service is:
 - Map (Google Maps): it is loaded only if you press "Show map". When loaded, Google may store cookies in your browser, under Google's own policy.
 
 ## How to control cookies
@@ -56,7 +56,7 @@ Les cookies sont de petits fichiers qu’un site peut enregistrer dans votre nav
 Ce site ne dépose pas de cookies propres et n’utilise pas de cookies d’analyse, de publicité ni de suivi. Nous n’avons donc pas besoin de vous demander votre consentement pour les cookies.
 
 ## Services tiers
-- Polices (Google Fonts) : pour afficher le texte, votre navigateur demande les polices aux serveurs de Google, qui voit alors votre adresse IP. Aucun cookie n’est enregistré.
+Les polices sont servies par ce site lui-même. Le seul service tiers est :
 - Carte (Google Maps) : elle n’est chargée que si vous appuyez sur « Afficher la carte ». Une fois chargée, Google peut enregistrer des cookies dans votre navigateur, selon sa propre politique.
 
 ## Comment contrôler les cookies
@@ -74,7 +74,7 @@ Cookies sind kleine Dateien, die eine Website in Ihrem Browser speichern kann.
 Diese Website setzt keine eigenen Cookies und verwendet keine Analyse-, Werbe- oder Tracking-Cookies. Wir müssen Sie daher nicht um Ihre Einwilligung zu Cookies bitten.
 
 ## Dienste Dritter
-- Schriftarten (Google Fonts): Zur Anzeige des Textes fordert Ihr Browser die Schriftarten von den Servern von Google an, die dadurch Ihre IP-Adresse sehen. Es werden keine Cookies gespeichert.
+Die Schriftarten werden von dieser Website selbst bereitgestellt. Der einzige Dienst Dritter ist:
 - Karte (Google Maps): Sie wird nur geladen, wenn Sie auf „Karte anzeigen“ tippen. Nach dem Laden kann Google gemäß der eigenen Richtlinie Cookies in Ihrem Browser speichern.
 
 ## Cookies verwalten
@@ -92,7 +92,7 @@ Las cookies son pequeños archivos que un sitio web puede guardar en su navegado
 Este sitio no establece cookies propias y no utiliza cookies de análisis, publicidad ni seguimiento. Por eso no necesitamos pedirle su consentimiento para las cookies.
 
 ## Servicios de terceros
-- Tipos de letra (Google Fonts): para mostrar el texto, su navegador solicita las fuentes a los servidores de Google, que así conocen su dirección IP. No se guardan cookies.
+Las fuentes las sirve este propio sitio. El único servicio de terceros es:
 - Mapa (Google Maps): solo se carga si pulsa "Mostrar mapa". Una vez cargado, Google puede guardar cookies en su navegador, según su propia política.
 
 ## Cómo controlar las cookies
@@ -137,6 +137,7 @@ export function renderLegalPage(doc, { lang = 'pt', brand, legal, available = ['
 <title>${esc(title)} — ${esc(brand.name)}</title>
 <meta name="robots" content="index,follow">
 <link rel="icon" href="${esc(brand.logo)}">
+<link rel="stylesheet" href="/fonts/fonts.css">
 <style>
 :root{ --ink:#0f2a27; --soft:#3d6a63; --p:#0d9488; --p9:#134e4a }
 *{ box-sizing:border-box } body{ margin:0; font:16px/1.65 Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif; color:var(--ink); background:linear-gradient(180deg,#f0fdfa,#fff 240px) }

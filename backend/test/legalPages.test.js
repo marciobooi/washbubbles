@@ -64,5 +64,7 @@ describe('Website legal pages (privacy, terms, cookies) and footer links', funct
     expect(res.text).to.contain('livroreclamacoes.pt')
     expect(res.text).to.not.match(/<iframe[^>]*google\.com\/maps/) // no Google request before the visitor asks
     expect(res.text).to.contain('id="map-show"')
+    expect(res.text).to.not.contain('fonts.googleapis.com') // fonts are self-hosted
+    expect(res.text).to.contain('/fonts/fonts.css')
   })
 })

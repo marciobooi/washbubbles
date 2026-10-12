@@ -88,6 +88,8 @@ app.use('/uploads', uploadsFetchThrough({ uploadDir }))
 // build's "/" is the point-of-sale UI (SERVE_FRONTEND below) and must never be
 // shadowed by this; the two are mutually exclusive by what each deployment sets.
 if (process.env.PUBLIC_LANDING_PAGE === 'true') {
+  // The website's own copy of its fonts (Inter, Poppins): visitors never contact Google for them.
+  app.use('/fonts', express.static(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../public/fonts'), { maxAge: '365d', immutable: true }))
   app.use('/', publicRoutes)
   console.log('Public front page enabled at /')
 }

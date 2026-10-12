@@ -485,9 +485,8 @@ ${alternates}
 <meta name="twitter:image" content="${SITE_URL}${escapeHtml(brand.logo)}">
 
 <link rel="icon" href="${escapeHtml(brand.logo)}" type="image/png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet">
+<link rel="preload" href="/fonts/inter_v20_UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/fonts/fonts.css">
 
 <script type="application/ld+json">${jsonLd(content, L, pageUrl)}</script>
 
