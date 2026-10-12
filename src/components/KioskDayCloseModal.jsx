@@ -3,6 +3,7 @@ import Modal from '@/components/ui/Modal'
 import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
 import DayCloseForm from '@/components/dayClose/DayCloseForm'
+import HopperRefillModal from '@/components/dayClose/HopperRefillModal'
 
 function getKioskApiKey() {
   const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
@@ -28,6 +29,7 @@ export default function KioskDayCloseModal({ open, onClose, pin }) {
   const [summary, setSummary] = useState(null)
   const [summaryLoading, setSummaryLoading] = useState(true)
   const [tab, setTab] = useState('fecho') // 'fecho' | 'hopper'
+  const [refillOpen, setRefillOpen] = useState(false)
 
   const loadSummary = useCallback(async () => {
     setSummaryLoading(true)
@@ -59,6 +61,12 @@ export default function KioskDayCloseModal({ open, onClose, pin }) {
           </button>
         ))}
       </div>
+      {tab === 'hopper' && (
+        <button type="button" onClick={() => setRefillOpen(true)} className="w-full h-14 mb-4 rounded-xl bg-emerald-600 text-white font-bold text-lg shadow-sm active:scale-[0.99]">
+          Fazer reforço do hopper
+        </button>
+      )}
+      <HopperRefillModal open={refillOpen} onClose={() => setRefillOpen(false)} onSubmit={(p) => api.refillKioskHopper({ ...p, pin }, { apiKey: getKioskApiKey() })} onDone={() => { setRefillOpen(false); loadSummary() }} />
       <DayCloseForm
         view={tab}
         summary={summary}

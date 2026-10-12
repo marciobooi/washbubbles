@@ -1232,6 +1232,14 @@ router.post('/day-close', requireAdmin, async (req, res) => {
   res.status(status).json(body)
 })
 
+// POST /admin/hopper/refill — coins brought from outside into the hopper (stock +, booked as float).
+router.post('/hopper/refill', requireAdmin, async (req, res) => {
+  const { refillHopper } = await import('../services/hopperRefill.js')
+  const { status, body } = await refillHopper(req, req.body || {})
+  if (status === 200) logAction(req, 'hopper.refill', 'Peripheral', null, { coins: req.body?.coins })
+  res.status(status).json(body)
+})
+
 // POST /admin/day-close/adjust-float — add cash straight to the float (e.g.
 // seeding a starting till), without it counting as bankable sales money.
 router.post('/day-close/adjust-float', requireAdmin, async (req, res) => {

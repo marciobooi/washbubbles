@@ -219,6 +219,17 @@ router.get('/day-close/summary', requireKioskOrAdmin, async (req, res) => {
   res.json(await getDayCloseSummary(req))
 })
 
+// Hopper reinforcement from the kiosk: staff PIN, like the day close (a kiosk key alone cannot move money).
+router.post('/hopper/refill', requireKioskOrAdmin, async (req, res) => {
+  if (req.userModel?.role === 'KIOSK') {
+    const pinCheck = await checkAdminPin(req, req.body.pin)
+    if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error })
+  }
+  const { refillHopper } = await import('../services/hopperRefill.js')
+  const { status, body } = await refillHopper(req, req.body || {})
+  res.status(status).json(body)
+})
+
 router.post('/day-close', requireKioskOrAdmin, async (req, res) => {
   if (req.userModel?.role === 'KIOSK') {
     const pinCheck = await checkAdminPin(req, req.body.pin)

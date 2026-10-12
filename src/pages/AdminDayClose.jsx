@@ -4,6 +4,7 @@ import api from '@/services/api'
 import Modal from '@/components/ui/Modal'
 import { PiggyBank } from 'lucide-react'
 import DayCloseForm from '@/components/dayClose/DayCloseForm'
+import HopperRefillModal from '@/components/dayClose/HopperRefillModal'
 import { fmt, fmtDenomLabel, DiscrepancyPill, ALL_CASH_DENOMS, CoinChipGrid, buildDenomState, denomSum } from '@/components/dayClose/shared'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -15,6 +16,7 @@ export default function AdminDayClose() {
   const [expandedId, setExpandedId]         = useState(null)
   const [floatModalOpen, setFloatModalOpen] = useState(false)
   const [tab, setTab] = useState('fecho') // 'fecho' | 'hopper' | 'historico'
+  const [refillOpen, setRefillOpen] = useState(false)
 
   const loadSummary = useCallback(async () => {
     setSummaryLoading(true)
@@ -64,6 +66,8 @@ export default function AdminDayClose() {
         </div>
       </div>
 
+      <HopperRefillModal open={refillOpen} onClose={() => setRefillOpen(false)} onSubmit={(p) => api.refillHopper(p)} onDone={() => { setRefillOpen(false); loadSummary(); loadHistory() }} />
+
       <AddFloatModal
         open={floatModalOpen}
         onClose={() => setFloatModalOpen(false)}
@@ -82,8 +86,8 @@ export default function AdminDayClose() {
 
       {tab === 'hopper' && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 px-4 py-3">
-          <p className="text-sm text-emerald-900">Reforço: junte moedas ao fundo quando o hopper precisar (entra como fundo, nunca como venda).</p>
-          <button type="button" onClick={() => setFloatModalOpen(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-primary-600 text-white text-sm font-semibold px-4 py-2 shadow-sm">
+          <p className="text-sm text-emerald-900">Reforço: moedas que traz de fora para o hopper (por exemplo, acabaram as de 1€). Sobe o stock do hopper e entra como fundo, nunca como venda.</p>
+          <button type="button" onClick={() => setRefillOpen(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-primary-600 text-white text-sm font-semibold px-4 py-2 shadow-sm">
             <PiggyBank className="w-4 h-4" strokeWidth={1.8} /> Fazer reforço
           </button>
         </div>

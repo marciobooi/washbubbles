@@ -373,6 +373,16 @@ export function createApi(config) {
     return request('/admin/day-close', { method: 'POST', json: payload, expect: 'json' });
   }
 
+  function refillHopper(payload) {
+    // payload: { coins: [{value, count}], notes? } — coins brought from outside into the hopper
+    return request('/admin/hopper/refill', { method: 'POST', json: payload, expect: 'json' })
+  }
+
+  function refillKioskHopper(payload, opts) {
+    const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
+    return request('/pos/hopper/refill', { method: 'POST', json: payload, headers, skipAuth: true, expect: 'json' })
+  }
+
   function addDayCloseFloat(payload) {
     // payload: { denominations: [{value, count}], notes? } — top up the float
     // directly, without it counting as bankable sales money.
@@ -667,6 +677,8 @@ export function createApi(config) {
     getDayCloses,
     createDayClose,
     addDayCloseFloat,
+    refillHopper,
+    refillKioskHopper,
     emailDayCloseReceipt,
 
     // Tenants

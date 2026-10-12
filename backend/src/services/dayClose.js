@@ -296,14 +296,9 @@ export async function createFloatAdjustment(req, { amount, denominations = [], n
     const periodTo = new Date()
 
     const sales = await SaleT.find({ createdAt: { $gt: periodFrom, $lte: periodTo } }).lean()
-    let totalCash = 0; let totalCard = 0
-    for (const s of sales) {
-      const a = Number(s.amount || 0)
-      if (s.method === 'cash') totalCash += a
-      else totalCard += a
-    }
-    const tc = Number(totalCash.toFixed(2))
-    const tk = Number(totalCard.toFixed(2))
+    const tally = tallySales(sales)
+    const tc = tally.totalCash
+    const tk = tally.totalCard
     const roundedAmt = Number(amt.toFixed(2))
     const expectedCash = Number((openingFloat + tc + roundedAmt).toFixed(2))
 
@@ -318,7 +313,8 @@ export async function createFloatAdjustment(req, { amount, denominations = [], n
       floatLeft: expectedCash,
       totalCash: tc,
       totalCard: tk,
-      totalSales: Number((tc + tk).toFixed(2)),
+      totalRecharges: tally.totalRecharges,
+      totalSales: tally.totalSales,
       salesCount: sales.length,
       notes: `Fundo adicionado: +${roundedAmt.toFixed(2)}€${notes ? ` — ${String(notes).slice(0, 400)}` : ''}`,
       closedBy: req.userModel?._id,

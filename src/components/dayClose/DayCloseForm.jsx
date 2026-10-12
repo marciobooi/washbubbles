@@ -91,37 +91,14 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
 
   // Common case: bank today's cash sales, keep the float unchanged — prefilled
   // as an editable default, not forced. Same once-only guard as above.
+  // There is no "next session float" field any more (the Hopper tab is where the change stock is managed): the
+  // bank amount defaults to everything counted minus the coins that refill the hopper to its target, and whatever
+  // is not banked simply stays (the server still stores it as the float of the next session).
+  const bankEditedRef = useRef(false)
   const splitLoadedRef = useRef(false)
-  useEffect(() => {
-    if (splitLoadedRef.current) return
-    if (summary && (summary.totalCash > 0 || summary.openingFloat > 0)) {
-      setAmountToBank(Number(summary.totalCash || 0).toFixed(2))
-      setFloatLeft(Number(summary.openingFloat || 0).toFixed(2))
-      splitLoadedRef.current = true
-    }
-  }, [summary])
 
-  // Each hopper peripheral tracks its own live coin count (`hopperConfig.currentCount`,
-  // decremented in real time as change is paid out — see services/middleware.js).
-  // A hopper only ever holds one denomination, so summing currentCount per
-  // coinValue across all enabled hoppers gives the actual coin count without
-  // anyone physically counting it. Still fully editable afterwards — this is a
-  // prefill, not a replacement for catching real-world drift (jams, manual top-ups).
-  const actualLoadedRef = useRef(false)
-  useEffect(() => {
-    if (actualLoadedRef.current) return
-    actualLoadedRef.current = true
-    api.getPeripherals().then((list) => {
-      const hoppers = (list || []).filter(p => p.type === 'hopper' && p.enabled && p.hopperConfig?.coinValue)
-      if (!hoppers.length) return
-      const byValue = {}
-      for (const h of hoppers) {
-        const v = Number(h.hopperConfig.coinValue)
-        byValue[v] = (byValue[v] || 0) + Number(h.hopperConfig.currentCount || 0)
-      }
-      setHopperActualDenoms(prev => prev.map(d => byValue[d.value] != null ? { ...d, count: byValue[d.value] } : d))
-    }).catch(() => { /* live hopper stock is just a convenience prefill — manual count still works if this fails */ })
-  }, [])
+  // The hopper stock is NOT prefilled: the system knows every coin that comes in, but not which coins go out as change
+  // (only the euro amount is known), so the stock per coin can only be counted by hand in the Hopper tab.
 
   useEffect(() => {
     if (targetLoadedRef.current) return
@@ -135,10 +112,21 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
   }, [])
 
   function handleAmountToBank(val) {
+    bankEditedRef.current = true
     setAmountToBank(val)
-    const remaining = countedCash - Number(val)
-    if (!isNaN(remaining) && remaining >= 0) setFloatLeft(remaining.toFixed(2))
   }
+
+  const refillTotal = countedDenoms.filter((d) => d.value < 3).reduce((s, d) => s + Math.min(d.count, hopperGap.find((g) => Math.abs(g.value - d.value) < 0.001)?.toAdd || 0) * d.value, 0)
+  useEffect(() => {
+    if (bankEditedRef.current) return
+    const bank = Math.max(0, countedCash - refillTotal)
+    setAmountToBank(countedCash > 0 ? bank.toFixed(2) : '')
+  }, [countedCash, refillTotal])
+  // the float is always the rest, so bank + float is exactly what was counted
+  useEffect(() => {
+    const atb = parseFloat(amountToBank)
+    setFloatLeft(isNaN(atb) ? '' : Math.max(0, countedCash - atb).toFixed(2))
+  }, [amountToBank, countedCash])
 
   function makeUpdater(setter) {
     return (i, rawVal) => {
@@ -151,7 +139,7 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
     e.preventDefault()
     const atb = parseFloat(amountToBank)
     const fl  = parseFloat(floatLeft)
-    if (isNaN(atb) || isNaN(fl)) return toast({ title: 'Preencha banco e fundo de caixa', variant: 'destructive' })
+    if (isNaN(atb) || isNaN(fl)) return toast({ title: 'Indique o valor para o banco', variant: 'destructive' })
     if (atb < 0 || fl < 0) return toast({ title: 'Os valores nao podem ser negativos', variant: 'destructive' })
     if (Math.abs(atb + fl - countedCash) > 0.005) return toast({
       title: `Banco + Fundo (${fmt(atb + fl)}€) ≠ Total contado (${fmt(countedCash)}€)`,
@@ -317,11 +305,10 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
             <Step title="Hopper (dispensador de troco)" subtitle="Registe o estado atual, defina o objetivo e veja o que repor" accent="blue">
           <div>
             <div className="text-xs font-semibold text-neutral-600 mb-1 uppercase tracking-wide">Moedas restantes agora</div>
-            <div className="text-xs text-neutral-400 mb-2">Pré-preenchido com o stock atual dos hoppers — corrija se não bater certo.</div>
+            <div className="text-xs text-neutral-400 mb-2">Conte as moedas que estão no hopper agora. O sistema sabe o que entra, mas não que moedas saem no troco (só o valor em euros).</div>
             {summary?.openingHopperCoins?.length > 0 && summary.totalChangeDispensed > 0 && (
               <div className="text-xs text-neutral-400 mb-2">
-                Inicio: {fmt(summary.openingHopperTotal)}&euro; &mdash; troco dispensado: {fmt(summary.totalChangeDispensed)}&euro;
-                &mdash; estimativa: ~{fmt(Math.max(0, summary.openingHopperTotal - summary.totalChangeDispensed))}&euro;
+                No início: {fmt(summary.openingHopperTotal)}&euro; &mdash; troco dado desde então: {fmt(summary.totalChangeDispensed)}&euro; (em euros; as moedas exatas não são registadas)
               </div>
             )}
             <CoinChipGrid denoms={hopperActualDenoms} onChange={makeUpdater(setHopperActualDenoms)} />
@@ -363,34 +350,23 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
         )}
 
         <div className={view === 'fecho' ? 'space-y-4' : 'hidden'}>
-        <Step number="2" title="Distribuicao do dinheiro" subtitle="Quanto vai para o banco e quanto fica como fundo" accent="emerald">
+        <Step number="2" title="Para o banco" subtitle="O que retira da caixa agora; o resto fica na caixa e o hopper gere-se no menu Hopper" accent="emerald">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <MoneyInput
               label="Para o banco"
               value={amountToBank}
               onChange={handleAmountToBank}
               required
-              hint="Os restantes sao atribuidos automaticamente ao fundo"
+              hint="Sugerido: tudo o que contou, menos as moedas que repõem o hopper"
             />
-            <MoneyInput
-              label="Fundo da proxima sessao"
-              value={floatLeft}
-              onChange={setFloatLeft}
-              required
-            />
-          </div>
-          {keptNotes.length > 0 && (
-            <div className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium bg-amber-50 border border-amber-200 text-amber-800">
-              Fica na caixa para acertar o fundo: {keptNotes.map((d) => `${d.keepNotes}×${fmtDenomLabel(d.value)}`).join(', ')} (não damos troco em notas; o resto das notas sai).
+            <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm self-end">
+              <div className="text-neutral-500">Fica na caixa</div>
+              <div className="text-xl font-extrabold text-neutral-800">{floatLeft !== '' ? fmt(floatLeft) : '0.00'}&euro;</div>
             </div>
-          )}
-          {amountToBank !== '' && floatLeft !== '' && (
-            <div className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium
-              ${splitOk ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' : 'bg-red-50 border border-red-200 text-red-600'}`}>
-              {splitOk
-                ? <>{'✓'} Banco + Fundo = {fmt(splitSum)}&euro; — correto</>
-                : <>{'⚠'} Banco + Fundo = {fmt(splitSum)}&euro; — deve ser {fmt(countedCash)}&euro;</>
-              }
+          </div>
+          {amountToBank !== '' && parseFloat(amountToBank) > countedCash + 0.005 && (
+            <div className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium bg-red-50 border border-red-200 text-red-600">
+              {'⚠'} Não pode levar para o banco mais do que contou ({fmt(countedCash)}&euro;)
             </div>
           )}
         </Step>
