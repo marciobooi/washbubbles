@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
 import { subscribe } from '@/services/websocket'
 import api from '@/services/api'
+import i18n from '@/lib/i18n'
 
 // The kiosk authenticates with its own API key, same as the other kiosk pages.
 function kioskHeaders() {
@@ -59,17 +60,17 @@ export const CartProvider = ({ children }) => {
         if (!(amount > 0)) return
         setCredit((c) => Math.round((c + amount) * 100) / 100)
         restartCountdown()
-        toast({ title: `Dinheiro inserido: ${amount.toFixed(2)}€`, variant: 'success' })
+        toast({ title: i18n.t('cashInserted', { ns: 'cart', amount: `${amount.toFixed(2)}€` }), variant: 'success' })
       } else if (data.type === 'credit:refunded') {
         // The shop paid the unspent cash back from the hopper.
         setCredit(0)
         setRefundAt(null)
-        toast({ title: `Crédito devolvido: ${Number(data.payload?.refunded || 0).toFixed(2)}€`, description: 'Recolha as moedas na bandeja.', variant: 'success' })
+        toast({ title: i18n.t('refunded', { ns: 'cart', amount: `${Number(data.payload?.refunded || 0).toFixed(2)}€` }), description: i18n.t('takeCoins', { ns: 'cart' }), variant: 'success' })
       } else if (data.type === 'credit:refund-failed') {
         const left = Number(data.payload?.remaining || 0)
         setCredit(Math.round(left * 100) / 100)
         restartCountdown()
-        toast({ title: 'Não foi possível devolver todo o crédito', description: `Faltam ${left.toFixed(2)}€. Contacte o balcão.`, variant: 'destructive' })
+        toast({ title: i18n.t('refundFailed', { ns: 'cart' }), description: i18n.t('refundFailedHint', { ns: 'cart', amount: `${left.toFixed(2)}€` }), variant: 'destructive' })
       }
     })
   }, [restartCountdown, syncFromShop])
@@ -135,7 +136,7 @@ export const CartProvider = ({ children }) => {
       const already = cart.some((c) => (c.productId || c._id || c.id) === String(baseId))
       if (already) {
         // Dynamic import to avoid eager dependency on Toast provider at module load
-        import('@/components/ui/Toast').then(({ toast }) => toast({ title: 'Máquina já no carrinho', description: 'Não é possível adicionar a mesma máquina duas vezes', variant: 'warning' })).catch(() => {})
+        import('@/components/ui/Toast').then(({ toast }) => toast({ title: i18n.t('alreadyInCart', { ns: 'cart' }), description: i18n.t('alreadyInCartHint', { ns: 'cart' }), variant: 'warning' })).catch(() => {})
         return
       }
     }

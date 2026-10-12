@@ -125,40 +125,37 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
       // Handle rejected coin/bill
       if (data.type === 'peripheral:rejected') {
         const { type, reason } = data.payload || {}
-        const label = type === 'bill' ? 'Nota' : 'Moeda'
-        const reasonLabel = reason === 'inhibited' ? 'não aceite' : reason === 'unrecognised' ? 'não reconhecida' : 'rejeitada'
+        const reasonLabel = reason === 'inhibited' ? t('reasonInhibited') : reason === 'unrecognised' ? t('reasonUnrecognised') : t('reasonRejected')
         console.warn('[CartModal] Peripheral rejected:', type, reason)
-        toast({ title: `${label} ${reasonLabel}`, description: 'Por favor insira outro dinheiro.', variant: 'destructive' })
+        toast({ title: type === 'bill' ? t('rejectedBill', { reason: reasonLabel }) : t('rejectedCoin', { reason: reasonLabel }), description: t('insertOther'), variant: 'destructive' })
       }
 
       // Handle fake/counterfeit bill
       if (data.type === 'peripheral:fraud') {
         const { type } = data.payload || {}
-        const label = type === 'bill' ? 'nota' : 'moeda'
         console.error('[CartModal] Fraud detected:', type)
-        toast({ title: `⚠️ ${label.charAt(0).toUpperCase() + label.slice(1)} suspeita de fraude`, description: 'A nota foi retida. Por favor contacte o operador.', variant: 'destructive' })
+        toast({ title: type === 'bill' ? t('fraudBill') : t('fraudCoin'), description: t('fraudHint'), variant: 'destructive' })
       }
 
       // Handle peripheral fault (jam, stacker full)
       if (data.type === 'peripheral:fault') {
         const { type, reason } = data.payload || {}
-        const label = type === 'bill' ? 'leitor de notas' : 'leitor de moedas'
-        const reasonLabel = reason === 'jam' ? 'encravamento' : reason === 'stacker_full' ? 'stacker cheio' : 'avaria'
+        const reasonLabel = reason === 'jam' ? t('faultJam') : reason === 'stacker_full' ? t('faultStacker') : t('faultOther')
         console.error('[CartModal] Peripheral fault:', type, reason)
-        toast({ title: `Avaria no ${label}`, description: `${reasonLabel.charAt(0).toUpperCase() + reasonLabel.slice(1)} — contacte o operador.`, variant: 'destructive' })
+        toast({ title: type === 'bill' ? t('faultBill') : t('faultCoin'), description: t('faultHint', { reason: reasonLabel }), variant: 'destructive' })
       }
 
       // Handle hopper empty / change cannot be dispensed
       if (data.type === 'hopper:empty') {
         console.error('[CartModal] Hopper empty')
-        toast({ title: 'Sem troco disponível', description: 'A máquina não tem troco. Por favor insira o montante exacto.', variant: 'destructive' })
+        toast({ title: t('noChange'), description: t('noChangeHint'), variant: 'destructive' })
       }
 
       // Handle hopper fault
       if (data.type === 'hopper:fault') {
         const { reason } = data.payload || {}
         console.error('[CartModal] Hopper fault:', reason)
-        toast({ title: 'Falha ao devolver troco', description: 'Por favor contacte o operador.', variant: 'destructive' })
+        toast({ title: t('changeFailed'), description: t('contactOperator'), variant: 'destructive' })
       }
 
       // The card was taken out of the reader: back to the cash price.
@@ -264,7 +261,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
         })
       }
     } catch (e) {
-      toast({ title: 'Erro ao devolver troco', description: e?.message, variant: 'destructive' })
+      toast({ title: t('changeError'), description: e?.message, variant: 'destructive' })
     } finally {
       setCashingOut(false)
     }
@@ -280,7 +277,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
       onClose()
     } catch (e) {
       console.error('Auto card payment failed', e)
-      setCardError(e?.message || 'Erro ao processar pagamento com cartão')
+      setCardError(e?.message || t('cardPayError'))
       toast({ title: t('paymentError'), description: e?.message, variant: 'error' })
     } finally {
       setCheckingCard(false)
@@ -312,7 +309,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
     setCardError(null)
     try {
       if (!cardCode) {
-        setCardError('Insira o código do cartão')
+        setCardError(t('cardEnterCode'))
         setCheckingCard(false)
         return
       }
@@ -323,7 +320,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
       onClose()
     } catch (e) {
       console.error('Card payment failed', e)
-      setCardError(e?.message || 'Erro ao processar pagamento com cartão')
+      setCardError(e?.message || t('cardPayError'))
     } finally {
       setCheckingCard(false)
     }
@@ -335,7 +332,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
     try {
       const amount = Number(topupAmount)
       if (!amount || amount <= 0) {
-        setCardError('Insira um valor de recarga válido')
+        setCardError(t('topupInvalid'))
         setCheckingCard(false)
         return
       }
@@ -346,12 +343,12 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
       // Use gateways topup for card code
       await api.gatewayTopupCard(cardCode, { amount }, { apiKey: kioskKey })
 
-      toast({ title: `Cartão recarregado: +${amount.toFixed(2)}€`, variant: 'success' })
+      toast({ title: t('toppedUp', { amount: `${amount.toFixed(2)}€` }), variant: 'success' })
       // Now attempt payment again
       await checkCardAndPay()
     } catch (e) {
       console.error('Topup failed', e)
-      setCardError('Erro ao recarregar cartão')
+      setCardError(t('topupError'))
     } finally {
       setCheckingCard(false)
     }
@@ -376,11 +373,11 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
       setPin('')
     } catch (e) {
       if (e?.status === 409) {
-        setPinError('Nenhum PIN de administrador configurado para este local.')
+        setPinError(t('pinNone'))
       } else if (e?.status === 429) {
-        setPinError('Demasiadas tentativas. Aguarde alguns minutos.')
+        setPinError(t('pinTooMany'))
       } else {
-        setPinError('PIN inválido')
+        setPinError(t('pinInvalid'))
       }
       setPin('')
     } finally {
@@ -707,17 +704,17 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
       </div>
       {/* Card pay prompt */}
       {showCardPrompt && (
-        <Modal open={showCardPrompt} onClose={() => setShowCardPrompt(false)} title="Pagar com Cartão">
+        <Modal open={showCardPrompt} onClose={() => setShowCardPrompt(false)} title={t('cardPayTitle')}>
           <div className="flex flex-col gap-4">
-            <label className="text-sm">Código do cartão</label>
-            <input value={cardCode} onChange={(e) => setCardCode(e.target.value)} className="p-3 rounded-lg border" placeholder="Insira o código do cartão" />
-            {checkingCard && <div className="text-sm text-neutral-500">A verificar...</div>}
+            <label className="text-sm">{t('cardCodeLabel')}</label>
+            <input value={cardCode} onChange={(e) => setCardCode(e.target.value)} className="p-3 rounded-lg border" placeholder={t('cardCodePlaceholder')} />
+            {checkingCard && <div className="text-sm text-neutral-500">{t('checking')}</div>}
             {cardError && <div className="text-sm text-red-600 font-semibold">{cardError}</div>}
-            {cardBalance != null && <div className="text-sm text-neutral-600">Saldo do cartão: <span className="font-semibold">{cardBalance.toFixed(2)}€</span></div>}
+            {cardBalance != null && <div className="text-sm text-neutral-600">{t('cardBalance')}: <span className="font-semibold">{cardBalance.toFixed(2)}€</span></div>}
 
             {cardNeedsTopup ? (
               <div className="flex flex-col gap-2">
-                <label className="text-sm">Recarregar cartão</label>
+                <label className="text-sm">{t('topupLabel')}</label>
                 <div className="flex gap-2">
                   {[5,10,20].map((a)=> (
                     <button key={a} onClick={() => setTopupAmount(a)} className={`py-2 px-3 rounded-lg ${topupAmount===a?'bg-teal-600 text-white':'bg-neutral-100'}`}>{a}€</button>
@@ -725,14 +722,14 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
                 </div>
                 <input value={topupAmount} onChange={(e)=>setTopupAmount(Number(e.target.value))} className="p-3 rounded-lg border" />
                 <div className="flex gap-2">
-                  <button onClick={() => setShowCardPrompt(false)} className="flex-1 py-2 rounded-lg border">Cancelar</button>
-                  <button onClick={topupCardAndRetry} disabled={checkingCard} className={`flex-1 py-2 rounded-lg ${checkingCard ? 'bg-neutral-100 text-neutral-500' : 'bg-teal-600 text-white'}`}>Recarregar e pagar</button>
+                  <button onClick={() => setShowCardPrompt(false)} className="flex-1 py-2 rounded-lg border">{t('cancel')}</button>
+                  <button onClick={topupCardAndRetry} disabled={checkingCard} className={`flex-1 py-2 rounded-lg ${checkingCard ? 'bg-neutral-100 text-neutral-500' : 'bg-teal-600 text-white'}`}>{t('topupAndPay')}</button>
                 </div>
               </div>
             ) : (
               <div className="flex gap-2">
-                <button onClick={() => setShowCardPrompt(false)} className="flex-1 py-2 rounded-lg border">Cancelar</button>
-                <button onClick={checkCardAndPay} disabled={checkingCard} className={`flex-1 py-2 rounded-lg ${checkingCard ? 'bg-neutral-100 text-neutral-500' : 'bg-teal-600 text-white'}`}>Confirmar pagamento</button>
+                <button onClick={() => setShowCardPrompt(false)} className="flex-1 py-2 rounded-lg border">{t('cancel')}</button>
+                <button onClick={checkCardAndPay} disabled={checkingCard} className={`flex-1 py-2 rounded-lg ${checkingCard ? 'bg-neutral-100 text-neutral-500' : 'bg-teal-600 text-white'}`}>{t('confirmPay')}</button>
               </div>
             )}
           </div>
@@ -743,11 +740,10 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
     {/* cash insert modal */}
     {/* Admin PIN gate */}
     {showPinPrompt && (
-      <Modal open={showPinPrompt} onClose={() => { setShowPinPrompt(false); setPin(''); setPinError(null) }} title="Pagamento manual">
+      <Modal open={showPinPrompt} onClose={() => { setShowPinPrompt(false); setPin(''); setPinError(null) }} title={t('pinTitle')}>
         <div className="space-y-4">
           <p className="text-sm text-neutral-600">
-            Introduza o PIN de administrador para desbloquear o pagamento manual.
-            Utilize apenas quando o aceitador de moedas ou o leitor de cartões estiver avariado.
+            {t('pinText')}
           </p>
           <input
             type="password"
@@ -756,18 +752,18 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
             value={pin}
             onChange={(e) => setPin(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && pin && !checkingPin) verifyPinAndUnlock() }}
-            placeholder="PIN"
+            placeholder={t('pinPlaceholder')}
             className="w-full px-4 py-3 rounded-lg border border-neutral-300 text-center text-2xl tracking-widest"
           />
           {pinError && <div className="text-sm text-red-600 font-semibold">{pinError}</div>}
           <div className="flex gap-2">
-            <button onClick={() => { setShowPinPrompt(false); setPin(''); setPinError(null) }} className="flex-1 py-2 rounded-lg border">Cancelar</button>
+            <button onClick={() => { setShowPinPrompt(false); setPin(''); setPinError(null) }} className="flex-1 py-2 rounded-lg border">{t('cancel')}</button>
             <button
               onClick={verifyPinAndUnlock}
               disabled={checkingPin || !pin}
               className={`flex-1 py-2 rounded-lg ${checkingPin || !pin ? 'bg-neutral-100 text-neutral-500' : 'bg-teal-600 text-white'}`}
             >
-              {checkingPin ? 'A verificar…' : 'Desbloquear'}
+              {checkingPin ? t('pinChecking') : t('pinUnlock')}
             </button>
           </div>
         </div>
@@ -776,13 +772,13 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
 
     {/* Unlocked: choose a manual payment method */}
     {manualUnlocked && !showCash && !showCardPrompt && (
-      <Modal open={manualUnlocked} onClose={closeManual} title="Pagamento manual">
+      <Modal open={manualUnlocked} onClose={closeManual} title={t('pinTitle')}>
         <div className="space-y-4">
-          <div className="text-sm text-neutral-600">Total a cobrar</div>
+          <div className="text-sm text-neutral-600">{t('totalCharge')}</div>
           <div className="text-3xl font-bold text-teal-600">{total.toFixed(2)}€</div>
           <div className="grid grid-cols-2 gap-3">
-            <button onClick={openCashModal} className="py-4 rounded-lg bg-teal-600 text-white font-semibold">Dinheiro</button>
-            <button onClick={handleCardPay} className="py-4 rounded-lg bg-neutral-800 text-white font-semibold">Cartão</button>
+            <button onClick={openCashModal} className="py-4 rounded-lg bg-teal-600 text-white font-semibold">{t('cash')}</button>
+            <button onClick={handleCardPay} className="py-4 rounded-lg bg-neutral-800 text-white font-semibold">{t('card')}</button>
           </div>
           <button onClick={closeManual} className="w-full py-2 rounded-lg border">Cancelar</button>
         </div>

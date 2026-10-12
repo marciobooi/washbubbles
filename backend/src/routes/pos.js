@@ -358,7 +358,7 @@ router.post('/card/purchase', requireKiosk, async (req, res) => {
 
   const parsedInserted = parseAmount(inserted)
   if (!parsedInserted.ok) return res.status(400).json({ error: parsedInserted.error })
-  const insertedAmount = parsedInserted.value
+  let insertedAmount = parsedInserted.value
 
   try {
     const Card = (await import('../models/card.js')).default
@@ -391,6 +391,16 @@ router.post('/card/purchase', requireKiosk, async (req, res) => {
 
     if (!(price > 0)) {
       return res.status(409).json({ error: 'Card purchase price not configured' })
+    }
+    // On the shop PC the kiosk's "inserted" figure is not trusted: it came from a button on the screen, so
+    // anybody could press 20 and get a card for nothing. The payment is the cash really in the session
+    // (what the coin and bill acceptors credited); whatever is above the price comes back as change.
+    if (coinMachine.running) {
+      const cash = roundMoney(coinMachine.client?.getState?.().balance || 0)
+      if (cash + 0.005 < price) {
+        return res.status(409).json({ error: `Insufficient cash inserted. Card costs €${price.toFixed(2)}`, price, inserted: cash })
+      }
+      insertedAmount = cash
     }
     if (insertedAmount + 0.005 < price) {
       return res.status(400).json({ error: `Insufficient payment. Card costs €${price.toFixed(2)}`, price })

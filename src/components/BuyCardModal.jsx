@@ -7,6 +7,8 @@ import { CreditCard, User, Mail, Phone, FileText, Banknote, CheckCircle2 } from 
 import { toast } from './ui/Toast'
 import api from '@/services/api'
 import * as localApi from '@/services/local-api'
+import { useTranslation } from 'react-i18next'
+import { useCart } from '@/context/CartContext'
 
 const STEPS = {
   FORM: 'form',
@@ -17,6 +19,9 @@ const STEPS = {
 }
 
 export default function BuyCardModal({ open, onClose }) {
+  const { t, i18n } = useTranslation('buycard')
+  const { credit } = useCart() // the cash really inserted (the shop's session), not a button
+  const eur = (n) => `${Number(n).toFixed(2).replace('.', i18n.language === 'en' ? '.' : ',')}€`
   const [step, setStep] = useState(STEPS.FORM)
   const [loading, setLoading] = useState(false)
   
@@ -120,7 +125,7 @@ export default function BuyCardModal({ open, onClose }) {
   async function handlePayment(amount) {
     if (amount < cardPrice) {
       toast({ 
-        title: `Valor insuficiente. Cartão custa €${cardPrice.toFixed(2)}`, 
+        title: t('insufficient', { price: eur(cardPrice) }), 
         variant: 'destructive' 
       })
       return
@@ -153,13 +158,13 @@ export default function BuyCardModal({ open, onClose }) {
           setPurchasedLocally(true)
           if (local.change > 0) {
             toast({
-              title: `Troco: €${local.change.toFixed(2)}`,
-              description: local.changeDispensed ? 'Recolha o seu troco' : 'Dispensador de troco não disponível',
+              title: t('changeTitle', { amount: eur(local.change) }),
+              description: local.changeDispensed ? t('collectChange') : t('noChangeDispenser'),
               variant: local.changeDispensed ? 'success' : 'warning',
             })
           }
           setStep(STEPS.INSERT_CARD)
-          toast({ title: 'Cartão dispensado!', description: local.message, variant: 'success' })
+          toast({ title: t('dispensed'), description: local.message, variant: 'success' })
           return
         }
       }
@@ -195,14 +200,14 @@ export default function BuyCardModal({ open, onClose }) {
         if (response.change > 0) {
           if (response.changeDispensed) {
             toast({ 
-              title: `Troco: €${response.change.toFixed(2)}`, 
-              description: 'Recolha o seu troco',
+              title: t('changeTitle', { amount: eur(response.change) }), 
+              description: t('collectChange'),
               variant: 'success' 
             })
           } else {
             toast({ 
-              title: `Troco: €${response.change.toFixed(2)}`, 
-              description: 'Dispensador de troco não disponível',
+              title: t('changeTitle', { amount: eur(response.change) }), 
+              description: t('noChangeDispenser'),
               variant: 'warning' 
             })
           }
@@ -212,18 +217,18 @@ export default function BuyCardModal({ open, onClose }) {
         setStep(STEPS.INSERT_CARD)
         
         toast({ 
-          title: 'Cartão dispensado!', 
+          title: t('dispensed'), 
           description: response.message,
           variant: 'success' 
         })
       } else {
-        throw new Error(response.error || 'Falha na compra')
+        throw new Error(response.error || t('purchaseFailed'))
       }
     } catch (e) {
       console.error('Card purchase failed:', e)
       toast({ 
-        title: 'Erro na compra do cartão', 
-        description: e.message || 'Tente novamente',
+        title: t('purchaseError'), 
+        description: e.message || t('tryAgain'),
         variant: 'destructive' 
       })
       setStep(STEPS.PAYMENT)
@@ -264,8 +269,8 @@ export default function BuyCardModal({ open, onClose }) {
       setStep(STEPS.COMPLETE)
 
       toast({ 
-        title: 'Cartão ativado!', 
-        description: `Saldo: €${initialCredit.toFixed(2)}`,
+        title: t('activatedToast'), 
+        description: t('balanceLine', { amount: eur(initialCredit) }),
         variant: 'success' 
       })
 
@@ -280,11 +285,11 @@ export default function BuyCardModal({ open, onClose }) {
       // the reader, and tell them the truth.
       setWriteError(
         e?.body?.message || e?.message ||
-        'Não foi possível gravar o cartão. Verifique que está bem inserido e tente novamente.'
+        t('writeFallback')
       )
       toast({
-        title: 'Falha ao gravar o cartão',
-        description: 'O cartão ainda não está activo. Tente novamente ou contacte o balcão.',
+        title: t('writeFail'),
+        description: t('writeFailDesc'),
         variant: 'destructive',
       })
     } finally {
@@ -353,27 +358,27 @@ export default function BuyCardModal({ open, onClose }) {
           <div className="space-y-6">
             <div className="text-center mb-6">
               <CreditCard className="h-16 w-16 mx-auto mb-4 text-primary" />
-              <h3 className="text-xl font-semibold mb-2">Comprar Novo Cartão</h3>
+              <h3 className="text-xl font-semibold mb-2">{t('title')}</h3>
               <p className="text-muted-foreground">
-                Preço: <span className="font-bold text-lg">€{cardPrice.toFixed(2)}</span>
+                {t('price')}: <span className="font-bold text-lg">{eur(cardPrice)}</span>
                 {' • '}
-                Crédito inicial: <span className="font-bold text-lg">€{initialCredit.toFixed(2)}</span>
+                {t('initialCredit')}: <span className="font-bold text-lg">{eur(initialCredit)}</span>
               </p>
             </div>
 
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Preencha os seus dados (opcional):
+                {t('fillData')}
               </p>
 
               <div className="space-y-2">
-                <Label htmlFor="name">Nome</Label>
+                <Label htmlFor="name">{t('name')}</Label>
                 <div className="flex items-center gap-2">
                   <User className="h-4 w-4 text-muted-foreground" />
                   <Input
                     ref={nameRef}
                     id="name"
-                    placeholder="Nome completo (opcional)"
+                    placeholder={t('namePlaceholder')}
                     value={formData.name}
                     onChange={(e) => handleInputChange('name', e.target.value)}
                     onFocus={handleFieldFocus}
@@ -384,14 +389,14 @@ export default function BuyCardModal({ open, onClose }) {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">{t('email')}</Label>
                 <div className="flex items-center gap-2">
                   <Mail className="h-4 w-4 text-muted-foreground" />
                   <Input
                     ref={emailRef}
                     id="email"
                     type="email"
-                    placeholder="email@exemplo.com (opcional)"
+                    placeholder={t('emailPlaceholder')}
                     value={formData.email}
                     onChange={(e) => handleInputChange('email', e.target.value)}
                     onFocus={handleFieldFocus}
@@ -402,14 +407,14 @@ export default function BuyCardModal({ open, onClose }) {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="phone">Telefone</Label>
+                <Label htmlFor="phone">{t('phone')}</Label>
                 <div className="flex items-center gap-2">
                   <Phone className="h-4 w-4 text-muted-foreground" />
                   <Input
                     ref={phoneRef}
                     id="phone"
                     type="tel"
-                    placeholder="+351 912 345 678 (opcional)"
+                    placeholder={t('phonePlaceholder')}
                     value={formData.phone}
                     onChange={(e) => handleInputChange('phone', e.target.value)}
                     onFocus={handleFieldFocus}
@@ -420,13 +425,13 @@ export default function BuyCardModal({ open, onClose }) {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="contribuinte">NIF / Contribuinte</Label>
+                <Label htmlFor="contribuinte">{t('nif')}</Label>
                 <div className="flex items-center gap-2">
                   <FileText className="h-4 w-4 text-muted-foreground" />
                   <Input
                     ref={contribuinteRef}
                     id="contribuinte"
-                    placeholder="123456789 (opcional)"
+                    placeholder={t('nifPlaceholder')}
                     value={formData.contribuinte}
                     onChange={(e) => handleInputChange('contribuinte', e.target.value)}
                     onFocus={handleFieldFocus}
@@ -445,7 +450,7 @@ export default function BuyCardModal({ open, onClose }) {
                   onChange={(e) => handleInputChange('marketingOptIn', e.target.checked)}
                 />
                 <Label htmlFor="marketingOptIn" className="font-normal text-sm">
-                  Aceito receber promoções e novidades por email
+                  {t('marketing')}
                 </Label>
               </div>
             </div>
@@ -461,7 +466,7 @@ export default function BuyCardModal({ open, onClose }) {
                 }} 
                 className="flex-1"
               >
-                Saltar
+                {t('skip')}
               </Button>
               <Button 
                 onClick={() => {
@@ -472,43 +477,50 @@ export default function BuyCardModal({ open, onClose }) {
                 }} 
                 className="flex-1"
               >
-                Continuar
+                {t('continue')}
               </Button>
             </div>
           </div>
         )
 
-      case STEPS.PAYMENT:
+      case STEPS.PAYMENT: {
+        const paid = Math.round((Number(credit) || 0) * 100) / 100
+        const enough = paid + 0.005 >= cardPrice
+        const missing = Math.max(0, Math.round((cardPrice - paid) * 100) / 100)
+        const percent = cardPrice > 0 ? Math.min(100, Math.round((paid / cardPrice) * 100)) : 0
         return (
           <div className="space-y-6">
-            <div className="text-center mb-6">
+            <div className="text-center mb-2">
               <Banknote className="h-16 w-16 mx-auto mb-4 text-green-600" />
-              <h3 className="text-xl font-semibold mb-2">Pagamento</h3>
-              <p className="text-2xl font-bold text-primary">
-                €{cardPrice.toFixed(2)}
-              </p>
+              <h3 className="text-xl font-semibold mb-2">{t('payTitle')}</h3>
+              <p className="text-2xl font-bold text-primary">{eur(cardPrice)}</p>
             </div>
 
-            <div className="space-y-3">
-              <p className="text-center text-muted-foreground mb-4">
-                Insira dinheiro para pagar o cartão
-              </p>
+            <div className="space-y-4">
+              <p className="text-center text-muted-foreground">{t('insertCash')}</p>
 
-              <div className="grid grid-cols-2 gap-3">
-                {[5, 10, 20, 50].map(amount => (
-                  <Button
-                    key={amount}
-                    size="lg"
-                    variant={amount === cardPrice ? 'default' : 'outline'}
-                    onClick={() => handlePayment(amount)}
-                    disabled={loading}
-                  >
-                    €{amount}
-                  </Button>
-                ))}
+              {/* The cash really inserted (the shop's own session): paying is only possible with money in */}
+              <div className="rounded-xl border-2 border-emerald-200 bg-white p-4 space-y-3">
+                <div className="grid grid-cols-2 gap-3 divide-x divide-slate-100">
+                  <div className="pr-2">
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">{t('inserted')}</span>
+                    <span className="text-3xl font-bold tabular-nums text-slate-800">{eur(paid)}</span>
+                  </div>
+                  <div className="pl-3">
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">{enough && paid > cardPrice ? t('change') : t('missing')}</span>
+                    <span className={`text-3xl font-bold tabular-nums ${enough ? 'text-emerald-600' : 'text-slate-800'}`}>{enough ? eur(Math.max(0, paid - cardPrice)) : eur(missing)}</span>
+                  </div>
+                </div>
+                <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200/80">
+                  <div className="h-full bg-emerald-500 rounded-full transition-all duration-300" style={{ width: `${percent}%` }} />
+                </div>
               </div>
 
-              <div className="pt-4">
+              <Button size="lg" className="w-full" onClick={() => handlePayment(paid)} disabled={loading || !enough}>
+                {t('pay')} · {eur(cardPrice)}
+              </Button>
+
+              <div className="pt-2">
                 <Button
                   variant="outline"
                   onClick={() => {
@@ -520,19 +532,20 @@ export default function BuyCardModal({ open, onClose }) {
                   className="w-full"
                   disabled={loading}
                 >
-                  Voltar
+                  {t('back')}
                 </Button>
               </div>
             </div>
           </div>
         )
+      }
 
       case STEPS.DISPENSING:
         return (
           <div className="text-center py-8">
             <div className="animate-spin h-16 w-16 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
-            <h3 className="text-xl font-semibold mb-2">A dispensar cartão...</h3>
-            <p className="text-muted-foreground">Por favor aguarde</p>
+            <h3 className="text-xl font-semibold mb-2">{t('dispensing')}</h3>
+            <p className="text-muted-foreground">{t('pleaseWait')}</p>
           </div>
         )
 
@@ -541,9 +554,9 @@ export default function BuyCardModal({ open, onClose }) {
           <div className="space-y-6">
             <div className="text-center mb-6">
               <CreditCard className="h-16 w-16 mx-auto mb-4 text-primary animate-pulse" />
-              <h3 className="text-xl font-semibold mb-2">Insira o Cartão</h3>
+              <h3 className="text-xl font-semibold mb-2">{t('insertCardTitle')}</h3>
               <p className="text-red-500 animate-pulse animate-transform">
-                Por favor insira o cartão no leitor para ativar
+                {t('insertCardHint')}
               </p>
             </div>
 
@@ -551,7 +564,7 @@ export default function BuyCardModal({ open, onClose }) {
               <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
                 <p className="text-sm text-red-700 font-semibold">{writeError}</p>
                 <p className="text-xs text-red-600 mt-1">
-                  O cartão ainda não está activo. O seu pagamento está registado.
+                  {t('notActive')}
                 </p>
               </div>
             )}
@@ -559,14 +572,14 @@ export default function BuyCardModal({ open, onClose }) {
             {purchasedCard && (
               <div className="bg-muted p-4 rounded-lg space-y-2">
                 <p className="text-sm">
-                  <span className="font-semibold">Código:</span> {purchasedCard.code}
+                  <span className="font-semibold">{t('code')}:</span> {purchasedCard.code}
                 </p>
                 <p className="text-sm">
-                  <span className="font-semibold">Saldo:</span> €{initialCredit.toFixed(2)}
+                  <span className="font-semibold">{t('balance')}:</span> {eur(initialCredit)}
                 </p>
                 {changeAmount > 0 && (
                   <p className="text-sm text-green-600 font-semibold">
-                    Troco: €{changeAmount.toFixed(2)}
+                    {t('change')}: {eur(changeAmount)}
                   </p>
                 )}
               </div>
@@ -577,7 +590,7 @@ export default function BuyCardModal({ open, onClose }) {
               className="w-full"
               disabled={loading}
             >
-              {loading ? 'A ativar...' : 'Cartão Inserido'}
+              {loading ? t('activating') : t('cardInserted')}
             </Button>
           </div>
         )
@@ -586,24 +599,24 @@ export default function BuyCardModal({ open, onClose }) {
         return (
           <div className="text-center py-8">
             <CheckCircle2 className="h-20 w-20 mx-auto mb-4 text-green-600" />
-            <h3 className="text-2xl font-semibold mb-2">Cartão Ativado!</h3>
+            <h3 className="text-2xl font-semibold mb-2">{t('activatedTitle')}</h3>
             <p className="text-muted-foreground mb-4">
-              O seu cartão está pronto a usar
+              {t('ready')}
             </p>
             
             {purchasedCard && (
               <div className="bg-green-50 p-4 rounded-lg mb-4">
                 <p className="text-lg font-bold text-green-800">
-                  Saldo: €{initialCredit.toFixed(2)}
+                  {t('balance')}: {eur(initialCredit)}
                 </p>
                 <p className="text-sm text-green-700">
-                  Código: {purchasedCard.code}
+                  {t('code')}: {purchasedCard.code}
                 </p>
               </div>
             )}
 
             <Button onClick={handleClose} className="mt-4">
-              Concluir
+              {t('done')}
             </Button>
           </div>
         )

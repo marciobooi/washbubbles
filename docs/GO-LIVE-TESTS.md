@@ -258,6 +258,7 @@ Steps (on the PC, PowerShell, in `C:\washbubbles`):
 - [ ] Lavar 1 and Lavar 6: set interface + port in the admin first (both are empty on Hetzner); check Lavar 1 polarity
 
 ### 13.4 Cards
+- [ ] Buy a card WITHOUT inserting money: the Pay button stays disabled; pressing nothing charges nothing
 - [ ] **Buy a card** (cost 10, credit 5): the coins inserted are consumed (no leftover), the card is dispensed, presented at the reader it is written automatically and becomes active, 5.00 on screen; the card keeps the chip's own id
 - [ ] The same card read again: 5.00, name/email/phone present in the central admin, no second empty card
 - [ ] **Recharge** 10 in cash with the card in the reader: balance +10 on screen, chip rewritten, Hetzner updated, one sale with the card code
@@ -321,4 +322,5 @@ Owner finding: the bill acceptor, coin acceptor and the other peripherals connec
 - It is translated (pt / en / fr / de, `src/locales/*/cart.json`, namespace `cart`), plural-aware ("1 ciclo", "2 ciclos"). Verified by switching languages in a local screen pointed at the live server.
 - The kiosk machine list (`GET /pos/machines`) now also returns `number`, `tImp`, `outOfService`, `serviceStatus`; the kiosk promo rule is now the server's rule (it used Portuguese weekday names, so a promo price never showed). Test: `backend/test/kioskDataPath.test.js`.
 - Local view of the kiosk without the PC: `npx vite` with `DEV_API_TARGET=https://freshbubbles.pt` (already in `.claude/launch.json`) and the kiosk key in the git-ignored `.env.local`. READ ONLY: do not press pay on the live server.
-- STILL hardcoded Portuguese on the kiosk (customer-facing), to translate next: BuyCardModal (card purchase), the card/PIN prompts inside CartModal, the credit/refund toasts and the header credit badge (CartContext / App.jsx), Pos.jsx home cards, MachineCard status labels use `pos.json` already.
+- 2026-10-12 later: translated pt/en/fr/de (namespaces `cart` and `buycard`): the payment window, the card and PIN prompts, the hardware toasts (rejected coin/note, fault, no change), credit / refund toasts, the header credit badge with its countdown, the payment result messages and the whole card-purchase screen. Still Portuguese only: admin pages (staff), aria-labels used for screen readers, the WiFi voucher notice and the machine-started notice (`showMachineNotice`).
+- The card purchase now charges the cash REALLY in the session (the shop PC ignores the "inserted" figure the screen sent: a pressed 20 button used to be enough for a free card). The purchase screen shows the cash inserted with a Pay button that only enables when it covers the price. Test: `backend/test/cardPurchaseCash.test.js`.

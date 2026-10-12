@@ -1,5 +1,6 @@
 import { Link, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 import Pos from './pages/Pos'
 import api from './services/api'
 import * as localApi from './services/local-api'
@@ -90,6 +91,7 @@ export default function App() {
 
 // "devolução em 1:45": ticks once a second, only while there is credit waiting to be paid back.
 function RefundCountdown({ at }) {
+  const { t } = useTranslation('cart')
   const [now, setNow] = React.useState(() => Date.now())
   React.useEffect(() => {
     if (!at) return undefined
@@ -98,11 +100,13 @@ function RefundCountdown({ at }) {
   }, [at])
   if (!at) return null
   const s = Math.max(0, Math.ceil((at - now) / 1000))
-  return <span className="ml-2 text-sm font-medium text-white/90">· devolução em {Math.floor(s / 60)}:{String(s % 60).padStart(2, '0')}</span>
+  return <span className="ml-2 text-sm font-medium text-white/90">· {t('refundIn', { time: `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` })}</span>
 }
 
 function AppInner() {
   const { cart, clearCart, credit, resetCredit, refundAt } = useCart()
+  const { t } = useTranslation('cart')
+  const tr = (key, opts) => t(key, opts)
   const { processPayment } = usePayment()
   const cartCount = cart.length
   const [cartOpen, setCartOpen] = React.useState(false)
@@ -303,7 +307,7 @@ function AppInner() {
             const session = await localApi.getSession()
             if (session && session.credits >= price) {
               await localApi.processSale(only._id || only.id, price, 'cash', null, batchId, null)
-              toast({ title: `Pagamento efetuado (Dinheiro)`, variant: 'success' })
+              toast({ title: tr('paidCash'), variant: 'success' })
               try { if (only.name) showMachineNotice([only.name]) } catch { /* the notice is cosmetic; the payment already succeeded */ }
               tryShowWifiVoucher([only], batchId, kioskKey)
               setReceiptItems([only])
@@ -313,8 +317,8 @@ function AppInner() {
               return
             }
           } catch (e) {
-            const msg = e?.message || 'Erro no pagamento com dinheiro'
-            toast({ title: 'Pagamento falhou', description: msg, variant: 'destructive' })
+            const msg = e?.message || tr('payErrorCash')
+            toast({ title: tr('payFailed'), description: msg, variant: 'destructive' })
             return
           }
         }
@@ -328,7 +332,7 @@ function AppInner() {
             const session = await localApi.getSession()
             if (session && session.credits >= total) {
               await localApi.processCart(items, 'cash', null, batchId)
-              toast({ title: `Pagamento efetuado (Dinheiro)`, variant: 'success' })
+              toast({ title: tr('paidCash'), variant: 'success' })
               try { if (machineItems.length) showMachineNotice(machineItems.map(i => i.name).filter(Boolean)) } catch { /* the notice is cosmetic; the payment already succeeded */ }
               tryShowWifiVoucher(machineItems, batchId, kioskKey)
               setReceiptItems(items)
@@ -338,8 +342,8 @@ function AppInner() {
               return
             }
           } catch (e) {
-            const msg = e?.message || 'Erro no pagamento com dinheiro'
-            toast({ title: 'Pagamento falhou', description: msg, variant: 'destructive' })
+            const msg = e?.message || tr('payErrorCash')
+            toast({ title: tr('payFailed'), description: msg, variant: 'destructive' })
             return
           }
         }
@@ -348,8 +352,8 @@ function AppInner() {
         const res = await processPayment(items, { method: 'cash', inserted: opts.inserted, couponCode: opts.couponCode })
         if (!res.success) {
           // Forward meaningful errors to the user
-          const msg = res.error?.message || (res.error && res.error.body && res.error.body.error) || 'Erro no pagamento com dinheiro'
-          toast({ title: 'Pagamento falhou', description: msg, variant: 'destructive' })
+          const msg = res.error?.message || (res.error && res.error.body && res.error.body.error) || tr('payErrorCash')
+          toast({ title: tr('payFailed'), description: msg, variant: 'destructive' })
           return
         }
 
@@ -358,12 +362,12 @@ function AppInner() {
         // change out we must say so rather than let the customer walk away short.
         if (res.change > 0 && res.changeDispensed === false) {
           toast({
-            title: 'Troco não entregue',
-            description: `Faltam ${Number(res.change).toFixed(2)}€ de troco. Peça ao balcão — a venda ficou registada.`,
+            title: tr('changeNotDelivered'),
+            description: tr('changeNotDeliveredHint', { amount: `${Number(res.change).toFixed(2)}€` }),
             variant: 'destructive',
           })
         } else {
-          toast({ title: `Pagamento efetuado (Dinheiro)`, variant: 'success' })
+          toast({ title: tr('paidCash'), variant: 'success' })
         }
         // Show machine notification for machines purchased (if any)
         try {
@@ -403,14 +407,14 @@ function AppInner() {
               try { if (only.name) showMachineNotice([only.name]) } catch { /* the notice is cosmetic; the payment already succeeded */ }
               tryShowWifiVoucher(machineItemsOnly, batchId, kioskKey)
               setReceiptItems(machineItemsOnly)
-              toast({ title: `Pagamento efetuado (Cartão)`, variant: 'success' })
+              toast({ title: tr('paidCard'), variant: 'success' })
               clearCart()
               setCartOpen(false)
               return
             }
           } catch (e) {
             const msg = e?.message || 'Erro no pagamento com cartão'
-            toast({ title: 'Erro no pagamento com cartão', description: msg, variant: 'destructive' })
+            toast({ title: tr('payErrorCard'), description: msg, variant: 'destructive' })
             return
           }
         }
@@ -427,14 +431,14 @@ function AppInner() {
               try { if (machineItemsOnly.length) showMachineNotice(machineItemsOnly.map(i => i.name).filter(Boolean)) } catch { /* the notice is cosmetic; the payment already succeeded */ }
               tryShowWifiVoucher(machineItemsOnly, batchId, kioskKey)
               setReceiptItems(items)
-              toast({ title: `Pagamento efetuado (Cartão)`, variant: 'success' })
+              toast({ title: tr('paidCard'), variant: 'success' })
               clearCart()
               setCartOpen(false)
               return
             }
           } catch (e) {
             const msg = e?.message || 'Erro no pagamento com cartão'
-            toast({ title: 'Erro no pagamento com cartão', description: msg, variant: 'destructive' })
+            toast({ title: tr('payErrorCard'), description: msg, variant: 'destructive' })
             return
           }
         }
@@ -456,9 +460,9 @@ function AppInner() {
             const status = res.error?.status || res.error?.response?.status
             const msg = res.error?.message || (res.error && res.error.body && res.error.body.error) || res.error || 'Erro desconhecido'
             if (status === 409) {
-              toast({ title: 'Máquina já em uso', description: String(msg), variant: 'destructive' })
+              toast({ title: tr('machineBusy'), description: String(msg), variant: 'destructive' })
             } else {
-              toast({ title: 'Erro no pagamento com cartão', description: String(msg), variant: 'destructive' })
+              toast({ title: tr('payErrorCard'), description: String(msg), variant: 'destructive' })
             }
             return
           }
@@ -472,7 +476,7 @@ function AppInner() {
           setReceiptBatchId(batchId)
           setReceiptItems(machineItems)
 
-          toast({ title: `Pagamento efetuado (Cartão)`, variant: 'success' })
+          toast({ title: tr('paidCard'), variant: 'success' })
           clearCart()
           setCartOpen(false)
           return
@@ -494,7 +498,7 @@ function AppInner() {
         setReceiptBatchId(batchId)
         setReceiptItems(machineItems)
 
-        toast({ title: `Pagamento efetuado (Cartão)`, variant: 'success' })
+        toast({ title: tr('paidCard'), variant: 'success' })
         clearCart()
         setCartOpen(false)
       } catch (e) {
@@ -502,13 +506,13 @@ function AppInner() {
         const status = e?.status || e?.response?.status || (e?.body && e.body.status)
         const bodyError = (e && e.body && e.body.error) || e?.message || e
         if (status === 409 || String(bodyError).toLowerCase().includes('already in use')) {
-          toast({ title: 'Máquina já em uso', description: String(bodyError), variant: 'destructive' })
+          toast({ title: tr('machineBusy'), description: String(bodyError), variant: 'destructive' })
         } else {
-          toast({ title: 'Erro ao persistir transacções', variant: 'destructive' })
+          toast({ title: tr('persistError'), variant: 'destructive' })
         }
       }
     } catch (e) {
-      toast({ title: 'Erro no pagamento', variant: 'destructive' })
+      toast({ title: tr('payError'), variant: 'destructive' })
       console.error(e)
     }
   }
@@ -544,10 +548,10 @@ function AppInner() {
               {credit > 0 && location.pathname.startsWith('/pos') && (
                 <span
                   className="inline-flex items-center gap-1 rounded-full bg-teal-600 px-4 py-2 text-lg font-bold text-white shadow"
-                  title="Dinheiro inserido"
+                  title={t('creditTitle')}
                   aria-live="polite"
                 >
-                  Crédito: {credit.toFixed(2)}€
+                  {t('creditBadge', { amount: `${credit.toFixed(2)}€` })}
                   <RefundCountdown at={refundAt} />
                 </span>
               )}
