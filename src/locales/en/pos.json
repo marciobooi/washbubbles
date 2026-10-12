@@ -2,19 +2,23 @@
   "cards": {
     "wash": {
       "title": "Wash",
-      "text": "Wash laundry"
+      "text": "Wash laundry",
+      "sub": "Choose the machine and cycle"
     },
     "dry": {
       "title": "Dry",
-      "text": "Dry laundry"
+      "text": "Dry laundry",
+      "sub": "Quick, gentle drying"
     },
     "card": {
       "title": "My Card",
-      "text": "My Card"
+      "text": "My Card",
+      "sub": "Check balance & top up"
     },
     "buyCard": {
       "title": "Buy Card",
-      "text": "Buy a card"
+      "text": "Buy a card",
+      "sub": "New loyalty card"
     }
   },
   "recharge": {
@@ -63,5 +67,9 @@
     "recharged": "Recharged",
     "spent_wash": "Spent - Wash",
     "spent_dry": "Spent - Dry"
+  },
+  "home": {
+    "ready": "Ready to use",
+    "touch": "Touch any option to start"
   }
 }

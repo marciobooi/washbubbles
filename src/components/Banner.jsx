@@ -82,7 +82,7 @@ export default function Banner() {
 
   return (
     <div
-      className="relative w-full h-[20rem] overflow-hidden bg-gradient-to-r from-teal-500 to-teal-600 shadow-xl touch-pan-y select-none"
+      className="relative w-full h-[18rem] overflow-hidden rounded-3xl border border-white/20 bg-gradient-to-r from-teal-600 to-emerald-700 shadow-lg shadow-teal-950/10 touch-pan-y select-none"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -106,12 +106,12 @@ export default function Banner() {
           }}
         >
           {/* Overlay for darkening the image only */}
-          <div className="absolute inset-0 z-0" style={{background: 'linear-gradient(to right, rgba(13,148,136,0.7), rgba(20,184,166,0.6))', filter: 'brightness(0.7)'}} />
-          <div className="relative z-10 flex flex-col items-start justify-end h-full px-8 lg:px-16 w-full max-w-5xl mx-auto pb-10">
-            <h2 className="text-4xl lg:text-5xl font-bold mb-2 text-white drop-shadow-lg">
+          <div className="absolute inset-0 z-0" style={{ background: 'linear-gradient(135deg, rgba(8,70,60,0.88) 0%, rgba(13,148,136,0.74) 50%, rgba(4,120,87,0.82) 100%)' }} />
+          <div className="relative z-10 flex flex-col items-center justify-center text-center h-full px-12 w-full pb-6">
+            <h2 className="text-6xl font-extrabold tracking-tight mb-4 text-white drop-shadow-lg">
               {banner.title}
             </h2>
-            <p className="text-xl lg:text-2xl text-white opacity-90 drop-shadow-md">
+            <p className="text-3xl font-medium text-teal-50 opacity-95 drop-shadow-md max-w-3xl">
               {banner.text}
             </p>
           </div>
@@ -121,7 +121,7 @@ export default function Banner() {
       {/* Dots Indicator. Swipe and autoplay replace the arrow buttons that used
           to sit here — on a touchscreen kiosk they were redundant with a swipe
           gesture, and could still register a tap through an open modal. */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-20">
+      <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-3 z-20">
         {banners.map((_, index) => (
           <button
             key={index}

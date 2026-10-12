@@ -24,10 +24,10 @@ export default function Pos() {
   const { t } = useTranslation('pos')
 
   const cards = [
-    { id: 'wash', title: t('cards.wash.title'), text: t('cards.wash.text'), frames: [washL1, washL2, washL3, washL4] },
-    { id: 'dry', title: t('cards.dry.title'), text: t('cards.dry.text'), frames: [dryS1, dryS2, dryS3, dryS4] },
-    { id: 'card', title: t('cards.card.title'), text: t('cards.card.text'), frames: [cardIcon] },
-    { id: 'buyCard', title: t('cards.buyCard.title'), text: t('cards.buyCard.text') , frames: [cardGroupIcon] }
+    { id: 'wash', title: t('cards.wash.title'), text: t('cards.wash.text'), sub: t('cards.wash.sub'), frames: [washL1, washL2, washL3, washL4] },
+    { id: 'dry', title: t('cards.dry.title'), text: t('cards.dry.text'), sub: t('cards.dry.sub'), frames: [dryS1, dryS2, dryS3, dryS4] },
+    { id: 'card', title: t('cards.card.title'), text: t('cards.card.text'), sub: t('cards.card.sub'), frames: [cardIcon] },
+    { id: 'buyCard', title: t('cards.buyCard.title'), text: t('cards.buyCard.text'), sub: t('cards.buyCard.sub'), frames: [cardGroupIcon] }
   ]
 
   // Card component moved to src/components/Card.jsx
@@ -126,16 +126,16 @@ export default function Pos() {
   return (
     <>
       {/* Banner Carousel */}
-      <div className="mb-8">
+      <div className="px-10 pt-8">
         <Banner />
       </div>
 <div className='flex-1 container mx-auto p-4'>
       <div className="relative min-h-[calc(100vh-35rem)] flex flex-col z-10">
         {/* Cards Grid */}
         <div className="grow flex items-center justify-center px-6 pb-32">
-          <div className="w-full max-w-5xl grid grid-cols-2 gap-10">
+          <div className="w-full max-w-[920px] grid grid-cols-2 gap-8">
             {cards.map((c) => (
-              <div key={c.id} className="aspect-square transition-all duration-300 hover:-translate-y-2">
+              <div key={c.id} className="min-h-[520px]">
                 <Card c={c} onClick={(id) => {
                   if (c.id === 'wash' || c.id === 'dry') {
                     navigate(`/pos/machines?type=${c.id}`)
@@ -156,8 +156,12 @@ export default function Pos() {
         <CardModal open={cardOpen} onClose={closeCard} transactions={transactions} balance={Number(currentCard?.balance) || 0} card={currentCard} />
 
         
-        <div className="fixed bottom-0 left-0 right-0 pointer-events-none z-0">
-          <Wave height="18vh" className="opacity-90 text-primary-500" />
+        <div className="fixed bottom-0 left-0 right-0 z-10 bg-white/80 backdrop-blur-md border-t border-emerald-100/80 py-5 px-10 flex items-center justify-between text-xl font-medium text-slate-600">
+          <span className="flex items-center gap-3">
+            <span className="w-3.5 h-3.5 rounded-full bg-emerald-500 ring-4 ring-emerald-200" />
+            <span className="font-bold text-slate-800">{t('home.ready')}</span>
+          </span>
+          <span className="text-slate-500">{t('home.touch')}</span>
         </div>
       </div>
       </div>

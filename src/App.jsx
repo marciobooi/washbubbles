@@ -109,6 +109,8 @@ function AppInner() {
   const tr = (key, opts) => t(key, opts)
   const { processPayment } = usePayment()
   const cartCount = cart.length
+  // What the basket is worth in cash (the card price is lower; the payment window shows both options)
+  const cartTotalLabel = `${cart.reduce((s, i) => s + Number(i.cashPrice ?? i.price ?? 0) * (i.type === 'dry' ? Number(i.quantity) || 1 : 1), 0).toFixed(2).replace('.', ',')} €`
   const [cartOpen, setCartOpen] = React.useState(false)
   const [helpOpen, setHelpOpen] = React.useState(false)
   // Screens (machine list) can ask for the same tutorial the ? button opens
@@ -526,25 +528,24 @@ function AppInner() {
   return (
     <div className="min-h-screen flex flex-col bg-linear-to-br from-primary-50 via-primary-100 to-primary-200">
       {!location.pathname.startsWith('/admin') && (
-        <header className="p-4 border-b border-primary-100 bg-white/70 backdrop-blur">
-          <div className="container mx-auto flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Link to="/" className="inline-flex items-center gap-2 p-3 rounded-lg hover:bg-white/60 focus:outline-none" title="Home">
-                {branding.logo ? (
-                  <img src={branding.logo} alt={branding.companyName || 'Company'} className="h-12 w-12 object-contain rounded-md" />
-                ) : (
-                  <Home className="h-9 w-9 text-primary-800" />
-                )}
-                <span className="text-3xl font-semibold text-primary-800">{branding.companyName || 'Washstore'}</span>
-              </Link>
-            </div>
-            <div className="flex items-center gap-3">
-         
-
-
+        <header className="w-full bg-white/95 backdrop-blur-md border-b border-emerald-100 shadow-sm sticky top-0 z-30 px-10 py-4">
+          <div className="flex items-center justify-between">
+            <Link to="/" className="flex items-center gap-4 focus:outline-none" title="Home">
+              {branding.logo ? (
+                <div className="w-16 h-16 rounded-2xl bg-white border border-emerald-100 shadow-md flex items-center justify-center overflow-hidden">
+                  <img src={branding.logo} alt={branding.companyName || 'Company'} className="w-full h-full object-contain p-1" />
+                </div>
+              ) : (
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 text-white shadow-md flex items-center justify-center">
+                  <Home className="h-9 w-9" />
+                </div>
+              )}
+              <span className="text-4xl font-black tracking-tight text-slate-800">{branding.companyName || 'Washstore'}</span>
+            </Link>
+            <div className="flex items-center gap-4">
               {showHome && (
-                <Link to="/pos" className="inline-flex items-center p-3 rounded-lg hover:bg-white/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400" title="Home">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-primary-800" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+                <Link to="/pos" className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-2xl border border-slate-200 shadow-sm active:scale-95" title="Home">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-9 w-9 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 9.75L12 3l9 6.75V20a1 1 0 0 1-1 1h-5.5a1 1 0 0 1-1-1V14a1 1 0 0 0-1-1H10a1 1 0 0 0-1 1v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9.75z" />
                   </svg>
                   <span className="sr-only">Home</span>
@@ -553,7 +554,7 @@ function AppInner() {
 
               {credit > 0 && location.pathname.startsWith('/pos') && (
                 <span
-                  className="inline-flex items-center gap-1 rounded-full bg-teal-600 px-4 py-2 text-lg font-bold text-white shadow"
+                  className="inline-flex items-center gap-2 rounded-2xl bg-teal-600 px-5 h-16 text-2xl font-bold text-white shadow"
                   title={t('creditTitle')}
                   aria-live="polite"
                 >
@@ -562,29 +563,29 @@ function AppInner() {
                 </span>
               )}
 
-                         {cartCount > 0 && (
-                <button aria-label="Abrir carrinho" className="relative inline-flex items-center p-3 rounded-lg hover:bg-white/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400" onClick={() => setCartOpen(true)}>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-primary-800" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4m1.6 8L5 21h14" />
-                  </svg>
-                  <span className="sr-only">Carrinho</span>
-                  <span className="absolute -top-1 -right-1 inline-flex items-center justify-center px-2 py-1 text-sm font-bold leading-none text-white bg-red-600 rounded-full">{cartCount}</span>
+              {cartCount > 0 && (
+                <button aria-label="Abrir carrinho" className="relative inline-flex items-center gap-3 h-16 px-5 bg-emerald-50 rounded-2xl border border-emerald-200 active:scale-95 focus:outline-none" onClick={() => setCartOpen(true)}>
+                  <span className="relative">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-9 w-9 text-emerald-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                    <span className="absolute -top-3 -right-3 bg-rose-500 text-white font-bold text-sm min-w-6 h-6 px-1 rounded-full flex items-center justify-center ring-2 ring-white">{cartCount}</span>
+                  </span>
+                  <span className="text-2xl font-bold text-slate-800">{cartTotalLabel}</span>
                 </button>
               )}
-     {location.pathname.startsWith('/admin') && <TenantSelector className="mr-2" />}
-     {location.pathname.startsWith('/admin') && tenant && (
-       <div className="text-sm text-primary-700 mr-2">{tenant.name}</div>
-     )}
-    {location.pathname.startsWith('/pos') && <LanguageSwitcher />}
+              {location.pathname.startsWith('/admin') && <TenantSelector className="mr-2" />}
+              {location.pathname.startsWith('/admin') && tenant && (
+                <div className="text-sm text-primary-700 mr-2">{tenant.name}</div>
+              )}
+              {location.pathname.startsWith('/pos') && <LanguageSwitcher />}
 
-              <button aria-label="Ajuda" className="inline-flex items-center p-3 rounded-lg hover:bg-white/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400" onClick={() => setHelpOpen(true)} title="Ajuda">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-primary-800" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+              <button aria-label="Ajuda" className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-2xl border border-slate-200 shadow-sm active:scale-95 focus:outline-none" onClick={() => setHelpOpen(true)} title="Ajuda">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-9 w-9 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <span className="sr-only">Ajuda</span>
               </button>
-
-   
             </div>
           </div>
         </header>

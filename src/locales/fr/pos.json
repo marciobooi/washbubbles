@@ -2,19 +2,23 @@
   "cards": {
     "wash": {
       "title": "Laver",
-      "text": "Laver le linge"
+      "text": "Laver le linge",
+      "sub": "Choisissez la machine et le cycle"
     },
     "dry": {
       "title": "Sécher",
-      "text": "Sécher le linge"
+      "text": "Sécher le linge",
+      "sub": "Séchage rapide et doux"
     },
     "card": {
       "title": "Ma carte",
-      "text": "Ma carte"
+      "text": "Ma carte",
+      "sub": "Consulter le solde & recharger"
     },
     "buyCard": {
       "title": "Acheter la carte",
-      "text": "Acheter la carte"
+      "text": "Acheter la carte",
+      "sub": "Nouvelle carte de fidélité"
     }
   },
   "recharge": {
@@ -63,5 +67,9 @@
     "recharged": "Rechargé",
     "spent_wash": "Dépense - Lavage",
     "spent_dry": "Dépense - Séchage"
+  },
+  "home": {
+    "ready": "Prêt à l’emploi",
+    "touch": "Touchez une option pour commencer"
   }
 }

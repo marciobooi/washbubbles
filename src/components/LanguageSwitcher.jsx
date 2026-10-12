@@ -44,9 +44,10 @@ export default function LanguageSwitcher() {
 
   return (
     <div className="relative">
-      <button ref={btnRef} onClick={toggle} className="inline-flex items-center p-3 rounded-lg hover:bg-white/60 focus:outline-none">
-        <img src={current.flagSrc} alt={current.name} className="w-9 h-9 rounded-md mr-3 object-cover" />
-        <span className="hidden sm:inline text-xl font-semibold">{current.label}</span>
+      <button ref={btnRef} onClick={toggle} className="inline-flex items-center gap-3 h-16 px-5 bg-white rounded-2xl border border-slate-200 shadow-sm active:scale-95 focus:outline-none">
+        <img src={current.flagSrc} alt={current.name} className="w-9 h-9 rounded-md object-cover" />
+        <span className="text-2xl font-bold tracking-wide text-slate-700">{current.label}</span>
+        <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" /></svg>
       </button>
 
       {/* Rendered at the top level of the page: inside the header it was covered by the machine list. */}

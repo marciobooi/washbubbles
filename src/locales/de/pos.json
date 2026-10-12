@@ -2,19 +2,23 @@
   "cards": {
     "wash": {
       "title": "Waschen",
-      "text": "Wäsche waschen"
+      "text": "Wäsche waschen",
+      "sub": "Maschine und Programm wählen"
     },
     "dry": {
       "title": "Trocknen",
-      "text": "Wäsche trocknen"
+      "text": "Wäsche trocknen",
+      "sub": "Schnelles, schonendes Trocknen"
     },
     "card": {
       "title": "Meine Karte",
-      "text": "Meine Karte"
+      "text": "Meine Karte",
+      "sub": "Guthaben prüfen & aufladen"
     },
     "buyCard": {
       "title": "Karte kaufen",
-      "text": "Karte kaufen"
+      "text": "Karte kaufen",
+      "sub": "Neue Treuekarte"
     }
   },
   "recharge": {
@@ -63,5 +67,9 @@
     "recharged": "Aufgeladen",
     "spent_wash": "Ausgabe - Waschen",
     "spent_dry": "Ausgabe - Trocknen"
+  },
+  "home": {
+    "ready": "Betriebsbereit",
+    "touch": "Tippen Sie auf eine Option, um zu starten"
   }
 }

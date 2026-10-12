@@ -2,19 +2,23 @@
   "cards": {
     "wash": {
       "title": "Lavar roupa",
-      "text": "Lavar roupa"
+      "text": "Lavar roupa",
+      "sub": "Escolha a máquina e o ciclo"
     },
     "dry": {
       "title": "Secar roupa",
-      "text": "Secar roupa"
+      "text": "Secar roupa",
+      "sub": "Secagem rápida e suave"
     },
     "card": {
       "title": "O meu cartão",
-      "text": "O meu cartão"
+      "text": "O meu cartão",
+      "sub": "Consultar saldo & carregar"
     },
     "buyCard": {
       "title": "Comprar cartão",
-      "text": "Comprar cartão"
+      "text": "Comprar cartão",
+      "sub": "Novo cartão fidelidade"
     }
   },
   "recharge": {
@@ -63,5 +67,9 @@
     "recharged": "Recarregado",
     "spent_wash": "Gasto - Lavagem",
     "spent_dry": "Gasto - Secagem"
+  },
+  "home": {
+    "ready": "Pronto a utilizar",
+    "touch": "Toque em qualquer opção para iniciar"
   }
 }
