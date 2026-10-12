@@ -49,6 +49,9 @@
     "last": "Terminer",
     "next": "Suivant",
     "nextLabelWithProgress": "Suivant (Étape {step} sur {steps})",
-    "skip": "Passer le tutoriel"
+    "skip": "Passer le tutoriel",
+    "badge": "Étape {{n}} sur {{total}}",
+    "guide": "Guide interactif",
+    "nextStep": "Suivant (étape {{n}} sur {{total}})"
   }
 }

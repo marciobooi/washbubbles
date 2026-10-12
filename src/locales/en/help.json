@@ -49,6 +49,9 @@
     "last": "Finish",
     "next": "Next",
     "nextLabelWithProgress": "Next (Step {step} of {steps})",
-    "skip": "Skip Tutorial"
+    "skip": "Skip Tutorial",
+    "badge": "Step {{n}} of {{total}}",
+    "guide": "Interactive guide",
+    "nextStep": "Next (Step {{n}} of {{total}})"
   }
 }

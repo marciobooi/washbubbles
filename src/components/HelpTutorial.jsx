@@ -1,269 +1,196 @@
 import React, { useState } from 'react'
-import Joyride, { STATUS } from 'react-joyride'
-import { X } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { X, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useTranslation, Trans } from 'react-i18next'
+
+// One coloured row of the tutorial (a legend entry, a payment option, ...).
+const TONES = {
+  green: 'bg-emerald-50/70 border-emerald-300 text-emerald-900',
+  red: 'bg-rose-50/70 border-rose-200 text-rose-900',
+  amber: 'bg-amber-50/70 border-amber-200 text-amber-900',
+  teal: 'bg-teal-50/70 border-teal-200 text-teal-900',
+  slate: 'bg-slate-50 border-slate-200 text-slate-800',
+}
+function Row({ tone = 'slate', children }) {
+  return <div className={`rounded-2xl border-2 px-6 py-5 text-2xl font-medium leading-snug ${TONES[tone]}`}>{children}</div>
+}
+function Note({ icon = '👆', children }) {
+  return (
+    <div className="rounded-2xl bg-slate-100/80 border border-slate-200 px-6 py-5 flex items-center gap-4 text-2xl font-semibold text-slate-700">
+      <span className="text-3xl">{icon}</span>
+      <p>{children}</p>
+    </div>
+  )
+}
 
 export default function HelpTutorial({ run, onClose }) {
   const { t } = useTranslation('help')
-  const [stepIndex, setStepIndex] = useState(0)
+  const [step, setStep] = useState(0)
   const [company, setCompany] = useState(null)
 
   React.useEffect(() => {
     // listen for branding updates from App
     const onBrand = (e) => setCompany(e && e.detail && e.detail.company ? e.detail.company : null)
     window.addEventListener('branding:update', onBrand)
-    // try to initialize from document.title if present
     try { if (!company && typeof document !== 'undefined' && document.title) setCompany(document.title) } catch { /* document.title is cosmetic; a sandboxed frame can refuse it */ }
     return () => window.removeEventListener('branding:update', onBrand)
   }, [company])
+
+  // Each time it opens it starts from the first step.
+  React.useEffect(() => { if (run) setStep(0) }, [run])
+
+  if (!run) return null
+
+  const name = company || 'Washstore'
   const steps = [
     {
-      target: 'body',
-      content: (
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-teal-600 mb-3"><Trans ns="help" i18nKey="welcome.title" values={{ company: company || 'Washstore' }} /></h2>
-          <p className="text-neutral-700"><Trans ns="help" i18nKey="welcome.text" /></p>
-        </div>
-      ),
-      placement: 'center',
-      disableBeacon: true,
+      hero: true,
+      title: <Trans ns="help" i18nKey="welcome.title" values={{ company: name }} />,
+      body: <p className="text-slate-600 text-2xl leading-relaxed font-medium max-w-2xl"><Trans ns="help" i18nKey="welcome.text" /></p>,
     },
     {
-      target: 'body',
-      content: (
-        <div>
-          <h3 className="text-xl font-bold text-teal-600 mb-3"><Trans ns="help" i18nKey="step1.title" /></h3>
-          <div className="space-y-2 text-neutral-700">
-            <p><Trans ns="help" i18nKey="step1.wash" components={[<strong />]} /></p>
-            <p><Trans ns="help" i18nKey="step1.dry" components={[<strong />]} /></p>
-            <p className="mt-1"><Trans ns="help" i18nKey="step1.instruction" /></p>
-          </div>
-        </div>
+      title: <Trans ns="help" i18nKey="step1.title" />,
+      body: (
+        <>
+          <Row tone="teal"><Trans ns="help" i18nKey="step1.wash" components={[<strong />]} /></Row>
+          <Row tone="teal"><Trans ns="help" i18nKey="step1.dry" components={[<strong />]} /></Row>
+          <Note><Trans ns="help" i18nKey="step1.instruction" /></Note>
+        </>
       ),
-      placement: 'center',
-      disableBeacon: true,
     },
     {
-      target: 'body',
-      content: (
-        <div>
-          <h3 className="text-xl font-bold text-teal-600 mb-3"><Trans ns="help" i18nKey="step2.title" /></h3>
-          <div className="space-y-2 text-neutral-700">
-            <p><Trans ns="help" i18nKey="step2.available" components={[<strong className="text-green-600" />]} /></p>
-            <p><Trans ns="help" i18nKey="step2.occupied" components={[<strong className="text-red-600" />]} /></p>
-            <p><Trans ns="help" i18nKey="step2.maintenance" components={[<strong className="text-yellow-600" />]} /></p>
-            <p className="mt-3"><Trans ns="help" i18nKey="step2.instruction" components={[<strong />]} /></p>
-          </div>
-        </div>
+      title: <Trans ns="help" i18nKey="step2.title" />,
+      body: (
+        <>
+          <Row tone="green"><Trans ns="help" i18nKey="step2.available" components={[<strong />]} /></Row>
+          <Row tone="red"><Trans ns="help" i18nKey="step2.occupied" components={[<strong />]} /></Row>
+          <Row tone="amber"><Trans ns="help" i18nKey="step2.maintenance" components={[<strong />]} /></Row>
+          <Note><Trans ns="help" i18nKey="step2.instruction" components={[<strong className="text-emerald-700" />]} /></Note>
+        </>
       ),
-      placement: 'center',
-      disableBeacon: true,
     },
     {
-      target: 'body',
-      content: (
-        <div>
-          <h3 className="text-xl font-bold text-teal-600 mb-3"><Trans i18nKey="step3.title" /></h3>
-          <div className="space-y-2 text-neutral-700">
-            <p>{t('step3.durations')} • {t('step3.temperatures')} • {t('step3.prices')}</p>
-            <p className="mt-3"><Trans ns="help" i18nKey="step3.instruction" /></p>
-          </div>
-        </div>
+      title: <Trans ns="help" i18nKey="step3.title" />,
+      body: (
+        <>
+          <Row tone="slate">{t('step3.durations')} • {t('step3.temperatures')} • {t('step3.prices')}</Row>
+          <Note><Trans ns="help" i18nKey="step3.instruction" /></Note>
+        </>
       ),
-      placement: 'center',
-      disableBeacon: true,
     },
     {
-      target: '[aria-label="Abrir carrinho"]',
-      content: (
-        <div>
-          <h3 className="text-xl font-bold text-teal-600 mb-3"><Trans ns="help" i18nKey="step4.title" /></h3>
-          <div className="space-y-2 text-neutral-700">
-            <p><Trans ns="help" i18nKey="step4.text" /></p>
-            <p className="mt-3"><Trans ns="help" i18nKey="step4.instruction" /></p>
-          </div>
-        </div>
+      title: <Trans ns="help" i18nKey="step4.title" />,
+      body: (
+        <>
+          <Row tone="slate"><Trans ns="help" i18nKey="step4.text" /></Row>
+          <Note><Trans ns="help" i18nKey="step4.instruction" /></Note>
+        </>
       ),
-      placement: 'bottom',
-      disableBeacon: true,
     },
     {
-      target: 'body',
-      content: (
-        <div>
-          <h3 className="text-xl font-bold text-teal-600 mb-3"><Trans ns="help" i18nKey="step5.title" /></h3>
-          <div className="space-y-2 text-neutral-700">
-            <p><Trans ns="help" i18nKey="step5.option1" components={[<strong />]} /></p>
-            <p><Trans ns="help" i18nKey="step5.option2" components={[<strong />]} /></p>
-            <p className="mt-3"><Trans ns="help" i18nKey="step5.note" components={{ em: <em /> }} /></p>
-          </div>
-        </div>
+      title: <Trans ns="help" i18nKey="step5.title" />,
+      body: (
+        <>
+          <Row tone="green"><Trans ns="help" i18nKey="step5.option1" components={[<strong />]} /></Row>
+          <Row tone="slate"><Trans ns="help" i18nKey="step5.option2" components={[<strong />]} /></Row>
+          <Note icon="⚠️"><Trans ns="help" i18nKey="step5.note" components={{ em: <em /> }} /></Note>
+        </>
       ),
-      placement: 'center',
-      disableBeacon: true,
     },
     {
-      target: 'body',
-      content: (
-        <div>
-          <h3 className="text-xl font-bold text-teal-600 mb-3"><Trans ns="help" i18nKey="card.title" /></h3>
-          <div className="space-y-2 text-neutral-700">
-            <p><Trans ns="help" i18nKey="card.text" components={[<strong />]} /></p>
-            <p className="mt-3">💡 <Trans ns="help" i18nKey="done.note" /></p>
-          </div>
-        </div>
+      title: <Trans ns="help" i18nKey="card.title" />,
+      body: (
+        <>
+          <Row tone="teal"><Trans ns="help" i18nKey="card.text" components={[<strong />]} /></Row>
+          <Note icon="💡"><Trans ns="help" i18nKey="done.note" components={{ strong: <strong /> }} /></Note>
+        </>
       ),
-      placement: 'center',
-      disableBeacon: true,
-    },  
+    },
     {
-      target: 'body',
-      content: (
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-teal-600 mb-3"><Trans ns="help" i18nKey="done.title" /></h2>
-          <p className="text-neutral-700 mb-4"><Trans ns="help" i18nKey="done.text" values={{ company: company || 'Washstore' }} /></p>
-          <p className="text-sm text-neutral-500"><Trans ns="help" i18nKey="done.note" components={{ strong: <strong /> }} /></p>
-        </div>
+      hero: true,
+      title: <Trans ns="help" i18nKey="done.title" />,
+      body: (
+        <>
+          <p className="text-slate-600 text-2xl leading-relaxed font-medium max-w-2xl"><Trans ns="help" i18nKey="done.text" values={{ company: name }} /></p>
+          <p className="text-slate-500 text-xl"><Trans ns="help" i18nKey="done.note" components={{ strong: <strong /> }} /></p>
+        </>
       ),
-      placement: 'center',
-      disableBeacon: true,
     },
   ]
 
-  const handleJoyrideCallback = (data) => {
-    const { status, index, action } = data
-
-    if ([STATUS.FINISHED, STATUS.SKIPPED].includes(status)) {
-      onClose()
-      setStepIndex(0)
-    } else if (action === 'next' || action === 'prev') {
-      setStepIndex(index + (action === 'next' ? 1 : -1))
-    }
+  const total = steps.length
+  const cur = steps[step]
+  const last = step === total - 1
+  const close = () => {
+    setStep(0)
+    try { onClose && onClose() } catch (err) { console.error(err) }
+    try { window.dispatchEvent(new CustomEvent('modal-close')) } catch { /* optional notification */ }
   }
 
-  // Capture clicks on Joyride's internal close button (data-test-id="button-close") in case
-  // the button's own handler is blocked by overlay or propagation issues.
-  React.useEffect(() => {
-    if (!run) return
-    const onDocClick = (e) => {
-      try {
-        const el = e.target && e.target.closest ? e.target.closest('[data-test-id="button-close"]') : null
-        if (el) {
-          e.preventDefault()
-          e.stopPropagation()
-          try { onClose && onClose() } catch (err) { console.error(err) }
-          setStepIndex(0)
-          try { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('modal-close')) } catch (err) {}
-        }
-      } catch (err) {
-        console.error('Error handling Joyride close click', err)
-      }
-    }
-    document.addEventListener('click', onDocClick, true)
-    return () => document.removeEventListener('click', onDocClick, true)
-  }, [run, onClose])
+  return createPortal(
+    <div className="fixed inset-0 z-[10000] flex items-center justify-center p-8 bg-slate-950/65 backdrop-blur-md" role="presentation">
+      <div role="dialog" aria-modal="true" className="w-full max-w-[900px] bg-white rounded-[2.5rem] border border-slate-100 overflow-hidden flex flex-col" style={{ boxShadow: '0 25px 60px -15px rgba(15,23,42,.35)' }}>
+        {/* header: step badge + progress + close */}
+        <div className="px-10 pt-8 pb-5 flex items-center justify-between border-b border-slate-100 bg-slate-50/70">
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-base font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
+                {t('buttons.badge', { n: step + 1, total })}
+              </span>
+              <span className="text-base font-semibold text-slate-400">{t('buttons.guide')}</span>
+            </div>
+            <div className="w-64 h-2.5 bg-slate-200 rounded-full overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-emerald-600 to-teal-500 rounded-full transition-all duration-500" style={{ width: `${((step + 1) / total) * 100}%` }} />
+            </div>
+          </div>
+          <button type="button" aria-label={t('buttons.close')} onClick={close} className="w-16 h-16 flex items-center justify-center rounded-2xl bg-white border border-slate-200 text-slate-400 active:scale-95 shadow-sm">
+            <X className="w-8 h-8" strokeWidth={2.5} />
+          </button>
+        </div>
 
-  return (
-    <>
-      <Joyride
-        steps={steps}
-        run={run}
-        continuous
-        showProgress
-        showSkipButton
-        stepIndex={stepIndex}
-        callback={handleJoyrideCallback}
-        styles={{
-          options: {
-            primaryColor: '#0d9488',
-            textColor: '#1f2937',
-            backgroundColor: '#fff',
-            arrowColor: '#fff',
-            overlayColor: 'rgba(0, 0, 0, 0.6)',
-            zIndex: 10000,
-          },
-          tooltip: {
-            borderRadius: 20,
-            padding: 40,
-            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-            width: 600,
-            height: 450,
-          },
-          tooltipContainer: {
-            textAlign: 'left',
-            display: 'flex',
-            flexDirection: 'column',
-            height: '80%',
-          },
-          tooltipContent: {
-            padding: '10px 0',
-            fontSize: 18,
-            lineHeight: 1.7,
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-          },
-          buttonNext: {
-            backgroundColor: '#0d9488',
-            borderRadius: 14,
-            padding: '16px 32px',
-            fontSize: 18,
-            fontWeight: 700,
-            boxShadow: '0 4px 6px -1px rgba(13, 148, 136, 0.3)',
-            transition: 'all 0.2s',
-          },
-          buttonBack: {
-            color: '#0d9488',
-            marginRight: 12,
-            borderRadius: 14,
-            padding: '16px 32px',
-            fontSize: 18,
-            fontWeight: 600,
-            border: '2px solid #0d9488',
-            backgroundColor: 'transparent',
-          },
-          buttonSkip: {
-            color: '#6b7280',
-            fontSize: 16,
-            fontWeight: 500,
-          },
-          buttonClose: {
-            color: '#6b7280',
-            width: 36,
-            height: 36,
-          },
-          spotlight: {
-            borderRadius: 12,
-          },
-        }}
-        locale={{
-          back: t('buttons.back'),
-          close: t('buttons.close'),
-          last: t('buttons.last'),
-          next: t('buttons.next'),
-          nextLabelWithProgress: t('buttons.nextLabelWithProgress'),
-          skip: t('buttons.skip'),
-        }}
-      />
+        {/* content */}
+        <div className="px-12 py-10 min-h-[460px] flex flex-col justify-center">
+          {cur.hero ? (
+            <div className="flex flex-col items-center text-center gap-7">
+              <div className="relative w-36 h-36 rounded-[2rem] bg-gradient-to-tr from-emerald-50 to-teal-50 border-2 border-emerald-100 flex items-center justify-center">
+                <div className="w-24 h-24 rounded-3xl bg-emerald-600 flex items-center justify-center text-white shadow-lg shadow-emerald-500/30 text-6xl">{last ? '🎉' : '🫧'}</div>
+              </div>
+              <h2 className="text-5xl font-extrabold text-emerald-700 tracking-tight">{cur.title}</h2>
+              {cur.body}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-6 text-left">
+              <h2 className="text-4xl font-extrabold text-teal-700 tracking-tight">{cur.title}</h2>
+              <div className="flex flex-col gap-4">{cur.body}</div>
+            </div>
+          )}
+        </div>
 
-      {/* Always-available close button (in case Joyride's close is not actionable) */}
-      {run && (
-        <button
-          aria-label="Fechar Tutorial"
-          title="Fechar Tutorial"
-          onClick={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            try { onClose && onClose() } catch (err) { console.error(err) }
-            setStepIndex(0)
-            try { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('modal-close')) } catch (err) {}
-          }}
-          className="fixed top-4 right-4 z-[11000] pointer-events-auto inline-flex items-center justify-center w-10 h-10 bg-white rounded-full shadow-md hover:bg-neutral-100 focus:outline-none"
-        >
-          <X className="w-4 h-4 text-neutral-700" />
-        </button>
-      )}
-    </>
+        {/* footer */}
+        <div className="px-8 py-6 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-4">
+          <button type="button" onClick={close} className="h-[72px] px-5 rounded-2xl text-slate-500 font-bold text-xl whitespace-nowrap active:bg-slate-200/60">
+            {t('buttons.skip')}
+          </button>
+          <div className="flex items-center gap-4">
+            {step > 0 && (
+              <button type="button" onClick={() => setStep(step - 1)} className="h-[72px] px-6 rounded-2xl bg-white border-2 border-slate-200 text-teal-800 font-bold text-xl whitespace-nowrap shadow-sm flex items-center gap-2 active:scale-95">
+                <ChevronLeft className="w-7 h-7" strokeWidth={2.5} />
+                {t('buttons.back')}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => (last ? close() : setStep(step + 1))}
+              className="h-[72px] px-7 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-extrabold text-xl whitespace-nowrap shadow-lg flex items-center gap-2 active:scale-[0.98]"
+            >
+              <span>{last ? t('buttons.last') : t('buttons.nextStep', { n: step + 2, total })}</span>
+              {!last && <ChevronRight className="w-7 h-7" strokeWidth={2.5} />}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
   )
 }
