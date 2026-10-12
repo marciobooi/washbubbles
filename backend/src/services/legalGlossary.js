@@ -39,6 +39,8 @@ export const LEGAL_GLOSSARY = [
   row('produtos adequados a máquinas de lavar roupa', 'products suitable for washing machines', 'produits adaptés aux machines à laver', 'für Waschmaschinen geeignete Produkte', 'productos adecuados para lavadoras'),
   row('não respondemos por', 'we are not liable for', 'nous ne sommes pas responsables de', 'wir haften nicht für', 'no nos responsabilizamos de'),
   row('alojamento do sistema', 'system hosting', 'hébergement du système', 'Hosting des Systems', 'alojamiento del sistema'),
+  row('Lavagem de carpetes', 'Carpet washing', 'Lavage de tapis', 'Teppichreinigung', 'Lavado de alfombras'),
+  row('Lavagem de tapetes', 'Rug washing', 'Lavage de tapis', 'Teppichreinigung', 'Lavado de alfombras'),
   // whole phrases only: a single noun swapped in on its own loses its gender and the German/Spanish
   // articles around it come out wrong ("Ihren Karte"), so nouns are listed inside the phrase they appear in
   row('dinheiro ou cartão', 'cash or card', 'espèces ou carte', 'Bargeld oder Karte', 'efectivo o tarjeta'),

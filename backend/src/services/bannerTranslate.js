@@ -41,7 +41,9 @@ async function runOnce(tenantId, translate) {
     for (const lang of BANNER_LANGS) {
       try {
         const { out: done } = await translateWithGlossary([pt.title, pt.text], lang, glossary, (list) => translate(list, { source: 'pt', target: lang }))
-        out[id][lang] = { title: done[0], text: done[1] }
+        // keep the capital letter of the Portuguese (dictionary entries are written in lower case)
+        const cap = (src, s) => (src && src[0] !== src[0].toLowerCase() && s ? s[0].toUpperCase() + s.slice(1) : s)
+        out[id][lang] = { title: cap(pt.title, done[0]), text: cap(pt.text, done[1]) }
       } catch (err) {
         console.warn(`[banner-translate] ${id} ${lang} failed: ${err.message}`)
       }
