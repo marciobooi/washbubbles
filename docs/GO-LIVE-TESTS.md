@@ -204,7 +204,22 @@ The shop PC was switched off because the shop is working. Everything below is bu
 the latest code first (copy the files, build the screen, restart ONLY the backend: the process whose command line has
 `src\index.js`, never every node process). The new payment window (13.5) is in the repo but not on the PC yet.
 
-### 13.0 FIRST, when the shop PC is on: bring the code up to date (git pull)
+### 13.0a ONE-TIME: make the shop PC a real git checkout, so everything stays in sync with one `git pull`
+Until now the PC has been updated by copying files by hand, so it may have drifted from the repo in places nobody listed.
+Do this once, with the owner present, before the first pull of 13.0:
+- [ ] Back up first: copy `C:\washbubbles` to `C:\washbubbles-backup-<date>` (code only; `backend\.env`, `backend\data\`, `logs\` must be kept as they are)
+- [ ] Check whether it already is a checkout: `git rev-parse --is-inside-work-tree` and `git remote -v` (expected remote: `https://github.com/marciobooi/washbubbles.git`, branch `main`)
+- [ ] If it is NOT: `git init`, `git remote add origin https://github.com/marciobooi/washbubbles.git`, `git fetch origin`, then `git reset --hard origin/main`
+      (`reset --hard` only touches tracked files: `.env`, `.env.*`, `node_modules/`, `dist/`, `logs/`, `backend\data\` are ignored or untracked and stay)
+- [ ] `git config core.autocrlf true` on the PC (Windows line endings) and `git config pull.ff only` (a pull must never create a merge commit on the PC)
+- [ ] The repo is on GitHub: if it is private, the PC needs a read-only credential (deploy key or fine-grained token); store it in Windows Credential Manager, never in the repo
+- [ ] Compare what the PC had with the repo before the reset: `git diff --stat` on the hand-copied files; anything that differs and is not in the repo is a local edit to keep or discard (ask before discarding)
+- [ ] `npm install` in `backend\` and in the root only if `package.json` / `package-lock.json` changed in the pull
+- [ ] Afterwards: `git status` is clean, `git log --oneline -1` equals the repo's latest, and an update is always: `git pull`, build the screen, restart only the backend if backend files changed
+- [ ] Do the same on the Hetzner server check: `/opt/washbubbles` is already a checkout (deploys use `git pull`); confirm its commit equals the PC's
+- [ ] Write the final update procedure into this file (one short block) so it is the single place to look
+
+### 13.0 THEN: bring the code up to date (git pull)
 Last code copied to the PC was the dryer "one command, n impulses" change (`efc088c`). Everything after it is in the repo
 but NOT on the PC yet; it is all screen (frontend) work, so **no backend restart is needed**:
 - new payment window (`b83d130` ... `127ce73`: single column, 68% width, scales to the screen), `Modal.jsx`, `CartContext.jsx` export, dev-only `/dev/cart` preview
