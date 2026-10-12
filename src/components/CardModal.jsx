@@ -8,7 +8,6 @@ import api from '@/services/api'
 const MAX_RECENT = 10 // how many movements the window keeps
 const PAGE_SIZE = 5   // shown per page, flipped with big touch buttons (no inner scrolling)
 const QUICK = [5, 10, 20, 50]
-const fmtMoney = (n) => `${Number(n).toFixed(2).replace('.', ',')}€`
 
 // `onRecharge` used to be accepted here and never called — the cart-based flow superseded it.
 export default function CardModal({ open, onClose, transactions = [], balance = 0, card = null }) {
@@ -19,7 +18,8 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
   const [page, setPage] = useState(0)
   // The shop's own rules, read from the server: minimum top-up and what the card saves per machine kind.
   const [info, setInfo] = useState({ minRecharge: 0, saving: { wash: 0, dry: 0 } })
-  const minAmount = Math.max(1, Number(info.minRecharge) || 5)
+  // The −/+ buttons move in steps of 5; the floor is the server's minimum top-up, never below one step.
+  const minAmount = Math.max(5, Number(info.minRecharge) || 0)
 
   useEffect(() => {
     if (!open) return undefined
@@ -40,7 +40,7 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
 
   if (!open) return null
 
-  const fmt = (n) => `${Number(n).toFixed(2)}€`
+  const fmt = (n) => `${Number(n).toLocaleString(i18n.language, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€`
   const close = () => {
     if (window.electronAPI?.hideKeyboard) window.electronAPI.hideKeyboard()
     onClose()
@@ -72,8 +72,8 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
   const TONE = { green: 'bg-emerald-100 text-emerald-700', blue: 'bg-blue-100 text-blue-700', amber: 'bg-amber-100 text-amber-700' }
 
   const parts = []
-  if (info.saving?.wash > 0) parts.push(tc('perkWash', { amount: fmtMoney(info.saving.wash) }))
-  if (info.saving?.dry > 0) parts.push(tc('perkDry', { amount: fmtMoney(info.saving.dry) }))
+  if (info.saving?.wash > 0) parts.push(tc('perkWash', { amount: fmt(info.saving.wash) }))
+  if (info.saving?.dry > 0) parts.push(tc('perkDry', { amount: fmt(info.saving.dry) }))
   const perkText = parts.length ? tc('perkText', { parts: parts.join(' • ') }) : ''
 
   const code = card?.code ? String(card.code) : ''
@@ -150,9 +150,9 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
                 </span>
               </div>
               <div className="flex items-center justify-center gap-6 py-3 bg-slate-50/80 rounded-2xl border border-slate-100">
-                <button type="button" aria-label={tc('less')} onClick={dec} className="w-[72px] h-[72px] rounded-2xl bg-white border border-slate-200 text-slate-800 font-black text-4xl flex items-center justify-center shadow-sm active:scale-95">−</button>
+                <button type="button" aria-label={tc('amountLess')} onClick={dec} className="w-[72px] h-[72px] rounded-2xl bg-white border border-slate-200 text-slate-800 font-black text-4xl flex items-center justify-center shadow-sm active:scale-95">−</button>
                 <span className="min-w-[150px] text-center text-6xl font-black text-[#008770] tracking-tight">{amount}€</span>
-                <button type="button" aria-label={tc('more')} onClick={inc} className="w-[72px] h-[72px] rounded-2xl bg-[#008770] text-white font-black text-4xl flex items-center justify-center shadow-md active:scale-95">+</button>
+                <button type="button" aria-label={tc('amountMore')} onClick={inc} className="w-[72px] h-[72px] rounded-2xl bg-[#008770] text-white font-black text-4xl flex items-center justify-center shadow-md active:scale-95">+</button>
               </div>
               <div className="grid grid-cols-4 gap-3">
                 {QUICK.filter((v) => v >= minAmount).map((v) => (
@@ -213,7 +213,7 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
                             <div className="text-sm text-slate-400 font-medium">{dateLabel(tx.ts)}</div>
                           </div>
                         </div>
-                        <span className={`text-xl font-extrabold shrink-0 ${positive ? 'text-[#008770]' : 'text-slate-800'}`}>{positive ? '+' : ''}{Number(tx.amount).toFixed(2)}€</span>
+                        <span className={`text-xl font-extrabold shrink-0 ${positive ? 'text-[#008770]' : 'text-slate-800'}`}>{positive ? '+' : '−'}{fmt(Math.abs(Number(tx.amount)))}</span>
                       </div>
                     )
                   })}

@@ -179,5 +179,7 @@
   "perkText": "Pay less with the card: {{parts}}.",
   "cardStatus": "Status",
   "perkWash": "up to {{amount}} off each wash",
-  "perkDry": "up to {{amount}} off each dry"
+  "perkDry": "up to {{amount}} off each dry",
+  "amountLess": "Decrease amount",
+  "amountMore": "Increase amount"
 }

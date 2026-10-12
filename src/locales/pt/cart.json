@@ -179,5 +179,7 @@
   "perkText": "Com o cartão paga menos: {{parts}}.",
   "cardStatus": "Estado",
   "perkWash": "até {{amount}} de desconto por lavagem",
-  "perkDry": "até {{amount}} de desconto por secagem"
+  "perkDry": "até {{amount}} de desconto por secagem",
+  "amountLess": "Diminuir valor",
+  "amountMore": "Aumentar valor"
 }
