@@ -42,6 +42,17 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
   const hopperGap         = computeGap(hopperTargetDenoms, hopperActualDenoms)
   const hopperGapTotal    = hopperGap.reduce((s, d) => s + d.toAdd * d.value, 0)
   const splitSum          = parseFloat(amountToBank || 0) + parseFloat(floatLeft || 0)
+
+  // What to take out of the till: the machine already knows what came in (coin acceptor + note reader, step 1 is
+  // prefilled from it) and what the hopper holds, so this is just the list. Coins first refill the hopper up to its
+  // target; what is left of each coin value, and every note, is what leaves the till.
+  const withdrawPlan = countedDenoms.map((d) => {
+    const isCoin = d.value < 3
+    const refill = isCoin ? Math.min(d.count, hopperGap.find((g) => Math.abs(g.value - d.value) < 0.001)?.toAdd || 0) : 0
+    return { value: d.value, isCoin, count: d.count, toHopper: refill, take: Math.max(0, d.count - refill) }
+  })
+  const takeTotal   = withdrawPlan.reduce((s, d) => s + d.take * d.value, 0)
+  const hopperTotalIn = withdrawPlan.reduce((s, d) => s + d.toHopper * d.value, 0)
   const splitOk           = amountToBank !== '' && floatLeft !== '' && Math.abs(splitSum - countedCash) <= 0.005
 
   useEffect(() => {
@@ -235,6 +246,25 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
             )}
           </div>
         </Step>
+
+        {countedCash > 0 && (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 space-y-3">
+            <div className="text-sm font-bold text-emerald-900">Retirar da caixa</div>
+            <div className="flex flex-wrap gap-2">
+              {withdrawPlan.filter((d) => d.take > 0).sort((a, b) => b.value - a.value).map((d) => (
+                <span key={d.value} className="inline-flex items-center gap-1.5 rounded-xl bg-white border border-emerald-200 px-3 py-2 text-base font-extrabold text-emerald-800">
+                  {d.take} <span className="text-emerald-500 font-bold">×</span> {fmtDenomLabel(d.value)}
+                </span>
+              ))}
+              {takeTotal === 0 && <span className="text-sm text-neutral-500">Nada a retirar.</span>}
+            </div>
+            <div className="text-xs text-emerald-800">
+              Total a retirar: <strong>{fmt(takeTotal)}&euro;</strong>
+              {hopperTotalIn > 0 && <> · fica no hopper para repor o troco: <strong>{fmt(hopperTotalIn)}&euro;</strong> ({withdrawPlan.filter((d) => d.toHopper > 0).map((d) => `${d.toHopper}×${fmtDenomLabel(d.value)}`).join(', ')})</>}
+              . A lista parte do que as máquinas registaram; corrija a contagem acima se algo não bater.
+            </div>
+          </div>
+        )}
 
         <button
           type="button"
