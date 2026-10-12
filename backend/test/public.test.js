@@ -505,13 +505,15 @@ describe('mergeContent (views/landing.js) — the DB-down/malformed-data safety 
 })
 
 describe('index.js: PUBLIC_LANDING_PAGE gate (not the shop-kiosk POS app)', () => {
-  it('the route module exports exactly GET /, the four language pages, /robots.txt, /sitemap.xml — nothing that could shadow /api or /ws', () => {
+  it('the route module exports exactly GET /, the four language pages, the legal pages, /robots.txt, /sitemap.xml — nothing that could shadow /api or /ws', () => {
     const routes = publicRoutes.stack
       .filter((l) => l.route)
       .map((l) => ({ path: l.route.path, methods: Object.keys(l.route.methods) }))
     expect(routes).to.deep.equal([
       { path: '/', methods: ['get'] },
       { path: '/:lang(en|fr|de|es)', methods: ['get'] },
+      { path: '/legal/:doc(privacy|terms|cookies)', methods: ['get'] },
+      { path: '/:lang(en|fr|de|es)/legal/:doc(privacy|terms|cookies)', methods: ['get'] },
       { path: '/robots.txt', methods: ['get'] },
       { path: '/sitemap.xml', methods: ['get'] },
     ])

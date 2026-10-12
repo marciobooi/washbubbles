@@ -16,6 +16,8 @@ import { withTenant } from '../services/tenant.js'
 import { TRANSLATIONS_KEY } from '../services/landingTranslate.js'
 import { landingVersion } from '../services/landingCache.js'
 import { TRANSLATED_LANGS } from '../views/landingI18n.js'
+import { renderLegalPage } from '../views/legalPage.js'
+import { mergeLegal } from '../services/legalDefaults.js'
 
 const router = express.Router()
 
@@ -39,6 +41,8 @@ let cachedAt = 0
 let cachedTranslations = {}
 // The price table's rows: read from the database (prices + how many machines of each kind), cached like the rest.
 let cachedPrices = []
+// The legal texts (legal.info + their translations), cached with the rest
+let cachedLegal = mergeLegal(null, null)
 let cachedVersion = 0 // see services/landingCache.js: changes when content/translations were just saved
 
 // The logo is uploaded once, from the existing Branding tab (AdminSettings.jsx),
@@ -54,6 +58,7 @@ export function _resetContentCacheForTests() {
   cachedAt = 0
   cachedTranslations = {}
   cachedPrices = []
+  cachedLegal = mergeLegal(null, null)
   cachedVersion = 0
 }
 
@@ -62,6 +67,11 @@ async function loadContent(req) {
   try {
     const SettingT = withTenant(Setting, req)
     const timeout = () => new Promise((_, reject) => setTimeout(() => reject(new Error('landing content DB read timed out')), DB_TIMEOUT_MS))
+    const [legalDoc, legalTrDoc] = await Promise.all([
+      Promise.race([SettingT.findOne({ key: 'legal.info' }).lean(), timeout()]),
+      Promise.race([SettingT.findOne({ key: 'legal.translations' }).lean(), timeout()]),
+    ])
+    cachedLegal = mergeLegal(legalDoc && legalDoc.value, legalTrDoc && legalTrDoc.value)
     const [contentDoc, logoDoc, translationsDoc] = await Promise.all([
       Promise.race([SettingT.findOne({ key: CONTENT_SETTING_KEY }).lean(), timeout()]),
       Promise.race([SettingT.findOne({ key: BRAND_LOGO_SETTING_KEY }).lean(), timeout()]),
@@ -101,7 +111,7 @@ const availableLangs = () => ['pt', ...TRANSLATED_LANGS.filter((l) => cachedTran
 router.get('/', async (req, res) => {
   res.set('Cache-Control', 'public, max-age=300') // 5 min — plain content, changes rarely
   const content = await loadContent(req)
-  res.type('html').send(renderLandingPage(content, { lang: 'pt', available: availableLangs(), prices: cachedPrices }))
+  res.type('html').send(renderLandingPage(content, { lang: 'pt', available: availableLangs(), prices: cachedPrices, legal: cachedLegal }))
 })
 
 // The same page in another language: /en /fr /de /es. Text written by the admin comes from the stored
@@ -115,8 +125,21 @@ router.get('/:lang(en|fr|de|es)', async (req, res) => {
   res.set('Cache-Control', 'public, max-age=300')
   res.set('Content-Language', lang)
   const merged = { ...stored.content, brand: mergeContent(content).brand }
-  res.type('html').send(renderLandingPage(merged, { lang, available: availableLangs(), prices: cachedPrices }))
+  res.type('html').send(renderLandingPage(merged, { lang, available: availableLangs(), prices: cachedPrices, legal: cachedLegal }))
 })
+
+// Legal pages: /legal/privacy, /legal/terms, /legal/cookies and the same under /en /fr /de /es.
+// The text is the one the kiosk shows; a language without a translation falls back to Portuguese.
+async function sendLegal(req, res, lang) {
+  const doc = req.params.doc
+  const content = await loadContent(req)
+  const brand = mergeContent(content).brand
+  res.set('Cache-Control', 'public, max-age=300')
+  res.set('Content-Language', lang)
+  res.type('html').send(renderLegalPage(doc, { lang, brand, legal: cachedLegal, available: availableLangs() }))
+}
+router.get('/legal/:doc(privacy|terms|cookies)', (req, res) => sendLegal(req, res, 'pt'))
+router.get('/:lang(en|fr|de|es)/legal/:doc(privacy|terms|cookies)', (req, res) => sendLegal(req, res, req.params.lang))
 
 router.get('/robots.txt', (req, res) => {
   res.type('text/plain').send(renderRobotsTxt())

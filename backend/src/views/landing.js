@@ -387,7 +387,7 @@ function renderCustomSection(cs) {
  * @param opts.available  the languages that currently have a page, for the switcher and hreflang links
  * @param opts.prices     rows for the price table, read from the database: { type, weight, duration, tImp, cash, card, machines }
  */
-export function renderLandingPage(rawContent, { lang = 'pt', available = ['pt'], prices = [] } = {}) {
+export function renderLandingPage(rawContent, { lang = 'pt', available = ['pt'], prices = [], legal = null } = {}) {
   if (!UI[lang]) lang = 'pt'
   const L = UI[lang]
   const hours = (tpl, b) => fmt(tpl, { open: b.hours.open, close: b.hours.close })
@@ -937,6 +937,11 @@ section{ padding:84px 0 }
   border:1px solid rgba(13,148,136,.14); aspect-ratio:16/11; background:var(--primary-100);
 }
 .map-embed iframe{ width:100%; height:100%; border:0; display:block }
+.map-ask{ height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:16px; text-align:center }
+.map-ask button{ font:inherit; font-weight:600; padding:10px 20px; border-radius:999px; border:0; background:var(--primary-600); color:#fff; cursor:pointer }
+.map-ask p{ margin:0; font-size:12.5px; color:var(--ink-soft); max-width:34ch }
+.foot-legal{ width:100%; display:flex; flex-wrap:wrap; justify-content:center; gap:8px 22px; font-size:13px; margin-top:18px }
+.foot-legal a{ color:var(--ink-soft); text-decoration:none } .foot-legal a:hover{ color:var(--primary-800); text-decoration:underline }
 
 /* footer */
 footer{ border-top:1px solid rgba(13,148,136,.14); padding:40px 0 32px }
@@ -1234,8 +1239,11 @@ footer .foot-links a:hover{ color:var(--primary-800) }
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
             <a href="https://www.google.com/maps/search/?api=1&query=${mapsQuery}" target="_blank" rel="noopener noreferrer">${escapeHtml(fullAddress)}</a>
           </div>
-          <div class="map-embed">
-            <iframe src="https://www.google.com/maps?q=${mapsQuery}&output=embed" title="${escapeHtml(L.mapTitle)} — ${escapeHtml(fullAddress)}" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+          <div class="map-embed" id="map-embed" data-src="https://www.google.com/maps?q=${mapsQuery}&output=embed" data-title="${escapeHtml(L.mapTitle)} — ${escapeHtml(fullAddress)}">
+            <div class="map-ask">
+              <button type="button" id="map-show">${escapeHtml(L.mapShow)}</button>
+              <p>${escapeHtml(L.mapNote)}</p>
+            </div>
           </div>
         </div>
         <div class="visit-card">
@@ -1282,12 +1290,28 @@ footer .foot-links a:hover{ color:var(--primary-800) }
       ${content.reviews.visible ? `<a href="#avaliacoes">${escapeHtml(L.reviews)}</a>` : ''}
       <a href="${LOGIN_URL}">${escapeHtml(L.enter)}</a>
     </div>
+    <div class="foot-legal">
+      <a href="${langPath(lang) === '/' ? '' : langPath(lang)}/legal/privacy">${escapeHtml(L.privacyLink)}</a>
+      <a href="${langPath(lang) === '/' ? '' : langPath(lang)}/legal/terms">${escapeHtml(L.termsLink)}</a>
+      <a href="${langPath(lang) === '/' ? '' : langPath(lang)}/legal/cookies">${escapeHtml(L.cookiesLink)}</a>
+      ${legal && legal.complaintsUrl ? `<a href="${escapeHtml(legal.complaintsUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(L.complaintsLink)}</a>` : ''}
+    </div>
     <p class="foot-copy">&copy; ${new Date().getFullYear()} ${escapeHtml(brand.name)}. ${escapeHtml(L.rights)}</p>
   </div>
 </footer>
 
 <script>
 (function(){
+  // The map (Google) is only loaded when the visitor asks for it: until then nothing is sent to Google for it.
+  var mapBox = document.getElementById('map-embed'), mapBtn = document.getElementById('map-show');
+  if (mapBox && mapBtn) {
+    mapBtn.addEventListener('click', function(){
+      var f = document.createElement('iframe');
+      f.src = mapBox.getAttribute('data-src'); f.title = mapBox.getAttribute('data-title');
+      f.setAttribute('referrerpolicy', 'no-referrer-when-downgrade');
+      mapBox.innerHTML = ''; mapBox.appendChild(f);
+    });
+  }
   // Language dropdown: close on outside click / Escape (it also works without this script).
   var dd = document.querySelector('.lang-dd');
   if (dd) {
