@@ -64,8 +64,8 @@ export default function MachineCard({ m, frames, inCart = false, onSelect = () =
       aria-label={inCart ? t('machines.removeLabel', { name: m.name }) : m.name}
     >
       <div className="flex items-center gap-7 min-w-0">
-        <div className={`relative shrink-0 w-24 h-24 min-[900px]:w-32 min-[900px]:h-32 rounded-3xl flex items-center justify-center ${frameClass}`}>
-          {frame && <img src={frame} alt="" className="w-20 h-20 min-[900px]:w-24 min-[900px]:h-24 object-contain tealFilter" />}
+        <div className={`relative shrink-0 w-32 h-32 rounded-3xl flex items-center justify-center ${frameClass}`}>
+          {frame && <img src={frame} alt="" className="w-24 h-24 object-contain tealFilter" />}
           {inCart && (
             <span className="absolute -top-2.5 -right-2.5 bg-emerald-600 text-white rounded-full p-1.5 shadow-md">
               <Check className="w-5 h-5" strokeWidth={3.5} />
@@ -92,14 +92,17 @@ export default function MachineCard({ m, frames, inCart = false, onSelect = () =
         </div>
       </div>
       <div className="flex items-center gap-5 shrink-0">
-        <div className={`items-center gap-2 text-2xl font-bold px-6 py-3 rounded-full border ${pill.cls} ${inCart ? 'hidden min-[900px]:flex' : 'flex'}`}>
-          <span className={`w-3 h-3 rounded-full ${pill.dot}`} />
-          <span>{pill.label}</span>
-        </div>
+        {/* In the basket it is obviously free: the Selected button replaces the status pill */}
+        {!inCart && (
+          <div className={`flex items-center gap-2 text-2xl font-bold px-6 py-3 rounded-full border ${pill.cls}`}>
+            <span className={`w-3 h-3 rounded-full ${pill.dot}`} />
+            <span>{pill.label}</span>
+          </div>
+        )}
         {inCart && (
           <div className="h-[72px] px-8 rounded-2xl bg-emerald-600 text-white font-bold text-2xl flex items-center gap-2.5 shadow-sm">
             <Check className="w-6 h-6" strokeWidth={3} />
-            <span className="hidden min-[900px]:inline">{t('machines.selected')}</span>
+            <span className="">{t('machines.selected')}</span>
           </div>
         )}
       </div>

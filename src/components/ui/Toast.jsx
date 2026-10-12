@@ -17,7 +17,7 @@ export function ToastProvider({ children }) {
         gap={16}
         offset="104px"
         richColors
-        style={{ "--width": "min(94vw, 860px)" }}
+        style={{ "--width": "min(96vw, 1000px)" }}
         toastOptions={{
           // Gone after 5 s, whatever it carries.
           duration: 5000,
@@ -54,8 +54,8 @@ export function showToast({ variant = 'info', title, description, badge, action,
       style={{ width: '100%', touchAction: 'manipulation', boxShadow: `0 24px 48px -12px rgba(15,23,42,.18), 0 8px 24px -6px ${tone.glow}` }}
       className={`bg-white/95 backdrop-blur-md rounded-full border overflow-hidden ${tone.border}`}
     >
-      <div className="px-9 py-6 flex flex-wrap items-center justify-between gap-x-8 gap-y-4">
-        <div className="flex items-center gap-6 min-w-0 flex-1 basis-[22rem]">
+      <div className="px-9 py-6 flex items-center justify-between gap-8">
+        <div className="flex items-center gap-6 min-w-0">
           <div className={`shrink-0 w-16 h-16 rounded-2xl text-white flex items-center justify-center font-bold text-3xl shadow-sm ${tone.badge}`}>
             {badge || (
               <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth="2.75" viewBox="0 0 24 24"><path d={tone.icon} strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -73,7 +73,7 @@ export function showToast({ variant = 'info', title, description, badge, action,
             {description ? <p className="text-lg text-slate-500 font-medium leading-snug mt-1.5">{description}</p> : null}
           </div>
         </div>
-        <div className="flex items-center gap-4 shrink-0 ml-auto">
+        <div className="flex items-center gap-4 shrink-0">
           {action ? (
             <button
               type="button"
