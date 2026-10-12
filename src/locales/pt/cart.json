@@ -176,6 +176,8 @@
   "prevPage": "Anteriores",
   "nextPage": "Mais antigos",
   "perkTitle": "Vantagem do cartão",
-  "perkText": "Com o cartão paga menos: desconto de 0,50€ por lavagem e 0,20€ por secagem.",
-  "cardStatus": "Estado"
+  "perkText": "Com o cartão paga menos: {{parts}}.",
+  "cardStatus": "Estado",
+  "perkWash": "até {{amount}} de desconto por lavagem",
+  "perkDry": "até {{amount}} de desconto por secagem"
 }

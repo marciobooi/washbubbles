@@ -730,6 +730,26 @@ router.get('/cards/:code', cardLookupLimiter, requireKiosk, async (req, res) => 
   res.json(c)
 })
 
+// Public: what the "My card" window needs from the server's own rules — the minimum top-up and how much
+// cheaper the card is than cash per machine type. Nothing sensitive; same exposure as /prices/lookup.
+router.get('/card-info', async (req, res) => {
+  try {
+    const SettingT = withTenant(Setting, req)
+    const PriceT = withTenant(Price, req)
+    const minRow = await SettingT.findOne({ key: 'loyaltyCard.minRecharge' }).lean()
+    const prices = await PriceT.find({}).lean()
+    const saving = { wash: 0, dry: 0 }
+    for (const p of prices) {
+      if (p.type !== 'wash' && p.type !== 'dry') continue
+      const diff = Math.round((Number(p.cashPrice || 0) - Number(p.cardPrice || 0)) * 100) / 100
+      if (diff > saving[p.type]) saving[p.type] = diff // the most the card saves for that kind of machine
+    }
+    res.json({ minRecharge: Math.max(0, Number(minRow?.value) || 0), saving })
+  } catch (e) {
+    res.status(500).json({ error: e.message || 'Could not load card info' })
+  }
+})
+
 // Public: lightweight settings lookup for branding and card purchase keys (no auth)
 router.get('/settings/:key', async (req, res) => {
   const key = String(req.params.key || '')

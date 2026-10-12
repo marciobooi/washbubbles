@@ -3,10 +3,12 @@ import { useCart } from '../context/CartContext'
 import { useTranslation } from 'react-i18next'
 import { Plus, RotateCcw, ShieldCheck, ChevronLeft, ChevronRight, ArrowLeft, CreditCard, Wifi } from 'lucide-react'
 import { WasherIcon, DryerIcon } from './icons/MachineIcons'
+import api from '@/services/api'
 
 const MAX_RECENT = 10 // how many movements the window keeps
 const PAGE_SIZE = 5   // shown per page, flipped with big touch buttons (no inner scrolling)
 const QUICK = [5, 10, 20, 50]
+const fmtMoney = (n) => `${Number(n).toFixed(2).replace('.', ',')}€`
 
 // `onRecharge` used to be accepted here and never called — the cart-based flow superseded it.
 export default function CardModal({ open, onClose, transactions = [], balance = 0, card = null }) {
@@ -15,8 +17,19 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
   const { t: tc } = useTranslation('cart')
   const [amount, setAmount] = useState(10)
   const [page, setPage] = useState(0)
+  // The shop's own rules, read from the server: minimum top-up and what the card saves per machine kind.
+  const [info, setInfo] = useState({ minRecharge: 0, saving: { wash: 0, dry: 0 } })
+  const minAmount = Math.max(1, Number(info.minRecharge) || 5)
 
-  useEffect(() => { if (open) { setPage(0); setAmount(10) } }, [open])
+  useEffect(() => {
+    if (!open) return undefined
+    let alive = true
+    setPage(0)
+    api.request('/pos/card-info', { method: 'GET', expect: 'json', skipAuth: true })
+      .then((r) => { if (alive && r) { setInfo(r); setAmount((a) => Math.max(a, Number(r.minRecharge) || 5)) } })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [open])
 
   useEffect(() => {
     if (!open) return undefined
@@ -58,11 +71,16 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
   }
   const TONE = { green: 'bg-emerald-100 text-emerald-700', blue: 'bg-blue-100 text-blue-700', amber: 'bg-amber-100 text-amber-700' }
 
+  const parts = []
+  if (info.saving?.wash > 0) parts.push(tc('perkWash', { amount: fmtMoney(info.saving.wash) }))
+  if (info.saving?.dry > 0) parts.push(tc('perkDry', { amount: fmtMoney(info.saving.dry) }))
+  const perkText = parts.length ? tc('perkText', { parts: parts.join(' • ') }) : ''
+
   const code = card?.code ? String(card.code) : ''
   const masked = code ? `•••• ${code.slice(-4)}` : '—'
   const hasBalance = balance > 0
 
-  const dec = () => setAmount((a) => Math.max(5, a - 5))
+  const dec = () => setAmount((a) => Math.max(minAmount, a - 5))
   const inc = () => setAmount((a) => Math.min(100, a + 5))
 
   const proceed = () => {
@@ -137,7 +155,7 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
                 <button type="button" aria-label={tc('more')} onClick={inc} className="w-[72px] h-[72px] rounded-2xl bg-[#008770] text-white font-black text-4xl flex items-center justify-center shadow-md active:scale-95">+</button>
               </div>
               <div className="grid grid-cols-4 gap-3">
-                {QUICK.map((v) => (
+                {QUICK.filter((v) => v >= minAmount).map((v) => (
                   <button
                     key={v}
                     type="button"
@@ -214,15 +232,17 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
               </>
             )}
 
-            <div className="mt-auto bg-gradient-to-r from-emerald-50 to-[#ebf8f4] border border-emerald-200/80 rounded-2xl p-5 flex items-start gap-4">
-              <div className="w-12 h-12 rounded-xl bg-[#008770] text-white shrink-0 flex items-center justify-center shadow-md">
-                <ShieldCheck className="w-7 h-7" strokeWidth={2.2} />
+            {perkText && (
+              <div className="mt-auto bg-gradient-to-r from-emerald-50 to-[#ebf8f4] border border-emerald-200/80 rounded-2xl p-5 flex items-start gap-4">
+                <div className="w-12 h-12 rounded-xl bg-[#008770] text-white shrink-0 flex items-center justify-center shadow-md">
+                  <ShieldCheck className="w-7 h-7" strokeWidth={2.2} />
+                </div>
+                <div>
+                  <div className="font-extrabold text-slate-900 text-lg">{tc('perkTitle')}</div>
+                  <p className="text-base text-slate-700 font-medium leading-snug mt-1">{perkText}</p>
+                </div>
               </div>
-              <div>
-                <div className="font-extrabold text-slate-900 text-lg">{tc('perkTitle')}</div>
-                <p className="text-base text-slate-700 font-medium leading-snug mt-1">{tc('perkText')}</p>
-              </div>
-            </div>
+            )}
           </section>
         </div>
       </div>

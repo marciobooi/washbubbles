@@ -176,6 +176,8 @@
   "prevPage": "Newer",
   "nextPage": "Older",
   "perkTitle": "Card advantage",
-  "perkText": "Pay less with the card: €0.50 off each wash and €0.20 off each dry.",
-  "cardStatus": "Status"
+  "perkText": "Pay less with the card: {{parts}}.",
+  "cardStatus": "Status",
+  "perkWash": "up to {{amount}} off each wash",
+  "perkDry": "up to {{amount}} off each dry"
 }

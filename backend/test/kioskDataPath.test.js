@@ -46,6 +46,19 @@ describe('What the kiosk fetches and shows agrees with what the server charges',
     expect(res.body.cardPrice).to.equal(1.8)
   })
 
+  it('the card window reads the minimum top-up and the card saving per machine kind from the server', async () => {
+    const Setting = (await import('../src/models/setting.js')).default
+    await Setting.create({ tenantId: tenant._id, key: 'loyaltyCard.minRecharge', value: 10 })
+    await Price.create({ tenantId: tenant._id, type: 'dry', weight: 18, cashPrice: 2, cardPrice: 1.8 })
+    await Price.create({ tenantId: tenant._id, type: 'wash', weight: 9, cashPrice: 4, cardPrice: 3.5 })
+    await Price.create({ tenantId: tenant._id, type: 'wash', weight: 14, cashPrice: 6, cardPrice: 5.2 })
+    const res = await request(app).get('/api/pos/card-info')
+    expect(res.status).to.equal(200)
+    expect(res.body.minRecharge).to.equal(10)
+    expect(res.body.saving.dry).to.equal(0.2)
+    expect(res.body.saving.wash).to.equal(0.8) // the most it saves on any wash machine
+  })
+
   it('kiosk and server agree on when a promo is active (days, hours, empty days = every day)', () => {
     // Wednesday 2026-10-14 12:30 local time
     const wed = new Date(2026, 9, 14, 12, 30)

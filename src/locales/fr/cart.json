@@ -176,6 +176,8 @@
   "prevPage": "Précédents",
   "nextPage": "Plus anciens",
   "perkTitle": "Avantage de la carte",
-  "perkText": "Payez moins avec la carte : 0,50 € de réduction par lavage et 0,20 € par séchage.",
-  "cardStatus": "Statut"
+  "perkText": "Payez moins avec la carte : {{parts}}.",
+  "cardStatus": "Statut",
+  "perkWash": "jusqu’à {{amount}} de réduction par lavage",
+  "perkDry": "jusqu’à {{amount}} de réduction par séchage"
 }
