@@ -3,7 +3,7 @@ import QRCode from 'qrcode'
 import Modal from './ui/Modal'
 import api from '@/services/api'
 import { useTranslation } from 'react-i18next'
-import { mergeLegal, legalText } from '@/lib/defaultLegal'
+import { mergeLegal, legalText, parseLegal } from '@/lib/defaultLegal'
 
 let cache = null
 /** The shop's legal info, from the server (setting `legal.info`), with the defaults behind it. */
@@ -48,8 +48,12 @@ export default function LegalModal({ open, kind, onClose }) {
             <p className="text-lg text-slate-500 break-all">{info.complaintsUrl}</p>
           </div>
         ) : (
-          <div className="max-h-[46vh] overflow-y-auto touch-pan-y pr-3 text-xl leading-relaxed text-slate-700 whitespace-pre-line">
-            {body}
+          <div className="max-h-[46vh] overflow-y-auto touch-pan-y pr-3 text-xl leading-relaxed text-slate-700">
+            {parseLegal(body).map((b, i) => b.type === 'h'
+              ? <h4 key={i} className="mt-6 first:mt-0 mb-2 text-2xl font-bold text-emerald-900">{b.text}</h4>
+              : b.type === 'ul'
+                ? <ul key={i} className="list-disc pl-7 space-y-1.5">{b.items.map((it, k) => <li key={k}>{it}</li>)}</ul>
+                : <p key={i} className="mb-2">{b.text}</p>)}
           </div>
         )}
 

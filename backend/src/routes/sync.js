@@ -121,7 +121,9 @@ router.post('/push/card', async (req, res) => {
             code: data.code,
             balance: roundMoney(Math.max(0, Number(data.balance) || 0)),
             status: data.status === 'active' ? 'active' : 'pending_write',
-            name: data.name || '', email: data.email || '', phone: data.phone || '', contribuinte: data.contribuinte || ''
+            name: data.name || '', email: data.email || '', phone: data.phone || '', contribuinte: data.contribuinte || '',
+            marketingOptIn: Boolean(data.marketingOptIn),
+            privacyConsentAt: data.privacyConsentAt ? new Date(data.privacyConsentAt) : null,
           }
         },
         { upsert: true, new: true, setDefaultsOnInsert: true }

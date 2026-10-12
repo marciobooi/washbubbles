@@ -47,6 +47,31 @@ describe('Card purchase on the shop PC charges the cash really inserted', functi
     expect(await Sale.countDocuments({ type: 'card_purchase' })).to.equal(0)
   })
 
+  it('records when the holder authorised the processing of their details, on the card and on the sale', async () => {
+    await Peripheral.create({ tenantId: tenant._id, name: 'Dispenser', type: 'card_dispenser', enabled: true, status: 'ok' })
+    const Card = (await import('../src/models/card.js')).default
+    coinMachine.client.client.balance = 5
+    const before = Date.now()
+    const res = await request(app).post('/api/pos/card/purchase').set('Authorization', `Bearer ${kioskToken}`)
+      .send({ inserted: 5, customerName: 'Maria', customerEmail: 'maria@example.com', customerPrivacyConsent: true })
+    expect(res.status).to.equal(200)
+    const card = await Card.findOne({ email: 'maria@example.com' })
+    expect(card.privacyConsentAt).to.be.instanceOf(Date)
+    expect(card.privacyConsentAt.getTime()).to.be.at.least(before - 1000)
+    const sale = await Sale.findOne({ type: 'card_purchase' })
+    expect(new Date(sale.metadata.privacyConsentAt).getTime()).to.equal(card.privacyConsentAt.getTime())
+  })
+
+  it('stores no consent date when nothing was authorised', async () => {
+    await Peripheral.create({ tenantId: tenant._id, name: 'Dispenser', type: 'card_dispenser', enabled: true, status: 'ok' })
+    const Card = (await import('../src/models/card.js')).default
+    coinMachine.client.client.balance = 5
+    const res = await request(app).post('/api/pos/card/purchase').set('Authorization', `Bearer ${kioskToken}`).send({ inserted: 5 })
+    expect(res.status).to.equal(200)
+    const card = await Card.findOne({})
+    expect(card.privacyConsentAt).to.equal(null)
+  })
+
   it('charges the cash in the session, takes it out of the session, and the change is what is above the price', async () => {
     await Peripheral.create({ tenantId: tenant._id, name: 'Dispenser', type: 'card_dispenser', enabled: true, status: 'ok' })
     coinMachine.client.client.balance = 10

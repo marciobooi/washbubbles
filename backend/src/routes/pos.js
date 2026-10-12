@@ -432,6 +432,9 @@ router.post('/card/purchase', requireKiosk, async (req, res) => {
       })
     }
 
+    // The moment the customer authorised the processing of their details (GDPR proof), if they did.
+    const privacyConsentAt = customerPrivacyConsent ? new Date() : null
+
     // ── A card is physically out. From here the customer owns it. ──
     const card = await CardT.create({
       code: cardCode,
@@ -443,7 +446,7 @@ router.post('/card/purchase', requireKiosk, async (req, res) => {
       phone: customerPhone || '',
       contribuinte: customerContribuinte || '',
       marketingOptIn: Boolean(customerMarketingOptIn),
-      privacyConsentAt: customerPrivacyConsent ? new Date() : null,
+      privacyConsentAt,
     })
 
     const sale = await SaleT.create({
@@ -456,7 +459,7 @@ router.post('/card/purchase', requireKiosk, async (req, res) => {
       type: 'card_purchase',
       cardId: card._id,
       cardCode,
-      metadata: localId ? { localId: String(localId) } : undefined,
+      metadata: { ...(localId ? { localId: String(localId) } : {}), ...(privacyConsentAt ? { privacyConsentAt } : {}) },
     })
 
     // The cash inserted for this purchase is spent: take it out of the session. Left in, it was moved

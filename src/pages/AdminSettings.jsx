@@ -9,7 +9,7 @@ import { Scale, Palette, ShieldCheck, Wifi as WifiIcon, Bell, MessageCircle, Sli
 import { DEFAULT_BANNERS } from '@/lib/defaultBanners'
 import { DEFAULT_LANDING_CONTENT } from '@/lib/defaultLandingContent'
 import LandingTranslations from '@/components/LandingTranslations'
-import { DEFAULT_LEGAL, DEFAULT_PRIVACY_PT, LEGAL_LANGS, mergeLegal } from '@/lib/defaultLegal'
+import { DEFAULT_LEGAL, DEFAULT_PRIVACY_PT, DEFAULT_TERMS_PT, LEGAL_LANGS, mergeLegal } from '@/lib/defaultLegal'
 
 // Settings hidden from the raw "Avançado" list below — either because they
 // already have a dedicated, friendlier UI elsewhere (so a second raw/rawer
@@ -1421,7 +1421,7 @@ export default function AdminSettings(){
                 {LEGAL_LANGS.map((l) => (
                   <button key={l.code} type="button" onClick={() => setLegalLang(l.code)}
                     className={`px-3 py-1.5 rounded-lg text-sm border ${legalLang === l.code ? 'bg-primary-600 text-white border-primary-600' : 'bg-white text-neutral-700'}`}>
-                    {l.label}{l.code !== 'pt' && !legal.privacy[l.code] ? ' (vazio)' : ''}
+                    {l.label}{l.code !== 'pt' && !legal.privacy[l.code] ? ' (usa português)' : ''}
                   </button>
                 ))}
                 <Button type="button" size="sm" variant="outline" disabled={translatingLegal} onClick={translateLegal}>
@@ -1435,7 +1435,7 @@ export default function AdminSettings(){
                   value={legal.privacy[legalLang] || ''}
                   onChange={(e) => setLegal((l) => ({ ...l, privacy: { ...l.privacy, [legalLang]: e.target.value } }))} />
                 <p className="text-xs text-muted-foreground mt-1">
-                  O texto em português é um <b>modelo</b> escrito a partir dos dados que o sistema guarda (nome, email, telefone, NIF, saldo e movimentos do cartão).
+                  O texto em português é um <b>modelo</b> escrito a partir dos dados que o sistema guarda (cartão, saldo e movimentos, nome, email, telefone, NIF e vendas).
                   Reveja-o com quem trata do RGPD antes de o considerar definitivo. Uma língua em branco usa o português.
                 </p>
                 {legalLang === 'pt' && (
@@ -1444,10 +1444,18 @@ export default function AdminSettings(){
               </div>
 
               <div>
-                <Label htmlFor="legal-terms">Termos e Condições (opcional — só aparece no quiosque se tiver texto em português)</Label>
+                <Label htmlFor="legal-terms">Termos e Regras de Utilização</Label>
                 <textarea id="legal-terms" rows={8} className="w-full rounded-md border p-3 text-sm"
                   value={legal.terms[legalLang] || ''}
                   onChange={(e) => setLegal((l) => ({ ...l, terms: { ...l.terms, [legalLang]: e.target.value } }))} />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Formato: uma linha que começa por <code>## </code> é um título de secção e uma linha que começa por <code>- </code> é um ponto de lista.
+                  Modelo para uma lavandaria self-service em Portugal; confirme o que se aplica ao seu espaço antes de o publicar
+                  (por exemplo: horário, videovigilância — se tiver câmaras tem de informar —, o que fazer em caso de avaria e peças esquecidas).
+                </p>
+                {legalLang === 'pt' && (
+                  <button type="button" className="text-xs underline text-primary-700 mt-1" onClick={() => setLegal((l) => ({ ...l, terms: { ...l.terms, pt: DEFAULT_TERMS_PT } }))}>Repor o texto modelo</button>
+                )}
               </div>
             </div>
 

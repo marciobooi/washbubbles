@@ -170,7 +170,7 @@ export default function Pos() {
         <CardModal open={cardOpen} onClose={closeCard} transactions={transactions} balance={Number(currentCard?.balance) || 0} card={currentCard} />
 
         
-        <div className="fixed bottom-0 left-0 right-0 z-10 bg-white/90 backdrop-blur-md border-t border-emerald-100/80 px-8 py-4 flex items-center justify-between gap-4 text-lg font-medium text-slate-600">
+        <div className="fixed bottom-0 left-0 right-0 z-10 bg-white/90 backdrop-blur-md border-t border-emerald-100/80 px-6 py-3 flex items-center justify-between gap-3 text-base font-medium text-slate-600">
           <span className="flex items-center gap-3 shrink-0">
             <span className="w-3.5 h-3.5 rounded-full bg-emerald-500 ring-4 ring-emerald-200" />
             <span className="font-bold text-slate-800">{t('home.ready')}</span>

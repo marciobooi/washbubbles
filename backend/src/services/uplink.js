@@ -205,6 +205,8 @@ export class Uplink extends EventEmitter {
       email: card.email || '',
       phone: card.phone || '',
       contribuinte: card.contribuinte || '',
+      marketingOptIn: Boolean(card.marketingOptIn),
+      privacyConsentAt: card.privacyConsentAt || null,
     })
   }
 
@@ -348,6 +350,7 @@ export class Uplink extends EventEmitter {
           create: true, code: p.code, balance: p.balance,
           status: p.status === 'active' ? 'active' : 'pending_write',
           name: p.name, email: p.email, phone: p.phone, contribuinte: p.contribuinte,
+          marketingOptIn: Boolean(p.marketingOptIn), privacyConsentAt: p.privacyConsentAt || null,
         })
         if (p.status !== 'active') return // still awaiting its write at the reader
         // 2) a card written at the shop becomes usable there (409 = already active: fine)
