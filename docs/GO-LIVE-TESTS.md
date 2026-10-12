@@ -279,6 +279,14 @@ Steps (on the PC, PowerShell, in `C:\washbubbles`):
 - [ ] Touch calibration holds after a reboot
 - [ ] "Fora de servico" / Avariada from the admin reaches the kiosk in about 5 s and blocks the sale; Reparada returns it
 
+### 13.5b Hopper, change coins and the new cash close (list added 2026-10-12)
+- [ ] **Which coins does the change use?** Give change on purpose in a case that needs a 2 EUR coin (e.g. pay a 0.50 EUR item with a 5 EUR note and see what drops). Yesterday a try at paying 2 EUR coins as change did not happen: find out whether the hopper simply has no 2 EUR coins/hopper for that value, or whether the change plan never asks for them. Note exactly what drops for 4.50, 3.00, 1.50 change.
+- [ ] **Hopper stock per coin is manual on purpose**: the system knows every coin that ENTERS (acceptor ledger) but only the EUR amount of the change that leaves, not which coins. To track it automatically one of two things must be true: (a) the controller reports which coins it dispensed per payout, or (b) one single-denomination hopper per coin value, each with its own Peripheral (`hopperConfig.coinValue`). Check on the real hardware what the controller reports after a payout and decide.
+- [ ] **Hopper tab (kiosk + admin)**: count the coins by hand, set the target per coin, see "a repor"; the stock is no longer pre-filled.
+- [ ] **Reforço** (coins brought from outside, e.g. the 1 EUR ran out): from the admin tab and from the kiosk with the staff PIN. Check: hopper stock for that coin value goes up, a "Reforço do hopper" entry appears in the history as float (not a sale), expected cash of the session goes up by the same amount; a coin value with no hopper configured is reported but still booked as float.
+- [ ] **Fecho**: "Para o banco" defaults to everything counted minus the coins that refill the hopper to target; lowering it keeps the smallest note(s) (e.g. one 5 EUR) in the till; only 5/10/20 notes are offered; "Retirar da caixa" lists N x coin and the notes; confirm the close and see the history entry; after it, the accepted ledger starts from zero.
+- [ ] **Books follow the cash**: a card sold for 10 with 5 credit shows 10 in cash sales/till, nothing more when the 5 is spent later (that day only shows in "Consumo de cartões", information); a top-up counts once, when the cash enters; a cash refund reduces the till.
+
 ### 13.6 Admin / central
 - [ ] A machine's occupied/free in the central admin follows the shop (5 s)
 - [ ] A price / machine / setting change reaches the shop in seconds (sync_now); edited straight in the database, within 30 s
