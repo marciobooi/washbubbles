@@ -514,6 +514,7 @@ describe('index.js: PUBLIC_LANDING_PAGE gate (not the shop-kiosk POS app)', () =
       { path: '/:lang(en|fr|de|es)', methods: ['get'] },
       { path: '/legal/:doc(privacy|terms|cookies)', methods: ['get'] },
       { path: '/:lang(en|fr|de|es)/legal/:doc(privacy|terms|cookies)', methods: ['get'] },
+      { path: '/404', methods: ['get'] },
       { path: '/robots.txt', methods: ['get'] },
       { path: '/sitemap.xml', methods: ['get'] },
     ])

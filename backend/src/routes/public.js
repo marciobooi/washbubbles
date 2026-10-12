@@ -16,7 +16,7 @@ import { withTenant } from '../services/tenant.js'
 import { TRANSLATIONS_KEY } from '../services/landingTranslate.js'
 import { landingVersion } from '../services/landingCache.js'
 import { TRANSLATED_LANGS } from '../views/landingI18n.js'
-import { renderLegalPage } from '../views/legalPage.js'
+import { renderLegalPage, renderNotFoundPage } from '../views/legalPage.js'
 import { mergeLegal } from '../services/legalDefaults.js'
 
 const router = express.Router()
@@ -146,6 +146,12 @@ async function sendLegal(req, res, lang) {
 }
 router.get('/legal/:doc(privacy|terms|cookies)', (req, res) => sendLegal(req, res, 'pt'))
 router.get('/:lang(en|fr|de|es)/legal/:doc(privacy|terms|cookies)', (req, res) => sendLegal(req, res, req.params.lang))
+
+// Where nginx sends every address that is neither a page nor a file: a real 404 (never the app shell with a 200).
+router.get('/404', async (req, res) => {
+  const content = await loadContent(req)
+  res.status(404).set('Cache-Control', 'no-store').type('html').send(renderNotFoundPage({ brand: mergeContent(content).brand }))
+})
 
 router.get('/robots.txt', (req, res) => {
   res.type('text/plain').send(renderRobotsTxt())

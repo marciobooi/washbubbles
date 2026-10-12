@@ -208,4 +208,14 @@ footer a{ color:inherit }
 </html>`
 }
 
+/** A real "page not found" (served with status 404 by routes/public.js, reached through nginx for unknown addresses). */
+export function renderNotFoundPage({ brand }) {
+  return `<!doctype html>
+<html lang="pt-PT"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Página não encontrada — ${esc(brand.name)}</title><meta name="robots" content="noindex">
+<link rel="stylesheet" href="/fonts/fonts.css">
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;font:16px/1.6 Inter,system-ui,sans-serif;color:#0f2a27;background:linear-gradient(180deg,#f0fdfa,#fff)}main{text-align:center;padding:24px}h1{font-size:28px;color:#134e4a;margin:8px 0}a{display:inline-block;margin-top:14px;padding:10px 18px;border-radius:999px;background:#0d9488;color:#fff;text-decoration:none;font-weight:600}</style></head>
+<body><main><img src="${esc(brand.logo)}" alt="" width="56" height="56"><h1>Página não encontrada</h1><p>O endereço que abriu não existe ou foi alterado.</p><a href="/">Voltar à página inicial</a></main></body></html>`
+}
+
 export { SITE_URL }

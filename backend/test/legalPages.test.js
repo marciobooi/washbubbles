@@ -69,6 +69,13 @@ describe('Website legal pages (privacy, terms, cookies) and footer links', funct
     expect(home.text).to.contain('id="to-top"')
   })
 
+  it('unknown addresses get a real 404 page (not the app shell with a 200)', async () => {
+    const r = await request(app).get('/404')
+    expect(r.status).to.equal(404)
+    expect(r.text).to.contain('Página não encontrada')
+    expect(r.text).to.contain('noindex')
+  })
+
   it('the front page footer links to the three pages and the complaints book, and the map waits for a click', async () => {
     const res = await request(app).get('/')
     expect(res.status).to.equal(200)
