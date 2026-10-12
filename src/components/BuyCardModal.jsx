@@ -6,7 +6,7 @@ import { CreditCard, User, Mail, Phone, FileText, CheckCircle2, Wifi, ArrowRight
 import { toast } from './ui/Toast'
 import api from '@/services/api'
 import * as localApi from '@/services/local-api'
-import { useTranslation } from 'react-i18next'
+import { useTranslation, Trans } from 'react-i18next'
 import { useCart } from '@/context/CartContext'
 
 const STEPS = {
@@ -31,6 +31,7 @@ export default function BuyCardModal({ open, onClose }) {
     email: '',
     phone: '',
     contribuinte: '',
+    privacyConsent: false,
     marketingOptIn: false
   })
 
@@ -99,7 +100,7 @@ export default function BuyCardModal({ open, onClose }) {
 
   function resetForm() {
     setStep(STEPS.FORM)
-    setFormData({ name: '', email: '', phone: '', contribuinte: '', marketingOptIn: false })
+    setFormData({ name: '', email: '', phone: '', contribuinte: '', privacyConsent: false, marketingOptIn: false })
     setInsertedAmount(0)
     setChangeAmount(0)
     setPurchasedCard(null)
@@ -112,13 +113,21 @@ export default function BuyCardModal({ open, onClose }) {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
+  // Any personal detail typed needs the customer's authorisation (GDPR); with nothing typed there is nothing to authorise.
+  const hasPersonalData = Boolean((formData.name || formData.email || formData.phone || formData.contribuinte).toString().trim())
+
   function handleNext() {
+    if (hasPersonalData && !formData.privacyConsent) {
+      toast({ title: t('consentRequired'), variant: 'warning' })
+      return
+    }
     // Move to payment step
     setStep(STEPS.PAYMENT)
   }
 
   function handleSkipForm() {
-    // Skip data entry and go straight to payment
+    // Skipping means NO personal data: whatever was typed is dropped, never sent without authorisation
+    setFormData({ name: '', email: '', phone: '', contribuinte: '', privacyConsent: false, marketingOptIn: false })
     setStep(STEPS.PAYMENT)
   }
 
@@ -152,6 +161,8 @@ export default function BuyCardModal({ open, onClose }) {
             customerPhone: formData.phone,
             customerContribuinte: formData.contribuinte,
             customerMarketingOptIn: formData.marketingOptIn,
+          customerPrivacyConsent: hasPersonalData && formData.privacyConsent,
+            customerPrivacyConsent: hasPersonalData && formData.privacyConsent,
             batchId: `BATCH-${Date.now()}`
           })
           setPurchasedCard(local.card)
@@ -476,6 +487,23 @@ export default function BuyCardModal({ open, onClose }) {
                 </div>
               </div>
 
+              <div className={`flex items-start gap-4 p-3 rounded-xl border-2 ${hasPersonalData && !formData.privacyConsent ? 'border-amber-300 bg-amber-50/60' : 'border-transparent'}`}>
+                <input
+                  id="privacyConsent"
+                  type="checkbox"
+                  className="mt-1 w-7 h-7 shrink-0 rounded-md border-2 border-slate-300 accent-[#00875A]"
+                  checked={formData.privacyConsent}
+                  onChange={(e) => handleInputChange('privacyConsent', e.target.checked)}
+                />
+                <label htmlFor="privacyConsent" className="text-lg font-medium text-slate-700 leading-snug">
+                  <Trans
+                    ns="buycard"
+                    i18nKey="consent"
+                    components={{ a: <button type="button" onClick={(e) => { e.preventDefault(); setShowPrivacy(true) }} className="font-semibold text-[#00875A] underline underline-offset-4" /> }}
+                  />
+                </label>
+              </div>
+
               <label htmlFor="marketingOptIn" className="flex items-center gap-4 p-3 rounded-xl active:bg-slate-100 cursor-pointer">
                 <input
                   id="marketingOptIn"
@@ -486,7 +514,6 @@ export default function BuyCardModal({ open, onClose }) {
                 />
                 <span className="text-lg font-medium text-slate-700">{t('marketing')}</span>
               </label>
-              <button type="button" onClick={() => setShowPrivacy(true)} className="self-start px-3 py-2 text-lg font-semibold text-[#00875A] underline underline-offset-4">{t('privacyLink')}</button>
             </div>
 
             <div className="grid grid-cols-2 gap-4 mt-6 pt-6 border-t border-slate-200/80">

@@ -49,5 +49,7 @@
   "closeWindow": "Fermer la fenêtre",
   "cardLabel": "Carte FreshBubbles",
   "fillHint": "Permet de récupérer le solde en cas de perte et d’associer les factures automatiquement.",
-  "privacyLink": "Voir la politique de confidentialité (RGPD)"
+  "privacyLink": "Voir la politique de confidentialité (RGPD)",
+  "consent": "J’autorise le traitement de mes données personnelles conformément à la <a>Politique de confidentialité</a>.",
+  "consentRequired": "Pour enregistrer vos données, veuillez autoriser leur traitement dans la case indiquée."
 }

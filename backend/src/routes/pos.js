@@ -354,7 +354,7 @@ router.post('/recharge', requireKiosk, async (req, res) => {
  * and told "Card dispensed. Please insert card into reader to activate."
  */
 router.post('/card/purchase', requireKiosk, async (req, res) => {
-  const { inserted, customerName, customerEmail, customerPhone, customerContribuinte, customerMarketingOptIn, batchId, localId } = req.body
+  const { inserted, customerName, customerEmail, customerPhone, customerContribuinte, customerMarketingOptIn, customerPrivacyConsent, batchId, localId } = req.body
 
   const parsedInserted = parseAmount(inserted)
   if (!parsedInserted.ok) return res.status(400).json({ error: parsedInserted.error })
@@ -443,6 +443,7 @@ router.post('/card/purchase', requireKiosk, async (req, res) => {
       phone: customerPhone || '',
       contribuinte: customerContribuinte || '',
       marketingOptIn: Boolean(customerMarketingOptIn),
+      privacyConsentAt: customerPrivacyConsent ? new Date() : null,
     })
 
     const sale = await SaleT.create({

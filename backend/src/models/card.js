@@ -41,6 +41,8 @@ const cardSchema = new Schema({
   // Opt-in, not opt-out, per GDPR — unchecked by default at purchase time.
   // Only cards with this true are ever included in a marketing broadcast.
   marketingOptIn: { type: Boolean, default: false },
+  // When the holder authorised the processing of the details above (GDPR proof). Null = none given / none stored.
+  privacyConsentAt: { type: Date, default: null },
   
   /**
    * What the physical card was last CONFIRMED to hold (services/cardSync.js).

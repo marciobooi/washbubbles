@@ -49,5 +49,7 @@
   "closeWindow": "Close window",
   "cardLabel": "FreshBubbles card",
   "fillHint": "Lets you recover your balance if the card is lost and link invoices automatically.",
-  "privacyLink": "View Privacy Policy (GDPR)"
+  "privacyLink": "View Privacy Policy (GDPR)",
+  "consent": "I authorise the processing of my personal data, as set out in the <a>Privacy Policy</a>.",
+  "consentRequired": "To save your details, please authorise their processing in the box shown."
 }
