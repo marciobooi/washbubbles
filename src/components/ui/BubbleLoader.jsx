@@ -3,14 +3,13 @@ import React, { useEffect, useRef } from 'react'
 // Bioluminescent soap bubbles floating up and popping. Tap one to pop it, tap empty water to blow a few more.
 // Canvas, own artwork; stops when unmounted or when the page is hidden.
 const PALETTE = [
-  { neon: '#00E5FF', accent: '#38BDF8' },
-  { neon: '#10B981', accent: '#34D399' },
-  { neon: '#2DD4BF', accent: '#5EEAD4' },
-  { neon: '#38BDF8', accent: '#7DD3FC' },
+  { rim: '45,212,191', tint: '20,184,166' },
+  { rim: '56,189,248', tint: '14,165,233' },
+  { rim: '52,211,153', tint: '16,185,129' },
 ]
 const MAX_BUBBLES = 30
 
-export default function BubbleLoader({ className = '', children }) {
+export default function BubbleLoader({ className = '', children, compact = false }) {
   const wrapRef = useRef(null)
   const canvasRef = useRef(null)
 
@@ -42,22 +41,22 @@ export default function BubbleLoader({ className = '', children }) {
 
     function makeBubble(x, y, radius) {
       const rnd = Math.random()
-      const base = radius || (rnd < 0.42 ? Math.random() * 14 + 12 : rnd < 0.78 ? Math.random() * 22 + 27 : Math.random() * 28 + 50)
-      const buoy = base > 45 ? 1.9 : base < 20 ? 1.1 : 1.4
+      const base = radius || (compact ? Math.random() * 7 + 6 : rnd < 0.42 ? Math.random() * 14 + 12 : rnd < 0.78 ? Math.random() * 22 + 27 : Math.random() * 28 + 50)
+      const buoy = (base > 45 ? 1.9 : base < 20 ? 1.1 : 1.4) * (compact ? 0.45 : 1)
       return {
-        x: x !== undefined ? x : Math.random() * width,
+        x: x !== undefined ? x : (compact ? width / 2 + (Math.random() - 0.5) * width * 0.45 : Math.random() * width),
         y: y !== undefined ? y : height + Math.random() * 80 + 30,
         r: base,
-        vy: -(Math.random() * 0.9 + buoy),
-        vx: (Math.random() - 0.5) * 0.6,
-        swaySpeed: Math.random() * 0.025 + 0.015,
+        vy: -(Math.random() * 0.9 + buoy) * (compact ? 0.4 : 0.5),
+        vx: (Math.random() - 0.5) * 0.3,
+        swaySpeed: (Math.random() * 0.025 + 0.015) * 0.5,
         swayDist: Math.random() * 2.2 + 0.8,
         swayAngle: Math.random() * Math.PI * 2,
-        m1: Math.random() * Math.PI * 2, m1s: Math.random() * 0.045 + 0.025,
-        m2: Math.random() * Math.PI * 2, m2s: Math.random() * 0.03 + 0.02,
-        wob: Math.random() * 0.14 + 0.06,
+        m1: Math.random() * Math.PI * 2, m1s: (Math.random() * 0.045 + 0.025) * 0.5,
+        m2: Math.random() * Math.PI * 2, m2s: (Math.random() * 0.03 + 0.02) * 0.5,
+        wob: Math.random() * 0.035 + 0.015,
         rot: Math.random() * Math.PI * 2, rots: (Math.random() - 0.5) * 0.012,
-        pop: Math.random() * height * 0.2 + 16,
+        pop: Math.random() * height * 0.2 + (compact ? 4 : 16),
         pal: PALETTE[Math.floor(Math.random() * PALETTE.length)],
         alpha: 0, target: Math.random() * 0.25 + 0.75, dead: false,
       }
@@ -65,12 +64,12 @@ export default function BubbleLoader({ className = '', children }) {
     function popBubble(b) {
       if (b.dead) return
       b.dead = true
-      effects.push({ kind: 'ring', x: b.x, y: b.y, r: b.r * 0.4, max: b.r * 1.45, a: 0.95, color: b.pal.neon })
-      const n = Math.floor(b.r * 0.5) + 8
+      effects.push({ kind: 'ring', x: b.x, y: b.y, r: b.r, max: b.r * 1.5, a: 0.7, color: 'rgb(' + b.pal.rim + ')' })
+      const n = compact ? 4 : 7
       for (let i = 0; i < n; i++) {
-        const ang = Math.random() * Math.PI * 2
-        const sp = (Math.random() * 4.5 + 2) * (b.r > 45 ? 1.25 : 1)
-        effects.push({ kind: 'dot', x: b.x, y: b.y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 1.2, r: Math.random() * 2.2 + 0.8, a: 1, decay: Math.random() * 0.03 + 0.025, color: b.pal.neon })
+        const ang = (i / n) * Math.PI * 2 + Math.random() * 0.6
+        const sp = (Math.random() * 1.6 + 1.2) * (b.r > 45 ? 1.4 : 1)
+        effects.push({ kind: 'dot', x: b.x + Math.cos(ang) * b.r, y: b.y + Math.sin(ang) * b.r, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, r: Math.random() * 1.4 + 1, a: 0.9, decay: 0.03, color: 'rgb(' + b.pal.rim + ')' })
       }
     }
 
@@ -79,64 +78,48 @@ export default function BubbleLoader({ className = '', children }) {
       const r = b.r
       ctx.save()
       ctx.translate(b.x, b.y)
-      ctx.rotate(b.rot)
-      const sx = 1 + Math.sin(b.m1) * b.wob
-      const sy = 1 - Math.sin(b.m1) * b.wob * 0.85
-      ctx.transform(sx, Math.cos(b.m2) * b.wob * 0.35, 0, sy, 0, 0)
+      ctx.scale(1 + Math.sin(b.m1) * b.wob, 1 - Math.sin(b.m1) * b.wob)
       ctx.globalAlpha = b.alpha
-      // neon rim
-      ctx.shadowColor = b.pal.neon
-      ctx.shadowBlur = r > 40 ? 24 : r > 25 ? 16 : 9
-      ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2)
-      ctx.strokeStyle = b.pal.neon; ctx.lineWidth = Math.max(1.8, r * 0.075); ctx.stroke()
-      ctx.shadowBlur = 0
-      // translucent iridescent body
-      const g = ctx.createRadialGradient(-r * 0.28, -r * 0.28, r * 0.1, 0, 0, r)
-      g.addColorStop(0, 'rgba(255,255,255,0.14)')
-      g.addColorStop(0.55, 'rgba(0,229,255,0.05)')
-      g.addColorStop(0.82, 'rgba(16,185,129,0.10)')
-      g.addColorStop(0.96, 'rgba(255,255,255,0.26)')
-      g.addColorStop(1, 'rgba(0,229,255,0.45)')
+      // soft body: nearly clear in the middle, tinted towards the edge
+      const g = ctx.createRadialGradient(0, 0, r * 0.15, 0, 0, r)
+      g.addColorStop(0, 'rgba(255,255,255,0.10)')
+      g.addColorStop(0.7, 'rgba(' + b.pal.tint + ',0.08)')
+      g.addColorStop(1, 'rgba(' + b.pal.tint + ',0.30)')
       ctx.fillStyle = g
       ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill()
-      // glass edge
-      ctx.beginPath(); ctx.arc(0, 0, Math.max(1, r - 1.5), 0, Math.PI * 2)
-      ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = Math.max(1, r * 0.035); ctx.stroke()
-      // crescent highlight
-      ctx.save()
-      ctx.beginPath()
-      ctx.arc(0, 0, r * 0.88, -Math.PI * 0.82, -Math.PI * 0.16, false)
-      ctx.arc(0, 0, r * 0.7, -Math.PI * 0.16, -Math.PI * 0.82, true)
-      ctx.closePath()
-      const gg = ctx.createLinearGradient(-r * 0.6, -r * 0.8, r * 0.5, -r * 0.2)
-      gg.addColorStop(0, 'rgba(255,255,255,0.25)'); gg.addColorStop(0.35, 'rgba(255,255,255,0.98)')
-      gg.addColorStop(0.75, 'rgba(255,255,255,0.85)'); gg.addColorStop(1, 'rgba(255,255,255,0.1)')
-      ctx.fillStyle = gg; ctx.fill()
-      ctx.restore()
-      ctx.beginPath(); ctx.arc(-r * 0.42, -r * 0.48, Math.max(1.8, r * 0.1), 0, Math.PI * 2)
-      ctx.fillStyle = 'rgba(255,255,255,0.95)'; ctx.fill()
-      // lower refraction
-      ctx.beginPath(); ctx.arc(0, 0, r * 0.86, Math.PI * 0.28, Math.PI * 0.68)
-      ctx.strokeStyle = b.pal.accent; ctx.lineWidth = Math.max(1.4, r * 0.065); ctx.lineCap = 'round'; ctx.stroke()
+      // thin clean rim
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2)
+      ctx.strokeStyle = 'rgba(' + b.pal.rim + ',0.85)'
+      ctx.lineWidth = Math.max(1.2, r * 0.05)
+      ctx.stroke()
+      // one soft highlight, top-left
+      ctx.beginPath(); ctx.arc(0, 0, r * 0.72, Math.PI * 1.08, Math.PI * 1.45)
+      ctx.strokeStyle = 'rgba(255,255,255,0.95)'
+      ctx.lineWidth = Math.max(1.6, r * 0.11)
+      ctx.lineCap = 'round'
+      ctx.stroke()
+      // tiny sparkle
+      ctx.beginPath(); ctx.arc(r * 0.3, r * 0.35, Math.max(1, r * 0.06), 0, Math.PI * 2)
+      ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.fill()
       ctx.restore()
     }
 
-    for (let i = 0; i < 16; i++) bubbles.push(makeBubble(Math.random() * width, Math.random() * height))
+    for (let i = 0; i < (compact ? 5 : 16); i++) bubbles.push(makeBubble(Math.random() * width, Math.random() * height))
     let tick = 0
 
     function frame() {
       if (stopped) return
       ctx.clearRect(0, 0, width, height)
       tick++
-      if (tick % 24 === 0 && bubbles.length < MAX_BUBBLES) bubbles.push(makeBubble())
+      if (tick % (compact ? 30 : 40) === 0 && bubbles.length < (compact ? 7 : MAX_BUBBLES)) bubbles.push(makeBubble())
       for (let i = bubbles.length - 1; i >= 0; i--) {
         const b = bubbles[i]
         if (!b.dead) {
-          if (b.alpha < b.target) b.alpha += 0.03
+          if (b.alpha < b.target) b.alpha += 0.015
           b.y += b.vy
           b.swayAngle += b.swaySpeed
           b.x += Math.sin(b.swayAngle) * b.swayDist * 0.5 + b.vx
-          b.m1 += b.m1s; b.m2 += b.m2s; b.rot += b.rots
+          b.m1 += b.m1s; b.m2 += b.m2s; 
           if (b.y <= b.pop) popBubble(b)
           if (b.x < -b.r * 2.5 || b.x > width + b.r * 2.5) b.dead = true
         }
@@ -146,11 +129,11 @@ export default function BubbleLoader({ className = '', children }) {
       for (let i = effects.length - 1; i >= 0; i--) {
         const p = effects[i]
         if (p.kind === 'ring') {
-          p.r += (p.max - p.r) / 4
-          p.a -= 0.085
+          p.r += (p.max - p.r) / 7
+          p.a -= 0.05
           if (p.a > 0) {
             ctx.save(); ctx.globalAlpha = p.a
-            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.2; ctx.shadowColor = p.color; ctx.shadowBlur = 12
+            ctx.strokeStyle = p.color; ctx.lineWidth = 1.6
             ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.stroke()
             ctx.restore()
           }
@@ -158,7 +141,7 @@ export default function BubbleLoader({ className = '', children }) {
           p.x += p.vx; p.y += p.vy; p.vy += 0.09; p.vx *= 0.98; p.a -= p.decay
           if (p.a > 0) {
             ctx.save(); ctx.globalAlpha = p.a
-            ctx.fillStyle = p.color; ctx.shadowColor = p.color; ctx.shadowBlur = 8
+            ctx.fillStyle = p.color
             ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill()
             ctx.restore()
           }
@@ -194,20 +177,20 @@ export default function BubbleLoader({ className = '', children }) {
         bubbles.push(nb)
       }
     }
-    canvas.addEventListener('pointerdown', onPointer)
+    if (!compact) canvas.addEventListener('pointerdown', onPointer)
 
     return () => {
       stopped = true
       cancelAnimationFrame(raf)
       ro?.disconnect()
       document.removeEventListener('visibilitychange', onVisibility)
-      canvas.removeEventListener('pointerdown', onPointer)
+      if (!compact) canvas.removeEventListener('pointerdown', onPointer)
     }
-  }, [])
+  }, [compact])
 
   return (
     <div ref={wrapRef} className={`relative overflow-hidden ${className}`} role="status" aria-live="polite">
-      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full cursor-pointer" />
+      <canvas ref={canvasRef} className={`absolute inset-0 w-full h-full ${compact ? '' : 'cursor-pointer'}`} />
       {children ? <div className="relative z-10 h-full flex flex-col items-center justify-center text-center pointer-events-none">{children}</div> : null}
     </div>
   )

@@ -601,7 +601,7 @@ function AppInner() {
               sell against, so these routes bounce to the admin login. */}
           {import.meta.env.DEV && <Route path="/dev/cart" element={<DevCartPreview />} />}
           {import.meta.env.DEV && <Route path="/dev/card" element={<DevCardPreview />} />}
-          {import.meta.env.DEV && <Route path="/dev/loading" element={<div className="p-6"><Loading size="large" /></div>} />}
+          {import.meta.env.DEV && <Route path="/dev/loading" element={<div className="p-6"><Loading /></div>} />}
           <Route path="/pos" element={isPublicSite ? <Navigate to="/admin/login" replace /> : <Pos />} />
           <Route path="/pos/machines" element={isPublicSite ? <Navigate to="/admin/login" replace /> : <Machines />} />
           <Route path="/pos/machines/:id" element={isPublicSite ? <Navigate to="/admin/login" replace /> : <MachineDetail />} />

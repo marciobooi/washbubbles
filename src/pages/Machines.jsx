@@ -155,7 +155,7 @@ export default function Machines() {
         </div>
       </div>
       {loading ? (
-        <Loading size="large" label={t('machines.loading')} />
+        <Loading label={t('machines.loading')} />
       ) : (
         <div className="grid gap-6">
           {machines.map((m) => (
