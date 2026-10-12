@@ -182,5 +182,6 @@
   "perkDry": "até {{amount}} de desconto por secagem",
   "amountLess": "Diminuir valor",
   "amountMore": "Aumentar valor",
-  "loading": "A carregar…"
+  "loading": "A carregar…",
+  "cardLoading": "A ler o cartão…"
 }

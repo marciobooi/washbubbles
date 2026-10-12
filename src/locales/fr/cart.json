@@ -182,5 +182,6 @@
   "perkDry": "jusqu’à {{amount}} de réduction par séchage",
   "amountLess": "Diminuer le montant",
   "amountMore": "Augmenter le montant",
-  "loading": "Chargement…"
+  "loading": "Chargement…",
+  "cardLoading": "Lecture de la carte…"
 }

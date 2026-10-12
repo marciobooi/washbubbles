@@ -182,5 +182,6 @@
   "perkDry": "bis zu {{amount}} Rabatt pro Trocknung",
   "amountLess": "Betrag verringern",
   "amountMore": "Betrag erhöhen",
-  "loading": "Wird geladen…"
+  "loading": "Wird geladen…",
+  "cardLoading": "Karte wird gelesen…"
 }

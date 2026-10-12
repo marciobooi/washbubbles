@@ -7,6 +7,7 @@ import CardModal from '../components/CardModal'
 import BuyCardModal from '../components/BuyCardModal'
 import { toast } from '@/components/ui/Toast'
 import Banner from '../components/Banner'
+import Loading from '../components/ui/loading'
 import api from '@/services/api'
 import { useTranslation } from 'react-i18next'
 import { connect, subscribe } from '@/services/websocket'
@@ -31,9 +32,12 @@ export default function Pos() {
   const [currentCard, setCurrentCard] = React.useState(null) // { code, balance, name, ... }
   const [transactions, setTransactions] = React.useState([])
   const removeTimer = React.useRef(null)
+  // Bubbles while the card's data comes from the server (the customer has just put the card in).
+  const [cardLoading, setCardLoading] = React.useState(0)
 
   // Load card balance + history from backend
   async function loadCard(code) {
+    setCardLoading((n) => n + 1)
     try {
       const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
       const kioskKey = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
@@ -50,6 +54,8 @@ export default function Pos() {
     } catch (e) {
       console.error('[Pos] Failed to load card data', e)
       toast({ title: i18n.t('cardLoadError', { ns: 'cart' }), variant: 'destructive' })
+    } finally {
+      setCardLoading((n) => Math.max(0, n - 1))
     }
   }
 
@@ -143,6 +149,14 @@ export default function Pos() {
           </div>
         </div>
         <BuyCardModal open={buyCardOpen} onClose={closeBuyCard} />
+
+        {cardLoading > 0 && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/30">
+            <div className="bg-white rounded-3xl shadow-2xl px-14 py-6">
+              <Loading label={i18n.t('cardLoading', { ns: 'cart' })} />
+            </div>
+          </div>
+        )}
 
         <CardModal open={cardOpen} onClose={closeCard} transactions={transactions} balance={Number(currentCard?.balance) || 0} card={currentCard} />
 

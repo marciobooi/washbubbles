@@ -182,5 +182,6 @@
   "perkDry": "up to {{amount}} off each dry",
   "amountLess": "Decrease amount",
   "amountMore": "Increase amount",
-  "loading": "Loading…"
+  "loading": "Loading…",
+  "cardLoading": "Reading your card…"
 }
