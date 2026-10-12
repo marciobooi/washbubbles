@@ -1,9 +1,21 @@
 {
   "cards": {
-    "wash": { "title": "Waschen", "text": "Wäsche waschen" },
-    "dry": { "title": "Trocknen", "text": "Wäsche trocknen" },
-    "card": { "title": "Meine Karte", "text": "Meine Karte" },
-    "buyCard": { "title": "Karte kaufen", "text": "Karte kaufen" }
+    "wash": {
+      "title": "Waschen",
+      "text": "Wäsche waschen"
+    },
+    "dry": {
+      "title": "Trocknen",
+      "text": "Wäsche trocknen"
+    },
+    "card": {
+      "title": "Meine Karte",
+      "text": "Meine Karte"
+    },
+    "buyCard": {
+      "title": "Karte kaufen",
+      "text": "Karte kaufen"
+    }
   },
   "recharge": {
     "success": "Karte aufgeladen {{amount}}€",
@@ -25,7 +37,18 @@
     "type": {
       "wash": "Waschmaschine",
       "dry": "Trockner"
-    }
+    },
+    "subtitle": "Tippen Sie auf eine freie Maschine, um sie zu wählen.",
+    "legendFree": "Frei",
+    "legendBusy": "Belegt",
+    "inCart": "Im Warenkorb",
+    "selected": "Gewählt",
+    "removeLabel": "{{name}} aus dem Warenkorb entfernen",
+    "tip": "Tipp: Sie können vor dem Bezahlen mehrere Maschinen zur selben Bestellung hinzufügen.",
+    "howTo": "So funktioniert es",
+    "loading": "Maschinen werden geladen...",
+    "cashPrice": "{{price}}€ bar",
+    "cardPrice": "{{price}}€ Karte"
   },
   "card": {
     "title": "Meine Karte",

@@ -1,9 +1,21 @@
 {
   "cards": {
-    "wash": { "title": "Lavar roupa", "text": "Lavar roupa" },
-    "dry": { "title": "Secar roupa", "text": "Secar roupa" },
-    "card": { "title": "O meu cartão", "text": "O meu cartão" },
-    "buyCard": { "title": "Comprar cartão", "text": "Comprar cartão" }
+    "wash": {
+      "title": "Lavar roupa",
+      "text": "Lavar roupa"
+    },
+    "dry": {
+      "title": "Secar roupa",
+      "text": "Secar roupa"
+    },
+    "card": {
+      "title": "O meu cartão",
+      "text": "O meu cartão"
+    },
+    "buyCard": {
+      "title": "Comprar cartão",
+      "text": "Comprar cartão"
+    }
   },
   "recharge": {
     "success": "Cartão recarregado {{amount}}€",
@@ -25,7 +37,18 @@
     "type": {
       "wash": "lavar",
       "dry": "secar"
-    }
+    },
+    "subtitle": "Toque numa máquina disponível para a escolher.",
+    "legendFree": "Disponível",
+    "legendBusy": "Ocupada",
+    "inCart": "No Carrinho",
+    "selected": "Selecionada",
+    "removeLabel": "Remover {{name}} do carrinho",
+    "tip": "Dica: pode adicionar várias máquinas ao mesmo pedido antes de pagar.",
+    "howTo": "Como funciona",
+    "loading": "A carregar máquinas...",
+    "cashPrice": "{{price}}€ dinheiro",
+    "cardPrice": "{{price}}€ cartão"
   },
   "card": {
     "title": "Meu Cartão",

@@ -1,9 +1,21 @@
 {
   "cards": {
-    "wash": { "title": "Laver", "text": "Laver le linge" },
-    "dry": { "title": "Sécher", "text": "Sécher le linge" },
-    "card": { "title": "Ma carte", "text": "Ma carte" },
-    "buyCard": { "title": "Acheter la carte", "text": "Acheter la carte" }
+    "wash": {
+      "title": "Laver",
+      "text": "Laver le linge"
+    },
+    "dry": {
+      "title": "Sécher",
+      "text": "Sécher le linge"
+    },
+    "card": {
+      "title": "Ma carte",
+      "text": "Ma carte"
+    },
+    "buyCard": {
+      "title": "Acheter la carte",
+      "text": "Acheter la carte"
+    }
   },
   "recharge": {
     "success": "Carte rechargée {{amount}}€",
@@ -25,7 +37,18 @@
     "type": {
       "wash": "lavage",
       "dry": "séchage"
-    }
+    },
+    "subtitle": "Touchez une machine disponible pour la choisir.",
+    "legendFree": "Disponible",
+    "legendBusy": "Occupée",
+    "inCart": "Dans le panier",
+    "selected": "Sélectionnée",
+    "removeLabel": "Retirer {{name}} du panier",
+    "tip": "Astuce : vous pouvez ajouter plusieurs machines à la même commande avant de payer.",
+    "howTo": "Comment ça marche",
+    "loading": "Chargement des machines...",
+    "cashPrice": "{{price}}€ espèces",
+    "cardPrice": "{{price}}€ carte"
   },
   "card": {
     "title": "Ma Carte",

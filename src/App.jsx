@@ -111,6 +111,12 @@ function AppInner() {
   const cartCount = cart.length
   const [cartOpen, setCartOpen] = React.useState(false)
   const [helpOpen, setHelpOpen] = React.useState(false)
+  // Screens (machine list) can ask for the same tutorial the ? button opens
+  React.useEffect(() => {
+    const open = () => setHelpOpen(true)
+    window.addEventListener('kiosk:open-help', open)
+    return () => window.removeEventListener('kiosk:open-help', open)
+  }, [])
   const [wifiVoucher, setWifiVoucher] = React.useState(null)
   const [receiptBatchId, setReceiptBatchId] = React.useState(null)
   const [receiptItems, setReceiptItems] = React.useState(null)

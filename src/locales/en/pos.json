@@ -1,9 +1,21 @@
 {
   "cards": {
-    "wash": { "title": "Wash", "text": "Wash laundry" },
-    "dry": { "title": "Dry", "text": "Dry laundry" },
-    "card": { "title": "My Card", "text": "My Card" },
-    "buyCard": { "title": "Buy Card", "text": "Buy a card" }
+    "wash": {
+      "title": "Wash",
+      "text": "Wash laundry"
+    },
+    "dry": {
+      "title": "Dry",
+      "text": "Dry laundry"
+    },
+    "card": {
+      "title": "My Card",
+      "text": "My Card"
+    },
+    "buyCard": {
+      "title": "Buy Card",
+      "text": "Buy a card"
+    }
   },
   "recharge": {
     "success": "Card recharged {{amount}}€",
@@ -25,7 +37,18 @@
     "type": {
       "wash": "washing",
       "dry": "drying"
-    }
+    },
+    "subtitle": "Tap an available machine to choose it.",
+    "legendFree": "Available",
+    "legendBusy": "Busy",
+    "inCart": "In cart",
+    "selected": "Selected",
+    "removeLabel": "Remove {{name}} from cart",
+    "tip": "Tip: you can add several machines to the same order before paying.",
+    "howTo": "How it works",
+    "loading": "Loading machines...",
+    "cashPrice": "{{price}}€ cash",
+    "cardPrice": "{{price}}€ card"
   },
   "card": {
     "title": "My Card",

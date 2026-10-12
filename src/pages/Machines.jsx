@@ -89,7 +89,7 @@ export default function Machines() {
     return () => { mounted = false; unsub() }
   }, [type])
 
-  const { cart, addToCart, clearCart, openCart } = useCart()
+  const { cart, addToCart, removeFromCart, clearCart, openCart } = useCart()
   const { t: tc } = useTranslation('cart')
 
   async function openForAdd(m) {
@@ -142,19 +142,48 @@ export default function Machines() {
 
   const typeLabel = t(`machines.type.${type}`)
 
+  const inCartItem = (m) => cart.find((c) => String(c.productId || c._id) === String(m._id || m.id))
+  const toggle = (id) => {
+    const found = machines.find((x) => String(x._id || x.id) === String(id))
+    if (!found) return
+    const item = inCartItem(found)
+    if (item) removeFromCart(item.id)
+    else openForAdd(found)
+  }
+
   return (
     <div className='flex-1 container mx-auto p-4'>
     <div className="relative pb-[12vh] z-10">
-      <h2 className="p-4 text-center text-4xl font-semibold mb-6">{t('machines.select', { type: typeLabel })}</h2>
+      <div className="px-2 pt-2 mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-5xl font-extrabold text-slate-900 tracking-tight">{t('machines.select', { type: typeLabel })}</h2>
+          <p className="text-2xl text-slate-600 mt-3">{t('machines.subtitle')}</p>
+        </div>
+        <div className="shrink-0 flex items-center gap-5 bg-white px-5 py-3 rounded-xl border border-slate-200 text-lg font-medium text-slate-600">
+          <span className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-emerald-500" />{t('machines.legendFree')}</span>
+          <span className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-rose-400" />{t('machines.legendBusy')}</span>
+        </div>
+      </div>
       {loading ? (
-        <div className="text-center text-neutral-500">Carregando máquinas...</div>
+        <div className="text-center text-neutral-500 text-xl">{t('machines.loading')}</div>
       ) : (
         <div className="grid gap-6">
           {machines.map((m) => (
-            <MachineCard key={m._id || m.id} m={m} frames={frames} onSelect={(id) => { const mFound = machines.find((x) => String(x._id || x.id) === String(id)); if (mFound) openForAdd(mFound) }} />
+            <MachineCard key={m._id || m.id} m={m} frames={frames} inCart={Boolean(inCartItem(m))} onSelect={toggle} />
           ))}
         </div>
       )}
+      <div className="mt-8 bg-slate-100/90 rounded-2xl p-6 border border-slate-200 flex items-center justify-between gap-5 text-xl text-slate-600">
+        <div className="flex items-center gap-4">
+          <span className="shrink-0 w-11 h-11 rounded-full bg-white flex items-center justify-center border border-slate-200">💡</span>
+          <p>{t('machines.tip')}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new CustomEvent('kiosk:open-help'))}
+          className="text-emerald-700 font-bold shrink-0 min-h-[56px] px-4 rounded-xl active:bg-emerald-50"
+        >{t('machines.howTo')}</button>
+      </div>
       {/* MachineModal removed — clicking a machine adds directly to cart */}
 
       <Wave height="12vh" className="mt-2" />
