@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import Modal from './ui/Modal'
-import { Button } from './ui/button'
-import { Input } from './ui/input'
-import { Label } from './ui/label'
+import Loading from './ui/loading'
 import { CreditCard, User, Mail, Phone, FileText, Banknote, CheckCircle2, Wifi, ArrowRight } from 'lucide-react'
 import { toast } from './ui/Toast'
 import api from '@/services/api'
@@ -499,52 +497,49 @@ export default function BuyCardModal({ open, onClose }) {
         const missing = Math.max(0, Math.round((cardPrice - paid) * 100) / 100)
         const percent = cardPrice > 0 ? Math.min(100, Math.round((paid / cardPrice) * 100)) : 0
         return (
-          <div className="space-y-6">
-            <div className="text-center mb-2">
-              <Banknote className="h-16 w-16 mx-auto mb-4 text-green-600" />
-              <h3 className="text-xl font-semibold mb-2">{t('payTitle')}</h3>
-              <p className="text-2xl font-bold text-primary">{eur(cardPrice)}</p>
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col items-center text-center pt-2">
+              <div className="w-20 h-20 rounded-3xl bg-emerald-50 border border-emerald-100 flex items-center justify-center mb-4">
+                <Banknote className="h-11 w-11 text-[#00875A]" />
+              </div>
+              <h3 className="text-3xl font-extrabold tracking-tight text-emerald-900">{t('payTitle')}</h3>
+              <div className="mt-3 inline-flex items-center gap-3 bg-emerald-50 border border-emerald-200 px-5 py-2 rounded-full text-lg font-medium text-slate-600">
+                <span>{t('price')}: <strong className="text-slate-900">{eur(cardPrice)}</strong></span>
+              </div>
             </div>
 
-            <div className="space-y-4">
-              <p className="text-center text-muted-foreground">{t('insertCash')}</p>
+            <p className="text-center text-xl text-slate-500">{t('insertCash')}</p>
 
-              {/* The cash really inserted (the shop's own session): paying is only possible with money in */}
-              <div className="rounded-xl border-2 border-emerald-200 bg-white p-4 space-y-3">
-                <div className="grid grid-cols-2 gap-3 divide-x divide-slate-100">
-                  <div className="pr-2">
-                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">{t('inserted')}</span>
-                    <span className="text-3xl font-bold tabular-nums text-slate-800">{eur(paid)}</span>
-                  </div>
-                  <div className="pl-3">
-                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">{enough && paid > cardPrice ? t('change') : t('missing')}</span>
-                    <span className={`text-3xl font-bold tabular-nums ${enough ? 'text-emerald-600' : 'text-slate-800'}`}>{enough ? eur(Math.max(0, paid - cardPrice)) : eur(missing)}</span>
-                  </div>
+            {/* The cash really inserted (the shop's own session): paying is only possible with money in */}
+            <div className="rounded-2xl border-2 border-emerald-200 bg-white p-6 flex flex-col gap-5">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="pr-4 border-r border-slate-100">
+                  <span className="text-sm font-bold text-slate-500 uppercase tracking-wider block mb-1">{t('inserted')}</span>
+                  <span className="text-5xl font-extrabold tabular-nums text-slate-800">{eur(paid)}</span>
                 </div>
-                <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200/80">
-                  <div className="h-full bg-emerald-500 rounded-full transition-all duration-300" style={{ width: `${percent}%` }} />
+                <div className="pl-4">
+                  <span className="text-sm font-bold text-slate-500 uppercase tracking-wider block mb-1">{enough && paid > cardPrice ? t('change') : t('missing')}</span>
+                  <span className={`text-5xl font-extrabold tabular-nums ${enough ? 'text-emerald-600' : 'text-slate-800'}`}>{enough ? eur(Math.max(0, paid - cardPrice)) : eur(missing)}</span>
                 </div>
               </div>
-
-              <Button size="lg" className="w-full" onClick={() => handlePayment(paid)} disabled={loading || !enough}>
-                {t('pay')} · {eur(cardPrice)}
-              </Button>
-
-              <div className="pt-2">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    if (window.electronAPI?.hideKeyboard) {
-                      window.electronAPI.hideKeyboard()
-                    }
-                    setStep(STEPS.FORM)
-                  }}
-                  className="w-full"
-                  disabled={loading}
-                >
-                  {t('back')}
-                </Button>
+              <div className="w-full h-4 bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200/80">
+                <div className="h-full bg-emerald-500 rounded-full transition-all duration-300" style={{ width: `${percent}%` }} />
               </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 pt-6 border-t border-slate-200/80">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => { if (window.electronAPI?.hideKeyboard) window.electronAPI.hideKeyboard(); setStep(STEPS.FORM) }}
+                className="h-[72px] rounded-2xl bg-emerald-50 border border-emerald-200 text-[#00875A] font-bold text-2xl active:scale-[0.98] disabled:opacity-50"
+              >{t('back')}</button>
+              <button
+                type="button"
+                onClick={() => handlePayment(paid)}
+                disabled={loading || !enough}
+                className="h-[72px] rounded-2xl bg-[#00875A] border border-emerald-700 text-white font-bold text-2xl shadow-md active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
+              >{t('pay')} · {eur(cardPrice)}</button>
             </div>
           </div>
         )
@@ -552,82 +547,76 @@ export default function BuyCardModal({ open, onClose }) {
 
       case STEPS.DISPENSING:
         return (
-          <div className="text-center py-8">
-            <div className="animate-spin h-16 w-16 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
-            <h3 className="text-xl font-semibold mb-2">{t('dispensing')}</h3>
-            <p className="text-muted-foreground">{t('pleaseWait')}</p>
+          <div className="flex flex-col items-center text-center py-10 gap-2">
+            <Loading label={t('dispensing')} />
+            <p className="text-xl text-slate-500">{t('pleaseWait')}</p>
           </div>
         )
 
       case STEPS.INSERT_CARD:
         return (
-          <div className="space-y-6">
-            <div className="text-center mb-6">
-              <CreditCard className="h-16 w-16 mx-auto mb-4 text-primary animate-pulse" />
-              <h3 className="text-xl font-semibold mb-2">{t('insertCardTitle')}</h3>
-              <p className="text-red-500 animate-pulse animate-transform">
-                {t('insertCardHint')}
-              </p>
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col items-center text-center pt-2">
+              <div className="w-20 h-20 rounded-3xl bg-emerald-50 border border-emerald-100 flex items-center justify-center mb-4 animate-pulse">
+                <CreditCard className="h-11 w-11 text-[#00875A]" />
+              </div>
+              <h3 className="text-3xl font-extrabold tracking-tight text-emerald-900">{t('insertCardTitle')}</h3>
+              <p className="mt-3 text-xl text-slate-500 max-w-md">{t('insertCardHint')}</p>
             </div>
 
             {writeError && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
-                <p className="text-sm text-red-700 font-semibold">{writeError}</p>
-                <p className="text-xs text-red-600 mt-1">
-                  {t('notActive')}
-                </p>
+              <div className="bg-red-50 border border-red-200 rounded-2xl p-5 text-center">
+                <p className="text-lg text-red-700 font-semibold">{writeError}</p>
+                <p className="text-base text-red-600 mt-1">{t('notActive')}</p>
               </div>
             )}
 
             {purchasedCard && (
-              <div className="bg-muted p-4 rounded-lg space-y-2">
-                <p className="text-sm">
-                  <span className="font-semibold">{t('code')}:</span> {purchasedCard.code}
-                </p>
-                <p className="text-sm">
-                  <span className="font-semibold">{t('balance')}:</span> {eur(initialCredit)}
-                </p>
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-5 flex flex-col gap-2 text-xl">
+                <p><span className="font-semibold text-slate-500">{t('code')}:</span> <span className="font-mono font-bold text-slate-800">{purchasedCard.code}</span></p>
+                <p><span className="font-semibold text-slate-500">{t('balance')}:</span> <span className="font-bold text-slate-800">{eur(initialCredit)}</span></p>
                 {changeAmount > 0 && (
-                  <p className="text-sm text-green-600 font-semibold">
-                    {t('change')}: {eur(changeAmount)}
-                  </p>
+                  <p className="text-emerald-700 font-bold">{t('change')}: {eur(changeAmount)}</p>
                 )}
               </div>
             )}
 
-            <Button 
-              onClick={handleCardInserted} 
-              className="w-full"
-              disabled={loading}
-            >
-              {loading ? t('activating') : t('cardInserted')}
-            </Button>
+            <div className="pt-6 border-t border-slate-200/80">
+              <button
+                type="button"
+                onClick={handleCardInserted}
+                disabled={loading}
+                className="w-full h-[72px] rounded-2xl bg-[#00875A] border border-emerald-700 text-white font-bold text-2xl shadow-md active:scale-[0.98] disabled:opacity-60"
+              >{loading ? t('activating') : t('cardInserted')}</button>
+            </div>
           </div>
         )
 
       case STEPS.COMPLETE:
         return (
-          <div className="text-center py-8">
-            <CheckCircle2 className="h-20 w-20 mx-auto mb-4 text-green-600" />
-            <h3 className="text-2xl font-semibold mb-2">{t('activatedTitle')}</h3>
-            <p className="text-muted-foreground mb-4">
-              {t('ready')}
-            </p>
-            
+          <div className="flex flex-col gap-6 items-center text-center">
+            <div className="w-24 h-24 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center mt-2">
+              <CheckCircle2 className="h-14 w-14 text-[#00875A]" />
+            </div>
+            <div>
+              <h3 className="text-3xl font-extrabold tracking-tight text-emerald-900">{t('activatedTitle')}</h3>
+              <p className="mt-2 text-xl text-slate-500">{t('ready')}</p>
+            </div>
+
             {purchasedCard && (
-              <div className="bg-green-50 p-4 rounded-lg mb-4">
-                <p className="text-lg font-bold text-green-800">
-                  {t('balance')}: {eur(initialCredit)}
-                </p>
-                <p className="text-sm text-green-700">
-                  {t('code')}: {purchasedCard.code}
-                </p>
+              <div className="w-full bg-emerald-50 border border-emerald-200 rounded-2xl p-5">
+                <p className="text-3xl font-extrabold text-emerald-800">{t('balance')}: {eur(initialCredit)}</p>
+                <p className="text-lg text-emerald-700 mt-1">{t('code')}: <span className="font-mono">{purchasedCard.code}</span></p>
               </div>
             )}
 
-            <Button onClick={handleClose} className="mt-4">
-              {t('done')}
-            </Button>
+            <div className="w-full pt-6 border-t border-slate-200/80">
+              <button
+                type="button"
+                onClick={handleClose}
+                className="w-full h-[72px] rounded-2xl bg-[#00875A] border border-emerald-700 text-white font-bold text-2xl shadow-md active:scale-[0.98]"
+              >{t('done')}</button>
+            </div>
           </div>
         )
 
