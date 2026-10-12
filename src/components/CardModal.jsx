@@ -108,71 +108,61 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
       >
         <div className="grid grid-cols-2 gap-6 items-stretch">
           {/* LEFT: card, balance, top-up */}
-          <section className="bg-white rounded-3xl p-7 shadow-sm border border-slate-100 flex flex-col justify-between gap-7">
-            <div className="rounded-2xl p-6 text-white shadow-lg relative overflow-hidden bg-gradient-to-br from-[#008770] via-[#059669] to-[#047857]">
-              <div className="absolute -right-8 -bottom-8 w-36 h-36 rounded-full bg-white/10 blur-xl pointer-events-none" />
-              <div className="flex justify-between items-start mb-8 relative">
-                <div>
-                  <div className="text-sm uppercase font-extrabold tracking-wider text-emerald-100">{tc('cardBrandTitle')}</div>
-                  <div className="text-base font-medium text-emerald-50 opacity-90">{tc('cardBrandSub')}</div>
-                </div>
-                <div className="w-12 h-9 rounded-md bg-amber-200/90 border border-amber-300 flex items-center justify-center shadow-inner">
+          <section className="bg-white rounded-3xl px-8 py-9 shadow-sm border border-slate-100 flex flex-col justify-between gap-10">
+            {/* the card itself: calm, little text */}
+            <div className="rounded-2xl px-7 py-6 text-white shadow-md relative overflow-hidden bg-gradient-to-br from-[#008770] via-[#059669] to-[#047857]">
+              <div className="absolute -right-8 -bottom-10 w-36 h-36 rounded-full bg-white/10 blur-xl pointer-events-none" />
+              <div className="flex justify-between items-center relative">
+                <div className="text-lg font-semibold tracking-wide text-emerald-50">{tc('cardBrandTitle')}</div>
+                <div className="w-12 h-9 rounded-md bg-amber-200/90 border border-amber-300 flex items-center justify-center">
                   <Wifi className="w-5 h-5 text-amber-800 rotate-90" />
                 </div>
               </div>
-              <div className="text-sm font-mono tracking-widest text-emerald-100 mb-1 relative">{tc('cardNumber')}</div>
-              <div className="text-2xl font-bold tracking-widest font-mono relative">{masked}</div>
+              <div className="mt-10 text-2xl font-medium tracking-[0.25em] font-mono relative">{masked}</div>
             </div>
 
-            <div className="flex items-stretch gap-6 pb-6 border-b border-slate-100">
-              <div className="flex-1 flex flex-col justify-center gap-2">
-                <span className="text-sm font-semibold uppercase tracking-wider text-slate-400">{tc('cardStatus')}</span>
-                <span className="inline-flex w-fit items-center gap-2 bg-[#eafaf4] text-[#008770] font-bold text-sm px-3 py-1 rounded-full border border-emerald-200">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#008770]" />
+            {/* status + balance */}
+            <div className="flex items-center justify-between gap-6">
+              <div className="flex flex-col gap-2">
+                <span className="text-base text-slate-400">{tc('cardStatus')}</span>
+                <span className="inline-flex w-fit items-center gap-2 text-emerald-700 font-semibold text-lg bg-emerald-50 px-3.5 py-1 rounded-full">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
                   {t('card.active')}
                 </span>
               </div>
-              <div className="w-px bg-slate-200" />
-              <div className="flex-1 flex flex-col justify-center gap-1 pl-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-semibold uppercase tracking-wider text-slate-400">{t('card.balanceLabel')}</span>
-                  {!hasBalance && <span className="text-xs font-bold uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">{tc('noBalance')}</span>}
-                </div>
-                <div className={`text-5xl font-extrabold tracking-tight ${hasBalance ? 'text-[#008770]' : 'text-slate-700'}`}>{fmt(balance)}</div>
+              <div className="text-right flex flex-col gap-1">
+                <span className="text-base text-slate-400">{t('card.balanceLabel')}</span>
+                <span className={`text-5xl font-bold tracking-tight ${hasBalance ? 'text-[#008770]' : 'text-slate-600'}`}>{fmt(balance)}</span>
               </div>
             </div>
 
-            <div className="flex flex-col gap-5">
-              <div className="text-center">
-                <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-50 border border-emerald-100 text-sm font-bold uppercase tracking-wider text-emerald-800">
-                  <span className="w-2 h-2 rounded-full bg-[#008770]" />
-                  {tc('selectAmount')}
-                </span>
+            {/* top-up */}
+            <div className="flex flex-col gap-6">
+              <div className="text-center text-lg font-semibold text-slate-500">{tc('selectAmount')}</div>
+              <div className="flex items-center justify-between gap-4">
+                <button type="button" aria-label={tc('amountLess')} onClick={dec} className="w-16 h-16 rounded-2xl bg-white border-2 border-slate-200 text-slate-700 text-4xl leading-none flex items-center justify-center active:scale-95">−</button>
+                <span className="text-6xl font-bold text-[#008770] tracking-tight">{amount}€</span>
+                <button type="button" aria-label={tc('amountMore')} onClick={inc} className="w-16 h-16 rounded-2xl bg-[#008770] text-white text-4xl leading-none flex items-center justify-center active:scale-95">+</button>
               </div>
-              <div className="flex items-center justify-center gap-6 py-3 bg-slate-50/80 rounded-2xl border border-slate-100">
-                <button type="button" aria-label={tc('amountLess')} onClick={dec} className="w-[72px] h-[72px] rounded-2xl bg-white border border-slate-200 text-slate-800 font-black text-4xl flex items-center justify-center shadow-sm active:scale-95">−</button>
-                <span className="min-w-[150px] text-center text-6xl font-black text-[#008770] tracking-tight">{amount}€</span>
-                <button type="button" aria-label={tc('amountMore')} onClick={inc} className="w-[72px] h-[72px] rounded-2xl bg-[#008770] text-white font-black text-4xl flex items-center justify-center shadow-md active:scale-95">+</button>
-              </div>
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-4 gap-4">
                 {QUICK.filter((v) => v >= minAmount).map((v) => (
                   <button
                     key={v}
                     type="button"
                     onClick={() => setAmount(v)}
-                    className={`h-16 rounded-xl border-2 font-extrabold text-2xl active:scale-95 ${amount === v ? 'bg-[#008770] border-[#008770] text-white shadow-md' : 'bg-white border-emerald-600 text-emerald-700'}`}
+                    className={`h-14 rounded-xl text-xl font-semibold active:scale-95 ${amount === v ? 'bg-emerald-50 border-2 border-[#008770] text-[#006d5b]' : 'bg-white border-2 border-slate-200 text-slate-600'}`}
                   >{v}€</button>
                 ))}
               </div>
             </div>
 
-            <div className="flex flex-col gap-3">
-              <button type="button" onClick={proceed} className="w-full h-[72px] rounded-2xl bg-[#008770] text-white font-black text-2xl flex items-center justify-center gap-3 shadow-lg active:scale-[0.98]">
+            <div className="flex flex-col gap-4">
+              <button type="button" onClick={proceed} className="w-full h-[72px] rounded-2xl bg-[#008770] text-white font-bold text-2xl flex items-center justify-center gap-3 shadow-md active:scale-[0.98]">
                 <CreditCard className="w-7 h-7 text-emerald-100" />
                 {tc('goToPayment')}
               </button>
-              <button type="button" onClick={close} className="w-full h-16 rounded-2xl bg-[#f5f6f8] text-slate-700 font-bold text-xl flex items-center justify-center gap-2 border border-slate-200 active:scale-[0.98]">
-                <ArrowLeft className="w-6 h-6 text-slate-500" />
+              <button type="button" onClick={close} className="w-full h-14 rounded-2xl text-slate-500 font-semibold text-xl flex items-center justify-center gap-2 active:bg-slate-100">
+                <ArrowLeft className="w-6 h-6" />
                 {tc('back')}
               </button>
             </div>
