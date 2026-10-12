@@ -264,6 +264,10 @@ Steps (on the PC, PowerShell, in `C:\washbubbles`):
 - [ ] **Recharge** 10 in cash with the card in the reader: balance +10 on screen, chip rewritten, Hetzner updated, one sale with the card code
 - [ ] Take the card out: after about 3 s the card window closes and the kiosk is back on the home screen
 - [ ] Card present + cash credit at once, pay a washer: card price used, no phantom credit moved onto the card
+- [ ] **Card in -> loading -> window** (2026-10-12): put a card in on the home screen: the bubble panel "A ler o cartão…" appears at once, then the "My card" window opens already filled (balance, history). Check it does not just flash (if the read is instant, add a ~300 ms minimum)
+- [ ] **Card out while loading**: pull the card out while the panel is still showing: no card window opens afterwards and the kiosk is on the home screen
+- [ ] **Card out with the window open**: it closes about 3 s after removal (bouncing removed/inserted on the reader must NOT close it); Buy-card flow is not closed by this
+- [ ] New "My card" window at 70% height: top-up -/+ in steps of 5 from the server minimum, "Avançar para pagamento" adds the recharge and opens the payment window; history shows machine names (needs the Hetzner backend, deployed 2026-10-12) and pages 5 at a time
 
 ### 13.5 Kiosk screens
 - [ ] **New payment window** (design of 2026-10-12): header with machine number, quick choices, stepper, dark total, inserted / remaining / progress; check at touch size on the real screen
