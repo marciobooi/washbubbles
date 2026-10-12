@@ -34,6 +34,7 @@ describe('Website legal pages (privacy, terms, cookies) and footer links', funct
     expect(res.text).to.contain('<h2>1. Quem é o responsável</h2>')
     expect(res.text).to.contain('desta página') // "janela" becomes "página" on the website
     expect(res.text).to.contain('/legal/cookies')
+    expect(res.text).to.contain('class="back" href="/"') // a clear way back at the top
   })
 
   it('shows the admin entity details and the saved translation in the other language', async () => {

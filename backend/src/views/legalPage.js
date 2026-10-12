@@ -146,6 +146,8 @@ header a.brand{ display:flex; align-items:center; gap:10px; text-decoration:none
 header img{ width:32px; height:32px; object-fit:contain }
 .langs{ display:flex; gap:10px; font-size:13px } .langs a{ color:var(--soft); text-decoration:none } .langs a[aria-current]{ color:var(--p9); font-weight:700 }
 main{ max-width:860px; margin:0 auto; padding:8px 20px 56px }
+.back{ display:inline-flex; align-items:center; gap:6px; margin-top:8px; padding:10px 16px; border-radius:999px; background:#fff; border:1px solid rgba(13,148,136,.3); color:var(--p9); font-weight:600; font-size:15px; text-decoration:none }
+.back:hover{ background:#f0fdfa }
 h1{ font-size:30px; line-height:1.2; color:var(--p9); margin:12px 0 18px }
 h2{ font-size:19px; color:var(--p9); margin:28px 0 8px }
 ul{ padding-left:22px } li{ margin:4px 0 }
@@ -161,6 +163,7 @@ footer a{ color:inherit }
   ${switcher}
 </header>
 <main>
+  <a class="back" href="${esc(home)}">&larr; ${esc(L.legalBack)}</a>
   <h1>${esc(title)}</h1>
   ${blocksHtml(text, lang)}
   ${parts.length ? `<div class="entity"><b>${esc(L.legalEntity)}</b>${esc(parts.join(' · '))}</div>` : ''}
