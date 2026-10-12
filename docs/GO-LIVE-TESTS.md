@@ -315,3 +315,10 @@ Owner finding: the bill acceptor, coin acceptor and the other peripherals connec
 - Commit "kiosk: new payment window ..." (CartModal, Modal, CartContext export, dev-only /dev/cart preview): NOT on the PC yet.
   To deploy: copy `src/components/CartModal.jsx`, `src/components/ui/Modal.jsx`, `src/context/CartContext.jsx`, `src/pages/DevCartPreview.jsx`, `src/App.jsx`, build the screen on the PC, press F5 on the kiosk. No backend restart needed.
 - Preview without the PC: `npm run dev`, open `http://localhost:5173/dev/cart` (fake cart + simulated coins, dev builds only).
+
+### Note 2026-10-12: payment window = the design's own sizes, scaled; translations
+- The window now uses the design's exact classes (528 px layout, light weights) and is scaled as a whole to the modal width (68% of the screen, centred at 53%) and down if the screen is too short. Measured on a 1080x1920 viewport with LIVE Hetzner data: dryer 70% of the height, washer 52%.
+- It is translated (pt / en / fr / de, `src/locales/*/cart.json`, namespace `cart`), plural-aware ("1 ciclo", "2 ciclos"). Verified by switching languages in a local screen pointed at the live server.
+- The kiosk machine list (`GET /pos/machines`) now also returns `number`, `tImp`, `outOfService`, `serviceStatus`; the kiosk promo rule is now the server's rule (it used Portuguese weekday names, so a promo price never showed). Test: `backend/test/kioskDataPath.test.js`.
+- Local view of the kiosk without the PC: `npx vite` with `DEV_API_TARGET=https://freshbubbles.pt` (already in `.claude/launch.json`) and the kiosk key in the git-ignored `.env.local`. READ ONLY: do not press pay on the live server.
+- STILL hardcoded Portuguese on the kiosk (customer-facing), to translate next: BuyCardModal (card purchase), the card/PIN prompts inside CartModal, the credit/refund toasts and the header credit badge (CartContext / App.jsx), Pos.jsx home cards, MachineCard status labels use `pos.json` already.

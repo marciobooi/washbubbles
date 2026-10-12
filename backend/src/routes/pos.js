@@ -66,6 +66,7 @@ router.get('/machines', requireKiosk, async (req, res) => {
     _id: m._id,
     id: m.id,
     name: m.name,
+    number: m.number,
     weight: m.weight,
     price: m.price,
     loyaltyPrice: m.loyaltyPrice,
@@ -73,6 +74,11 @@ router.get('/machines', requireKiosk, async (req, res) => {
     statusText: m.statusText,
     type: m.type,
     icon: m.icon,
+    // Minutes per block of a dryer (the price is per block) and the operator's out-of-service flag:
+    // the payment window shows the time and the kiosk list greys the machine out.
+    tImp: m.tImp,
+    outOfService: Boolean(m.outOfService),
+    serviceStatus: m.serviceStatus || null,
   }))
   if (typeFilter) data = data.filter((m) => (m.type || 'wash') === String(typeFilter))
   res.json(data)

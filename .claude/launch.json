@@ -3,12 +3,16 @@
   "configurations": [
     {
       "name": "dev",
-      "runtimeExecutable": "npm",
+      "runtimeExecutable": "npx",
       "runtimeArgs": [
-        "run",
-        "dev"
+        "vite",
+        "--port",
+        "5173"
       ],
-      "port": 5173
+      "port": 5173,
+      "env": {
+        "DEV_API_TARGET": "https://freshbubbles.pt"
+      }
     }
   ]
 }

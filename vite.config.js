@@ -40,15 +40,17 @@ export default defineConfig(({ mode }) => {
     server: {
       proxy: {
         // Proxy API calls to backend server
+        // DEV_API_TARGET=https://freshbubbles.pt points the local screen at the live server (no local backend needed)
         '/api': {
-          target: 'http://localhost:3000',
+          target: process.env.DEV_API_TARGET || 'http://localhost:3000',
           changeOrigin: true,
           secure: false,
         },
         // Proxy websocket endpoint
         '/ws': {
-          target: 'ws://localhost:3000',
+          target: (process.env.DEV_API_TARGET || 'http://localhost:3000').replace(/^http/, 'ws'),
           ws: true,
+          changeOrigin: true,
         },
       },
     },

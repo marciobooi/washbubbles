@@ -3,36 +3,19 @@
  * @param {Object} price - Price object with promotional fields
  * @returns {boolean} - True if promo is active now
  */
-export function isPromoActive(price) {
+export function isPromoActive(price, now = new Date()) {
+  // Same rule as the server (backend/src/routes/gateways.js promoIsActive): the admin stores English weekday
+  // names, an empty list means every day, and the time window is optional at either end. The kiosk used
+  // Portuguese weekday names here, so a promo price never showed on screen although the server applied it.
   if (!price || !price.promoActive) return false
-  
-  const now = new Date()
-  const currentDay = now.toLocaleDateString('pt-PT', { weekday: 'long' }).toLowerCase()
-  const currentTime = now.toTimeString().slice(0, 5) // HH:mm format
-  
-  // Check if today is a promo day
-  if (!price.promoDays || !Array.isArray(price.promoDays) || price.promoDays.length === 0) {
+  const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+  if (Array.isArray(price.promoDays) && price.promoDays.length && !price.promoDays.includes(days[now.getDay()])) {
     return false
   }
-  
-  if (!price.promoDays.includes(currentDay)) {
-    return false
-  }
-  
-  // Check if current time is within promo hours
-  if (!price.promoStartTime || !price.promoEndTime) {
-    return false
-  }
-  
-  const startTime = price.promoStartTime
-  const endTime = price.promoEndTime
-  
-  // Handle time comparison
-  if (currentTime >= startTime && currentTime <= endTime) {
-    return true
-  }
-  
-  return false
+  const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  if (price.promoStartTime && hhmm < price.promoStartTime) return false
+  if (price.promoEndTime && hhmm > price.promoEndTime) return false
+  return true
 }
 
 /**

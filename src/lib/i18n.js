@@ -11,11 +11,16 @@ import enHelp from '../locales/en/help.json'
 import frHelp from '../locales/fr/help.json'
 import deHelp from '../locales/de/help.json'
 
+import ptCart from '../locales/pt/cart.json'
+import enCart from '../locales/en/cart.json'
+import frCart from '../locales/fr/cart.json'
+import deCart from '../locales/de/cart.json'
+
 const resources = {
-  pt: { pos: pt, help: ptHelp },
-  en: { pos: en, help: enHelp },
-  fr: { pos: fr, help: frHelp },
-  de: { pos: de, help: deHelp },
+  pt: { pos: pt, help: ptHelp, cart: ptCart },
+  en: { pos: en, help: enHelp, cart: enCart },
+  fr: { pos: fr, help: frHelp, cart: frCart },
+  de: { pos: de, help: deHelp, cart: deCart },
 }
 
 i18n
@@ -24,7 +29,7 @@ i18n
     resources,
     lng: 'pt',
     fallbackLng: 'pt',
-    ns: ['pos', 'help'],
+    ns: ['pos', 'help', 'cart'],
     defaultNS: 'pos',
     interpolation: { escapeValue: false },
     react: { useSuspense: false },

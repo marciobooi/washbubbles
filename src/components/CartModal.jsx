@@ -1,5 +1,6 @@
 import React from 'react'
 import Modal from './ui/Modal'
+import { useTranslation } from 'react-i18next'
 import { useCart } from '../context/CartContext'
 import CashModal from './CashModal'
 import api from '@/services/api'
@@ -8,6 +9,7 @@ import * as websocket from '@/services/websocket'
 import * as localApi from '@/services/local-api'
 
 export default function CartModal({ open, onClose, onPay = () => {}, onClear = () => {} }) {
+  const { t, i18n } = useTranslation('cart')
   const { cart, removeFromCart, clearCart, credit, setQuantity } = useCart()
   const [showCash, setShowCash] = React.useState(false)
   // Staff-only manual payment, for when the coin acceptor or card reader is down.
@@ -78,14 +80,23 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
   const fitKey = cart.map((i) => `${i.id}:${i.quantity || 1}`).join('|') + `|${Math.round(credit * 100)}|${confirmed}`
   React.useLayoutEffect(() => {
     if (!open) return undefined
+    // The design is laid out at a fixed 528 px content width (its own sizes and weights) and scaled as a
+    // whole: to the modal's width first, then down if the screen is not tall enough.
+    const DESIGN_W = 528
     const fit = () => {
       const el = fitRef.current
       if (!el) return
+      const parent = el.parentElement
+      const cs = getComputedStyle(parent)
+      const innerW = parent.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)
+      const wantW = innerW > 0 ? innerW / DESIGN_W : 1
+      el.style.width = DESIGN_W + 'px'
       el.style.zoom = '1'
-      const natural = el.scrollHeight
+      const natural = el.scrollHeight // at the design's own scale
       const avail = window.innerHeight * 0.94 - 56 // dialog padding + a little air
-      const z = natural > 0 ? Math.max(0.55, Math.min(1, avail / natural)) : 1
+      const z = natural > 0 ? Math.max(0.5, Math.min(wantW, avail / natural)) : wantW
       el.style.zoom = String(z)
+      el.style.marginInline = 'auto'
     }
     fit()
     window.addEventListener('resize', fit)
@@ -161,7 +172,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
         if (cardCode) {
           console.log('[CartModal] Card detected:', cardCode)
           setDetectedCardCode(cardCode)
-          toast({ title: 'Cartão detetado', variant: 'success' })
+          toast({ title: t('cardDetected'), variant: 'success' })
           
           // Auto-process card payment (a dryer waits for the customer's confirmation first)
           if (!confirmedRef.current) {
@@ -210,7 +221,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
       if (!card?.code) return
       console.log('[CartModal] Local card detected:', card.code)
       setDetectedCardCode(card.code)
-      toast({ title: 'Cartão detetado', variant: 'success' })
+      toast({ title: t('cardDetected'), variant: 'success' })
       setTimeout(() => handleCardPayAutomatic(card.code), 500)
     }
     const onBlocked = ({ status }) => {
@@ -270,7 +281,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
     } catch (e) {
       console.error('Auto card payment failed', e)
       setCardError(e?.message || 'Erro ao processar pagamento com cartão')
-      toast({ title: 'Erro no pagamento', description: e?.message, variant: 'error' })
+      toast({ title: t('paymentError'), description: e?.message, variant: 'error' })
     } finally {
       setCheckingCard(false)
     }
@@ -405,7 +416,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
             <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mx-auto mb-3 opacity-20 text-neutral-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
             </svg>
-            <p className="text-neutral-400 mb-6">Carrinho vazio</p>
+            <p className="text-neutral-400 mb-6">{t('empty')}</p>
             <button 
               onClick={onClose}
               className="px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-semibold transition-all"
@@ -415,7 +426,8 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
           </div>
         ) : (
           <>
-            {/* ---- Payment window (design of 2026-10-12) ---- */}
+            {/* ---- Payment window (design of 2026-10-12): the mock's own sizes at a 528 px layout width,
+                 scaled up to the modal by the fit effect, so it looks like the design on the real screen ---- */}
             {(() => {
               const machineItems = cart.filter((i) => i.type !== 'Recarga de Cartão')
               const single = machineItems.length === 1 && !hasRecharge ? machineItems[0] : null
@@ -426,9 +438,9 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
               const enough = total > 0 && paid >= total
               const waitingConfirm = needsConfirm && !confirmed && (enough || detectedCardCode)
               const label = enough
-                ? (waitingConfirm ? 'DINHEIRO SUFICIENTE · CONFIRME' : 'PAGAMENTO CONCLUÍDO!')
-                : paid > 0 ? 'A RECEBER DINHEIRO...' : 'AGUARDANDO PAGAMENTO'
-              const eur = (n) => `${Number(n).toFixed(2).replace('.', ',')}€`
+                ? (waitingConfirm ? t('statusEnough') : t('statusDone'))
+                : paid > 0 ? t('statusReceiving') : t('statusWaiting')
+              const eur = (n) => `${Number(n).toFixed(2).replace('.', i18n.language === 'en' ? '.' : ',')}€`
               const gapOf = (i) => Number(i.tImp) || 15
               const qtyOf = (i) => (i.type === 'dry' ? Math.max(1, Math.min(8, Math.floor(Number(i.quantity)) || 1)) : 1)
               const perCycle = (i) => unitPrice({ ...i, quantity: 1 })
@@ -436,191 +448,202 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
                 const n = i.number ?? (String(i.name || '').match(/\d+/) || [''])[0]
                 return n === '' || n == null ? '•' : String(n)
               }
+              const dryers = cart.filter((i) => i.type === 'dry')
 
               return (
-                <>
+                <div className="flex flex-col gap-6 text-slate-800 antialiased">
                   {/* Header */}
-                  <header className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-2xl bg-teal-500 text-white font-bold flex items-center justify-center text-xl shadow-sm ring-4 ring-teal-50">
+                  <header className="flex items-center justify-between border-b border-slate-100/90 pb-4">
+                    <div className="flex items-center gap-3.5">
+                      <div className="w-12 h-12 rounded-2xl bg-teal-500 text-white font-bold flex items-center justify-center text-lg shadow-sm ring-4 ring-teal-50">
                         {single ? badge(single) : '🛒'}
                       </div>
                       <div>
                         <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-                          {single ? (single.name || single.type) : 'Carrinho'}
+                          {single ? (single.name || single.type) : t('title')}
                         </h1>
-                        <p className="text-base font-semibold text-slate-600">
+                        <p className="text-xs font-semibold text-slate-600 mt-0.5">
                           {single
-                            ? (single.type === 'dry' ? `Duração base: ${gapOf(single)} min por ciclo` : `${single.weight ? single.weight + ' kg' : 'Lavagem'}`)
-                            : `${cart.length} itens`}
+                            ? (single.type === 'dry' ? t('baseDuration', { min: gapOf(single) }) : `${single.weight ? single.weight + ' kg' : t('wash')}`)
+                            : t('items', { count: cart.length })}
                         </p>
                       </div>
                     </div>
                     <button
-                      aria-label="Fechar janela"
+                      aria-label={t('close')}
                       type="button"
                       onClick={onClose}
-                      className="w-12 h-12 rounded-full bg-slate-100 text-slate-400 hover:text-rose-500 hover:bg-rose-50 active:scale-95 flex items-center justify-center"
+                      className="w-11 h-11 rounded-full bg-slate-100 text-slate-400 hover:text-rose-500 hover:bg-rose-50 active:scale-95 flex items-center justify-center transition-all"
                     >
-                      <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" /></svg>
                     </button>
                   </header>
 
-                  <div className="space-y-3">
-                  <div className="space-y-3">
-                  {/* Items */}
-                  {cart.map((i) => {
-                    const isDry = i.type === 'dry'
+                  {/* More than one item: one compact row each */}
+                  {!single && (
+                    <div className="space-y-2">
+                      {cart.map((i) => (
+                        <div key={i.id} className="flex items-center justify-between bg-slate-50 rounded-xl px-4 py-3">
+                          <div className="text-sm font-bold text-slate-800">{i.name || i.type}</div>
+                          <div className="flex items-center gap-3">
+                            <div className="text-base font-bold text-slate-800">{(i.type === 'Recarga de Cartão' ? (i.price || i.amount || 0) : unitPrice(i)).toFixed(2)}€</div>
+                            <button
+                              type="button"
+                              aria-label={t('remove')}
+                              onClick={() => {
+                                const left = cart.filter((x) => x.id !== i.id).length
+                                removeFromCart(i.id)
+                                if (left === 0) onClose()
+                              }}
+                              className="w-9 h-9 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center active:scale-90"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Cycles (dryers only) */}
+                  {dryers.map((i) => {
                     const q = qtyOf(i)
                     const gap = gapOf(i)
                     return (
-                      <section key={i.id} className="space-y-3">
-                        {!single && (
-                          <div className="flex items-center justify-between bg-slate-50 rounded-2xl px-5 py-4">
-                            <div className="text-xl font-semibold text-slate-800">{i.name || i.type}</div>
-                            <div className="flex items-center gap-4">
-                              <div className="text-2xl font-bold text-slate-800">{(i.type === 'Recarga de Cartão' ? (i.price || i.amount || 0) : unitPrice(i)).toFixed(2)}€</div>
-                              <button
-                                type="button"
-                                aria-label="Remover item"
-                                onClick={() => {
-                                  const left = cart.filter((x) => x.id !== i.id).length
-                                  removeFromCart(i.id)
-                                  if (left === 0) onClose()
-                                }}
-                                className="w-12 h-12 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center active:scale-90"
-                              >
-                                <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                              </button>
-                            </div>
+                      <div key={i.id} className="space-y-4">
+                        {!single && <div className="text-sm font-bold text-teal-900">{i.name}</div>}
+                        <div>
+                          <div className="flex items-center justify-between mb-2.5">
+                            <span className="text-xs text-emerald-800 font-bold bg-emerald-100/80 px-2.5 py-1 rounded-md">{t('quick')}</span>
                           </div>
-                        )}
+                          <div className="grid gap-2.5 grid-cols-3 w-full">
+                            {[1, 2, 3].map((n) => (
+                              <button
+                                key={n}
+                                type="button"
+                                onClick={() => setQuantity(i.id, n)}
+                                className={`relative min-h-[64px] py-3.5 px-2 rounded-2xl text-xs font-bold border text-center flex flex-col items-center justify-center gap-1 shadow-sm active:scale-95 transition-all ${q === n ? 'border-2 border-teal-500 bg-teal-50/80 text-teal-800 ring-2 ring-teal-500/10' : 'border-slate-200 bg-white text-slate-700 hover:border-teal-400 hover:bg-teal-50/40'}`}
+                              >
+                                {n === 2 && <span className="absolute -top-2.5 bg-teal-600 text-[9px] text-white px-2 py-0.5 rounded-full font-bold uppercase tracking-tight shadow-sm">{t('mostUsed')}</span>}
+                                <span className={`text-base font-extrabold ${q === n ? 'text-teal-900' : 'text-slate-800'}`}>{t('minutes', { n: n * gap })}</span>
+                                <span className={`text-xs ${q === n ? 'text-teal-700 font-semibold' : 'text-slate-400 font-medium'}`}>{eur(perCycle(i) * n)}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
 
-                        {isDry && (
-                          <>
-                            <div>
-                              <span className="inline-block text-sm text-emerald-800 font-bold bg-emerald-100/80 px-2.5 py-1 rounded-md mb-2">Escolhas rápidas</span>
-                              <div className="grid grid-cols-3 gap-3">
-                                {[1, 2, 3].map((n) => (
-                                  <button
-                                    key={n}
-                                    type="button"
-                                    onClick={() => setQuantity(i.id, n)}
-                                    className={`relative min-h-[56px] py-1.5 px-2 rounded-2xl border-2 flex flex-col items-center justify-center gap-1 shadow-sm active:scale-95 transition-all ${q === n ? 'border-teal-500 bg-teal-50 ring-2 ring-teal-500/10' : 'border-slate-200 bg-white hover:border-teal-400'}`}
-                                  >
-                                    {n === 2 && <span className="absolute -top-3 bg-teal-600 text-[11px] text-white px-2.5 py-0.5 rounded-full font-bold uppercase tracking-tight">Mais usado</span>}
-                                    <span className="text-xl font-extrabold text-slate-800">{n * gap} min</span>
-                                    <span className={`text-base font-semibold ${q === n ? 'text-teal-700' : 'text-slate-400'}`}>{eur(perCycle(i) * n)}</span>
-                                  </button>
-                                ))}
+                        <div className="bg-teal-50/40 border border-teal-100 rounded-2xl p-4 sm:p-5 flex items-center justify-between">
+                          <div className="flex items-center justify-between w-full gap-3 sm:gap-4">
+                            <button
+                              type="button"
+                              aria-label={t('less')}
+                              disabled={q <= 1}
+                              onClick={() => setQuantity(i.id, q - 1)}
+                              className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl border-2 border-slate-200 bg-white hover:bg-slate-50 active:scale-90 text-slate-700 flex items-center justify-center shadow-sm transition-all disabled:opacity-30 shrink-0"
+                            >
+                              <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path d="M5 12h14" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                            </button>
+                            <div className="flex-1 flex flex-col items-center justify-center text-center select-none">
+                              <span className="text-xs font-bold text-teal-800 uppercase tracking-wider mb-0.5">{t('selectedTime')}</span>
+                              <span className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight tabular-nums">{t('minutes', { n: q * gap })}</span>
+                              <div className="flex items-center justify-center gap-1.5 text-xs font-semibold text-slate-600 mt-1">
+                                <span className="bg-white/80 border border-teal-100 px-2 py-0.5 rounded-full text-teal-800 font-bold">{t('cycles', { count: q, gap })}</span>
+                                <span className="text-slate-400">•</span>
+                                <span className="text-slate-500 font-medium">{t('perCycle', { price: eur(perCycle(i)) })}</span>
                               </div>
                             </div>
-
-                            <div className="bg-teal-50/60 border border-teal-100 rounded-2xl p-2.5 flex items-center justify-between gap-3">
-                              <button
-                                type="button"
-                                aria-label="Diminuir tempo"
-                                disabled={q <= 1}
-                                onClick={() => setQuantity(i.id, q - 1)}
-                                className="w-14 h-14 rounded-2xl border-2 border-slate-200 bg-white text-slate-700 flex items-center justify-center shadow-sm active:scale-90 disabled:opacity-30 shrink-0"
-                              >
-                                <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path d="M5 12h14" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                              </button>
-                              <div className="flex-1 flex flex-col items-center text-center select-none">
-                                <span className="text-sm font-bold text-teal-800 uppercase tracking-wider">Tempo selecionado</span>
-                                <span className="text-3xl font-extrabold text-slate-900 tabular-nums leading-tight">{q * gap} min</span>
-                                <span className="mt-1 flex flex-wrap items-center justify-center gap-x-2 text-sm font-semibold text-slate-600">
-                                  <span className="bg-white border border-teal-100 px-3 py-0.5 rounded-full text-teal-800 font-bold">{q} {q === 1 ? 'ciclo' : 'ciclos'} ({gap} min/ciclo)</span>
-                                  <span className="text-slate-400">•</span>
-                                  <span>{eur(perCycle(i))}/ciclo</span>
-                                </span>
-                              </div>
-                              <button
-                                type="button"
-                                aria-label="Aumentar tempo"
-                                disabled={q >= 8}
-                                onClick={() => setQuantity(i.id, q + 1)}
-                                className="w-14 h-14 rounded-2xl border-2 border-slate-200 bg-white text-slate-700 flex items-center justify-center shadow-sm active:scale-90 disabled:opacity-30 shrink-0"
-                              >
-                                <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path d="M12 5v14m-7-7h14" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                              </button>
-                            </div>
-                          </>
-                        )}
-                      </section>
+                            <button
+                              type="button"
+                              aria-label={t('more')}
+                              disabled={q >= 8}
+                              onClick={() => setQuantity(i.id, q + 1)}
+                              className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl border-2 border-slate-200 bg-white hover:bg-slate-50 active:scale-90 text-slate-700 flex items-center justify-center shadow-sm transition-all disabled:opacity-30 shrink-0"
+                            >
+                              <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24"><path d="M12 5v14m-7-7h14" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
                     )
                   })}
 
                   {/* Promo code (collapsed) */}
-                  <details className="group border-t border-slate-100 pt-3">
-                    <summary className="flex items-center justify-between text-base font-bold text-teal-900 cursor-pointer list-none select-none py-1">
-                      <span>Tens um código promocional? <span className="text-slate-600 font-medium">(opcional)</span></span>
-                      <svg className="w-5 h-5 text-slate-600 group-open:rotate-180 transition-transform" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  <details className="group border-t border-slate-100 pt-3.5">
+                    <summary className="flex items-center justify-between text-xs sm:text-sm font-semibold text-teal-700 cursor-pointer list-none select-none py-1.5">
+                      <span className="flex items-center gap-2 text-teal-900 font-bold">
+                        <svg className="w-4 h-4 text-teal-700" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                        {t('promo')}<span className="text-slate-600 font-medium">{t('optional')}</span>
+                      </span>
+                      <svg className="w-4 h-4 text-slate-600 group-open:rotate-180 transition-transform duration-200" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" /></svg>
                     </summary>
-                    <div className="pt-3 flex items-center gap-3">
+                    <div className="pt-2.5 flex items-center gap-2.5">
                       <input
                         id="cart-coupon-code"
                         type="text"
                         value={couponCode}
                         onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                        placeholder="INSERIR CÓDIGO"
-                        className="w-full h-12 bg-slate-50 text-lg text-slate-800 placeholder-slate-400 font-medium uppercase tracking-wider rounded-xl border border-slate-200 px-4 outline-none focus:border-teal-500"
+                        placeholder={t('promoPlaceholder')}
+                        className="w-full h-12 bg-slate-50 hover:bg-white focus:bg-white text-xs sm:text-sm text-slate-800 placeholder-slate-400 font-medium uppercase tracking-wider rounded-xl border border-slate-200 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 px-3.5 transition-all outline-none"
                       />
                     </div>
                   </details>
 
-                  </div>
-                  <div className="space-y-4">
                   {/* Total */}
-                  <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-2xl px-4 py-3 text-white shadow-md flex items-center justify-between">
+                  <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-2xl p-4 sm:p-5 text-white shadow-md flex items-center justify-between">
                     <div>
-                      <span className="text-sm font-semibold text-emerald-400 block tracking-wide uppercase">Total a pagar</span>
-                      <span className="text-base text-slate-200 font-medium">
-                        {hasRecharge ? `Inclui recarga de ${rechargeTotal.toFixed(2)}€` : 'Moedas e notas aceites'}
+                      <span className="text-xs font-semibold text-emerald-400 block tracking-wide uppercase">{t('totalToPay')}</span>
+                      <span className="text-xs text-slate-200 font-medium">
+                        {hasRecharge ? t('includesRecharge', { amount: eur(rechargeTotal) }) : t('coinsNotes')}
                       </span>
-                      {cardError && <span className="block text-base text-rose-300 font-semibold mt-1">{cardError}</span>}
+                      {cardError && <span className="block text-xs text-rose-300 font-semibold mt-1">{cardError}</span>}
                     </div>
-                    <span className="text-3xl font-extrabold tracking-tight tabular-nums">{eur(total)}</span>
+                    <div className="text-right flex items-baseline gap-1">
+                      <span className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight tabular-nums">{eur(total)}</span>
+                    </div>
                   </div>
 
                   {/* Payment status */}
-                  <div className="bg-teal-50/70 border border-teal-100 rounded-2xl p-3 space-y-2.5">
+                  <div className="bg-teal-50/70 border border-teal-100 rounded-2xl p-4 sm:p-5 space-y-3.5">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className="relative flex h-3 w-3">
+                      <div className="flex items-center gap-2">
+                        <span className="relative flex h-2.5 w-2.5">
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                          <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500" />
+                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
                         </span>
-                        <span className="text-sm font-bold uppercase tracking-wider text-emerald-800">{label}</span>
+                        <span className="text-xs font-bold uppercase tracking-wider text-emerald-800">{label}</span>
                       </div>
-                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider bg-white/80 border border-emerald-100 px-2.5 py-1 rounded-full">Notas &amp; Moedas</span>
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider bg-white/80 border border-emerald-100 px-2 py-0.5 rounded-full">{t('chip')}</span>
                     </div>
 
-                    <div className="bg-white/95 border border-emerald-200/60 rounded-xl p-3 flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0 border border-emerald-100">
+                    <div className="bg-white/95 border border-emerald-200/60 rounded-xl p-4 flex items-center gap-3.5 shadow-sm">
+                      <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 border border-emerald-100">
                         <svg className="w-7 h-7 text-emerald-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><rect height="12" rx="2" width="20" x="2" y="6" /><circle cx="12" cy="12" r="3" /><path d="M6 12h.01M18 12h.01" strokeLinecap="round" /></svg>
                       </div>
-                      <div>
-                        <p className="text-lg font-bold text-slate-800">Insira moedas ou notas na ranhura</p>
-                        <p className="text-sm font-semibold text-slate-600">Notas de 5€, 10€, 20€ e moedas de 0,10€ a 2€ · ou aproxime o cartão</p>
+                      <div className="flex-1">
+                        <p className="text-sm sm:text-base font-bold text-slate-800">{t('insertHere')}</p>
+                        <p className="text-xs font-semibold text-slate-600 mt-0.5">{t('accepted')}</p>
                       </div>
                     </div>
 
-                    <div className="bg-white border-2 border-emerald-200/80 rounded-xl p-3 space-y-2">
-                      <div className="grid grid-cols-2 gap-4 divide-x divide-slate-100">
-                        <div className="pr-3">
-                          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Total inserido</span>
-                          <span className="text-3xl font-bold text-slate-800 tracking-tight tabular-nums">{eur(paid)}</span>
+                    <div className="bg-white border-2 border-emerald-200/80 rounded-xl p-3.5 sm:p-4 shadow-sm space-y-3">
+                      <div className="grid grid-cols-2 gap-3 divide-x divide-slate-100">
+                        <div className="pr-2">
+                          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">{t('inserted')}</span>
+                          <div className="flex items-baseline gap-1 mt-0.5">
+                            <span className="text-2xl font-bold text-slate-800 tracking-tight tabular-nums">{eur(paid)}</span>
+                          </div>
                         </div>
-                        <div className="pl-5">
-                          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block">{change > 0 ? 'Troco' : 'Falta pagar'}</span>
-                          <span className={`text-3xl font-bold tracking-tight tabular-nums ${enough ? 'text-emerald-600' : 'text-slate-900'}`}>{change > 0 ? eur(change) : eur(remaining)}</span>
+                        <div className="pl-3">
+                          <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">{change > 0 ? t('change') : t('missing')}</span>
+                          <div className="flex items-baseline gap-1 mt-0.5">
+                            <span className={`text-2xl font-bold tracking-tight tabular-nums ${enough ? 'text-emerald-600' : 'text-slate-800'}`}>{change > 0 ? eur(change) : eur(remaining)}</span>
+                          </div>
                         </div>
                       </div>
-                      <div className="space-y-1.5 pt-2 border-t border-slate-100">
-                        <div className="flex justify-between items-center text-sm font-bold text-slate-600">
-                          <span>Progresso do pagamento</span>
-                          <span className="tabular-nums">{percent}%</span>
+                      <div className="space-y-1.5 pt-1 border-t border-slate-100">
+                        <div className="flex justify-between items-center text-xs font-bold text-slate-600">
+                          <span>{t('progress')}</span>
+                          <span className="text-slate-600 font-bold tabular-nums">{percent}%</span>
                         </div>
                         <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200/80">
                           <div className="h-full bg-emerald-500 rounded-full transition-all duration-300" style={{ width: `${percent}%` }} />
@@ -633,54 +656,50 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
                       <button
                         type="button"
                         onClick={confirmCart}
-                        className="w-full rounded-2xl bg-teal-600 text-white text-xl font-bold py-4 shadow-lg active:scale-95"
+                        className="w-full min-h-[54px] rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-base font-bold shadow-md active:scale-[0.99] transition-all"
                       >
-                        Confirmar e iniciar · {eur(total)}
+                        {t('confirm')} · {eur(total)}
                       </button>
                     )}
 
-                    {/* Local (offline) session credit of the embedded agent; electron kiosks only */}
                     {localApi.isElectron && localSession && localSession.credits > 0 && (
-                      <div className="p-4 bg-white rounded-xl">
-                        <p className="text-xl text-neutral-600">Crédito inserido</p>
-                        <p className="text-4xl font-bold text-teal-700">{localSession.credits.toFixed(2)}€</p>
+                      <div className="p-3 bg-white rounded-xl text-sm text-slate-600">
+                        {t('credit')}: <span className="font-bold text-teal-700">{localSession.credits.toFixed(2)}€</span>
                       </div>
                     )}
                   </div>
 
                   {/* Actions */}
-                  <div className="space-y-2 pt-0.5">
+                  <div className="space-y-3 pt-1">
                     <div className="flex gap-3">
                       <button
                         type="button"
                         onClick={onClose}
-                        className="flex-1 min-h-[52px] rounded-xl text-lg bg-slate-100 text-slate-700 hover:bg-slate-200 font-bold transition-all active:scale-[0.99]"
+                        className="flex-1 min-h-[54px] py-3.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-bold text-sm sm:text-base transition-all duration-150 active:scale-[0.99]"
                       >
-                        Cancelar
+                        {t('cancel')}
                       </button>
                       {localApi.isElectron && localSession && localSession.cashBalance > 0 && (
                         <button
                           type="button"
                           onClick={handleCashOut}
                           disabled={cashingOut}
-                          className="flex-1 min-h-[52px] rounded-xl text-lg bg-amber-100 text-amber-800 hover:bg-amber-200 font-bold transition-all disabled:opacity-50"
+                          className="flex-1 min-h-[54px] rounded-xl bg-amber-100 text-amber-800 hover:bg-amber-200 font-bold text-sm sm:text-base transition-all disabled:opacity-50"
                         >
-                          {cashingOut ? 'A devolver…' : `Levantar troco (${localSession.cashBalance.toFixed(2)}€)`}
+                          {cashingOut ? t('cashOutBusy') : t('cashOut', { amount: eur(localSession.cashBalance) })}
                         </button>
                       )}
                     </div>
                     <button
                       type="button"
                       onClick={() => { setPinError(null); setShowPinPrompt(true) }}
-                      className="w-full min-h-[48px] rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-base inline-flex items-center justify-center gap-3 active:scale-[0.99]"
+                      className="w-full min-h-[48px] py-2.5 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 active:bg-slate-100 text-slate-700 font-semibold text-xs sm:text-sm inline-flex items-center justify-center gap-2 transition-all duration-150 shadow-sm active:scale-[0.99]"
                     >
-                      <svg className="w-6 h-6 text-slate-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                      Pagamento manual (staff / ajuda)
+                      <svg className="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                      {t('manual')}
                     </button>
                   </div>
-                  </div>
-                  </div>
-                </>
+                </div>
               )
             })()}
           </>
