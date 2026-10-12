@@ -45,5 +45,8 @@
   "balanceLine": "Guthaben: {{amount}}",
   "writeFail": "Karte konnte nicht beschrieben werden",
   "writeFailDesc": "Die Karte ist noch nicht aktiv. Erneut versuchen oder am Schalter melden.",
-  "writeFallback": "Die Karte konnte nicht beschrieben werden. Prüfen Sie, ob sie richtig eingelegt ist, und versuchen Sie es erneut."
+  "writeFallback": "Die Karte konnte nicht beschrieben werden. Prüfen Sie, ob sie richtig eingelegt ist, und versuchen Sie es erneut.",
+  "closeWindow": "Fenster schließen",
+  "cardLabel": "FreshBubbles-Karte",
+  "fillHint": "Ermöglicht die Wiederherstellung des Guthabens bei Verlust und die automatische Zuordnung von Rechnungen."
 }

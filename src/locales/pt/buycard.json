@@ -45,5 +45,8 @@
   "balanceLine": "Saldo: {{amount}}",
   "writeFail": "Falha ao gravar o cartão",
   "writeFailDesc": "O cartão ainda não está activo. Tente novamente ou contacte o balcão.",
-  "writeFallback": "Não foi possível gravar o cartão. Verifique que está bem inserido e tente novamente."
+  "writeFallback": "Não foi possível gravar o cartão. Verifique que está bem inserido e tente novamente.",
+  "closeWindow": "Fechar janela",
+  "cardLabel": "Cartão FreshBubbles",
+  "fillHint": "Permite recuperar o saldo em caso de extravio e associar faturas automáticas."
 }

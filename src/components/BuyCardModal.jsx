@@ -3,7 +3,7 @@ import Modal from './ui/Modal'
 import { Button } from './ui/button'
 import { Input } from './ui/input'
 import { Label } from './ui/label'
-import { CreditCard, User, Mail, Phone, FileText, Banknote, CheckCircle2 } from 'lucide-react'
+import { CreditCard, User, Mail, Phone, FileText, Banknote, CheckCircle2, Wifi, ArrowRight } from 'lucide-react'
 import { toast } from './ui/Toast'
 import api from '@/services/api'
 import * as localApi from '@/services/local-api'
@@ -355,130 +355,140 @@ export default function BuyCardModal({ open, onClose }) {
     switch (step) {
       case STEPS.FORM:
         return (
-          <div className="space-y-6">
-            <div className="text-center mb-6">
-              <CreditCard className="h-16 w-16 mx-auto mb-4 text-primary" />
-              <h3 className="text-xl font-semibold mb-2">{t('title')}</h3>
-              <p className="text-muted-foreground">
-                {t('price')}: <span className="font-bold text-lg">{eur(cardPrice)}</span>
-                {' • '}
-                {t('initialCredit')}: <span className="font-bold text-lg">{eur(initialCredit)}</span>
-              </p>
+          <div className="flex flex-col">
+            <button
+              type="button"
+              aria-label={t('closeWindow')}
+              onClick={() => { if (window.electronAPI?.hideKeyboard) window.electronAPI.hideKeyboard(); handleClose() }}
+              className="absolute top-4 right-4 w-14 h-14 flex items-center justify-center rounded-2xl bg-slate-100 text-slate-500 text-2xl active:scale-95"
+            >✕</button>
+
+            {/* header: the card, the title, price and starting credit */}
+            <div className="flex flex-col items-center text-center pt-2 pb-5">
+              <div className="w-32 h-20 rounded-xl bg-gradient-to-tr from-[#00875A] via-emerald-700 to-emerald-500 shadow-lg p-2.5 flex flex-col justify-between mb-4 border border-emerald-400/40">
+                <div className="flex items-center justify-between">
+                  <div className="w-6 h-[18px] bg-amber-300/90 rounded-sm border border-amber-500/60" />
+                  <Wifi className="w-4 h-4 text-white/80 rotate-90" />
+                </div>
+                <div className="text-[9px] uppercase tracking-wider font-extrabold text-white/95 text-left">{t('cardLabel')}</div>
+              </div>
+              <h3 className="text-3xl font-extrabold tracking-tight text-emerald-900">{t('title')}</h3>
+              <div className="mt-3 inline-flex items-center gap-3 bg-emerald-50 border border-emerald-200 px-5 py-2 rounded-full text-lg font-medium text-slate-600">
+                <span>{t('price')}: <strong className="text-slate-900">{eur(cardPrice)}</strong></span>
+                <span className="text-emerald-400 font-bold">•</span>
+                <span>{t('initialCredit')}: <strong className="text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md">{eur(initialCredit)}</strong></span>
+              </div>
             </div>
 
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                {t('fillData')}
-              </p>
+            <div className="mb-4">
+              <h4 className="text-xl font-semibold text-slate-700">{t('fillData')}</h4>
+              <p className="text-base text-slate-500 mt-1">{t('fillHint')}</p>
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="name">{t('name')}</Label>
-                <div className="flex items-center gap-2">
-                  <User className="h-4 w-4 text-muted-foreground" />
-                  <Input
+            <div className="flex flex-col gap-4">
+              <div>
+                <label htmlFor="name" className="block text-sm font-semibold uppercase tracking-wider text-slate-600 mb-2 ml-1">{t('name')}</label>
+                <div className="relative flex items-center">
+                  <User className="absolute left-4 h-6 w-6 text-slate-400 pointer-events-none" />
+                  <input
                     ref={nameRef}
                     id="name"
+                    
+                    autoComplete="off"
                     placeholder={t('namePlaceholder')}
                     value={formData.name}
                     onChange={(e) => handleInputChange('name', e.target.value)}
                     onFocus={handleFieldFocus}
                     onBlur={handleFieldBlur}
                     onKeyDown={(e) => handleKeyDown(e, 'name')}
+                    className="w-full h-16 pl-14 pr-4 bg-slate-50/70 border border-slate-200 rounded-xl text-xl text-slate-800 placeholder-slate-400 focus:bg-white focus:ring-2 focus:ring-[#00875A] focus:border-[#00875A] outline-none transition"
                   />
                 </div>
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="email">{t('email')}</Label>
-                <div className="flex items-center gap-2">
-                  <Mail className="h-4 w-4 text-muted-foreground" />
-                  <Input
+              <div>
+                <label htmlFor="email" className="block text-sm font-semibold uppercase tracking-wider text-slate-600 mb-2 ml-1">{t('email')}</label>
+                <div className="relative flex items-center">
+                  <Mail className="absolute left-4 h-6 w-6 text-slate-400 pointer-events-none" />
+                  <input
                     ref={emailRef}
                     id="email"
                     type="email"
+                    autoComplete="off"
                     placeholder={t('emailPlaceholder')}
                     value={formData.email}
                     onChange={(e) => handleInputChange('email', e.target.value)}
                     onFocus={handleFieldFocus}
                     onBlur={handleFieldBlur}
                     onKeyDown={(e) => handleKeyDown(e, 'email')}
+                    className="w-full h-16 pl-14 pr-4 bg-slate-50/70 border border-slate-200 rounded-xl text-xl text-slate-800 placeholder-slate-400 focus:bg-white focus:ring-2 focus:ring-[#00875A] focus:border-[#00875A] outline-none transition"
                   />
                 </div>
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="phone">{t('phone')}</Label>
-                <div className="flex items-center gap-2">
-                  <Phone className="h-4 w-4 text-muted-foreground" />
-                  <Input
+              <div>
+                <label htmlFor="phone" className="block text-sm font-semibold uppercase tracking-wider text-slate-600 mb-2 ml-1">{t('phone')}</label>
+                <div className="relative flex items-center">
+                  <Phone className="absolute left-4 h-6 w-6 text-slate-400 pointer-events-none" />
+                  <input
                     ref={phoneRef}
                     id="phone"
                     type="tel"
+                    autoComplete="off"
                     placeholder={t('phonePlaceholder')}
                     value={formData.phone}
                     onChange={(e) => handleInputChange('phone', e.target.value)}
                     onFocus={handleFieldFocus}
                     onBlur={handleFieldBlur}
                     onKeyDown={(e) => handleKeyDown(e, 'phone')}
+                    className="w-full h-16 pl-14 pr-4 bg-slate-50/70 border border-slate-200 rounded-xl text-xl text-slate-800 placeholder-slate-400 focus:bg-white focus:ring-2 focus:ring-[#00875A] focus:border-[#00875A] outline-none transition"
                   />
                 </div>
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="contribuinte">{t('nif')}</Label>
-                <div className="flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                  <Input
+              <div>
+                <label htmlFor="contribuinte" className="block text-sm font-semibold uppercase tracking-wider text-slate-600 mb-2 ml-1">{t('nif')}</label>
+                <div className="relative flex items-center">
+                  <FileText className="absolute left-4 h-6 w-6 text-slate-400 pointer-events-none" />
+                  <input
                     ref={contribuinteRef}
                     id="contribuinte"
+                    
+                    autoComplete="off"
                     placeholder={t('nifPlaceholder')}
                     value={formData.contribuinte}
                     onChange={(e) => handleInputChange('contribuinte', e.target.value)}
                     onFocus={handleFieldFocus}
                     onBlur={handleFieldBlur}
                     onKeyDown={(e) => handleKeyDown(e, 'contribuinte')}
+                    className="w-full h-16 pl-14 pr-4 bg-slate-50/70 border border-slate-200 rounded-xl text-xl text-slate-800 placeholder-slate-400 focus:bg-white focus:ring-2 focus:ring-[#00875A] focus:border-[#00875A] outline-none transition"
                   />
                 </div>
               </div>
 
-              <div className="flex items-start gap-2 pt-1">
+              <label htmlFor="marketingOptIn" className="flex items-center gap-4 p-3 rounded-xl active:bg-slate-100 cursor-pointer">
                 <input
                   id="marketingOptIn"
                   type="checkbox"
-                  className="mt-1"
+                  className="w-7 h-7 rounded-md border-2 border-slate-300 accent-[#00875A]"
                   checked={formData.marketingOptIn}
                   onChange={(e) => handleInputChange('marketingOptIn', e.target.checked)}
                 />
-                <Label htmlFor="marketingOptIn" className="font-normal text-sm">
-                  {t('marketing')}
-                </Label>
-              </div>
+                <span className="text-lg font-medium text-slate-700">{t('marketing')}</span>
+              </label>
             </div>
 
-            <div className="flex gap-3 pt-4">
-              <Button 
-                variant="outline" 
-                onClick={() => {
-                  if (window.electronAPI?.hideKeyboard) {
-                    window.electronAPI.hideKeyboard()
-                  }
-                  handleSkipForm()
-                }} 
-                className="flex-1"
+            <div className="grid grid-cols-2 gap-4 mt-6 pt-6 border-t border-slate-200/80">
+              <button
+                type="button"
+                onClick={() => { if (window.electronAPI?.hideKeyboard) window.electronAPI.hideKeyboard(); handleSkipForm() }}
+                className="h-[72px] rounded-2xl bg-emerald-50 border border-emerald-200 text-[#00875A] font-bold text-2xl active:scale-[0.98]"
+              >{t('skip')}</button>
+              <button
+                type="button"
+                onClick={() => { if (window.electronAPI?.hideKeyboard) window.electronAPI.hideKeyboard(); handleNext() }}
+                className="h-[72px] rounded-2xl bg-[#00875A] border border-emerald-700 text-white font-bold text-2xl flex items-center justify-center gap-3 shadow-md active:scale-[0.98]"
               >
-                {t('skip')}
-              </Button>
-              <Button 
-                onClick={() => {
-                  if (window.electronAPI?.hideKeyboard) {
-                    window.electronAPI.hideKeyboard()
-                  }
-                  handleNext()
-                }} 
-                className="flex-1"
-              >
-                {t('continue')}
-              </Button>
+                <span>{t('continue')}</span>
+                <ArrowRight className="w-7 h-7 text-emerald-200" strokeWidth={2.5} />
+              </button>
             </div>
           </div>
         )
@@ -639,10 +649,10 @@ export default function BuyCardModal({ open, onClose }) {
     <Modal
       open={open}
       onClose={canClose ? handleClose : undefined}
-      hideClose={!canClose}
-      className="max-w-md"
+      hideClose={!canClose || step === STEPS.FORM}
+      maxWidth="min(68vw, 740px)"
     >
-      <div className="p-6">
+      <div className="p-3">
         {renderStepContent()}
       </div>
     </Modal>
