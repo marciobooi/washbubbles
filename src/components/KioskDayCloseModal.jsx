@@ -27,6 +27,7 @@ function getKioskApiKey() {
 export default function KioskDayCloseModal({ open, onClose, pin }) {
   const [summary, setSummary] = useState(null)
   const [summaryLoading, setSummaryLoading] = useState(true)
+  const [tab, setTab] = useState('fecho') // 'fecho' | 'hopper'
 
   const loadSummary = useCallback(async () => {
     setSummaryLoading(true)
@@ -50,7 +51,16 @@ export default function KioskDayCloseModal({ open, onClose, pin }) {
 
   return (
     <Modal open={open} onClose={onClose} title="Fecho de Caixa" maxWidth="min(72vw, 860px)">
+      <div className="flex gap-2 mb-4 pr-14">
+        {[['fecho', 'Fecho'], ['hopper', 'Hopper']].map(([id, label]) => (
+          <button key={id} type="button" onClick={() => setTab(id)}
+            className={`h-12 px-6 text-base font-semibold rounded-xl border transition-colors ${tab === id ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-white border-slate-200 text-slate-500'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
       <DayCloseForm
+        view={tab}
         summary={summary}
         summaryLoading={summaryLoading}
         onSubmit={(payload) => api.createKioskDayClose({ ...payload, pin }, { apiKey: getKioskApiKey() })}

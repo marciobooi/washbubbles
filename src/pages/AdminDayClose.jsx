@@ -14,6 +14,7 @@ export default function AdminDayClose() {
   const [historyLoading, setHistoryLoading] = useState(true)
   const [expandedId, setExpandedId]         = useState(null)
   const [floatModalOpen, setFloatModalOpen] = useState(false)
+  const [tab, setTab] = useState('fecho') // 'fecho' | 'hopper' | 'historico'
 
   const loadSummary = useCallback(async () => {
     setSummaryLoading(true)
@@ -69,7 +70,28 @@ export default function AdminDayClose() {
         onAdded={() => { setFloatModalOpen(false); loadSummary(); loadHistory() }}
       />
 
+      {/* the three areas of the day close */}
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {[['fecho', 'Fecho'], ['hopper', 'Hopper e reforço'], ['historico', 'Histórico de fechos']].map(([id, label]) => (
+          <button key={id} type="button" onClick={() => setTab(id)}
+            className={`px-4 py-2.5 text-sm font-semibold rounded-xl border whitespace-nowrap transition-colors ${tab === id ? 'bg-emerald-50 border-emerald-300 text-emerald-800 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800 hover:border-emerald-200'}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'hopper' && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 px-4 py-3">
+          <p className="text-sm text-emerald-900">Reforço: junte moedas ao fundo quando o hopper precisar (entra como fundo, nunca como venda).</p>
+          <button type="button" onClick={() => setFloatModalOpen(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-primary-600 text-white text-sm font-semibold px-4 py-2 shadow-sm">
+            <PiggyBank className="w-4 h-4" strokeWidth={1.8} /> Fazer reforço
+          </button>
+        </div>
+      )}
+
       <DayCloseForm
+        view={tab === 'hopper' ? 'hopper' : 'fecho'}
+        hidden={tab === 'historico'}
         summary={summary}
         summaryLoading={summaryLoading}
         onSubmit={(payload) => api.createDayClose(payload)}
@@ -78,7 +100,7 @@ export default function AdminDayClose() {
       />
 
       {/* ── History ─────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-2xl border border-neutral-200 shadow-sm overflow-hidden">
+      <div className={`bg-white rounded-2xl border border-neutral-200 shadow-sm overflow-hidden ${tab === 'historico' ? '' : 'hidden'}`}>
         <div className="px-5 pt-5 pb-3 border-b border-neutral-100">
           <h3 className="font-semibold text-sm text-neutral-800">Historico de fechos</h3>
         </div>
@@ -222,10 +244,10 @@ function AddFloatModal({ open, onClose, onAdded }) {
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Adicionar fundo inicial">
+    <Modal open={open} onClose={onClose} title="Reforço / fundo">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <h3 className="font-semibold text-sm text-neutral-800">Adicionar fundo inicial</h3>
+          <h3 className="font-semibold text-sm text-neutral-800">Reforço / fundo</h3>
           <p className="text-xs text-neutral-400 mt-0.5">
             Conte as moedas/notas que vai colocar na caixa. Este valor entra como fundo — nunca como venda a depositar no banco.
           </p>

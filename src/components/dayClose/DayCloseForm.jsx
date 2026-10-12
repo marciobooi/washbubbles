@@ -20,7 +20,9 @@ import {
  * the kiosk itself). `onSubmit` is the only thing that differs between them —
  * which endpoint gets called, and whether a PIN rides along with it.
  */
-export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClosed, onEmail, onDone }) {
+// `view` picks what is on screen while the SAME state stays mounted (the hopper counts are submitted with the close):
+// 'fecho' = summary, cash count, what to take out, split, notes; 'hopper' = mechanism + hopper stock/target/refill.
+export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClosed, onEmail, onDone, view = 'fecho', hidden = false }) {
   const [countedDenoms, setCountedDenoms]   = useState(buildDenomState(ALL_CASH_DENOMS))
   const [mechanismDenoms, setMechanismDenoms]     = useState(buildDenomState(COIN_DENOMS))
   const [hopperActualDenoms, setHopperActualDenoms] = useState(buildDenomState(COIN_DENOMS))
@@ -186,7 +188,7 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
   }
 
   return (
-    <div className="space-y-5">
+    <div className={`space-y-5 ${hidden ? 'hidden' : ''}`}>
       <DayCloseReceiptModal
         dc={closedRecord}
         onEmail={onEmail}
@@ -194,6 +196,7 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
       />
 
       {/* Session summary */}
+      <div className={view === 'fecho' ? 'space-y-5' : 'hidden'}>
       {summaryLoading ? (
         <div className="bg-white rounded-2xl border border-neutral-200 p-6 flex items-center gap-3 text-neutral-400 text-sm">
           <div className="w-4 h-4 rounded-full border-2 border-neutral-300 border-t-primary-500 animate-spin" />
@@ -234,8 +237,10 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
           )}
         </div>
       ) : null}
+      </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        <div className={view === 'fecho' ? 'space-y-4' : 'hidden'}>
         <Step number="1" title="Contagem de caixa" subtitle="Confirme o que já sabemos que entrou — só precisa de corrigir o que faltar ou sobrar" accent="teal">
           {summary?.acceptedTotal > 0 && (
             <div className="text-xs text-neutral-400 -mt-1">
@@ -279,9 +284,12 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
           </div>
         )}
 
+        </div>
+
         <button
           type="button"
           onClick={() => setShowAdvanced(s => !s)}
+          hidden
           className="w-full flex items-center justify-between gap-2 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 hover:bg-neutral-100 px-4 py-2.5 text-left transition"
         >
           <span className="text-xs font-semibold text-neutral-600">
@@ -291,7 +299,7 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
           <span className={`text-neutral-400 transition-transform ${showAdvanced ? 'rotate-180' : ''}`}>&#9660;</span>
         </button>
 
-        {showAdvanced && (
+        {view === 'hopper' && (
           <>
             <Step title="Mecanismo aceitador" subtitle="Moedas presentes no aceitador no momento do fecho" accent="amber">
               {summary?.openingMechanismCoins?.length > 0 && (
@@ -354,6 +362,7 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
           </>
         )}
 
+        <div className={view === 'fecho' ? 'space-y-4' : 'hidden'}>
         <Step number="2" title="Distribuicao do dinheiro" subtitle="Quanto vai para o banco e quanto fica como fundo" accent="emerald">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <MoneyInput
@@ -407,6 +416,7 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
             )}
           </button>
         </Step>
+        </div>
       </form>
     </div>
   )
