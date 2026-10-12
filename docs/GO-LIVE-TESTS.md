@@ -198,6 +198,63 @@ come from the machines and the controller themselves, or from the maker or the P
 - [ ] Known flaky tests (not caused by the shop work): "Day close … double-book two closes racing" (~1 in 16) and some
       40 ms-timer uplink tests; fix the races when there is time
 
+## 13. To test when the shop PC is next online (list made 2026-10-12)
+
+The shop PC was switched off because the shop is working. Everything below is built and deployed to Hetzner; the PC needs
+the latest code first (copy the files, build the screen, restart ONLY the backend: the process whose command line has
+`src\index.js`, never every node process). The new payment window (13.5) is in the repo but not on the PC yet.
+
+### 13.1 Money and the controller
+- [ ] After the PC boots: bridge task running (`WashBubbles Bridge`), backend connected through it, `status_per` lists the six peripherals in order
+- [ ] Bill acceptor light on after a **backend restart** (the bridge keeps the session): verified once on 2026-10-11, repeat
+- [ ] **PC reboot**: bridge and backend come back by themselves; the operator alert "controller session new" arrives; re-seat the acceptor cable and note the light
+- [ ] Coins 0.10 / 0.20 / 0.50 / 1 / 2 and notes 5 / 10 / 20 credit; the 50 note is spat out (the acceptor must never stack it)
+- [ ] Refund after 2 minutes pays the exact total; the badge and countdown disappear by themselves (no F5)
+- [ ] Controller session lost (pull the controller network cable 10 s): alert "Controlador desligado", then recovery without a restart
+
+### 13.2 Dryers: blocks of 15 minutes
+- [ ] Insert 4.00 EUR for **2 blocks** on a free dryer (Secar 7, 8 or 9): the log shows ONE `activate-machine ... impulses 2`; the dryer shows 30 min
+- [ ] 3 blocks (6.00) gives 45 min; the 8-block limit (16.00) is accepted
+- [ ] If a 2-block purchase gives only 15 min: pulses too close together (interface tOn 5 / tOff 1 never verified); try `DRYER_IMPULSE_MODE=staggered`
+- [ ] Cash already inserted, then choose a dryer: the cart does **not** pay by itself; the cycles can be changed; "Confirmar e iniciar" pays
+- [ ] Change the cycles after confirming: it asks again
+- [ ] Pay a dryer with the **card** (card price, 0.20 cheaper per block): same confirm step, card debited once, chip rewritten
+- [ ] Secar 10: the signal line on interface 15 channel 2 is dead; after a paid start it stays "Ocupado" for n x 15 min (time block) and then frees itself
+- [ ] Not enough money inserted: nothing starts, the credit stays; controller offline at payment: nothing charged, readable message
+- [ ] Door open / machine signals while a dryer runs (open the door): note the `machine-*` events and the 8 status bits
+
+### 13.3 Washers
+- [ ] Paid start of a washer with exact cash; Ocupado on the kiosk **and** in the central admin within seconds
+- [ ] A washer is held for its price-row duration (60 min if none is set) when its signal never shows it running
+- [ ] Lavar 1 and Lavar 6: set interface + port in the admin first (both are empty on Hetzner); check Lavar 1 polarity
+
+### 13.4 Cards
+- [ ] **Buy a card** (cost 10, credit 5): the coins inserted are consumed (no leftover), the card is dispensed, presented at the reader it is written automatically and becomes active, 5.00 on screen; the card keeps the chip's own id
+- [ ] The same card read again: 5.00, name/email/phone present in the central admin, no second empty card
+- [ ] **Recharge** 10 in cash with the card in the reader: balance +10 on screen, chip rewritten, Hetzner updated, one sale with the card code
+- [ ] Take the card out: after about 3 s the card window closes and the kiosk is back on the home screen
+- [ ] Card present + cash credit at once, pay a washer: card price used, no phantom credit moved onto the card
+
+### 13.5 Kiosk screens
+- [ ] **New payment window** (design of 2026-10-12): header with machine number, quick choices, stepper, dark total, inserted / remaining / progress; check at touch size on the real screen
+- [ ] Toasts top middle under the header, large, gone after 5 s, "Ver carrinho" big enough for a finger
+- [ ] On-screen keyboard opens on every text field (promo code, card code, staff PIN, admin login) and types; numeric pad for PIN/amount
+- [ ] Language dropdown opens on top of the machine list; all four languages
+- [ ] Help tutorial step 5: discount text 0.50 wash / 0.20 dry, no `<em>` text, progress button translated
+- [ ] Touch calibration holds after a reboot
+- [ ] "Fora de servico" / Avariada from the admin reaches the kiosk in about 5 s and blocks the sale; Reparada returns it
+
+### 13.6 Admin / central
+- [ ] A machine's occupied/free in the central admin follows the shop (5 s)
+- [ ] A price / machine / setting change reaches the shop in seconds (sync_now); edited straight in the database, within 30 s
+- [ ] Offline / Avariar buttons keep the machine's interface, port, weight and polarity (partial update)
+
+### 13.7 Needs information, not just a test
+- [ ] **Printer**: the controller lists it with error -1 (not answering). Need its real baud rate / port from Kitsec or the installer, then ONE correct complete `config_per` list (memory: reference-controller-config-per) with the owner present
+- [ ] `per-notification` messages from the controller: log which occur and decide what the app does
+- [ ] Lavar 1 / Lavar 5 busy-at-rest readings: confirm polarity per machine with a real cycle
+- [ ] Model and year of each of the 9 machines into the admin; manuals from Krebe / ICT
+
 ## How to run a test with me
 
 Tell me "doing test X". I read the controller trace live (`LOWLEVEL_TRACE=true` is on) and say what happened, one step at a
