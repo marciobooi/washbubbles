@@ -48,29 +48,31 @@ const toneOf = (variant) => TONES[variant === 'destructive' ? 'error' : variant]
  */
 export function showToast({ variant = 'info', title, description, badge, action, dismissLabel, duration = DURATION }) {
   const tone = toneOf(variant)
+  // The kiosk reads toasts from a distance (big pill); the admin is a normal desktop page (compact card).
+  const compact = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')
   const closeLabel = dismissLabel || i18n.t('dismissNotice', { ns: 'cart' })
   return sonnerToast.custom((id) => (
     <div
       style={{ width: '100%', touchAction: 'manipulation', boxShadow: `0 24px 48px -12px rgba(15,23,42,.18), 0 8px 24px -6px ${tone.glow}` }}
-      className={`bg-white/95 backdrop-blur-md rounded-full border overflow-hidden ${tone.border}`}
+      className={`bg-white/95 backdrop-blur-md border overflow-hidden ${compact ? 'rounded-xl' : 'rounded-full'} ${tone.border}`}
     >
-      <div className="px-9 py-6 flex items-center justify-between gap-8">
-        <div className="flex items-center gap-6 min-w-0">
-          <div className={`shrink-0 w-16 h-16 rounded-2xl text-white flex items-center justify-center font-bold text-3xl shadow-sm ${tone.badge}`}>
+      <div className={compact ? 'px-4 py-3 flex items-center justify-between gap-3' : 'px-9 py-6 flex items-center justify-between gap-8'}>
+        <div className={`flex items-center min-w-0 ${compact ? 'gap-3' : 'gap-6'}`}>
+          <div className={`shrink-0 text-white flex items-center justify-center font-bold shadow-sm ${compact ? 'w-9 h-9 rounded-lg text-base' : 'w-16 h-16 rounded-2xl text-3xl'} ${tone.badge}`}>
             {badge || (
-              <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth="2.75" viewBox="0 0 24 24"><path d={tone.icon} strokeLinecap="round" strokeLinejoin="round" /></svg>
+              <svg className={compact ? 'w-5 h-5' : 'w-8 h-8'} fill="none" stroke="currentColor" strokeWidth="2.75" viewBox="0 0 24 24"><path d={tone.icon} strokeLinecap="round" strokeLinejoin="round" /></svg>
             )}
           </div>
           <div className="flex flex-col text-left min-w-0">
             <div className="flex items-center gap-2">
-              <span className="font-bold text-slate-900 text-2xl leading-snug tracking-tight">{title}</span>
+              <span className={`font-bold text-slate-900 tracking-tight ${compact ? 'text-sm leading-snug' : 'text-2xl leading-snug'}`}>{title}</span>
               {badge ? (
                 <span className={`shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-full ${tone.chip}`}>
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d={tone.icon} strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </span>
               ) : null}
             </div>
-            {description ? <p className="text-lg text-slate-500 font-medium leading-snug mt-1.5">{description}</p> : null}
+            {description ? <p className={`text-slate-500 font-medium leading-snug ${compact ? 'text-xs mt-0.5' : 'text-lg mt-1.5'}`}>{description}</p> : null}
           </div>
         </div>
         <div className="flex items-center gap-4 shrink-0">
@@ -78,7 +80,7 @@ export function showToast({ variant = 'info', title, description, badge, action,
             <button
               type="button"
               onClick={() => { sonnerToast.dismiss(id); action.onClick && action.onClick() }}
-              className="min-h-[68px] px-8 bg-slate-900 active:scale-[0.98] text-white font-bold text-xl rounded-full flex items-center justify-center gap-3 shadow-md"
+              className={`bg-slate-900 active:scale-[0.98] text-white font-bold flex items-center justify-center shadow-md ${compact ? 'min-h-[36px] px-3 text-sm rounded-lg gap-2' : 'min-h-[68px] px-8 text-xl rounded-full gap-3'}`}
             >
               {action.icon === 'bag' ? (
                 <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" strokeLinecap="round" strokeLinejoin="round" /></svg>
@@ -91,18 +93,18 @@ export function showToast({ variant = 'info', title, description, badge, action,
             type="button"
             aria-label={closeLabel}
             onClick={() => sonnerToast.dismiss(id)}
-            className="shrink-0 w-16 h-16 rounded-full active:bg-slate-200 text-slate-400 flex items-center justify-center"
+            className={`shrink-0 active:bg-slate-200 text-slate-400 flex items-center justify-center ${compact ? 'w-8 h-8 rounded-lg' : 'w-16 h-16 rounded-full'}`}
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            <svg className={compact ? 'w-4 h-4' : 'w-6 h-6'} fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </button>
         </div>
       </div>
-      <div className="w-full h-1.5 bg-slate-100 overflow-hidden">
+      <div className={`w-full bg-slate-100 overflow-hidden ${compact ? 'h-1' : 'h-1.5'}`}>
         <div className={`h-full ${tone.bar}`} style={{ animation: `wbToastCountdown ${duration}ms linear forwards` }} />
       </div>
       <style>{'@keyframes wbToastCountdown{from{width:100%}to{width:0%}}'}</style>
     </div>
-  ), { id: [variant, title].join(":"), duration, unstyled: true, style: { padding: 0, background: 'transparent', border: 'none', boxShadow: 'none', width: 'var(--width)' } })
+  ), { id: [variant, title].join(":"), duration, unstyled: true, style: { padding: 0, background: 'transparent', border: 'none', boxShadow: 'none', width: compact ? 'min(92vw, 420px)' : 'var(--width)', ...(compact ? { left: 0, right: 0, marginLeft: 'auto', marginRight: 'auto' } : {}) } })
 }
 
 /** "Machine added to cart": the same toast with the machine number as badge and a view-cart action. */
