@@ -4,6 +4,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom'
 import MachineCard from '../components/MachineCard'
 import { toast } from '@/components/ui/Toast'
 import Wave from '../components/ui/wave'
+import Loading from '../components/ui/loading'
 import api from '@/services/api'
 import { connect, subscribe } from '@/services/websocket'
 import { useCart } from '../context/CartContext'
@@ -154,7 +155,7 @@ export default function Machines() {
         </div>
       </div>
       {loading ? (
-        <div className="text-center text-neutral-500 text-xl">{t('machines.loading')}</div>
+        <Loading size="large" label={t('machines.loading')} />
       ) : (
         <div className="grid gap-6">
           {machines.map((m) => (

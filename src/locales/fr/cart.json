@@ -181,5 +181,6 @@
   "perkWash": "jusqu’à {{amount}} de réduction par lavage",
   "perkDry": "jusqu’à {{amount}} de réduction par séchage",
   "amountLess": "Diminuer le montant",
-  "amountMore": "Augmenter le montant"
+  "amountMore": "Augmenter le montant",
+  "loading": "Chargement…"
 }

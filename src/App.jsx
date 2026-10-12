@@ -17,6 +17,7 @@ import { ToastProvider, toast } from './components/ui/Toast'
 import HelpTutorial from './components/HelpTutorial'
 import LanguageSwitcher from './components/LanguageSwitcher'
 import DevCardPreview from './pages/DevCardPreview'
+import Loading from './components/ui/loading'
 import DevCartPreview from './pages/DevCartPreview'
 import TenantSelector from './components/TenantSelector'
 import { useTenant } from './context/TenantContext'
@@ -600,6 +601,7 @@ function AppInner() {
               sell against, so these routes bounce to the admin login. */}
           {import.meta.env.DEV && <Route path="/dev/cart" element={<DevCartPreview />} />}
           {import.meta.env.DEV && <Route path="/dev/card" element={<DevCardPreview />} />}
+          {import.meta.env.DEV && <Route path="/dev/loading" element={<div className="p-6"><Loading size="large" /></div>} />}
           <Route path="/pos" element={isPublicSite ? <Navigate to="/admin/login" replace /> : <Pos />} />
           <Route path="/pos/machines" element={isPublicSite ? <Navigate to="/admin/login" replace /> : <Machines />} />
           <Route path="/pos/machines/:id" element={isPublicSite ? <Navigate to="/admin/login" replace /> : <MachineDetail />} />

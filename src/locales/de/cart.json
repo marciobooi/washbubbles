@@ -181,5 +181,6 @@
   "perkWash": "bis zu {{amount}} Rabatt pro Wäsche",
   "perkDry": "bis zu {{amount}} Rabatt pro Trocknung",
   "amountLess": "Betrag verringern",
-  "amountMore": "Betrag erhöhen"
+  "amountMore": "Betrag erhöhen",
+  "loading": "Wird geladen…"
 }

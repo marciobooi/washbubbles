@@ -181,5 +181,6 @@
   "perkWash": "até {{amount}} de desconto por lavagem",
   "perkDry": "até {{amount}} de desconto por secagem",
   "amountLess": "Diminuir valor",
-  "amountMore": "Aumentar valor"
+  "amountMore": "Aumentar valor",
+  "loading": "A carregar…"
 }
