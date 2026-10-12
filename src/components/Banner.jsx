@@ -82,7 +82,7 @@ export default function Banner() {
 
   return (
     <div
-      className="relative w-full h-[18rem] overflow-hidden rounded-3xl border border-white/20 bg-gradient-to-r from-teal-600 to-emerald-700 shadow-lg shadow-teal-950/10 touch-pan-y select-none"
+      className="relative w-full h-[26rem] overflow-hidden rounded-3xl border border-white/20 bg-gradient-to-r from-teal-600 to-emerald-700 shadow-lg shadow-teal-950/10 touch-pan-y select-none"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}

@@ -135,7 +135,7 @@ export default function Pos() {
         <div className="grow flex items-center justify-center px-6 pb-32">
           <div className="w-full max-w-[920px] grid grid-cols-2 gap-8">
             {cards.map((c) => (
-              <div key={c.id} className="min-h-[520px]">
+              <div key={c.id} className="min-h-[400px]">
                 <Card c={c} onClick={(id) => {
                   if (c.id === 'wash' || c.id === 'dry') {
                     navigate(`/pos/machines?type=${c.id}`)
