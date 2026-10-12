@@ -104,45 +104,45 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
         aria-label={t('card.title')}
         onClick={(e) => e.stopPropagation()}
         className="w-full bg-[#f0f8f5] rounded-[2rem] p-6 shadow-2xl max-h-[94vh] overflow-y-auto"
-        style={{ maxWidth: 'min(94vw, 1000px)' }}
+        style={{ maxWidth: 'min(94vw, 1000px)', minHeight: '70vh' }}
       >
-        <div className="grid grid-cols-2 gap-6 items-stretch">
+        <div className="grid grid-cols-2 gap-6 items-stretch" style={{ minHeight: 'calc(70vh - 3rem)' }}>
           {/* LEFT: card, balance, top-up */}
           <section className="bg-white rounded-3xl px-8 py-9 shadow-sm border border-slate-100 flex flex-col justify-between gap-10">
             {/* the card itself: calm, little text */}
-            <div className="rounded-2xl px-7 py-6 text-white shadow-md relative overflow-hidden bg-gradient-to-br from-[#008770] via-[#059669] to-[#047857]">
+            <div className="rounded-2xl px-8 py-9 text-white shadow-md relative overflow-hidden bg-gradient-to-br from-[#008770] via-[#059669] to-[#047857]">
               <div className="absolute -right-8 -bottom-10 w-36 h-36 rounded-full bg-white/10 blur-xl pointer-events-none" />
               <div className="flex justify-between items-center relative">
-                <div className="text-lg font-semibold tracking-wide text-emerald-50">{tc('cardBrandTitle')}</div>
+                <div className="text-xl font-semibold tracking-wide text-emerald-50">{tc('cardBrandTitle')}</div>
                 <div className="w-12 h-9 rounded-md bg-amber-200/90 border border-amber-300 flex items-center justify-center">
                   <Wifi className="w-5 h-5 text-amber-800 rotate-90" />
                 </div>
               </div>
-              <div className="mt-10 text-2xl font-medium tracking-[0.25em] font-mono relative">{masked}</div>
+              <div className="mt-16 text-3xl font-medium tracking-[0.25em] font-mono relative">{masked}</div>
             </div>
 
             {/* status + balance */}
             <div className="flex items-center justify-between gap-6">
               <div className="flex flex-col gap-2">
-                <span className="text-base text-slate-400">{tc('cardStatus')}</span>
+                <span className="text-lg text-slate-400">{tc('cardStatus')}</span>
                 <span className="inline-flex w-fit items-center gap-2 text-emerald-700 font-semibold text-lg bg-emerald-50 px-3.5 py-1 rounded-full">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
                   {t('card.active')}
                 </span>
               </div>
               <div className="text-right flex flex-col gap-1">
-                <span className="text-base text-slate-400">{t('card.balanceLabel')}</span>
-                <span className={`text-5xl font-bold tracking-tight ${hasBalance ? 'text-[#008770]' : 'text-slate-600'}`}>{fmt(balance)}</span>
+                <span className="text-lg text-slate-400">{t('card.balanceLabel')}</span>
+                <span className={`text-6xl font-bold tracking-tight ${hasBalance ? 'text-[#008770]' : 'text-slate-600'}`}>{fmt(balance)}</span>
               </div>
             </div>
 
             {/* top-up */}
             <div className="flex flex-col gap-6">
-              <div className="text-center text-lg font-semibold text-slate-500">{tc('selectAmount')}</div>
+              <div className="text-center text-xl font-semibold text-slate-500">{tc('selectAmount')}</div>
               <div className="flex items-center justify-between gap-4">
-                <button type="button" aria-label={tc('amountLess')} onClick={dec} className="w-16 h-16 rounded-2xl bg-white border-2 border-slate-200 text-slate-700 text-4xl leading-none flex items-center justify-center active:scale-95">−</button>
-                <span className="text-6xl font-bold text-[#008770] tracking-tight">{amount}€</span>
-                <button type="button" aria-label={tc('amountMore')} onClick={inc} className="w-16 h-16 rounded-2xl bg-[#008770] text-white text-4xl leading-none flex items-center justify-center active:scale-95">+</button>
+                <button type="button" aria-label={tc('amountLess')} onClick={dec} className="w-20 h-20 rounded-2xl bg-white border-2 border-slate-200 text-slate-700 text-5xl leading-none flex items-center justify-center active:scale-95">−</button>
+                <span className="text-7xl font-bold text-[#008770] tracking-tight">{amount}€</span>
+                <button type="button" aria-label={tc('amountMore')} onClick={inc} className="w-20 h-20 rounded-2xl bg-[#008770] text-white text-5xl leading-none flex items-center justify-center active:scale-95">+</button>
               </div>
               <div className="grid grid-cols-4 gap-4">
                 {QUICK.filter((v) => v >= minAmount).map((v) => (
@@ -150,18 +150,18 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
                     key={v}
                     type="button"
                     onClick={() => setAmount(v)}
-                    className={`h-14 rounded-xl text-xl font-semibold active:scale-95 ${amount === v ? 'bg-emerald-50 border-2 border-[#008770] text-[#006d5b]' : 'bg-white border-2 border-slate-200 text-slate-600'}`}
+                    className={`h-16 rounded-xl text-2xl font-semibold active:scale-95 ${amount === v ? 'bg-emerald-50 border-2 border-[#008770] text-[#006d5b]' : 'bg-white border-2 border-slate-200 text-slate-600'}`}
                   >{v}€</button>
                 ))}
               </div>
             </div>
 
             <div className="flex flex-col gap-4">
-              <button type="button" onClick={proceed} className="w-full h-[72px] rounded-2xl bg-[#008770] text-white font-bold text-2xl flex items-center justify-center gap-3 shadow-md active:scale-[0.98]">
+              <button type="button" onClick={proceed} className="w-full h-20 rounded-2xl bg-[#008770] text-white font-bold text-2xl flex items-center justify-center gap-3 shadow-md active:scale-[0.98]">
                 <CreditCard className="w-7 h-7 text-emerald-100" />
                 {tc('goToPayment')}
               </button>
-              <button type="button" onClick={close} className="w-full h-14 rounded-2xl text-slate-500 font-semibold text-xl flex items-center justify-center gap-2 active:bg-slate-100">
+              <button type="button" onClick={close} className="w-full h-16 rounded-2xl text-slate-500 font-semibold text-2xl flex items-center justify-center gap-2 active:bg-slate-100">
                 <ArrowLeft className="w-6 h-6" />
                 {tc('back')}
               </button>
@@ -190,17 +190,17 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
               </div>
             ) : (
               <>
-                <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-4">
                   {shown.map((tx) => {
                     const d = describe(tx)
                     const positive = tx.amount >= 0
                     return (
-                      <div key={tx.id} className="flex items-center justify-between gap-4 p-4 rounded-2xl border border-slate-100 bg-[#fbfdfc]">
+                      <div key={tx.id} className="flex items-center justify-between gap-4 p-5 rounded-2xl border border-slate-100 bg-[#fbfdfc]">
                         <div className="flex items-center gap-4 min-w-0">
-                          <div className={`w-14 h-14 rounded-xl flex items-center justify-center shrink-0 ${TONE[d.tone]}`}>{d.icon}</div>
+                          <div className={`w-16 h-16 rounded-xl flex items-center justify-center shrink-0 ${TONE[d.tone]}`}>{d.icon}</div>
                           <div className="min-w-0">
-                            <div className="font-bold text-slate-800 text-lg truncate">{d.title}</div>
-                            <div className="text-sm text-slate-400 font-medium">{dateLabel(tx.ts)}</div>
+                            <div className="font-bold text-slate-800 text-xl leading-tight">{d.title}</div>
+                            <div className="text-base text-slate-400 font-medium">{dateLabel(tx.ts)}</div>
                           </div>
                         </div>
                         <span className={`text-xl font-extrabold shrink-0 ${positive ? 'text-[#008770]' : 'text-slate-800'}`}>{positive ? '+' : '−'}{fmt(Math.abs(Number(tx.amount)))}</span>
