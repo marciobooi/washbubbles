@@ -51,6 +51,9 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
     const refill = isCoin ? Math.min(d.count, hopperGap.find((g) => Math.abs(g.value - d.value) < 0.001)?.toAdd || 0) : 0
     return { value: d.value, isCoin, count: d.count, toHopper: refill, take: Math.max(0, d.count - refill) }
   })
+  // Notes are never given as change, so every note leaves the till; the float can only be made of coins.
+  const coinsCounted = withdrawPlan.filter((d) => d.isCoin).reduce((s, d) => s + d.count * d.value, 0)
+  const floatNeedsNotes = floatLeft !== '' && parseFloat(floatLeft) > coinsCounted + 0.005
   const takeTotal   = withdrawPlan.reduce((s, d) => s + d.take * d.value, 0)
   const hopperTotalIn = withdrawPlan.reduce((s, d) => s + d.toHopper * d.value, 0)
   const splitOk           = amountToBank !== '' && floatLeft !== '' && Math.abs(splitSum - countedCash) <= 0.005
@@ -357,6 +360,11 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
               required
             />
           </div>
+          {floatNeedsNotes && (
+            <div className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium bg-amber-50 border border-amber-200 text-amber-800">
+              Não damos troco em notas: o fundo só pode ser em moedas (contadas: {fmt(coinsCounted)}&euro;). As notas são todas para retirar.
+            </div>
+          )}
           {amountToBank !== '' && floatLeft !== '' && (
             <div className={`flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium
               ${splitOk ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' : 'bg-red-50 border border-red-200 text-red-600'}`}>
