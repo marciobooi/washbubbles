@@ -108,7 +108,7 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
       >
         <div className="grid grid-cols-2 gap-6 items-stretch" style={{ minHeight: 'calc(70vh - 3rem)' }}>
           {/* LEFT: card, balance, top-up */}
-          <section className="bg-white rounded-3xl px-8 py-9 shadow-sm border border-slate-100 flex flex-col justify-between gap-10">
+          <section className="bg-white rounded-3xl px-8 py-9 shadow-sm border border-slate-100 flex flex-col gap-8">
             {/* the card itself: calm, little text */}
             <div className="rounded-2xl px-8 py-9 text-white shadow-md relative overflow-hidden bg-gradient-to-br from-[#008770] via-[#059669] to-[#047857]">
               <div className="absolute -right-8 -bottom-10 w-36 h-36 rounded-full bg-white/10 blur-xl pointer-events-none" />
@@ -122,7 +122,7 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
             </div>
 
             {/* status + balance */}
-            <div className="flex items-center justify-between gap-6">
+            <div className="flex items-center justify-between gap-6 pb-8 border-b border-slate-100">
               <div className="flex flex-col gap-2">
                 <span className="text-lg text-slate-400">{tc('cardStatus')}</span>
                 <span className="inline-flex w-fit items-center gap-2 text-emerald-700 font-semibold text-lg bg-emerald-50 px-3.5 py-1 rounded-full">
@@ -136,8 +136,8 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
               </div>
             </div>
 
-            {/* top-up */}
-            <div className="flex flex-col gap-6">
+            {/* top-up: takes the free space and sits in the middle of it */}
+            <div className="flex-1 flex flex-col justify-center gap-7">
               <div className="text-center text-xl font-semibold text-slate-500">{tc('selectAmount')}</div>
               <div className="flex items-center justify-between gap-4">
                 <button type="button" aria-label={tc('amountLess')} onClick={dec} className="w-20 h-20 rounded-2xl bg-white border-2 border-slate-200 text-slate-700 text-5xl leading-none flex items-center justify-center active:scale-95">−</button>
@@ -156,7 +156,8 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
               </div>
             </div>
 
-            <div className="flex flex-col gap-4">
+            {/* actions, pinned to the bottom */}
+            <div className="flex flex-col gap-3 pt-8 border-t border-slate-100">
               <button type="button" onClick={proceed} className="w-full h-20 rounded-2xl bg-[#008770] text-white font-bold text-2xl flex items-center justify-center gap-3 shadow-md active:scale-[0.98]">
                 <CreditCard className="w-7 h-7 text-emerald-100" />
                 {tc('goToPayment')}
