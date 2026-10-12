@@ -77,7 +77,8 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
   }
   const purchaseTotal = cart.reduce((s, i) => (i.type === 'Recarga de Cartão' ? s : s + unitPrice(i)), 0)
   const rechargeTotal = cart.reduce((s, i) => (i.type === 'Recarga de Cartão' ? s + (i.price || i.amount || 0) : s), 0)
-  const total = purchaseTotal + rechargeTotal
+  // Cents, never float dust (0.1 + 0.2): `paid >= total` below must be true when the exact amount is in.
+  const total = Math.round((purchaseTotal + rechargeTotal) * 100) / 100
 
   // Check if cart contains recharge items
   const hasRecharge = rechargeTotal > 0
@@ -449,7 +450,8 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
               const paid = Math.round(credit * 100) / 100
               const remaining = Math.max(0, Math.round((total - paid) * 100) / 100)
               const change = Math.max(0, Math.round((paid - total) * 100) / 100)
-              const percent = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0
+              // 100% only when it is really paid in full (rounding 99.6 up to 100 would show a full bar while 0.0x is missing)
+              const percent = total > 0 ? (paid >= total ? 100 : Math.min(99, Math.floor((paid / total) * 100 + 1e-9))) : 0
               const enough = total > 0 && paid >= total
               const waitingConfirm = needsConfirm && !confirmed && (enough || detectedCardCode)
               const label = enough

@@ -508,7 +508,7 @@ export default function BuyCardModal({ open, onClose }) {
         const paid = Math.round((Number(credit) || 0) * 100) / 100
         const enough = paid + 0.005 >= cardPrice
         const missing = Math.max(0, Math.round((cardPrice - paid) * 100) / 100)
-        const percent = cardPrice > 0 ? Math.min(100, Math.round((paid / cardPrice) * 100)) : 0
+        const percent = cardPrice > 0 ? (enough ? 100 : Math.min(99, Math.floor((paid / cardPrice) * 100 + 1e-9))) : 0
         return (
           <div className="flex flex-col gap-6">
             <StepHeader title={t('payTitle')} pill />
