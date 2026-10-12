@@ -638,7 +638,7 @@ export default function AdminSettings(){
           component's top level regardless of which tab is showing (the
           WhatsApp status poll above, for instance), so switching tabs never
           loses in-flight state. */}
-      <div className="border-b flex gap-1 overflow-x-auto">
+      <div className="flex gap-2 overflow-x-auto pb-1">
         {TABS.map((t) => {
           const active = activeTab === t.id
           return (
@@ -646,8 +646,8 @@ export default function AdminSettings(){
               key={t.id}
               type="button"
               onClick={() => setActiveTab(t.id)}
-              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors
-                ${active ? 'border-primary-600 text-primary-700' : 'border-transparent text-neutral-500 hover:text-neutral-800 hover:border-neutral-200'}`}
+              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl border whitespace-nowrap transition-colors
+                ${active ? 'bg-emerald-50 border-emerald-300 text-emerald-800 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800 hover:border-emerald-200'}`}
             >
               <t.Icon className="h-4 w-4" />
               {t.label}
