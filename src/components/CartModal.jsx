@@ -8,8 +8,26 @@ import { toast } from '@/components/ui/Toast'
 import * as websocket from '@/services/websocket'
 import * as localApi from '@/services/local-api'
 
+let cachedLogo = null
+function useShopLogo() {
+  const [logo, setLogo] = React.useState(cachedLogo)
+  React.useEffect(() => {
+    let alive = true
+    if (!cachedLogo) {
+      api.getPublicSetting('branding.logo')
+        .then((r) => { const v = r && r.value ? String(r.value) : null; if (v) cachedLogo = v; if (alive) setLogo(v) })
+        .catch(() => {})
+    }
+    const onBrand = (e) => { const v = e?.detail?.logo; if (v) { cachedLogo = v; setLogo(v) } }
+    window.addEventListener('branding:update', onBrand)
+    return () => { alive = false; window.removeEventListener('branding:update', onBrand) }
+  }, [])
+  return logo
+}
+
 export default function CartModal({ open, onClose, onPay = () => {}, onClear = () => {} }) {
   const { t, i18n } = useTranslation('cart')
+  const shopLogo = useShopLogo()
   const { cart, removeFromCart, clearCart, credit, setQuantity } = useCart()
   const [showCash, setShowCash] = React.useState(false)
   // Staff-only manual payment, for when the coin acceptor or card reader is down.
@@ -452,9 +470,15 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
                   {/* Header */}
                   <header className="flex items-center justify-between border-b border-slate-100/90 pb-4">
                     <div className="flex items-center gap-3.5">
-                      <div className="w-12 h-12 rounded-2xl bg-teal-500 text-white font-bold flex items-center justify-center text-lg shadow-sm ring-4 ring-teal-50">
-                        {single ? badge(single) : '🛒'}
-                      </div>
+                      {shopLogo ? (
+                        <div className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center shadow-sm ring-4 ring-teal-50 overflow-hidden">
+                          <img src={shopLogo} alt="" className="w-full h-full object-contain p-1" />
+                        </div>
+                      ) : (
+                        <div className="w-12 h-12 rounded-2xl bg-teal-500 text-white font-bold flex items-center justify-center text-lg shadow-sm ring-4 ring-teal-50">
+                          {single ? badge(single) : '🛒'}
+                        </div>
+                      )}
                       <div>
                         <h1 className="text-2xl font-bold tracking-tight text-slate-900">
                           {single ? (single.name || single.type) : t('title')}

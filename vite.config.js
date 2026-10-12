@@ -46,6 +46,11 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
         },
+        '/uploads': {
+          target: process.env.DEV_API_TARGET || 'http://localhost:3000',
+          changeOrigin: true,
+          secure: false,
+        },
         // Proxy websocket endpoint
         '/ws': {
           target: (process.env.DEV_API_TARGET || 'http://localhost:3000').replace(/^http/, 'ws'),
