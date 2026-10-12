@@ -16,9 +16,10 @@ export default function Loading({ size = 'small', label }) {
     )
   }
   return (
-    <div className="flex flex-col items-center gap-3 py-8" role="status" aria-live="polite">
-      <BubbleLoader compact className="w-24 h-24" />
-      <span className="text-xl font-semibold text-teal-800">{text}</span>
+    <div className="flex flex-col items-center py-8" role="status" aria-live="polite">
+      {/* the bubbles are born at the label: it overlaps the bottom of the box and sits in front of them */}
+      <BubbleLoader compact className="w-28 h-28" />
+      <span className="relative z-10 -mt-5 px-5 py-1.5 rounded-full bg-white/85 text-xl font-semibold text-teal-800 shadow-sm">{text}</span>
     </div>
   )
 }

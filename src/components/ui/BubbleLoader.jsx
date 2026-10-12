@@ -45,7 +45,7 @@ export default function BubbleLoader({ className = '', children, compact = false
       const buoy = (base > 45 ? 1.9 : base < 20 ? 1.1 : 1.4) * (compact ? 0.45 : 1)
       return {
         x: x !== undefined ? x : (compact ? width / 2 + (Math.random() - 0.5) * width * 0.35 : Math.random() * width),
-        y: y !== undefined ? y : height + Math.random() * 80 + 30,
+        y: y !== undefined ? y : (compact ? height - 6 + Math.random() * 10 : height + Math.random() * 80 + 30),
         r: base,
         vy: -(Math.random() * 0.9 + buoy) * (compact ? 0.4 : 0.5),
         vx: (Math.random() - 0.5) * 0.3,
