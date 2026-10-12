@@ -638,7 +638,7 @@ export default function AdminSettings(){
           component's top level regardless of which tab is showing (the
           WhatsApp status poll above, for instance), so switching tabs never
           loses in-flight state. */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
+      <div className="flex gap-2 overflow-x-auto pb-1 max-w-full">
         {TABS.map((t) => {
           const active = activeTab === t.id
           return (
