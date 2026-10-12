@@ -56,6 +56,19 @@ describe('Website legal pages (privacy, terms, cookies) and footer links', funct
     }
   })
 
+  it('legal pages carry canonical, hreflang, description and a back-to-top button; the sitemap lists them', async () => {
+    const r = await request(app).get('/de/legal/privacy')
+    expect(r.text).to.contain('<link rel="canonical" href="https://freshbubbles.pt/de/legal/privacy">')
+    expect(r.text).to.contain('hreflang="x-default" href="https://freshbubbles.pt/legal/privacy"')
+    expect(r.text).to.match(/<meta name="description" content="[^"]{20,}/)
+    expect(r.text).to.contain('id="to-top"')
+    const sm = await request(app).get('/sitemap.xml')
+    expect(sm.text).to.contain('<loc>https://freshbubbles.pt/legal/privacy</loc>')
+    expect(sm.text).to.contain('<loc>https://freshbubbles.pt/legal/cookies</loc>')
+    const home = await request(app).get('/')
+    expect(home.text).to.contain('id="to-top"')
+  })
+
   it('the front page footer links to the three pages and the complaints book, and the map waits for a click', async () => {
     const res = await request(app).get('/')
     expect(res.status).to.equal(200)

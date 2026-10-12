@@ -129,13 +129,26 @@ export function renderLegalPage(doc, { lang = 'pt', brand, legal, available = ['
     ? `<nav class="langs" aria-label="${esc(L.langAria)}">${langs.map((l) => `<a href="${langPath(l) === '/' ? '' : langPath(l)}/legal/${doc}"${l === lang ? ' aria-current="true"' : ''}>${l.toUpperCase()}</a>`).join('')}</nav>`
     : ''
   const home = langPath(lang)
+  const pathFor = (l) => `${langPath(l) === '/' ? '' : langPath(l)}/legal/${doc}`
+  // first paragraph of the text, trimmed to a search-result length
+  const firstPara = (parseLegal(text).find((b) => b.type === 'p') || { text: '' }).text
+  const description = (firstPara || title).replace(/\s+/g, ' ').slice(0, 155)
   return `<!doctype html>
 <html lang="${esc(L.htmlLang)}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)} — ${esc(brand.name)}</title>
+<meta name="description" content="${esc(description)}">
 <meta name="robots" content="index,follow">
+<link rel="canonical" href="${SITE_URL}${pathFor(lang)}">
+${langs.map((l) => `<link rel="alternate" hreflang="${esc(UI[l].htmlLang)}" href="${SITE_URL}${pathFor(l)}">`).join('\n')}
+<link rel="alternate" hreflang="x-default" href="${SITE_URL}${pathFor('pt')}">
+<meta property="og:type" content="article">
+<meta property="og:title" content="${esc(title)} — ${esc(brand.name)}">
+<meta property="og:description" content="${esc(description)}">
+<meta property="og:url" content="${SITE_URL}${pathFor(lang)}">
+<meta property="og:locale" content="${esc(UI[lang].ogLocale)}">
 <link rel="icon" href="${esc(brand.logo)}">
 <link rel="stylesheet" href="/fonts/fonts.css">
 <style>
@@ -148,6 +161,11 @@ header img{ width:32px; height:32px; object-fit:contain }
 main{ max-width:860px; margin:0 auto; padding:8px 20px 56px }
 .back{ display:inline-flex; align-items:center; gap:6px; margin-top:8px; padding:10px 16px; border-radius:999px; background:#fff; border:1px solid rgba(13,148,136,.3); color:var(--p9); font-weight:600; font-size:15px; text-decoration:none }
 .back:hover{ background:#f0fdfa }
+.to-top{ position:fixed; right:18px; bottom:18px; z-index:50; width:48px; height:48px; border-radius:50%; border:0; background:var(--p); color:#fff; box-shadow:0 6px 18px rgba(13,148,136,.35); cursor:pointer; display:flex; align-items:center; justify-content:center; opacity:0; visibility:hidden; transform:translateY(8px); transition:opacity .2s, transform .2s, visibility .2s }
+.to-top.show{ opacity:1; visibility:visible; transform:none }
+.to-top:hover{ background:var(--p9) }
+.to-top:focus-visible{ outline:3px solid #99f6e4; outline-offset:2px }
+.to-top svg{ width:22px; height:22px }
 h1{ font-size:30px; line-height:1.2; color:var(--p9); margin:12px 0 18px }
 h2{ font-size:19px; color:var(--p9); margin:28px 0 8px }
 ul{ padding-left:22px } li{ margin:4px 0 }
@@ -174,6 +192,18 @@ footer a{ color:inherit }
   <a href="${langPath(lang) === '/' ? '' : langPath(lang)}/legal/terms">${esc(L.termsLink)}</a>
   <a href="${langPath(lang) === '/' ? '' : langPath(lang)}/legal/cookies">${esc(L.cookiesLink)}</a>
 </footer>
+<button type="button" class="to-top" id="to-top" aria-label="${esc(L.backToTop)}" title="${esc(L.backToTop)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg></button>
+<script>(function(){
+  var toTop = document.getElementById('to-top');
+  if (toTop) {
+    var onScroll = function(){ toTop.classList.toggle('show', window.scrollY > 500); };
+    window.addEventListener('scroll', onScroll, { passive: true }); onScroll();
+    toTop.addEventListener('click', function(){
+      var rm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      window.scrollTo({ top: 0, behavior: rm ? 'auto' : 'smooth' });
+    });
+  }
+})()</script>
 </body>
 </html>`
 }

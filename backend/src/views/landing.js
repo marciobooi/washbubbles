@@ -936,6 +936,11 @@ section{ padding:84px 0 }
   border:1px solid rgba(13,148,136,.14); aspect-ratio:16/11; background:var(--primary-100);
 }
 .map-embed iframe{ width:100%; height:100%; border:0; display:block }
+.to-top{ position:fixed; right:18px; bottom:18px; z-index:50; width:48px; height:48px; border-radius:50%; border:0; background:var(--primary-600,#0d9488); color:#fff; box-shadow:0 6px 18px rgba(13,148,136,.35); cursor:pointer; display:flex; align-items:center; justify-content:center; opacity:0; visibility:hidden; transform:translateY(8px); transition:opacity .2s, transform .2s, visibility .2s }
+.to-top.show{ opacity:1; visibility:visible; transform:none }
+.to-top:hover{ background:var(--primary-700,#0f766e) }
+.to-top:focus-visible{ outline:3px solid #99f6e4; outline-offset:2px }
+.to-top svg{ width:22px; height:22px }
 .map-ask{ height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; padding:16px; text-align:center }
 .map-ask button{ font:inherit; font-weight:600; padding:10px 20px; border-radius:999px; border:0; background:var(--primary-600); color:#fff; cursor:pointer }
 .map-ask p{ margin:0; font-size:12.5px; color:var(--ink-soft); max-width:34ch }
@@ -1299,8 +1304,18 @@ footer .foot-links a:hover{ color:var(--primary-800) }
   </div>
 </footer>
 
+${'<button type="button" class="to-top" id="to-top" aria-label="${escapeHtml(L.backToTop)}" title="${escapeHtml(L.backToTop)}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg></button>'}
 <script>
 (function(){
+  var toTop = document.getElementById('to-top');
+  if (toTop) {
+    var onScroll = function(){ toTop.classList.toggle('show', window.scrollY > 500); };
+    window.addEventListener('scroll', onScroll, { passive: true }); onScroll();
+    toTop.addEventListener('click', function(){
+      var rm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      window.scrollTo({ top: 0, behavior: rm ? 'auto' : 'smooth' });
+    });
+  }
   // The map (Google) is only loaded when the visitor asks for it: until then nothing is sent to Google for it.
   var mapBox = document.getElementById('map-embed'), mapBtn = document.getElementById('map-show');
   if (mapBox && mapBtn) {
@@ -1487,9 +1502,16 @@ export function renderSitemapXml(available = ['pt']) {
     ? langs.map((l) => `\n    <xhtml:link rel="alternate" hreflang="${UI[l].htmlLang}" href="${SITE_URL}${langPath(l)}"/>`).join('')
     : ''
   const urls = langs.map((l) => `  <url><loc>${SITE_URL}${langPath(l)}</loc><lastmod>${today}</lastmod><changefreq>monthly</changefreq><priority>${l === 'pt' ? '1.0' : '0.8'}</priority>${alt}</url>`).join('\n')
+  // the legal pages, with their language alternates
+  const legalUrls = ['privacy', 'terms', 'cookies'].map((doc) => {
+    const p = (l) => `${SITE_URL}${langPath(l) === '/' ? '' : langPath(l)}/legal/${doc}`
+    const altL = langs.length > 1 ? langs.map((l) => `\n    <xhtml:link rel="alternate" hreflang="${UI[l].htmlLang}" href="${p(l)}"/>`).join('') : ''
+    return langs.map((l) => `  <url><loc>${p(l)}</loc><lastmod>${today}</lastmod><changefreq>yearly</changefreq><priority>0.3</priority>${altL}</url>`).join('\n')
+  }).join('\n')
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
 ${urls}
+${legalUrls}
 </urlset>
 `
 }
