@@ -1,296 +1,231 @@
 import React, { useEffect, useState } from 'react'
 import { useCart } from '../context/CartContext'
 import { useTranslation } from 'react-i18next'
-import { WasherIcon, DryerIcon, CardIcon } from './icons/MachineIcons'
+import { Plus, RotateCcw, ShieldCheck, ChevronLeft, ChevronRight, ArrowLeft, CreditCard, Wifi } from 'lucide-react'
+import { WasherIcon, DryerIcon } from './icons/MachineIcons'
 
-function formatDate(iso) {
-  const d = new Date(iso)
-  return d.toLocaleDateString(undefined, { day: '2-digit', month: 'short' })
-}
+const MAX_RECENT = 10 // how many movements the window keeps
+const PAGE_SIZE = 5   // shown per page, flipped with big touch buttons (no inner scrolling)
+const QUICK = [5, 10, 20, 50]
 
-function formatTime(iso) {
-  const d = new Date(iso)
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-}
-
-function getTxIcon(type) {
-  const t = type.toLowerCase()
-  if (t.includes('lavagem') || t.includes('wash')) return WasherIcon
-  if (t.includes('secagem') || t.includes('dry')) return DryerIcon
-  return CardIcon
-}
-
-// `onRecharge` used to be accepted here and never called — Pos.jsx passed a real
-// handler that could therefore never fire. The cart-based flow superseded it.
+// `onRecharge` used to be accepted here and never called — the cart-based flow superseded it.
 export default function CardModal({ open, onClose, transactions = [], balance = 0, card = null }) {
-  const { addToCart } = useCart()
-  const { t } = useTranslation('pos')
+  const { addToCart, openCart } = useCart()
+  const { t, i18n } = useTranslation('pos')
   const { t: tc } = useTranslation('cart')
-  const [selectedAmount, setSelectedAmount] = useState(10)
-  const [addedToCart, setAddedToCart] = useState(false)
+  const [amount, setAmount] = useState(10)
+  const [page, setPage] = useState(0)
+
+  useEffect(() => { if (open) { setPage(0); setAmount(10) } }, [open])
 
   useEffect(() => {
-    if (!open) return
-    const onKey = (e) => {
-      if (e.key === 'Escape') onClose()
-    }
+    if (!open) return undefined
+    const onKey = (e) => { if (e.key === 'Escape') close() }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [open, onClose])
-
-  // Prevent page scroll when CardModal is open, and restore on close
-  React.useEffect(() => {
-    if (!open) return
-    const prev = document.body.style.overflow
-    try { document.body.style.overflow = 'hidden' } catch { /* scroll-lock is cosmetic */ }
-    return () => {
-      try { document.body.style.overflow = prev } catch { /* scroll-lock is cosmetic */ }
-    }
-  }, [open])
-
-  const handleAddToCart = () => {
-    if (!selectedAmount || selectedAmount <= 0) return
-    
-    addToCart({
-      id: `recharge-${Date.now()}`,
-      name: `Recarga de Cartão - ${selectedAmount}€`,
-      type: 'Recarga de Cartão',
-      amount: selectedAmount,
-      price: selectedAmount
-    })
-    
-    // Visual feedback
-    setAddedToCart(true)
-    setTimeout(() => {
-      setAddedToCart(false)
-    }, 1500)
-  }
-
-  const incrementAmount = () => {
-    setSelectedAmount(prev => Math.min(prev + 1, 100))
-  }
-
-  const decrementAmount = () => {
-    setSelectedAmount(prev => Math.max(prev - 1, 1))
-  }
-
-  const handleQuickAmount = (amount) => {
-    setSelectedAmount(amount)
-  }
-
-  // The manual "insert money / show change" widget was removed: nothing ever
-  // called handleInsertMoney, so insertedMoney and showChange never changed and
-  // the Troco block below could not render. Change is dispensed and reported by
-  // the server (see the changeDispensed flag on the payment response).
+  })
 
   if (!open) return null
 
+  const fmt = (n) => `${Number(n).toFixed(2)}€`
+  const close = () => {
+    if (window.electronAPI?.hideKeyboard) window.electronAPI.hideKeyboard()
+    onClose()
+  }
+
+  const recent = transactions.slice(0, MAX_RECENT)
+  const pages = Math.max(1, Math.ceil(recent.length / PAGE_SIZE))
+  const shown = recent.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE)
+  const locale = i18n.language
+
+  const dateLabel = (iso) => {
+    const d = new Date(iso)
+    return `${d.toLocaleDateString(locale, { day: '2-digit', month: 'short' })} • ${d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}`
+  }
+
+  // What a movement is called and which icon it gets.
+  const describe = (tx) => {
+    const kind = String(tx.machineType || '').toLowerCase()
+    if (tx.type === 'recharge') return { title: tc('txRecharge'), tone: 'green', icon: <Plus className="w-7 h-7" strokeWidth={2.5} /> }
+    if (tx.type === 'card_purchase') return { title: tc('txCardPurchase'), tone: 'green', icon: <CreditCard className="w-7 h-7" strokeWidth={2.2} /> }
+    if (tx.type === 'refund') return { title: tc('txRefund'), tone: 'green', icon: <RotateCcw className="w-7 h-7" strokeWidth={2.2} /> }
+    const isDry = kind === 'dry' || /secar|dry|séch|trock/i.test(String(tx.name || ''))
+    return {
+      title: tx.name || tc('txPayment'),
+      tone: isDry ? 'amber' : 'blue',
+      icon: isDry ? <DryerIcon animated={false} className="w-9 h-9" /> : <WasherIcon animated={false} className="w-9 h-9" />,
+    }
+  }
+  const TONE = { green: 'bg-emerald-100 text-emerald-700', blue: 'bg-blue-100 text-blue-700', amber: 'bg-amber-100 text-amber-700' }
+
+  const code = card?.code ? String(card.code) : ''
+  const masked = code ? `•••• ${code.slice(-4)}` : '—'
+  const hasBalance = balance > 0
+
+  const dec = () => setAmount((a) => Math.max(5, a - 5))
+  const inc = () => setAmount((a) => Math.min(100, a + 5))
+
+  const proceed = () => {
+    if (!amount || amount <= 0) return
+    addToCart({
+      id: `recharge-${Date.now()}`,
+      name: `Recarga de Cartão - ${amount}€`,
+      type: 'Recarga de Cartão',
+      amount,
+      price: amount,
+    })
+    close()
+    openCart()
+  }
+
   return (
-    <div className="fixed bg-white  inset-0 z-50 flex flex-col animate-fade-in-up overflow-hidden">
-      {/* Header */}
-      <div className="bg-white shadow-sm px-6 py-4 flex items-center justify-between shrink-0 z-10">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-primary-50 rounded-xl">
-            <CardIcon className="w-9 h-9" />
-          </div>
-          <h2 className="text-2xl font-bold text-neutral-800 tracking-tight">{t('card.title')}</h2>
-        </div>
-        <button 
-          onClick={() => {
-            if (window.electronAPI?.hideKeyboard) {
-              window.electronAPI.hideKeyboard()
-            }
-            onClose()
-          }}
-          className="p-3 bg-neutral-100 hover:bg-neutral-200 active:bg-neutral-300 rounded-xl transition-colors group"
-          aria-label={tc('closeBtn')}
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-neutral-500 group-hover:text-neutral-800 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-
-      {/* Content */}
-      <div className="flex-grow overflow-hidden p-4 lg:p-6 ">
-        <div className="h-full flex flex-col lg:grid lg:grid-cols-12 gap-4 lg:gap-8 max-w-7xl mx-auto">
-          
-          {/* Left Column: Balance & Actions */}
-          <div className="shrink-0 lg:col-span-5">
-            <div className="bg-white rounded-3xl p-6 lg:p-8 shadow-xl border border-neutral-100 relative overflow-hidden group shrink-0 flex flex-col justify-between gap-6 h-full">
-              <div className="absolute top-0 right-0 -mt-10 -mr-10 w-40 h-40 bg-primary-50 rounded-full blur-3xl group-hover:scale-150 transition-transform duration-700"></div>
-              
-              {/* Balance & Info Section */}
-              <div className="relative z-10 grid grid-cols-2 gap-4 items-center flex-grow">
-                
-                <div className="flex flex-col justify-center gap-4 border-r border-neutral-100 pr-4">
-                  <div className="flex flex-col">
-                    <span className="text-neutral-400 text-xs uppercase tracking-wider font-bold mb-1">{t('card.idLabel')}</span>
-                    <span className="font-mono font-bold text-neutral-700 text-lg">{card?.code ? `**** ${String(card.code).slice(-4)}` : '—'}</span>
-                  </div>
-                  <div>
-                    <span className="inline-flex items-center px-3 py-1 bg-green-50 text-green-700 border border-green-200 rounded-full text-xs font-bold shadow-sm gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-                      {t('card.active')}
-                    </span>
-                  </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/35 animate-fade-in-up" onClick={close}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('card.title')}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full bg-[#f0f8f5] rounded-[2rem] p-6 shadow-2xl max-h-[94vh] overflow-y-auto"
+        style={{ maxWidth: 'min(94vw, 1000px)' }}
+      >
+        <div className="grid grid-cols-2 gap-6 items-stretch">
+          {/* LEFT: card, balance, top-up */}
+          <section className="bg-white rounded-3xl p-7 shadow-sm border border-slate-100 flex flex-col justify-between gap-7">
+            <div className="rounded-2xl p-6 text-white shadow-lg relative overflow-hidden bg-gradient-to-br from-[#008770] via-[#059669] to-[#047857]">
+              <div className="absolute -right-8 -bottom-8 w-36 h-36 rounded-full bg-white/10 blur-xl pointer-events-none" />
+              <div className="flex justify-between items-start mb-8 relative">
+                <div>
+                  <div className="text-sm uppercase font-extrabold tracking-wider text-emerald-100">{tc('cardBrandTitle')}</div>
+                  <div className="text-base font-medium text-emerald-50 opacity-90">{tc('cardBrandSub')}</div>
                 </div>
-
-                <div className="text-right flex flex-col justify-center h-full">
-                  <p className="text-neutral-400 text-xs font-bold uppercase tracking-wider mb-1">{t('card.balanceLabel')}</p>
-                  <p className="text-4xl lg:text-5xl font-bold tracking-tight text-primary-600">{balance.toFixed(2)}€</p>
+                <div className="w-12 h-9 rounded-md bg-amber-200/90 border border-amber-300 flex items-center justify-center shadow-inner">
+                  <Wifi className="w-5 h-5 text-amber-800 rotate-90" />
                 </div>
-
               </div>
+              <div className="text-sm font-mono tracking-widest text-emerald-100 mb-1 relative">{tc('cardNumber')}</div>
+              <div className="text-2xl font-bold tracking-widest font-mono relative">{masked}</div>
+            </div>
 
-              {/* Amount Selection with +/- Controls */}
-              <div className="relative z-10 space-y-4">
-                {/* Custom Amount with +/- */}
-                <div className="flex items-center justify-center gap-4">
-                  <button
-                    onClick={decrementAmount}
-                    className="w-12 h-12 rounded-xl bg-neutral-100 hover:bg-neutral-200 active:bg-neutral-300 text-neutral-700 font-bold text-2xl transition-colors flex items-center justify-center"
-                  >
-                    −
-                  </button>
-                  
-                  <div className="flex flex-col items-center">
-                    <span className="text-neutral-400 text-xs uppercase tracking-wider font-bold mb-1">{tc('rechargeAmount')}</span>
-                    <span className="text-5xl font-bold text-primary-600">{selectedAmount}€</span>
-                  </div>
-                  
-                  <button
-                    onClick={incrementAmount}
-                    className="w-12 h-12 rounded-xl bg-neutral-100 hover:bg-neutral-200 active:bg-neutral-300 text-neutral-700 font-bold text-2xl transition-colors flex items-center justify-center"
-                  >
-                    +
-                  </button>
+            <div className="flex items-stretch gap-6 pb-6 border-b border-slate-100">
+              <div className="flex-1 flex flex-col justify-center gap-2">
+                <span className="text-sm font-semibold uppercase tracking-wider text-slate-400">{tc('cardStatus')}</span>
+                <span className="inline-flex w-fit items-center gap-2 bg-[#eafaf4] text-[#008770] font-bold text-sm px-3 py-1 rounded-full border border-emerald-200">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#008770]" />
+                  {t('card.active')}
+                </span>
+              </div>
+              <div className="w-px bg-slate-200" />
+              <div className="flex-1 flex flex-col justify-center gap-1 pl-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-semibold uppercase tracking-wider text-slate-400">{t('card.balanceLabel')}</span>
+                  {!hasBalance && <span className="text-xs font-bold uppercase px-2 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200">{tc('noBalance')}</span>}
                 </div>
-
-                {/* Quick Amount Buttons */}
-                <div className="flex items-center gap-2">
-                  {[5, 10, 20, 50].map((amount) => (
-                    <button
-                      key={amount}
-                      onClick={() => handleQuickAmount(amount)}
-                      className={`flex-1 py-2 rounded-lg font-semibold text-sm transition-all ${
-                        selectedAmount === amount
-                          ? 'bg-teal-600 text-white shadow-md'
-                          : 'border border-teal-600 text-teal-600 hover:bg-teal-50'
-                      }`}
-                    >
-                      {amount}€
-                    </button>
-                  ))}
-                </div>
-
-                
-                {/* Add to Cart Button */}
-                <button 
-                  onClick={handleAddToCart}
-                  disabled={!selectedAmount || selectedAmount <= 0 || addedToCart}
-                  className={`w-full py-3 rounded-xl font-bold text-base transition-all flex items-center justify-center gap-2 ${
-                    addedToCart
-                      ? 'bg-green-600 text-white shadow-lg shadow-green-600/30'
-                      : selectedAmount > 0
-                      ? 'bg-teal-600 hover:bg-teal-700 text-white shadow-lg shadow-teal-600/20 active:scale-[0.98]'
-                      : 'bg-neutral-200 text-neutral-400 cursor-not-allowed'
-                  }`}
-                >
-                  {addedToCart ? (
-                    <>
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      {t('card.added')}
-                    </>
-                  ) : (
-                    <>
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-                      </svg>
-                      {t('card.addToCart')}
-                    </>
-                  )}
-                </button>
-
-                {/* Back/Close Button */}
-                <button
-                  onClick={() => {
-                    if (window.electronAPI?.hideKeyboard) {
-                      window.electronAPI.hideKeyboard()
-                    }
-                    onClose()
-                  }}
-                  className="w-full py-3 rounded-xl font-bold text-base transition-all flex items-center justify-center gap-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 border border-neutral-300 active:scale-[0.98]"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                  </svg>
-                  {tc('back')}
-                </button>
+                <div className={`text-5xl font-extrabold tracking-tight ${hasBalance ? 'text-[#008770]' : 'text-slate-700'}`}>{fmt(balance)}</div>
               </div>
             </div>
-          </div>
 
-          {/* Right Column: Transactions */}
-          <div className="flex-grow lg:col-span-7 bg-white rounded-3xl shadow-sm border border-neutral-100 flex flex-col overflow-hidden min-h-0">
-            <div className="p-4 lg:p-6 border-b border-neutral-100 bg-neutral-50/50 shrink-0">
-              <h3 className="text-lg lg:text-xl font-bold text-neutral-800">{t('card.transactionsTitle')}</h3>
+            <div className="flex flex-col gap-5">
+              <div className="text-center">
+                <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-50 border border-emerald-100 text-sm font-bold uppercase tracking-wider text-emerald-800">
+                  <span className="w-2 h-2 rounded-full bg-[#008770]" />
+                  {tc('selectAmount')}
+                </span>
+              </div>
+              <div className="flex items-center justify-center gap-6 py-3 bg-slate-50/80 rounded-2xl border border-slate-100">
+                <button type="button" aria-label={tc('less')} onClick={dec} className="w-[72px] h-[72px] rounded-2xl bg-white border border-slate-200 text-slate-800 font-black text-4xl flex items-center justify-center shadow-sm active:scale-95">−</button>
+                <span className="min-w-[150px] text-center text-6xl font-black text-[#008770] tracking-tight">{amount}€</span>
+                <button type="button" aria-label={tc('more')} onClick={inc} className="w-[72px] h-[72px] rounded-2xl bg-[#008770] text-white font-black text-4xl flex items-center justify-center shadow-md active:scale-95">+</button>
+              </div>
+              <div className="grid grid-cols-4 gap-3">
+                {QUICK.map((v) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setAmount(v)}
+                    className={`h-16 rounded-xl border-2 font-extrabold text-2xl active:scale-95 ${amount === v ? 'bg-[#008770] border-[#008770] text-white shadow-md' : 'bg-white border-emerald-600 text-emerald-700'}`}
+                  >{v}€</button>
+                ))}
+              </div>
             </div>
-            
-            <div className="flex-grow overflow-y-auto p-3 lg:p-4 custom-scrollbar">
-              {transactions.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-neutral-400 gap-4">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                  </svg>
-                  <p>{tc('noTransactions')}</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {transactions.map((tx) => {
-                    const isPositive = tx.amount >= 0
+
+            <div className="flex flex-col gap-3">
+              <button type="button" onClick={proceed} className="w-full h-[72px] rounded-2xl bg-[#008770] text-white font-black text-2xl flex items-center justify-center gap-3 shadow-lg active:scale-[0.98]">
+                <CreditCard className="w-7 h-7 text-emerald-100" />
+                {tc('goToPayment')}
+              </button>
+              <button type="button" onClick={close} className="w-full h-16 rounded-2xl bg-[#f5f6f8] text-slate-700 font-bold text-xl flex items-center justify-center gap-2 border border-slate-200 active:scale-[0.98]">
+                <ArrowLeft className="w-6 h-6 text-slate-500" />
+                {tc('back')}
+              </button>
+            </div>
+          </section>
+
+          {/* RIGHT: history */}
+          <section className="bg-white rounded-3xl p-7 shadow-sm border border-slate-100 flex flex-col gap-6">
+            <div className="flex flex-col gap-3 border-b border-slate-100 pb-5">
+              <div>
+                <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">{t('card.transactionsTitle')}</h2>
+                <p className="text-base text-slate-400 font-medium mt-1">{tc('historySub')}</p>
+              </div>
+              <div className="w-fit inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-xl border border-slate-200/60">
+                <span className="w-2 h-2 rounded-full bg-emerald-600" />
+                <span className="text-sm font-bold text-slate-700">{tc('lastMoves')}</span>
+                <span className="text-sm font-bold px-2 rounded-full bg-white text-slate-600 border border-slate-200">{recent.length}</span>
+              </div>
+            </div>
+
+            {recent.length === 0 ? (
+              <div className="flex flex-col items-center justify-center text-center py-14 px-4 text-slate-300">
+                <ShieldCheck className="w-20 h-20 opacity-40" strokeWidth={1.2} />
+                <h3 className="text-xl font-bold text-slate-600 mt-4">{tc('noTransactions')}</h3>
+                <p className="text-base text-slate-400 max-w-xs mt-1">{tc('noTransactionsHint')}</p>
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-col gap-3">
+                  {shown.map((tx) => {
+                    const d = describe(tx)
+                    const positive = tx.amount >= 0
                     return (
-                      <div key={tx.id} className="group bg-white p-4 rounded-2xl border border-neutral-100 border-primary-200 shadow-md transition-all duration-200 flex items-center gap-5">
-                        {/* Icon Box */}
-                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${isPositive ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600'}`}>
-                          {React.createElement(getTxIcon(tx.type), { className: 'w-10 h-10', animated: false })}
-                        </div>
-
-                        {/* Details */}
-                        <div className="flex-grow min-w-0">
-                          <div className="flex items-center justify-between mb-1">
-                            <h4 className="font-bold text-neutral-800 text-lg truncate">{t(`transactions.${tx.type}`)}</h4>
-                            <span className={`font-bold text-xl ${isPositive ? 'text-green-600' : 'text-neutral-800'}`}>
-                              {isPositive ? '+' : ''}{tx.amount.toFixed(2)}€
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-4 text-sm text-neutral-500">
-                            <span className="flex items-center gap-1.5 tealFilter">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                              </svg>
-                              {formatDate(tx.ts)}
-                            </span>
-                            <span className="flex items-center gap-1.5 tealFilter">
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                              {formatTime(tx.ts)}
-                            </span>
+                      <div key={tx.id} className="flex items-center justify-between gap-4 p-4 rounded-2xl border border-slate-100 bg-[#fbfdfc]">
+                        <div className="flex items-center gap-4 min-w-0">
+                          <div className={`w-14 h-14 rounded-xl flex items-center justify-center shrink-0 ${TONE[d.tone]}`}>{d.icon}</div>
+                          <div className="min-w-0">
+                            <div className="font-bold text-slate-800 text-lg truncate">{d.title}</div>
+                            <div className="text-sm text-slate-400 font-medium">{dateLabel(tx.ts)}</div>
                           </div>
                         </div>
+                        <span className={`text-xl font-extrabold shrink-0 ${positive ? 'text-[#008770]' : 'text-slate-800'}`}>{positive ? '+' : ''}{Number(tx.amount).toFixed(2)}€</span>
                       </div>
                     )
                   })}
                 </div>
-              )}
+                {pages > 1 && (
+                  <div className="flex items-center justify-between gap-3">
+                    <button type="button" disabled={page === 0} onClick={() => setPage(page - 1)} className="h-14 px-4 rounded-xl bg-white border-2 border-slate-200 text-slate-700 font-bold text-lg whitespace-nowrap flex items-center gap-1 disabled:opacity-35 active:scale-95">
+                      <ChevronLeft className="w-6 h-6" />{tc('prevPage')}
+                    </button>
+                    <span className="text-lg font-bold text-slate-500">{page + 1} / {pages}</span>
+                    <button type="button" disabled={page >= pages - 1} onClick={() => setPage(page + 1)} className="h-14 px-4 rounded-xl bg-white border-2 border-slate-200 text-slate-700 font-bold text-lg whitespace-nowrap flex items-center gap-1 disabled:opacity-35 active:scale-95">
+                      {tc('nextPage')}<ChevronRight className="w-6 h-6" />
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+
+            <div className="mt-auto bg-gradient-to-r from-emerald-50 to-[#ebf8f4] border border-emerald-200/80 rounded-2xl p-5 flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl bg-[#008770] text-white shrink-0 flex items-center justify-center shadow-md">
+                <ShieldCheck className="w-7 h-7" strokeWidth={2.2} />
+              </div>
+              <div>
+                <div className="font-extrabold text-slate-900 text-lg">{tc('perkTitle')}</div>
+                <p className="text-base text-slate-700 font-medium leading-snug mt-1">{tc('perkText')}</p>
+              </div>
             </div>
-          </div>
+          </section>
         </div>
       </div>
     </div>
-    
   )
 }

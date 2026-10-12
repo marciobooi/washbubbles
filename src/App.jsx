@@ -16,6 +16,7 @@ import ReceiptPrompt from './components/ReceiptPrompt'
 import { ToastProvider, toast } from './components/ui/Toast'
 import HelpTutorial from './components/HelpTutorial'
 import LanguageSwitcher from './components/LanguageSwitcher'
+import DevCardPreview from './pages/DevCardPreview'
 import DevCartPreview from './pages/DevCartPreview'
 import TenantSelector from './components/TenantSelector'
 import { useTenant } from './context/TenantContext'
@@ -598,6 +599,7 @@ function AppInner() {
               (VITE_PUBLIC_SITE=true) is admin-only — it has no hardware to
               sell against, so these routes bounce to the admin login. */}
           {import.meta.env.DEV && <Route path="/dev/cart" element={<DevCartPreview />} />}
+          {import.meta.env.DEV && <Route path="/dev/card" element={<DevCardPreview />} />}
           <Route path="/pos" element={isPublicSite ? <Navigate to="/admin/login" replace /> : <Pos />} />
           <Route path="/pos/machines" element={isPublicSite ? <Navigate to="/admin/login" replace /> : <Machines />} />
           <Route path="/pos/machines/:id" element={isPublicSite ? <Navigate to="/admin/login" replace /> : <MachineDetail />} />
