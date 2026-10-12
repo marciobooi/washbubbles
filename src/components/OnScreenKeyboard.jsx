@@ -1,4 +1,5 @@
 import React from 'react'
+import i18n from '@/lib/i18n'
 
 /**
  * On-screen keyboard for the shop kiosk.
@@ -155,12 +156,12 @@ export default function OnScreenKeyboard() {
             <>
               <button type="button" className={`${keyBase} h-16 w-24 text-2xl ${shift ? 'bg-teal-600 text-white' : ''}`} onClick={() => setShift((s) => !s)}>⇧</button>
               <button type="button" className={`${keyBase} h-16 w-28 text-2xl`} onClick={() => setSymbols((s) => !s)}>{symbols ? 'ABC' : '123'}</button>
-              <button type="button" className={`${keyBase} h-16 flex-1 text-2xl`} onClick={() => press(' ')}>espaço</button>
+              <button type="button" className={`${keyBase} h-16 flex-1 text-2xl`} onClick={() => press(' ')}>{i18n.t('kbSpace', { ns: 'cart' })}</button>
             </>
           )}
           <button type="button" className={`${keyBase} h-16 w-24 text-3xl`} onClick={() => press('BACKSPACE')} aria-label="Apagar">⌫</button>
           <button type="button" className={`${keyBase} h-16 w-28 text-2xl bg-teal-600 text-white`} onClick={() => press('ENTER')}>OK</button>
-          <button type="button" className={`${keyBase} h-16 w-20 text-2xl`} onClick={() => setDismissed(target)} aria-label="Fechar teclado">✕</button>
+          <button type="button" className={`${keyBase} h-16 w-20 text-2xl`} onClick={() => setDismissed(target)} aria-label={i18n.t('kbClose', { ns: 'cart' })}>✕</button>
         </div>
       </div>
     </div>

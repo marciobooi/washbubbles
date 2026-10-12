@@ -27,6 +27,7 @@ function getTxIcon(type) {
 export default function CardModal({ open, onClose, transactions = [], balance = 0, card = null }) {
   const { addToCart } = useCart()
   const { t } = useTranslation('pos')
+  const { t: tc } = useTranslation('cart')
   const [selectedAmount, setSelectedAmount] = useState(10)
   const [addedToCart, setAddedToCart] = useState(false)
 
@@ -104,7 +105,7 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
             onClose()
           }}
           className="p-3 bg-neutral-100 hover:bg-neutral-200 active:bg-neutral-300 rounded-xl transition-colors group"
-          aria-label="Fechar"
+          aria-label={tc('closeBtn')}
         >
           <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-neutral-500 group-hover:text-neutral-800 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -156,7 +157,7 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
                   </button>
                   
                   <div className="flex flex-col items-center">
-                    <span className="text-neutral-400 text-xs uppercase tracking-wider font-bold mb-1">Valor de Recarga</span>
+                    <span className="text-neutral-400 text-xs uppercase tracking-wider font-bold mb-1">{tc('rechargeAmount')}</span>
                     <span className="text-5xl font-bold text-primary-600">{selectedAmount}€</span>
                   </div>
                   
@@ -228,7 +229,7 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                   </svg>
-                  Voltar
+                  {tc('back')}
                 </button>
               </div>
             </div>
@@ -246,7 +247,7 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                   </svg>
-                  <p>Sem transações recentes</p>
+                  <p>{tc('noTransactions')}</p>
                 </div>
               ) : (
                 <div className="space-y-3">

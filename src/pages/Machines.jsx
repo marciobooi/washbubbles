@@ -1,4 +1,5 @@
 import React from 'react'
+import i18n from '@/lib/i18n'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import MachineCard from '../components/MachineCard'
 import { toast } from '@/components/ui/Toast'
@@ -48,7 +49,7 @@ export default function Machines() {
         if (e instanceof Error && (e.message?.includes('Invalid apiKey') || e.message?.includes('Invalid token') || e.status === 401)) {
           toast({ title: 'Kiosk key inválida ou expirada. Verifique a chave em localStorage / VITE_KIOSK_API_KEY', variant: 'destructive' })
         } else {
-          toast({ title: 'Erro ao carregar máquinas — usando dados locais', variant: 'destructive' })
+          toast({ title: i18n.t('machinesLoadError', { ns: 'cart' }), variant: 'destructive' })
         }
 
         // Fallback to local mock

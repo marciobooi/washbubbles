@@ -1,4 +1,5 @@
 import React from 'react'
+import i18n from '@/lib/i18n'
 import { useNavigate } from 'react-router-dom'
 import Wave from '../components/ui/wave'
 import Card from '../components/Card'
@@ -58,7 +59,7 @@ export default function Pos() {
       }
     } catch (e) {
       console.error('[Pos] Failed to load card data', e)
-      toast({ title: 'Erro ao carregar cartão', variant: 'destructive' })
+      toast({ title: i18n.t('cardLoadError', { ns: 'cart' }), variant: 'destructive' })
     }
   }
 
@@ -79,7 +80,7 @@ export default function Pos() {
         clearTimeout(removeTimer.current)
         const code = message.payload?.cardCode
         if (code) {
-          toast({ title: 'Cartão detetado', variant: 'success' })
+          toast({ title: i18n.t('cardDetected', { ns: 'cart' }), variant: 'success' })
           loadCard(code).then(() => setCardOpen(true))
         }
       }

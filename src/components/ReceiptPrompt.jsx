@@ -4,6 +4,7 @@ import * as localApi from '@/services/local-api'
 import { formatReceiptText } from '@/lib/receipt'
 import { toast } from '@/components/ui/Toast'
 import { Mail, Printer } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Small opt-in card offered after a successful payment — not a modal, since
@@ -17,6 +18,7 @@ import { Mail, Printer } from 'lucide-react'
  * only shows when `batchId` came from a network-settled payment.
  */
 export default function ReceiptPrompt({ items, batchId, kioskKey, onClose }) {
+  const { t } = useTranslation('cart')
   const [email, setEmail] = useState('')
   const [sending, setSending] = useState(false)
   const [printing, setPrinting] = useState(false)
@@ -27,16 +29,16 @@ export default function ReceiptPrompt({ items, batchId, kioskKey, onClose }) {
 
   async function send() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      toast({ title: 'Email inválido', variant: 'destructive' })
+      toast({ title: t('rcInvalidEmail'), variant: 'destructive' })
       return
     }
     setSending(true)
     try {
       await api.emailReceipt(batchId, email, { apiKey: kioskKey })
-      toast({ title: 'Recibo enviado', description: email, variant: 'success' })
+      toast({ title: t('rcSent'), description: email, variant: 'success' })
       onClose()
     } catch (e) {
-      toast({ title: 'Erro ao enviar recibo', description: e?.message, variant: 'destructive' })
+      toast({ title: t('rcSendError'), description: e?.message, variant: 'destructive' })
     } finally {
       setSending(false)
     }
@@ -47,13 +49,13 @@ export default function ReceiptPrompt({ items, batchId, kioskKey, onClose }) {
     try {
       const ok = await localApi.printReceipt(formatReceiptText(items))
       if (ok) {
-        toast({ title: 'Recibo impresso', variant: 'success' })
+        toast({ title: t('rcPrinted'), variant: 'success' })
         if (!canEmail) onClose()
       } else {
-        toast({ title: 'Impressora indisponível', description: 'Verifique a ligação — contacte o balcão.', variant: 'destructive' })
+        toast({ title: t('rcPrinterDown'), description: t('rcPrinterDownHint'), variant: 'destructive' })
       }
     } catch (e) {
-      toast({ title: 'Erro ao imprimir recibo', description: e?.message, variant: 'destructive' })
+      toast({ title: t('rcPrintError'), description: e?.message, variant: 'destructive' })
     } finally {
       setPrinting(false)
     }
@@ -63,7 +65,7 @@ export default function ReceiptPrompt({ items, batchId, kioskKey, onClose }) {
     <div className="fixed bottom-4 right-4 z-40 bg-white rounded-xl shadow-2xl border border-neutral-200 p-4 max-w-xs">
       <div className="flex items-center gap-2 text-primary-700 mb-2">
         <Mail className="h-5 w-5" />
-        <span className="font-semibold text-sm">Quer o recibo?</span>
+        <span className="font-semibold text-sm">{t('rcWant')}</span>
       </div>
 
       {canPrint && (
@@ -73,7 +75,7 @@ export default function ReceiptPrompt({ items, batchId, kioskKey, onClose }) {
           className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-neutral-100 hover:bg-neutral-200 text-sm font-semibold disabled:opacity-50 mb-2"
         >
           <Printer className="h-4 w-4" />
-          {printing ? 'A imprimir…' : 'Imprimir'}
+          {printing ? t('rcPrinting') : t('rcPrint')}
         </button>
       )}
 
@@ -91,13 +93,13 @@ export default function ReceiptPrompt({ items, batchId, kioskKey, onClose }) {
             disabled={sending}
             className="px-3 py-1.5 rounded-lg bg-primary-600 text-white text-sm font-semibold disabled:opacity-50"
           >
-            {sending ? '...' : 'Enviar'}
+            {sending ? '...' : t('rcSend')}
           </button>
         </div>
       )}
 
       <button onClick={onClose} className="text-xs text-neutral-400 hover:text-neutral-600 mt-2 underline underline-offset-2">
-        Não, obrigado
+        {t('rcNoThanks')}
       </button>
     </div>
   )

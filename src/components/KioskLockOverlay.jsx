@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import i18n from '@/lib/i18n'
 import { Lock } from 'lucide-react'
 import api from '@/services/api'
 import { useKioskLock } from '@/context/KioskLockContext'
@@ -32,7 +33,7 @@ export default function KioskLockOverlay() {
       unlock('day-close')
       setPin('')
     } catch (e) {
-      setError(e?.status === 409 ? 'Nenhum PIN configurado — contacte o administrador.' : 'PIN inválido')
+      setError(e?.status === 409 ? i18n.t('lockPinNone', { ns: 'cart' }) : i18n.t('lockPinInvalid', { ns: 'cart' }))
       setPin('')
     } finally {
       setChecking(false)
@@ -46,9 +47,9 @@ export default function KioskLockOverlay() {
           <Lock className="w-10 h-10 text-white" aria-hidden />
         </div>
         <div>
-          <h2 className="text-xl font-bold text-white">Ecrã bloqueado</h2>
+          <h2 className="text-xl font-bold text-white">{i18n.t('lockTitle', { ns: 'cart' })}</h2>
           <p className="text-sm text-white/60 mt-1">
-            O quiosque está em manutenção. Aguarde ou contacte o balcão.
+            {i18n.t('lockText', { ns: 'cart' })}
           </p>
         </div>
 
@@ -60,7 +61,7 @@ export default function KioskLockOverlay() {
             value={pin}
             onChange={(e) => setPin(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && pin && !checking) handleUnlock() }}
-            placeholder="PIN de staff"
+            placeholder={i18n.t('lockPin', { ns: 'cart' })}
             className="w-full px-4 py-3 rounded-lg text-center text-xl tracking-widest bg-white/10 text-white placeholder-white/30 border border-white/20 focus:outline-none focus:border-white/50"
           />
           {error && <div className="text-sm text-red-300 font-medium">{error}</div>}
@@ -69,7 +70,7 @@ export default function KioskLockOverlay() {
             disabled={checking || !pin}
             className={`w-full py-3 rounded-lg font-semibold transition ${checking || !pin ? 'bg-white/10 text-white/40' : 'bg-white text-neutral-900'}`}
           >
-            {checking ? 'A verificar…' : 'Desbloquear'}
+            {checking ? i18n.t('lockChecking', { ns: 'cart' }) : i18n.t('lockUnlock', { ns: 'cart' })}
           </button>
         </div>
       </div>

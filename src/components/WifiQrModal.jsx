@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react'
 import QRCode from 'qrcode'
 import Modal from './ui/Modal'
 import { Wifi, Camera, KeyRound } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Shown after a wash/dry purchase when a WiFi voucher was issued.
@@ -24,6 +25,7 @@ import { Wifi, Camera, KeyRound } from 'lucide-react'
  * their phone instead of the kiosk.
  */
 export default function WifiQrModal({ open, onClose, voucher }) {
+  const { t } = useTranslation('cart')
   const canvasRef = useRef(null)
 
   useEffect(() => {
@@ -37,23 +39,23 @@ export default function WifiQrModal({ open, onClose, voucher }) {
   if (!voucher) return null
 
   return (
-    <Modal open={open} onClose={onClose} title="WiFi grátis">
+    <Modal open={open} onClose={onClose} title={t('wifiTitle')}>
       <div className="flex flex-col items-center gap-5 text-center max-w-sm mx-auto">
         <div className="flex items-center gap-2 text-primary-700">
           <Wifi className="h-6 w-6" />
-          <h2 className="text-xl font-bold">Internet grátis para a sua visita</h2>
+          <h2 className="text-xl font-bold">{t('wifiHeadline')}</h2>
         </div>
 
         <div className="w-full flex flex-col gap-3">
-          <Step number={1} icon={Camera} title={voucher.ssid ? 'Aponte a câmara para o código QR e toque em "Ligar"' : 'Ligue-se à rede WiFi do estabelecimento'}>
+          <Step number={1} icon={Camera} title={voucher.ssid ? t('wifiStep1Qr') : t('wifiStep1Manual')}>
             {voucher.ssid && <canvas ref={canvasRef} className="rounded-lg mt-2 mx-auto" />}
           </Step>
 
-          <Step number={2} icon={Wifi} title="Uma página vai abrir sozinha a pedir um código de acesso">
-            <div className="text-xs text-neutral-500 mt-0.5">(se não abrir, abra o navegador no telemóvel)</div>
+          <Step number={2} icon={Wifi} title={t('wifiStep2')}>
+            <div className="text-xs text-neutral-500 mt-0.5">{t('wifiStep2Hint')}</div>
           </Step>
 
-          <Step number={3} icon={KeyRound} title="Introduza este código na página:">
+          <Step number={3} icon={KeyRound} title={t('wifiStep3')}>
             <div className="mt-2 text-3xl font-mono font-bold tracking-widest text-primary-700 bg-primary-50 rounded-lg py-2 text-center">
               {voucher.code}
             </div>
@@ -62,19 +64,19 @@ export default function WifiQrModal({ open, onClose, voucher }) {
 
         {voucher.durationMinutes ? (
           <div className="text-xs text-neutral-500">
-            Acesso válido por {voucher.durationMinutes} minutos a partir da ligação
+            {t('wifiValid', { min: voucher.durationMinutes })}
           </div>
         ) : null}
 
         <div className="text-xs text-neutral-400">
-          Dica: mantenha este ecrã aberto ou tire uma fotografia — vai precisar do código no telemóvel
+          {t('wifiTip')}
         </div>
 
         <button
           onClick={onClose}
           className="mt-1 px-6 py-2 rounded-lg bg-primary-600 text-white font-semibold hover:bg-primary-700"
         >
-          Fechar
+          {t('closeBtn')}
         </button>
       </div>
     </Modal>

@@ -241,8 +241,8 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
     }
     const onBlocked = ({ status }) => {
       toast({
-        title: status === 'pending_write' ? 'Cartão ainda não ativado' : 'Cartão bloqueado',
-        description: status === 'pending_write' ? 'Insira o cartão no leitor para o ativar primeiro.' : 'Contacte o balcão.',
+        title: status === 'pending_write' ? t('cardNotActivated') : t('cardBlocked'),
+        description: status === 'pending_write' ? t('cardNotActivatedHint') : t('seeCounter'),
         variant: 'destructive',
       })
     }
@@ -273,8 +273,8 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
       const result = await localApi.cashOut()
       if (result.amount > 0) {
         toast({
-          title: result.success ? `Troco: €${result.amount.toFixed(2)}` : 'Falha ao devolver troco',
-          description: result.success ? 'Recolha o seu dinheiro' : 'Dispensador indisponível — contacte o balcão',
+          title: result.success ? t('changeGiven', { amount: `${result.amount.toFixed(2)}€` }) : t('changeFailed'),
+          description: result.success ? t('takeMoney') : t('dispenserDown'),
           variant: result.success ? 'success' : 'destructive',
         })
       }
@@ -424,7 +424,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
 
   return (
     <>
-    <Modal open={open} onClose={onClose} title="Carrinho" hideClose={true} maxWidth="min(68vw, 768px)" shiftDownVh={3}>
+    <Modal open={open} onClose={onClose} title={t('title')} hideClose={true} maxWidth="min(68vw, 768px)" shiftDownVh={3}>
       <div ref={fitRef} className="flex flex-col gap-6">
         {cart.length === 0 ? (
           <div className="text-center py-8">
@@ -436,7 +436,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
               onClick={onClose}
               className="px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-semibold transition-all"
             >
-              Fechar
+              {t('closeBtn')}
             </button>
           </div>
         ) : (
@@ -505,7 +505,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
                     <div className="space-y-2">
                       {cart.map((i) => (
                         <div key={i.id} className="flex items-center justify-between bg-slate-50 rounded-xl px-4 py-3">
-                          <div className="text-sm font-bold text-slate-800">{i.name || i.type}</div>
+                          <div className="text-sm font-bold text-slate-800">{i.type === 'Recarga de Cartão' ? t('rechargeName', { amount: Number(i.price || i.amount || 0) }) : (i.name || i.type)}</div>
                           <div className="flex items-center gap-3">
                             <div className="text-base font-bold text-slate-800">{(i.type === 'Recarga de Cartão' ? (i.price || i.amount || 0) : unitPrice(i)).toFixed(2)}€</div>
                             <button
@@ -804,7 +804,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
             <button onClick={openCashModal} className="py-4 rounded-lg bg-teal-600 text-white font-semibold">{t('cash')}</button>
             <button onClick={handleCardPay} className="py-4 rounded-lg bg-neutral-800 text-white font-semibold">{t('card')}</button>
           </div>
-          <button onClick={closeManual} className="w-full py-2 rounded-lg border">Cancelar</button>
+          <button onClick={closeManual} className="w-full py-2 rounded-lg border">{t('cancel')}</button>
         </div>
       </Modal>
     )}

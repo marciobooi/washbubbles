@@ -1,6 +1,6 @@
 import { Link, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import React from 'react'
-import { useTranslation } from 'react-i18next'
+import { useTranslation, Trans } from 'react-i18next'
 import Pos from './pages/Pos'
 import api from './services/api'
 import * as localApi from './services/local-api'
@@ -421,7 +421,7 @@ function AppInner() {
               return
             }
           } catch (e) {
-            const msg = e?.message || 'Erro no pagamento com cartão'
+            const msg = e?.message || tr('payErrorCard')
             toast({ title: tr('payErrorCard'), description: msg, variant: 'destructive' })
             return
           }
@@ -445,7 +445,7 @@ function AppInner() {
               return
             }
           } catch (e) {
-            const msg = e?.message || 'Erro no pagamento com cartão'
+            const msg = e?.message || tr('payErrorCard')
             toast({ title: tr('payErrorCard'), description: msg, variant: 'destructive' })
             return
           }
@@ -564,7 +564,7 @@ function AppInner() {
               )}
 
               {cartCount > 0 && (
-                <button aria-label="Abrir carrinho" className="relative inline-flex items-center gap-3 h-16 px-5 bg-emerald-50 rounded-2xl border border-emerald-200 active:scale-95 focus:outline-none" onClick={() => setCartOpen(true)}>
+                <button aria-label={tr('ariaCart')} className="relative inline-flex items-center gap-3 h-16 px-5 bg-emerald-50 rounded-2xl border border-emerald-200 active:scale-95 focus:outline-none" onClick={() => setCartOpen(true)}>
                   <span className="relative">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-9 w-9 text-emerald-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -580,11 +580,11 @@ function AppInner() {
               )}
               {location.pathname.startsWith('/pos') && <LanguageSwitcher />}
 
-              <button aria-label="Ajuda" className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-2xl border border-slate-200 shadow-sm active:scale-95 focus:outline-none" onClick={() => setHelpOpen(true)} title="Ajuda">
+              <button aria-label={tr('ariaHelp')} className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-2xl border border-slate-200 shadow-sm active:scale-95 focus:outline-none" onClick={() => setHelpOpen(true)} title={tr('ariaHelp')}>
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-9 w-9 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <span className="sr-only">Ajuda</span>
+                <span className="sr-only">{tr('ariaHelp')}</span>
               </button>
             </div>
           </div>
@@ -648,21 +648,21 @@ function AppInner() {
       />
       <HelpTutorial run={helpOpen} onClose={() => setHelpOpen(false)} />
 
-      <Modal open={machineNotice.open} onClose={closeMachineNotice} title={machineNotice.names.length === 1 ? `Máquina ${machineNotice.names[0]}` : 'Máquina Iniciada'}>
+      <Modal open={machineNotice.open} onClose={closeMachineNotice} title={machineNotice.names.length === 1 ? tr('noticeTitleOne', { name: machineNotice.names[0] }) : tr('noticeTitleMany')}>
         <div className="p-4">
           {machineNotice.names.length === 1 ? (
             <div className="space-y-3">
-              <p className="text-lg font-semibold">Dirija-se à máquina <span className="font-bold">{machineNotice.names[0]}</span></p>
-              <p>Escolha o programa desejado e carregue <strong>Start</strong>. A máquina iniciará automaticamente.</p>
+              <p className="text-lg font-semibold">{tr('noticeGoOne')} <span className="font-bold">{machineNotice.names[0]}</span></p>
+              <p><Trans ns="cart" i18nKey="noticeTextOne" components={{ strong: <strong /> }} /></p>
             </div>
           ) : (
             <div className="space-y-3">
-              <p className="text-lg font-semibold">Dirija-se às máquinas <span className="font-bold">{machineNotice.names.join(', ')}</span></p>
-              <p>Escolham o programa desejado e carreguem <strong>Start</strong>. As máquinas iniciarão automaticamente.</p>
+              <p className="text-lg font-semibold">{tr('noticeGoMany')} <span className="font-bold">{machineNotice.names.join(', ')}</span></p>
+              <p><Trans ns="cart" i18nKey="noticeTextMany" components={{ strong: <strong /> }} /></p>
             </div>
           )}
           <div className="mt-4 text-right">
-            <button onClick={closeMachineNotice} className="px-4 py-2 bg-neutral-100 rounded-md hover:bg-neutral-200">Fechar</button>
+            <button onClick={closeMachineNotice} className="px-4 py-2 bg-neutral-100 rounded-md hover:bg-neutral-200">{tr('closeBtn')}</button>
           </div>
         </div>
       </Modal>
