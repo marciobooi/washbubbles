@@ -62,7 +62,9 @@ export function tallySales(sales) {
   return {
     totalCash: r(cash), totalCard: r(card), totalChangeDispensed: r(change),
     totalRecharges: r(prepaid),
-    totalSales: r(cash + card - prepaid), // revenue: what was prepaid on cards is counted when it is spent
+    // The books follow the cash: money is recorded when it enters the till (sales, new cards, top-ups).
+    // What customers later spend from their cards is shown for information only (totalCard) — it is not added again.
+    totalSales: r(cash),
     cashSales: r(cash - cashPrepaid),
   }
 }

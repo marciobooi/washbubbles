@@ -12,20 +12,22 @@ describe('Day close: what counts as cash, as a sale, and as a top-up', () => {
   it('the till holds every cash movement (top-ups included, refunds taken out)', () => {
     expect(tallySales(sales).totalCash).to.equal(15) // 2 + 5 + 10 - 2
   })
-  it('revenue leaves the top-ups out, so a top-up and the spending of it are not counted twice', () => {
+  it('the books follow the cash; card consumption is information only and is never added on top', () => {
     const t = tallySales(sales)
+    expect(t.totalSales).to.equal(15)  // = cash that entered the till (2 + 5 + 10 - 2)
+    expect(t.totalCard).to.equal(4.5)  // shown to the admin, not accounted
     expect(t.totalRecharges).to.equal(10)
-    expect(t.totalSales).to.equal(9.5) // 15 cash + 4.5 card - 10 recharged
-    expect(t.cashSales).to.equal(5)    // machine + card sales in cash: 2 + 5 - 2
+    expect(t.cashSales).to.equal(5)    // machine + card sales in cash, without the top-up
   })
-  it('a new card sold for 10 with 5 of starting credit: 5 is the card, 5 is prepaid and counted when spent', () => {
+  it('a new card sold for 10 with 5 of starting credit: counted once, when the cash entered', () => {
     const t = tallySales([
       { method: 'cash', type: 'card_purchase', amount: 10, change: 0, metadata: { initialCredit: 5 } },
       { method: 'card', type: 'payment', amount: 5, change: 0 }, // another day: the customer spends the 5 of credit
     ])
-    expect(t.totalCash).to.equal(10)     // in the till once
-    expect(t.totalRecharges).to.equal(5) // prepaid on the card
-    expect(t.totalSales).to.equal(10)    // 10 revenue in total: 5 for the card itself + 5 spent later (not 15)
+    expect(t.totalCash).to.equal(10)
+    expect(t.totalSales).to.equal(10)   // not 15: spending the credit is not accounted again
+    expect(t.totalCard).to.equal(5)     // visible to the admin
+    expect(t.totalRecharges).to.equal(5)
     expect(t.cashSales).to.equal(5)
   })
 
