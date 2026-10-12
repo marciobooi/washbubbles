@@ -237,6 +237,7 @@ the latest code first (copy the files, build the screen, restart ONLY the backen
 
 ### 13.5 Kiosk screens
 - [ ] **New payment window** (design of 2026-10-12): header with machine number, quick choices, stepper, dark total, inserted / remaining / progress; check at touch size on the real screen
+      Measured in a browser: fits without scrolling at 1920x1080 (full size), 1366x768 (84%), 1024x768 (81%) and portrait 768x1366 (90%): it scales itself to the screen height. Check the real screen: text readable, touch targets comfortable, no scrolling
 - [ ] Toasts top middle under the header, large, gone after 5 s, "Ver carrinho" big enough for a finger
 - [ ] On-screen keyboard opens on every text field (promo code, card code, staff PIN, admin login) and types; numeric pad for PIN/amount
 - [ ] Language dropdown opens on top of the machine list; all four languages
