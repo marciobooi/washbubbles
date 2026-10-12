@@ -34,6 +34,33 @@ export async function findLastDashboardClose(DayCloseT) {
   return arr[0] || null
 }
 
+/**
+ * One place that totals a set of sales, so the live summary and the close can never disagree.
+ *  - cash / card: by payment method. Cash is what physically went through the till (recharges included);
+ *    "card" is money spent from a card balance (it was cash when the card was topped up, earlier).
+ *  - recharges: cash that was put ON cards. It is in the till, so it counts for the expected cash, but it is a
+ *    prepayment, not a sale: revenue = cash + card - recharges (otherwise a 10 EUR top-up and the 10 EUR later
+ *    spent from it would be reported as 20 EUR of sales).
+ *  - refunds are negative rows of the same type/method as the sale they reverse, so they net out naturally.
+ */
+export function tallySales(sales) {
+  let cash = 0, card = 0, change = 0, recharges = 0
+  for (const s of sales) {
+    const amt = Number(s.amount || 0)
+    if (s.method === 'cash') cash += amt
+    else card += amt
+    if (s.type === 'recharge') recharges += amt
+    change += Number(s.change || 0)
+  }
+  const r = (n) => Number(n.toFixed(2))
+  return {
+    totalCash: r(cash), totalCard: r(card), totalChangeDispensed: r(change),
+    totalRecharges: r(recharges),
+    totalSales: r(cash + card - recharges), // revenue: top-ups excluded
+    cashSales: r(cash - (sales.filter((s) => s.method === 'cash' && s.type === 'recharge').reduce((x, s) => x + Number(s.amount || 0), 0))),
+  }
+}
+
 /** Live sales totals + reconciliation context for the currently open session. */
 export async function getDayCloseSummary(req) {
   const DayCloseT = withTenant(DayClose, req)
@@ -49,16 +76,8 @@ export async function getDayCloseSummary(req) {
   const openingFloat = lastClose ? Number(lastClose.floatLeft || 0) : 0
 
   const sales = await SaleT.find({ createdAt: { $gt: periodFrom } }).lean()
-  let totalCash = 0
-  let totalCard = 0
-  let totalChangeDispensed = 0
-  for (const s of sales) {
-    const amt = Number(s.amount || 0)
-    if (s.method === 'cash') totalCash += amt
-    else totalCard += amt
-    totalChangeDispensed += Number(s.change || 0)
-  }
-  const tc = Number(totalCash.toFixed(2))
+  const tally = tallySales(sales)
+  const tc = tally.totalCash
   const expectedCash = Number((openingFloat + tc).toFixed(2))
 
   // Coins/bills the hardware has actually accepted since the last close — see
@@ -72,11 +91,13 @@ export async function getDayCloseSummary(req) {
     periodTo: new Date(),
     openingFloat,
     totalCash: tc,
-    totalCard: Number(totalCard.toFixed(2)),
-    totalSales: Number((tc + totalCard).toFixed(2)),
+    cashSales: tally.cashSales,
+    totalRecharges: tally.totalRecharges,
+    totalCard: tally.totalCard,
+    totalSales: tally.totalSales,
     expectedCash,
     salesCount: sales.length,
-    totalChangeDispensed: Number(totalChangeDispensed.toFixed(2)),
+    totalChangeDispensed: tally.totalChangeDispensed,
     acceptedDenominations,
     acceptedTotal,
     openingMechanismCoins: lastClose?.coinMechanismInventory || [],
@@ -150,17 +171,11 @@ export async function createDayClose(req, {
     const periodTo = new Date()
 
     const sales = await SaleT.find({ createdAt: { $gt: periodFrom, $lte: periodTo } }).lean()
-    let totalCash = 0; let totalCard = 0; let totalChangeDisp = 0
-    for (const s of sales) {
-      const amt = Number(s.amount || 0)
-      if (s.method === 'cash') totalCash += amt
-      else totalCard += amt
-      totalChangeDisp += Number(s.change || 0)
-    }
-    const tc = Number(totalCash.toFixed(2))
-    const tk = Number(totalCard.toFixed(2))
+    const tally = tallySales(sales)
+    const tc = tally.totalCash
+    const tk = tally.totalCard
     const expectedCash = Number((openingFloat + tc).toFixed(2))
-    const totalChangeDispensed = Number(totalChangeDisp.toFixed(2))
+    const totalChangeDispensed = tally.totalChangeDispensed
 
     // If countedCash wasn't provided, derive it from denomination sum
     const actualCountedCash = countedCash != null
@@ -206,7 +221,8 @@ export async function createDayClose(req, {
       notes: String(notes || '').slice(0, 500),
       totalCash: tc,
       totalCard: tk,
-      totalSales: Number((tc + tk).toFixed(2)),
+      totalRecharges: tally.totalRecharges,
+      totalSales: tally.totalSales,
       salesCount: sales.length,
       closedBy: req.userModel?._id,
       closedByUsername: req.userModel?.username || '',

@@ -49,7 +49,7 @@ export default function KioskDayCloseModal({ open, onClose, pin }) {
   if (!open) return null
 
   return (
-    <Modal open={open} onClose={onClose} title="Fecho de Caixa">
+    <Modal open={open} onClose={onClose} title="Fecho de Caixa" maxWidth="min(72vw, 860px)">
       <DayCloseForm
         summary={summary}
         summaryLoading={summaryLoading}
