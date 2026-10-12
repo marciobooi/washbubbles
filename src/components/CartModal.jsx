@@ -398,7 +398,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
 
   return (
     <>
-    <Modal open={open} onClose={onClose} title="Carrinho" hideClose={true}>
+    <Modal open={open} onClose={onClose} title="Carrinho" hideClose={true} maxWidth="min(68vw, 768px)" shiftDownVh={3}>
       <div ref={fitRef} className="flex flex-col gap-6">
         {cart.length === 0 ? (
           <div className="text-center py-8">

@@ -237,7 +237,7 @@ the latest code first (copy the files, build the screen, restart ONLY the backen
 
 ### 13.5 Kiosk screens
 - [ ] **New payment window** (design of 2026-10-12): header with machine number, quick choices, stepper, dark total, inserted / remaining / progress; check at touch size on the real screen
-      Single-column modal (768 px wide) like the previous cart, no phone layout. Measured on a 1920x1080 screen: 931 px tall with no money inserted, 1000 px with the confirm button, never scrolls (it scales itself down a little when the cart is taller). Check the real screen: text readable, touch targets comfortable, nothing cut off
+      The kiosk screen is PORTRAIT (about 1080x1920, see the photo of 2026-10-12). The window is one centred column, 68% of the screen width, centre at 53% of the height (same footprint as the old cart in the photo). Measured on a 1080x1920 viewport: dryer 48% of the height (52% with the confirm button), mixed cart 58%, washer 37%; it never scrolls and scales itself down only if a cart is taller than the screen. Check on the real screen: text readable, touch targets comfortable, nothing cut off
 - [ ] Toasts top middle under the header, large, gone after 5 s, "Ver carrinho" big enough for a finger
 - [ ] On-screen keyboard opens on every text field (promo code, card code, staff PIN, admin login) and types; numeric pad for PIN/amount
 - [ ] Language dropdown opens on top of the machine list; all four languages
