@@ -36,9 +36,9 @@ describe('Legal texts: Portuguese in, automatic translations stored for the kios
 
   it('the built-in legal dictionary fixes known mistakes and never touches addresses', async () => {
     const { LEGAL_GLOSSARY } = await import('../src/services/legalGlossary.js')
-    const out = await translateText('Em caso de extravio do saldo veja www.consumidor.gov.pt', 'de', fake, LEGAL_GLOSSARY)
+    const out = await translateText('Em caso de extravio do cartão veja www.consumidor.gov.pt', 'de', fake, LEGAL_GLOSSARY)
     expect(out).to.contain('Verlust')
-    expect(out).to.contain('Guthaben')
+    expect(out).to.contain('Verlust der Karte')
     expect(out).to.contain('www.consumidor.gov.pt')
   })
 

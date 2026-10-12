@@ -1,0 +1,57 @@
+{
+  "welcome": {
+    "title": "¡Bienvenido a {{company}}! 👋",
+    "text": "Le guiaremos por el uso de nuestras máquinas."
+  },
+  "step1": {
+    "title": "Paso 1: Elija el tipo de servicio",
+    "wash": "🧺 <0>Lavado</0> - Para lavar su ropa",
+    "dry": "🌀 <0>Secado</0> - Para secar su ropa",
+    "instruction": "Toque la tarjeta del servicio que desee para continuar."
+  },
+  "step2": {
+    "title": "Paso 2: Seleccione una máquina",
+    "available": "✅ <0>Verde</0> - Máquina disponible",
+    "occupied": "🔴 <0>Rojo</0> - Máquina ocupada",
+    "maintenance": "🟡 <0>Amarillo</0> - Mantenimiento",
+    "instruction": "Elija una máquina <strong>disponible</strong> y tóquela."
+  },
+  "step3": {
+    "title": "Paso 3: Elija un programa",
+    "durations": "Duraciones",
+    "temperatures": "Temperaturas",
+    "prices": "Precios",
+    "instruction": "Seleccione el programa que mejor se adapte a sus necesidades."
+  },
+  "step4": {
+    "title": "Paso 4: Carrito de la compra 🛒",
+    "text": "Todos los servicios seleccionados aparecen aquí.",
+    "instruction": "Toque el icono del carrito para ver sus artículos."
+  },
+  "step5": {
+    "title": "Paso 5: Pago 💳",
+    "option1": "<0>Tarjeta de fidelidad</0> - Pague menos en lavados y secados",
+    "option2": "<0>Efectivo</0> - Pago tradicional",
+    "note": "⚠️ <em>Para recargar la tarjeta solo está disponible el efectivo.</em>"
+  },
+  "card": {
+    "title": "Tarjeta de fidelidad 💎",
+    "text": "Toque el <strong>icono de la tarjeta</strong> en el menú superior para ver el saldo, el historial y recargar la tarjeta."
+  },
+  "done": {
+    "title": "¡Todo listo! 🎉",
+    "text": "Ya sabe cómo usar {{company}}.",
+    "note": "Si necesita ayuda de nuevo, toque el icono <strong>?</strong> del menú."
+  },
+  "buttons": {
+    "back": "Anterior",
+    "close": "Cerrar",
+    "last": "Terminar",
+    "next": "Siguiente",
+    "nextLabelWithProgress": "Siguiente (Paso {step} de {steps})",
+    "skip": "Saltar tutorial",
+    "badge": "Paso {{n}} de {{total}}",
+    "guide": "Guía interactiva",
+    "nextStep": "Siguiente (Paso {{n}} de {{total}})"
+  }
+}

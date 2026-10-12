@@ -5,12 +5,14 @@ import flagPt from '@/assets/flags/pt.png'
 import flagEn from '@/assets/flags/en.png'
 import flagFr from '@/assets/flags/fr.png'
 import flagDe from '@/assets/flags/de.png'
+import flagEs from '@/assets/flags/es.svg'
 
 const LANGS = [
   { code: 'pt', label: 'PT', name: 'Português', flagSrc: flagPt },
   { code: 'en', label: 'EN', name: 'English', flagSrc: flagEn },
   { code: 'fr', label: 'FR', name: 'Français', flagSrc: flagFr },
   { code: 'de', label: 'DE', name: 'Deutsch', flagSrc: flagDe },
+  { code: 'es', label: 'ES', name: 'Español', flagSrc: flagEs },
 ]
 
 export default function LanguageSwitcher() {

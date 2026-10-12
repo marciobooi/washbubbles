@@ -6,6 +6,11 @@ import en from '../locales/en/pos.json'
 import fr from '../locales/fr/pos.json'
 import de from '../locales/de/pos.json'
 
+import es from '../locales/es/pos.json'
+import esHelp from '../locales/es/help.json'
+import esCart from '../locales/es/cart.json'
+import esBuy from '../locales/es/buycard.json'
+
 import ptHelp from '../locales/pt/help.json'
 import enHelp from '../locales/en/help.json'
 import frHelp from '../locales/fr/help.json'
@@ -26,6 +31,7 @@ const resources = {
   en: { pos: en, help: enHelp, cart: enCart, buycard: enBuy },
   fr: { pos: fr, help: frHelp, cart: frCart, buycard: frBuy },
   de: { pos: de, help: deHelp, cart: deCart, buycard: deBuy },
+  es: { pos: es, help: esHelp, cart: esCart, buycard: esBuy },
 }
 
 i18n

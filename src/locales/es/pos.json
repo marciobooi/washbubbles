@@ -1,0 +1,48 @@
+{
+  "cards": {
+    "wash": { "title": "Lavar ropa", "text": "Lavar ropa", "sub": "Elija la máquina y el ciclo" },
+    "dry": { "title": "Secar ropa", "text": "Secar ropa", "sub": "Secado rápido y suave" },
+    "card": { "title": "Mi tarjeta", "text": "Mi tarjeta", "sub": "Consultar saldo y recargar" },
+    "buyCard": { "title": "Comprar tarjeta", "text": "Comprar tarjeta", "sub": "Nueva tarjeta de fidelidad" }
+  },
+  "recharge": {
+    "success": "Tarjeta recargada {{amount}}€",
+    "error": "Error al recargar la tarjeta"
+  },
+  "unit": { "kg": "kg" },
+  "labels": { "fidelity": "fidelidad" },
+  "status": { "free": "Libre", "occupied": "Ocupada", "offline": "Fuera de servicio" },
+  "machines": {
+    "select": "Seleccionar máquina de {{type}}",
+    "type": { "wash": "lavado", "dry": "secado" },
+    "subtitle": "Toque una máquina disponible para elegirla.",
+    "legendFree": "Disponible",
+    "legendBusy": "Ocupada",
+    "inCart": "En el carrito",
+    "selected": "Seleccionada",
+    "removeLabel": "Quitar {{name}} del carrito",
+    "tip": "Consejo: puede añadir varias máquinas al mismo pedido antes de pagar.",
+    "howTo": "Cómo funciona",
+    "loading": "Cargando máquinas...",
+    "cashPrice": "{{price}}€ en efectivo",
+    "cardPrice": "{{price}}€ con tarjeta"
+  },
+  "card": {
+    "title": "Mi tarjeta",
+    "idLabel": "ID de la tarjeta",
+    "active": "Activa",
+    "balanceLabel": "Saldo disponible",
+    "addToCart": "Añadir al carrito",
+    "added": "¡Añadido!",
+    "transactionsTitle": "Historial de transacciones"
+  },
+  "transactions": {
+    "recharged": "Recargado",
+    "spent_wash": "Gasto - Lavado",
+    "spent_dry": "Gasto - Secado"
+  },
+  "home": {
+    "ready": "Listo para usar",
+    "touch": "Toque cualquier opción para empezar"
+  }
+}
