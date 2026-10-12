@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import Modal from './ui/Modal'
 import Loading from './ui/loading'
-import { CreditCard, User, Mail, Phone, FileText, Banknote, CheckCircle2, Wifi, ArrowRight } from 'lucide-react'
+import { CreditCard, User, Mail, Phone, FileText, CheckCircle2, Wifi, ArrowRight } from 'lucide-react'
 import { toast } from './ui/Toast'
 import api from '@/services/api'
 import * as localApi from '@/services/local-api'
@@ -349,6 +349,34 @@ export default function BuyCardModal({ open, onClose }) {
     }
   }
 
+  // Same header on every step: the card illustration, the title and (optionally) the price / credit pill.
+  function StepHeader({ title, pill = false, pulse = false, tick = false }) {
+    return (
+      <div className="flex flex-col items-center text-center pt-2 pb-5">
+        <div className={`relative w-32 h-20 rounded-xl bg-gradient-to-tr from-[#00875A] via-emerald-700 to-emerald-500 shadow-lg p-2.5 flex flex-col justify-between mb-4 border border-emerald-400/40 ${pulse ? 'animate-pulse' : ''}`}>
+          <div className="flex items-center justify-between">
+            <div className="w-6 h-[18px] bg-amber-300/90 rounded-sm border border-amber-500/60" />
+            <Wifi className="w-4 h-4 text-white/80 rotate-90" />
+          </div>
+          <div className="text-[9px] uppercase tracking-wider font-extrabold text-white/95 text-left">{t('cardLabel')}</div>
+          {tick && (
+            <span className="absolute -top-3 -right-3 bg-emerald-600 text-white rounded-full p-1.5 shadow-md ring-4 ring-white">
+              <CheckCircle2 className="w-6 h-6" />
+            </span>
+          )}
+        </div>
+        <h3 className="text-3xl font-extrabold tracking-tight text-emerald-900">{title}</h3>
+        {pill && (
+          <div className="mt-3 inline-flex items-center gap-3 bg-emerald-50 border border-emerald-200 px-5 py-2 rounded-full text-lg font-medium text-slate-600">
+            <span>{t('price')}: <strong className="text-slate-900">{eur(cardPrice)}</strong></span>
+            <span className="text-emerald-400 font-bold">•</span>
+            <span>{t('initialCredit')}: <strong className="text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md">{eur(initialCredit)}</strong></span>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   function renderStepContent() {
     switch (step) {
       case STEPS.FORM:
@@ -361,22 +389,7 @@ export default function BuyCardModal({ open, onClose }) {
               className="absolute top-4 right-4 w-14 h-14 flex items-center justify-center rounded-2xl bg-slate-100 text-slate-500 text-2xl active:scale-95"
             >✕</button>
 
-            {/* header: the card, the title, price and starting credit */}
-            <div className="flex flex-col items-center text-center pt-2 pb-5">
-              <div className="w-32 h-20 rounded-xl bg-gradient-to-tr from-[#00875A] via-emerald-700 to-emerald-500 shadow-lg p-2.5 flex flex-col justify-between mb-4 border border-emerald-400/40">
-                <div className="flex items-center justify-between">
-                  <div className="w-6 h-[18px] bg-amber-300/90 rounded-sm border border-amber-500/60" />
-                  <Wifi className="w-4 h-4 text-white/80 rotate-90" />
-                </div>
-                <div className="text-[9px] uppercase tracking-wider font-extrabold text-white/95 text-left">{t('cardLabel')}</div>
-              </div>
-              <h3 className="text-3xl font-extrabold tracking-tight text-emerald-900">{t('title')}</h3>
-              <div className="mt-3 inline-flex items-center gap-3 bg-emerald-50 border border-emerald-200 px-5 py-2 rounded-full text-lg font-medium text-slate-600">
-                <span>{t('price')}: <strong className="text-slate-900">{eur(cardPrice)}</strong></span>
-                <span className="text-emerald-400 font-bold">•</span>
-                <span>{t('initialCredit')}: <strong className="text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md">{eur(initialCredit)}</strong></span>
-              </div>
-            </div>
+            <StepHeader title={t('title')} pill />
 
             <div className="mb-4">
               <h4 className="text-xl font-semibold text-slate-700">{t('fillData')}</h4>
@@ -498,15 +511,7 @@ export default function BuyCardModal({ open, onClose }) {
         const percent = cardPrice > 0 ? Math.min(100, Math.round((paid / cardPrice) * 100)) : 0
         return (
           <div className="flex flex-col gap-6">
-            <div className="flex flex-col items-center text-center pt-2">
-              <div className="w-20 h-20 rounded-3xl bg-emerald-50 border border-emerald-100 flex items-center justify-center mb-4">
-                <Banknote className="h-11 w-11 text-[#00875A]" />
-              </div>
-              <h3 className="text-3xl font-extrabold tracking-tight text-emerald-900">{t('payTitle')}</h3>
-              <div className="mt-3 inline-flex items-center gap-3 bg-emerald-50 border border-emerald-200 px-5 py-2 rounded-full text-lg font-medium text-slate-600">
-                <span>{t('price')}: <strong className="text-slate-900">{eur(cardPrice)}</strong></span>
-              </div>
-            </div>
+            <StepHeader title={t('payTitle')} pill />
 
             <p className="text-center text-xl text-slate-500">{t('insertCash')}</p>
 
@@ -556,13 +561,8 @@ export default function BuyCardModal({ open, onClose }) {
       case STEPS.INSERT_CARD:
         return (
           <div className="flex flex-col gap-6">
-            <div className="flex flex-col items-center text-center pt-2">
-              <div className="w-20 h-20 rounded-3xl bg-emerald-50 border border-emerald-100 flex items-center justify-center mb-4 animate-pulse">
-                <CreditCard className="h-11 w-11 text-[#00875A]" />
-              </div>
-              <h3 className="text-3xl font-extrabold tracking-tight text-emerald-900">{t('insertCardTitle')}</h3>
-              <p className="mt-3 text-xl text-slate-500 max-w-md">{t('insertCardHint')}</p>
-            </div>
+            <StepHeader title={t('insertCardTitle')} pulse />
+            <p className="text-center text-xl text-slate-500 -mt-2">{t('insertCardHint')}</p>
 
             {writeError && (
               <div className="bg-red-50 border border-red-200 rounded-2xl p-5 text-center">
@@ -595,12 +595,9 @@ export default function BuyCardModal({ open, onClose }) {
       case STEPS.COMPLETE:
         return (
           <div className="flex flex-col gap-6 items-center text-center">
-            <div className="w-24 h-24 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center mt-2">
-              <CheckCircle2 className="h-14 w-14 text-[#00875A]" />
-            </div>
             <div>
-              <h3 className="text-3xl font-extrabold tracking-tight text-emerald-900">{t('activatedTitle')}</h3>
-              <p className="mt-2 text-xl text-slate-500">{t('ready')}</p>
+              <StepHeader title={t('activatedTitle')} tick />
+              <p className="text-xl text-slate-500 -mt-2">{t('ready')}</p>
             </div>
 
             {purchasedCard && (
