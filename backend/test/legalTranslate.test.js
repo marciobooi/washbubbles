@@ -34,6 +34,14 @@ describe('Legal texts: Portuguese in, automatic translations stored for the kios
     expect(out).to.contain('Complaints Book')
   })
 
+  it('the built-in legal dictionary fixes known mistakes and never touches addresses', async () => {
+    const { LEGAL_GLOSSARY } = await import('../src/services/legalGlossary.js')
+    const out = await translateText('Em caso de extravio do saldo veja www.consumidor.gov.pt', 'de', fake, LEGAL_GLOSSARY)
+    expect(out).to.contain('Verlust')
+    expect(out).to.contain('Guthaben')
+    expect(out).to.contain('www.consumidor.gov.pt')
+  })
+
   it('translates privacy and terms into en/fr/de and remembers the Portuguese they came from', async () => {
     await Setting.create({ tenantId: tenant._id, key: 'legal.info', value: { privacy: { pt: '## A\ntexto' }, terms: { pt: '## B\n- regra' } } })
     await translateLegal(tenant._id, { translate: fake })
