@@ -104,5 +104,9 @@
   "persistError": "Erreur lors de l'enregistrement des transactions",
   "payError": "Erreur de paiement",
   "changeNotDelivered": "Monnaie non rendue",
-  "changeNotDeliveredHint": "Il manque {{amount}} de monnaie. Adressez-vous au comptoir — la vente est enregistrée."
+  "changeNotDeliveredHint": "Il manque {{amount}} de monnaie. Adressez-vous au comptoir — la vente est enregistrée.",
+  "cartAdded": "{{name}} ajouté au panier",
+  "cartAddedHint": "Cycle de base {{min}} min • {{price}}",
+  "viewCart": "Voir le panier",
+  "dismissNotice": "Fermer"
 }

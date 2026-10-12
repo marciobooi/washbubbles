@@ -104,5 +104,9 @@
   "persistError": "Fehler beim Speichern der Transaktionen",
   "payError": "Zahlungsfehler",
   "changeNotDelivered": "Wechselgeld nicht ausgegeben",
-  "changeNotDeliveredHint": "{{amount}} Wechselgeld ausstehend. Bitte am Schalter melden — der Verkauf ist erfasst."
+  "changeNotDeliveredHint": "{{amount}} Wechselgeld ausstehend. Bitte am Schalter melden — der Verkauf ist erfasst.",
+  "cartAdded": "{{name}} zum Warenkorb hinzugefügt",
+  "cartAddedHint": "Grundzyklus {{min}} Min. • {{price}}",
+  "viewCart": "Warenkorb ansehen",
+  "dismissNotice": "Schließen"
 }

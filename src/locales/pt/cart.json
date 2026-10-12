@@ -104,5 +104,9 @@
   "persistError": "Erro ao guardar as transações",
   "payError": "Erro no pagamento",
   "changeNotDelivered": "Troco não entregue",
-  "changeNotDeliveredHint": "Faltam {{amount}} de troco. Peça ao balcão — a venda ficou registada."
+  "changeNotDeliveredHint": "Faltam {{amount}} de troco. Peça ao balcão — a venda ficou registada.",
+  "cartAdded": "{{name}} adicionado ao carrinho",
+  "cartAddedHint": "Ciclo base {{min}} min • {{price}}",
+  "viewCart": "Ver carrinho",
+  "dismissNotice": "Fechar aviso"
 }

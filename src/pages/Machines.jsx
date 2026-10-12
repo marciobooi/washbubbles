@@ -89,7 +89,8 @@ export default function Machines() {
     return () => { mounted = false; unsub() }
   }, [type])
 
-  const { addToCart, clearCart, openCart } = useCart()
+  const { cart, addToCart, clearCart, openCart } = useCart()
+  const { t: tc } = useTranslation('cart')
 
   async function openForAdd(m) {
     // Fetch fresh price data before adding to cart
@@ -110,14 +111,23 @@ export default function Machines() {
     }
     
     addToCart(machineWithPrice)
-    // Don't auto-open cart; show toast with action to view cart
+    // Don't auto-open cart; show the banner with a button to view it
+    const base = Number(m.tImp) || 15
+    const price = Number(machineWithPrice.cashPrice ?? machineWithPrice.price ?? 0)
+    const numMatch = String(m.number ?? '').trim() || (String(m.name || '').match(/(\d+)\s*$/) || [])[1] || ''
     try {
-      const sonner = await import('sonner')
-      const sonnerToast = sonner.toast
-      sonnerToast(`${m.name} adicionado ao carrinho`, { action: { label: 'Ver carrinho', onClick: () => openCart() }, type: 'success' })
+      const { cartAddedToast } = await import('@/components/ui/Toast')
+      cartAddedToast({
+        badge: numMatch || '🛒',
+        title: tc('cartAdded', { name: m.name }),
+        subtitle: tc('cartAddedHint', { min: base, price: `${price.toFixed(2).replace('.', ',')}€` }),
+        viewLabel: tc('viewCart'),
+        dismissLabel: tc('dismissNotice'),
+        count: cart.length + 1,
+        onView: () => openCart(),
+      })
     } catch (e) {
-      // fallback to simple toast
-      toast({ title: `${m.name} adicionado ao carrinho`, variant: 'success' })
+      toast({ title: tc('cartAdded', { name: m.name }), variant: 'success' })
     }
   }
 

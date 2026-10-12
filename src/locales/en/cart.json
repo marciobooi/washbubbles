@@ -104,5 +104,9 @@
   "persistError": "Error saving the transactions",
   "payError": "Payment error",
   "changeNotDelivered": "Change not returned",
-  "changeNotDeliveredHint": "{{amount}} of change is owed. Please ask at the counter — the sale is recorded."
+  "changeNotDeliveredHint": "{{amount}} of change is owed. Please ask at the counter — the sale is recorded.",
+  "cartAdded": "{{name}} added to cart",
+  "cartAddedHint": "Base cycle {{min}} min • {{price}}",
+  "viewCart": "View cart",
+  "dismissNotice": "Dismiss"
 }
