@@ -46,14 +46,23 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
   // What to take out of the till: the machine already knows what came in (coin acceptor + note reader, step 1 is
   // prefilled from it) and what the hopper holds, so this is just the list. Coins first refill the hopper up to its
   // target; what is left of each coin value, and every note, is what leaves the till.
-  const withdrawPlan = countedDenoms.map((d) => {
-    const isCoin = d.value < 3
-    const refill = isCoin ? Math.min(d.count, hopperGap.find((g) => Math.abs(g.value - d.value) < 0.001)?.toAdd || 0) : 0
-    return { value: d.value, isCoin, count: d.count, toHopper: refill, take: Math.max(0, d.count - refill) }
-  })
-  // Notes are never given as change, so every note leaves the till; the float can only be made of coins.
-  const coinsCounted = withdrawPlan.filter((d) => d.isCoin).reduce((s, d) => s + d.count * d.value, 0)
-  const floatNeedsNotes = floatLeft !== '' && parseFloat(floatLeft) > coinsCounted + 0.005
+  const floatTarget = floatLeft !== '' && !isNaN(parseFloat(floatLeft)) ? parseFloat(floatLeft) : null
+  const withdrawPlan = (() => {
+    const base = countedDenoms.map((d) => {
+      const isCoin = d.value < 3
+      const refill = isCoin ? Math.min(d.count, hopperGap.find((g) => Math.abs(g.value - d.value) < 0.001)?.toAdd || 0) : 0
+      return { value: d.value, isCoin, count: d.count, toHopper: refill, keepNotes: 0, take: 0 }
+    })
+    // The float may need a note (e.g. leave 5 EUR for tomorrow because the coins do not add up): after the hopper
+    // refill, keep the smallest notes that are still needed to reach the float, never more than it.
+    let need = floatTarget == null ? 0 : floatTarget - base.reduce((s, d) => s + d.toHopper * d.value, 0)
+    for (const d of base.filter((x) => !x.isCoin).sort((x, y) => x.value - y.value)) {
+      while (need >= d.value - 0.005 && d.keepNotes < d.count) { d.keepNotes += 1; need -= d.value }
+    }
+    base.forEach((d) => { d.take = Math.max(0, d.count - d.toHopper - d.keepNotes) })
+    return base
+  })()
+  const keptNotes = withdrawPlan.filter((d) => d.keepNotes > 0)
   const takeTotal   = withdrawPlan.reduce((s, d) => s + d.take * d.value, 0)
   const hopperTotalIn = withdrawPlan.reduce((s, d) => s + d.toHopper * d.value, 0)
   const splitOk           = amountToBank !== '' && floatLeft !== '' && Math.abs(splitSum - countedCash) <= 0.005
@@ -264,7 +273,8 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
             <div className="text-xs text-emerald-800">
               Total a retirar: <strong>{fmt(takeTotal)}&euro;</strong>
               {hopperTotalIn > 0 && <> · fica no hopper para repor o troco: <strong>{fmt(hopperTotalIn)}&euro;</strong> ({withdrawPlan.filter((d) => d.toHopper > 0).map((d) => `${d.toHopper}×${fmtDenomLabel(d.value)}`).join(', ')})</>}
-              . A lista parte do que as máquinas registaram; corrija a contagem acima se algo não bater.
+              {keptNotes.length > 0 && <> · nota(s) que ficam no fundo: {keptNotes.map((d) => `${d.keepNotes}×${fmtDenomLabel(d.value)}`).join(', ')}</>}
+              . As notas saem todas, exceto as que escolher deixar para acertar o fundo. A lista parte do que as máquinas registaram; corrija a contagem acima se algo não bater.
             </div>
           </div>
         )}
@@ -360,9 +370,9 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
               required
             />
           </div>
-          {floatNeedsNotes && (
+          {keptNotes.length > 0 && (
             <div className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium bg-amber-50 border border-amber-200 text-amber-800">
-              Não damos troco em notas: o fundo só pode ser em moedas (contadas: {fmt(coinsCounted)}&euro;). As notas são todas para retirar.
+              Fica na caixa para acertar o fundo: {keptNotes.map((d) => `${d.keepNotes}×${fmtDenomLabel(d.value)}`).join(', ')} (não damos troco em notas; o resto das notas sai).
             </div>
           )}
           {amountToBank !== '' && floatLeft !== '' && (
