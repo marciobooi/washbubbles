@@ -280,3 +280,8 @@ Owner finding: the bill acceptor, coin acceptor and the other peripherals connec
 - Restart ONLY the backend (`src\index.js`), never every node process.
 - Controller peripheral list: see memory `reference-controller-config-per` (replace semantics, `ccTalk` spelling, six entries in order). Printer still reports error -1 (real settings unknown).
 - Open: printer settings (baud/address), dryer 2-block paid test, Secar 10 signal wiring, Lavar 1/6 interface+port.
+
+### Pending deploy to the shop PC (as of 2026-10-12, PC offline)
+- Commit "kiosk: new payment window ..." (CartModal, Modal, CartContext export, dev-only /dev/cart preview): NOT on the PC yet.
+  To deploy: copy `src/components/CartModal.jsx`, `src/components/ui/Modal.jsx`, `src/context/CartContext.jsx`, `src/pages/DevCartPreview.jsx`, `src/App.jsx`, build the screen on the PC, press F5 on the kiosk. No backend restart needed.
+- Preview without the PC: `npm run dev`, open `http://localhost:5173/dev/cart` (fake cart + simulated coins, dev builds only).
