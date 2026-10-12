@@ -459,7 +459,8 @@ router.post('/card/purchase', requireKiosk, async (req, res) => {
       type: 'card_purchase',
       cardId: card._id,
       cardCode,
-      metadata: { ...(localId ? { localId: String(localId) } : {}), ...(privacyConsentAt ? { privacyConsentAt } : {}) },
+      // initialCredit: the part of the price that is balance on the card (prepaid), for the day-close revenue
+      metadata: { initialCredit: credit, ...(localId ? { localId: String(localId) } : {}), ...(privacyConsentAt ? { privacyConsentAt } : {}) },
     })
 
     // The cash inserted for this purchase is spent: take it out of the session. Left in, it was moved

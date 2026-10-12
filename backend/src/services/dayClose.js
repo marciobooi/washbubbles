@@ -44,20 +44,26 @@ export async function findLastDashboardClose(DayCloseT) {
  *  - refunds are negative rows of the same type/method as the sale they reverse, so they net out naturally.
  */
 export function tallySales(sales) {
-  let cash = 0, card = 0, change = 0, recharges = 0
+  let cash = 0, card = 0, change = 0, prepaid = 0, cashPrepaid = 0
   for (const s of sales) {
     const amt = Number(s.amount || 0)
     if (s.method === 'cash') cash += amt
     else card += amt
-    if (s.type === 'recharge') recharges += amt
+    // Money that was put ON a card, to be spent later: a top-up, or the starting credit that comes with a new card.
+    // It sits in the till today, but it is a prepayment: the sale is recorded when the card is spent.
+    let pre = 0
+    if (s.type === 'recharge') pre = amt
+    else if (s.type === 'card_purchase') pre = Number(s.metadata && s.metadata.initialCredit || 0)
+    prepaid += pre
+    if (s.method === 'cash') cashPrepaid += pre
     change += Number(s.change || 0)
   }
   const r = (n) => Number(n.toFixed(2))
   return {
     totalCash: r(cash), totalCard: r(card), totalChangeDispensed: r(change),
-    totalRecharges: r(recharges),
-    totalSales: r(cash + card - recharges), // revenue: top-ups excluded
-    cashSales: r(cash - (sales.filter((s) => s.method === 'cash' && s.type === 'recharge').reduce((x, s) => x + Number(s.amount || 0), 0))),
+    totalRecharges: r(prepaid),
+    totalSales: r(cash + card - prepaid), // revenue: what was prepaid on cards is counted when it is spent
+    cashSales: r(cash - cashPrepaid),
   }
 }
 
