@@ -800,7 +800,7 @@ export default function AdminSettings(){
       <Card>
         <CardHeader>
           <CardTitle>Banner da página inicial</CardTitle>
-          <CardDescription>Imagens e texto do carrossel que os clientes veem ao chegar ao quiosque</CardDescription>
+          <CardDescription>Imagens e texto do carrossel que os clientes veem ao chegar ao quiosque. Escreva o texto só em português: ao guardar, o servidor traduz sozinho para inglês, francês, alemão e espanhol.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {bannerSlides.map((slide, idx) => (

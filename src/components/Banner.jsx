@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import api from '@/services/api'
 import { DEFAULT_BANNERS } from '@/lib/defaultBanners'
+import { useTranslation } from 'react-i18next'
 
 const AUTOPLAY_INTERVAL_MS = 10000
 // Minimum horizontal drag before it counts as a swipe rather than a stray tap
@@ -13,6 +14,9 @@ export default function Banner() {
   // defaults when the setting has never been saved, so an upgraded kiosk
   // doesn't go blank — see lib/defaultBanners.js.
   const [banners, setBanners] = useState(DEFAULT_BANNERS)
+  const { i18n } = useTranslation()
+  // Machine translations of the slides made by the server from the Portuguese the admin wrote
+  const [translations, setTranslations] = useState({})
   const [currentIndex, setCurrentIndex] = useState(0)
   const timerRef = useRef(null)
   const dragStartX = useRef(null)
@@ -25,8 +29,19 @@ export default function Banner() {
       const saved = resp && Array.isArray(resp.value) ? resp.value : null
       if (saved && saved.length > 0) setBanners(saved)
     }).catch(() => { /* keep the defaults already in state */ })
+    api.getPublicSetting('bannersTranslations').then((resp) => {
+      if (!cancelled && resp && resp.value && resp.value.slides) setTranslations(resp.value.slides)
+    }).catch(() => { /* the Portuguese text stays */ })
     return () => { cancelled = true }
   }, [])
+
+  // The text in the customer's language, only if it was made from exactly the Portuguese that is saved now
+  const textFor = (banner, field) => {
+    const lang = i18n.language
+    const tr = translations[banner.id]
+    if (lang !== 'pt' && tr && tr.pt && tr.pt.title === (banner.title || '') && tr.pt.text === (banner.text || '') && tr[lang] && tr[lang][field]) return tr[lang][field]
+    return banner[field]
+  }
 
   // Restarting the timer (rather than letting a fixed setInterval run
   // untouched) means a manual swipe or dot tap doesn't get overridden a moment
@@ -109,10 +124,10 @@ export default function Banner() {
           <div className="absolute inset-0 z-0" style={{ background: 'linear-gradient(135deg, rgba(8,70,60,0.88) 0%, rgba(13,148,136,0.74) 50%, rgba(4,120,87,0.82) 100%)' }} />
           <div className="relative z-10 flex flex-col items-center justify-center text-center h-full px-12 w-full pb-6">
             <h2 className="text-6xl font-extrabold tracking-tight mb-4 text-white drop-shadow-lg">
-              {banner.title}
+              {textFor(banner, 'title')}
             </h2>
             <p className="text-3xl font-medium text-teal-50 opacity-95 drop-shadow-md max-w-3xl">
-              {banner.text}
+              {textFor(banner, 'text')}
             </p>
           </div>
         </div>

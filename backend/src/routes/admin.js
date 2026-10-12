@@ -27,6 +27,7 @@ import { broadcastMachines, broadcastMachine, listClients, disconnectClient } fr
 import { logAction } from '../services/auditLog.js'
 import { translateLandingSoon, translateLanding, getTranslations, getStatus } from '../services/landingTranslate.js'
 import { translateLegalSoon, getLegalStatus } from '../services/legalTranslate.js'
+import { translateBannersSoon } from '../services/bannerTranslate.js'
 import { translatorEnabled } from '../services/translator.js'
 import { bumpLandingVersion } from '../services/landingCache.js'
 import { loadGlossary, sanitizeGlossary, GLOSSARY_KEY } from '../services/landingGlossary.js'
@@ -618,6 +619,10 @@ router.post('/settings', requireAdmin, async (req, res) => {
     // Runs in the background — the save does not wait for, or depend on, the translation service.
     bumpLandingVersion() // the Portuguese page shows the new text at once
     translateLandingSoon(req.tenantId)
+  }
+  if (key === 'banners') {
+    // The slides are written in Portuguese; translate them in the background for the other kiosk languages.
+    translateBannersSoon(req.tenantId)
   }
   if (key === 'legal.info') {
     // The texts are written in Portuguese; translate them in the background (the save does not wait).
