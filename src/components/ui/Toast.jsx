@@ -14,10 +14,10 @@ export function ToastProvider({ children }) {
         position="top-center"
         expand
         visibleToasts={4}
-        gap={12}
+        gap={16}
         offset="104px"
         richColors
-        style={{ "--width": "min(94vw, 780px)" }}
+        style={{ "--width": "min(94vw, 860px)" }}
         toastOptions={{
           // Gone after 5 s, whatever it carries.
           duration: 5000,
@@ -54,44 +54,44 @@ export function showToast({ variant = 'info', title, description, badge, action,
       style={{ width: '100%', touchAction: 'manipulation', boxShadow: `0 24px 48px -12px rgba(15,23,42,.18), 0 8px 24px -6px ${tone.glow}` }}
       className={`bg-white/95 backdrop-blur-md rounded-full border overflow-hidden ${tone.border}`}
     >
-      <div className="px-7 py-5 flex items-center justify-between gap-6">
-        <div className="flex items-center gap-5 min-w-0">
-          <div className={`shrink-0 w-14 h-14 rounded-2xl text-white flex items-center justify-center font-bold text-2xl shadow-sm ${tone.badge}`}>
+      <div className="px-9 py-6 flex items-center justify-between gap-8">
+        <div className="flex items-center gap-6 min-w-0">
+          <div className={`shrink-0 w-16 h-16 rounded-2xl text-white flex items-center justify-center font-bold text-3xl shadow-sm ${tone.badge}`}>
             {badge || (
-              <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth="2.75" viewBox="0 0 24 24"><path d={tone.icon} strokeLinecap="round" strokeLinejoin="round" /></svg>
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" strokeWidth="2.75" viewBox="0 0 24 24"><path d={tone.icon} strokeLinecap="round" strokeLinejoin="round" /></svg>
             )}
           </div>
           <div className="flex flex-col text-left min-w-0">
             <div className="flex items-center gap-2">
-              <span className="font-bold text-slate-900 text-xl leading-snug tracking-tight">{title}</span>
+              <span className="font-bold text-slate-900 text-2xl leading-snug tracking-tight">{title}</span>
               {badge ? (
                 <span className={`shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-full ${tone.chip}`}>
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d={tone.icon} strokeLinecap="round" strokeLinejoin="round" /></svg>
                 </span>
               ) : null}
             </div>
-            {description ? <p className="text-base text-slate-500 font-medium leading-snug mt-1">{description}</p> : null}
+            {description ? <p className="text-lg text-slate-500 font-medium leading-snug mt-1.5">{description}</p> : null}
           </div>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-4 shrink-0">
           {action ? (
             <button
               type="button"
               onClick={() => { sonnerToast.dismiss(id); action.onClick && action.onClick() }}
-              className="min-h-[60px] px-6 bg-slate-900 active:scale-[0.98] text-white font-bold text-lg rounded-full flex items-center justify-center gap-2.5 shadow-md"
+              className="min-h-[68px] px-8 bg-slate-900 active:scale-[0.98] text-white font-bold text-xl rounded-full flex items-center justify-center gap-3 shadow-md"
             >
               {action.icon === 'bag' ? (
                 <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" strokeLinecap="round" strokeLinejoin="round" /></svg>
               ) : null}
               <span>{action.label}</span>
-              {action.count ? <span className="bg-slate-800 text-emerald-300 text-sm px-2.5 py-0.5 rounded-full font-semibold">{action.count}</span> : null}
+              {action.count ? <span className="bg-slate-800 text-emerald-300 text-base px-3 py-0.5 rounded-full font-semibold">{action.count}</span> : null}
             </button>
           ) : null}
           <button
             type="button"
             aria-label={closeLabel}
             onClick={() => sonnerToast.dismiss(id)}
-            className="shrink-0 w-14 h-14 rounded-full active:bg-slate-200 text-slate-400 flex items-center justify-center"
+            className="shrink-0 w-16 h-16 rounded-full active:bg-slate-200 text-slate-400 flex items-center justify-center"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </button>
@@ -102,7 +102,7 @@ export function showToast({ variant = 'info', title, description, badge, action,
       </div>
       <style>{'@keyframes wbToastCountdown{from{width:100%}to{width:0%}}'}</style>
     </div>
-  ), { duration, unstyled: true, style: { padding: 0, background: 'transparent', border: 'none', boxShadow: 'none', width: 'var(--width)' } })
+  ), { id: [variant, title].join(":"), duration, unstyled: true, style: { padding: 0, background: 'transparent', border: 'none', boxShadow: 'none', width: 'var(--width)' } })
 }
 
 /** "Machine added to cart": the same toast with the machine number as badge and a view-cart action. */
