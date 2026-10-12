@@ -204,6 +204,20 @@ The shop PC was switched off because the shop is working. Everything below is bu
 the latest code first (copy the files, build the screen, restart ONLY the backend: the process whose command line has
 `src\index.js`, never every node process). The new payment window (13.5) is in the repo but not on the PC yet.
 
+### 13.0 FIRST, when the shop PC is on: bring the code up to date (git pull)
+Last code copied to the PC was the dryer "one command, n impulses" change (`efc088c`). Everything after it is in the repo
+but NOT on the PC yet; it is all screen (frontend) work, so **no backend restart is needed**:
+- new payment window (`b83d130` ... `127ce73`: single column, 68% width, scales to the screen), `Modal.jsx`, `CartContext.jsx` export, dev-only `/dev/cart` preview
+- docs / checklist updates
+
+Steps (on the PC, PowerShell, in `C:\washbubbles`):
+- [ ] Check it is a git checkout: `git rev-parse --is-inside-work-tree` (if it is NOT: the files have been copied by hand so far; either `git init` + `git remote add origin <repo>` + `git fetch` + `git reset --hard origin/main`, or keep copying the changed files)
+- [ ] `git status` is clean (hand-copied files may show as modified: that is fine, the pull makes them match; `.env` and `logs\` are untracked and must stay)
+- [ ] `git pull origin main` (branch `main`); note the commit now on the PC: `git log --oneline -1` should be the latest of the repo
+- [ ] Build the screen with the kiosk key from `backend\.env` (`VITE_KIOSK_API_KEY` = the `KIOSK_API_KEY` line), then press **F5** on the kiosk
+- [ ] Backend: restart ONLY if backend files changed in the pull (`git diff --stat <old>..HEAD -- backend`); restart = stop the node process whose command line has `src\index.js`, never every node process (the bridge is also node)
+- [ ] Confirm: health 200, bridge + backend both running, `status_per` lists six, a coin credits; then do 13.1 onwards
+
 ### 13.1 Money and the controller
 - [ ] After the PC boots: bridge task running (`WashBubbles Bridge`), backend connected through it, `status_per` lists the six peripherals in order
 - [ ] Bill acceptor light on after a **backend restart** (the bridge keeps the session): verified once on 2026-10-11, repeat
