@@ -79,8 +79,9 @@ export default function AdminOperations() {
       // update local list
       setMachines((s) => s.map(x => x._id === m._id ? { ...x, status, statusText } : x))
       // show toast with undo action
-      const { toast: sonnerToast } = await import('sonner')
-      sonnerToast(`Máquina ${m.name} atualizada`, {
+      toast({
+        title: `Máquina ${m.name} atualizada`,
+        variant: 'success',
         action: {
           label: 'Desfazer',
           onClick: async () => {
