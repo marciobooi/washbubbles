@@ -44,7 +44,7 @@ export default function BubbleLoader({ className = '', children, compact = false
       const base = radius || (compact ? Math.random() * 7 + 6 : rnd < 0.42 ? Math.random() * 14 + 12 : rnd < 0.78 ? Math.random() * 22 + 27 : Math.random() * 28 + 50)
       const buoy = (base > 45 ? 1.9 : base < 20 ? 1.1 : 1.4) * (compact ? 0.45 : 1)
       return {
-        x: x !== undefined ? x : (compact ? width / 2 + (Math.random() - 0.5) * width * 0.45 : Math.random() * width),
+        x: x !== undefined ? x : (compact ? width / 2 + (Math.random() - 0.5) * width * 0.35 : Math.random() * width),
         y: y !== undefined ? y : height + Math.random() * 80 + 30,
         r: base,
         vy: -(Math.random() * 0.9 + buoy) * (compact ? 0.4 : 0.5),
@@ -104,14 +104,14 @@ export default function BubbleLoader({ className = '', children, compact = false
       ctx.restore()
     }
 
-    for (let i = 0; i < (compact ? 5 : 16); i++) bubbles.push(makeBubble(Math.random() * width, Math.random() * height))
+    for (let i = 0; i < (compact ? 8 : 16); i++) bubbles.push(makeBubble(Math.random() * width, Math.random() * height))
     let tick = 0
 
     function frame() {
       if (stopped) return
       ctx.clearRect(0, 0, width, height)
       tick++
-      if (tick % (compact ? 30 : 40) === 0 && bubbles.length < (compact ? 7 : MAX_BUBBLES)) bubbles.push(makeBubble())
+      if (tick % (compact ? 18 : 40) === 0 && bubbles.length < (compact ? 12 : MAX_BUBBLES)) bubbles.push(makeBubble())
       for (let i = bubbles.length - 1; i >= 0; i--) {
         const b = bubbles[i]
         if (!b.dead) {
@@ -119,6 +119,11 @@ export default function BubbleLoader({ className = '', children, compact = false
           b.y += b.vy
           b.swayAngle += b.swaySpeed
           b.x += Math.sin(b.swayAngle) * b.swayDist * 0.5 + b.vx
+          if (compact) {
+            // gentle pull to the middle so nothing drifts out of the little box
+            b.x += (width / 2 - b.x) * 0.012
+            b.x = Math.min(width - b.r, Math.max(b.r, b.x))
+          }
           b.m1 += b.m1s; b.m2 += b.m2s; 
           if (b.y <= b.pop) popBubble(b)
           if (b.x < -b.r * 2.5 || b.x > width + b.r * 2.5) b.dead = true
