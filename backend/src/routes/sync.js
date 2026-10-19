@@ -413,7 +413,8 @@ router.post('/commands/:id/done', async (req, res) => {
     }, { new: true })
     // A card wiped at the shop: forget it here too (its sales stay).
     if (cmd && cmd.type === 'blank_card' && req.body?.result?.code) {
-      await withTenant(Card, req).findOneAndDelete({ code: String(req.body.result.code) }).catch(() => {})
+      const { forgetCard } = await import('../services/cardForget.js')
+      await forgetCard(req.tenantId, req.body.result.code).catch(() => {})
     }
     // The shop did it: reflect it on this (central) server's own copy of the machine, so the
     // admin screen shows what really happened and not merely that a request was sent.

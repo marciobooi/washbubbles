@@ -1042,10 +1042,9 @@ class CoinMachine extends EventEmitter {
   async blankCardAtReader() {
     const res = await this.middleware.blankCardViaGateway()
     const code = res.before.cardId
-    const CardPurchase = (await import('../models/cardPurchase.js')).default
-    await Card.deleteMany(this.scoped({ code }))
-    await CardPurchase.deleteMany(this.scoped({ cardCode: code }))
-    await this.auditSystem('card.blanked', res.before)
+    const { forgetCard } = await import('./cardForget.js')
+    const gone = await forgetCard(this.tenantId, code)
+    await this.auditSystem('card.blanked', { ...res.before, ...gone })
     return { code, name: res.before.name, balance: res.before.balance }
   }
 
