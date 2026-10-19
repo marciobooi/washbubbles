@@ -294,6 +294,7 @@ Steps (on the PC, PowerShell, in `C:\washbubbles`):
 
 - Dryers (Secar 7): 10 EUR = ONE `activate-machine impulses 5`, controller 200, the machine held until exactly 75 min later; the all-at-once mode works, no need for `DRYER_IMPULSE_MODE=staggered`. Tested and fine: not enough money (nothing starts, credit stays), cash first then choose a machine (the cart does not pay by itself), cycle changes, 2 machines in one purchase.
 - **Door open on a running dryer (Secar 7 and Secar 11): NO change at all** in `status_int` (interfaces 16 and 15 stay `00000001`), no `machine-*` event, backend keeps `doorClosed: true`. The dryer door is not on a signal we read; the system only knows paid time. Ask the installer / Krebe whether the door has an output.
+- 8-block limit (16 EUR) on a dryer: accepted, and the screen does not allow more than 8 (owner, 2026-10-19). With this, 13.2 is done except the dryer paid by card.
 - Secar 7 and Secar 11 never show `occupied: true` from the signal while running (held by the paid time).
 - Opening the door stops the dryer by itself and it only runs again after pressing the button on the machine (owner, 2026-10-19). The system cannot see this: the paid time keeps counting, so a customer who pauses loses those minutes on our clock (the machine can still be running when the screen shows it free, or the reverse). Needs the door signal (13.7).
 
