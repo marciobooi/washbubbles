@@ -18,6 +18,7 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
   const { t, i18n } = useTranslation('pos')
   const { t: tc } = useTranslation('cart')
   const [amount, setAmount] = useState(10)
+  const [text, setText] = useState(null) // what is being typed in the free amount; null = not typing
   const [page, setPage] = useState(0)
   // The shop's own rules, read from the server: minimum top-up and what the card saves per machine kind.
   const [info, setInfo] = useState({ minRecharge: 0, saving: { wash: 0, dry: 0 } })
@@ -89,8 +90,18 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
   const holder = { name: clean(card?.name), nif: clean(card?.contribuinte), phone: clean(card?.phone), email: clean(card?.email) }
   const holderRows = [[tc('holderNif'), holder.nif && hideAll(holder.nif)], [tc('holderPhone'), holder.phone && hideAll(holder.phone)], [tc('holderEmail'), holder.email && hideEmail(holder.email)]].filter(([, v]) => v)
 
-  const dec = () => setAmount((a) => Math.max(minAmount, a - 5))
-  const inc = () => setAmount((a) => Math.min(100, a + 5))
+  // Free amount: any value from the minimum to 100 EUR, in steps of 0.10 (the smallest coin). 1 EUR on the - / + buttons; or tap
+  // the number and type it (numeric keypad). `text` holds what is being typed; null when not typing.
+  const clampAmount = (v) => Math.min(100, Math.max(minAmount, Math.round((Number(v) || 0) * 10) / 10))
+  const dec = () => setAmount((a) => clampAmount(a - 1))
+  const inc = () => setAmount((a) => clampAmount(a + 1))
+  const amountText = (v) => String(Math.round(v * 100) / 100).replace('.', ',')
+  const onType = (e) => {
+    let v = e.target.value.replace(/[^0-9.,]/g, '').replace('.', ',')
+    const i = v.indexOf(','); if (i >= 0) v = v.slice(0, i + 1) + v.slice(i + 1).replace(/,/g, '').slice(0, 2)
+    setText(v.slice(0, 6))
+  }
+  const endType = () => { if (text !== null && text !== '') setAmount(clampAmount(text.replace(',', '.'))); setText(null) }
 
   const proceed = () => {
     if (!amount || amount <= 0) return
@@ -173,7 +184,20 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
               <div className="text-center text-xl font-semibold text-slate-500">{tc('selectAmount')}</div>
               <div className="flex items-center justify-between gap-4">
                 <button type="button" aria-label={tc('amountLess')} onClick={dec} className="w-20 h-20 rounded-2xl bg-white border-2 border-slate-200 text-slate-700 text-5xl leading-none flex items-center justify-center active:scale-95">−</button>
-                <span className="text-7xl font-bold text-[#008770] tracking-tight">{amount}€</span>
+                <div className="flex items-baseline justify-center gap-1 min-w-0">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    aria-label={tc('selectAmount')}
+                    value={text !== null ? text : amountText(amount)}
+                    onFocus={(e) => { setText(amountText(amount)); e.target.select?.() }}
+                    onChange={onType}
+                    onBlur={endType}
+                    onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                    className="w-[5.2ch] text-center text-7xl font-bold text-[#008770] tracking-tight bg-transparent border-b-4 border-dashed border-emerald-200 focus:border-[#008770] outline-none"
+                  />
+                  <span className="text-7xl font-bold text-[#008770]">€</span>
+                </div>
                 <button type="button" aria-label={tc('amountMore')} onClick={inc} className="w-20 h-20 rounded-2xl bg-[#008770] text-white text-5xl leading-none flex items-center justify-center active:scale-95">+</button>
               </div>
               <div className="grid grid-cols-4 gap-4">
