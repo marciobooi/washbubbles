@@ -105,6 +105,20 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
     openCart()
   }
 
+  // Opened with no card in the reader: ask for it instead of showing an empty, misleading card (0.00, no history).
+  if (!card?.code) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/35 animate-fade-in-up" onClick={close}>
+        <div role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()} className="w-full bg-white rounded-[2rem] px-12 py-14 shadow-2xl text-center flex flex-col items-center gap-6" style={{ maxWidth: 'min(80vw, 760px)' }}>
+          <div className="w-28 h-28 rounded-3xl bg-emerald-50 border border-emerald-200 flex items-center justify-center"><CreditCard className="w-14 h-14 text-[#008770]" strokeWidth={1.6} /></div>
+          <div className="text-5xl font-bold text-slate-900 leading-tight">{tc('insertCardTitle')}</div>
+          <p className="text-2xl text-slate-500 leading-snug max-w-[560px]">{tc('insertCardText')}</p>
+          <button type="button" onClick={close} className="mt-4 h-20 px-14 rounded-2xl bg-[#008770] text-white font-bold text-2xl active:scale-[0.98]">{tc('back')}</button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/35 animate-fade-in-up" onClick={close}>
       <div

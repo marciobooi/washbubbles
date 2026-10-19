@@ -195,5 +195,7 @@
   "rechargeRemoved": "Aufladung aus dem Warenkorb entfernt: Die Karte wurde entnommen",
   "holderPhone": "Telefon",
   "holderEmail": "E-Mail",
-  "holderNif": "Steuer-Nr."
+  "holderNif": "Steuer-Nr.",
+  "insertCardTitle": "Stecken Sie Ihre Karte in das Lesegerät",
+  "insertCardText": "Guthaben, Verlauf und Aufladungen erscheinen hier, sobald die Karte gelesen wurde."
 }

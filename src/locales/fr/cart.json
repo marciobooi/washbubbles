@@ -195,5 +195,7 @@
   "rechargeRemoved": "Recharge retirée du panier : la carte a été retirée",
   "holderPhone": "Téléphone",
   "holderEmail": "E-mail",
-  "holderNif": "NIF"
+  "holderNif": "NIF",
+  "insertCardTitle": "Insérez votre carte dans le lecteur",
+  "insertCardText": "Votre solde, l’historique et les recharges s’affichent ici dès que la carte est lue."
 }

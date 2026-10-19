@@ -195,5 +195,7 @@
   "rechargeRemoved": "Recarga retirada de la cesta: se retiró la tarjeta",
   "holderPhone": "Teléfono",
   "holderEmail": "Correo",
-  "holderNif": "NIF"
+  "holderNif": "NIF",
+  "insertCardTitle": "Inserte la tarjeta en el lector",
+  "insertCardText": "El saldo, el historial y las recargas aparecen aquí en cuanto se lee la tarjeta."
 }
