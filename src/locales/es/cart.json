@@ -211,5 +211,6 @@
   "payNoBalance": "Saldo insuficiente en la tarjeta. Recárguela o pague en efectivo.",
   "payNoBalanceAmt": "Saldo insuficiente en la tarjeta (tiene {{balance}}). Recárguela o pague en efectivo.",
   "payNoCash": "Efectivo insuficiente. Introduzca el importe que falta.",
-  "payCardUnknown": "Tarjeta no reconocida."
+  "payCardUnknown": "Tarjeta no reconocida.",
+  "cardInReaderAria": "Tarjeta en el lector: ver mi tarjeta"
 }

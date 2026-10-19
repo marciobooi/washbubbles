@@ -4,7 +4,8 @@ import { useTranslation, Trans } from 'react-i18next'
 import Pos from './pages/Pos'
 import api from './services/api'
 import * as localApi from './services/local-api'
-import { Home } from 'lucide-react'
+import { Home, CreditCard } from 'lucide-react'
+import { connect, subscribe } from '@/services/websocket'
 import Machines from './pages/Machines'
 import MachineDetail from './pages/MachineDetail'
 import Admin from './pages/Admin'
@@ -131,6 +132,28 @@ function AppInner() {
     window.addEventListener('kiosk:open-help', open)
     return () => window.removeEventListener('kiosk:open-help', open)
   }, [])
+  // Is a card in the reader? Shown in the header, so the customer always knows (the reader 'bounces' removed/inserted: 3 s of calm).
+  const [cardIn, setCardIn] = React.useState(null)
+  React.useEffect(() => {
+    let timer
+    let alive = true
+    const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
+    const key = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
+    api.request('/middleware/client', { method: 'GET', headers: key ? { Authorization: `ApiKey ${key}` } : undefined, skipAuth: true, expect: 'json' })
+      .then((s) => { if (alive && s?.hasCard && s?.cardNumber) setCardIn(String(s.cardNumber)) })
+      .catch(() => {})
+    connect()
+    const unsub = subscribe((m) => {
+      if (!m || typeof m !== 'object') return
+      if (m.type === 'rfid:card_detected' && m.payload?.cardCode) { clearTimeout(timer); setCardIn(String(m.payload.cardCode)) }
+      if (m.type === 'rfid:card_removed') { clearTimeout(timer); timer = setTimeout(() => setCardIn(null), 3000) }
+    })
+    return () => { alive = false; clearTimeout(timer); unsub() }
+  }, [])
+  const openMyCard = () => {
+    if (location.pathname !== '/pos') { navigate('/pos'); setTimeout(() => window.dispatchEvent(new CustomEvent('kiosk:open-card')), 250) }
+    else window.dispatchEvent(new CustomEvent('kiosk:open-card'))
+  }
   const [wifiVoucher, setWifiVoucher] = React.useState(null)
   const [receiptBatchId, setReceiptBatchId] = React.useState(null)
   const [receiptItems, setReceiptItems] = React.useState(null)
@@ -586,6 +609,16 @@ function AppInner() {
                   {t('creditBadge', { amount: `${credit.toFixed(2)}€` })}
                   <RefundCountdown at={refundAt} />
                 </span>
+              )}
+
+              {cardIn && location.pathname.startsWith('/pos') && (
+                <button type="button" aria-label={tr('cardInReaderAria')} title={tr('cardInReaderAria')} onClick={openMyCard} className="relative inline-flex items-center gap-3 h-16 px-5 bg-emerald-50 rounded-2xl border border-emerald-300 active:scale-95 focus:outline-none">
+                  <span className="relative">
+                    <CreditCard className="h-9 w-9 text-emerald-700" strokeWidth={1.8} />
+                    <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 ring-2 ring-white" />
+                  </span>
+                  <span className="text-2xl font-bold text-slate-800 tabular-nums">•••{cardIn.slice(-4)}</span>
+                </button>
               )}
 
               {cartCount > 0 && (

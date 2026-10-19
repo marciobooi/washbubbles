@@ -117,6 +117,13 @@ export default function Pos() {
   }, [])
 
 
+  // The header's card icon asks for this window
+  React.useEffect(() => {
+    const open = () => openCard()
+    window.addEventListener('kiosk:open-card', open)
+    return () => window.removeEventListener('kiosk:open-card', open)
+  }, [])
+
   function openCard() {
     setCardOpen(true)
     // A card already in the reader (read before this window opened): load it now.
