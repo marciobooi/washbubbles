@@ -336,3 +336,10 @@ Owner finding: the bill acceptor, coin acceptor and the other peripherals connec
 - Local view of the kiosk without the PC: `npx vite` with `DEV_API_TARGET=https://freshbubbles.pt` (already in `.claude/launch.json`) and the kiosk key in the git-ignored `.env.local`. READ ONLY: do not press pay on the live server.
 - 2026-10-12 later: translated pt/en/fr/de (namespaces `cart` and `buycard`): the payment window, the card and PIN prompts, the hardware toasts (rejected coin/note, fault, no change), credit / refund toasts, the header credit badge with its countdown, the payment result messages and the whole card-purchase screen. Still Portuguese only: admin pages (staff), aria-labels used for screen readers, the WiFi voucher notice and the machine-started notice (`showMachineNotice`).
 - The card purchase now charges the cash REALLY in the session (the shop PC ignores the "inserted" figure the screen sent: a pressed 20 button used to be enough for a free card). The purchase screen shows the cash inserted with a Pay button that only enables when it covers the price. Test: `backend/test/cardPurchaseCash.test.js`.
+
+### Shop PC updates itself (2026-10-19)
+The PC checks GitHub every minute (task `WashBubbles Update`, `scripts/kiosk-update.ps1`, log `logs\update.log`). A push to `main` is live
+on the PC within about a minute: pull (fast-forward only), `npm install` if a package file changed, the screen is built aside
+(`dist-new`) and swapped in, ONLY the backend (`src\index.js`) is restarted if backend files changed, `/api/health` is checked and the kiosk
+browser is reloaded. If anything fails it goes back to the previous commit and the previous screen. The PC reads GitHub with its own read-only
+deploy key (`shop-pc-a8-max`, `core.sshCommand` in the repo config). Manual run: `powershell -File scripts\kiosk-update.ps1 [-DryRun] [-Force]`.
