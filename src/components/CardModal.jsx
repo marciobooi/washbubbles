@@ -19,18 +19,21 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
   const { t: tc } = useTranslation('cart')
   const [amount, setAmount] = useState(10)
   const [text, setText] = useState(null) // what is being typed in the free amount; null = not typing
+  const holdRef = React.useRef(null)
+  const stopHold = () => { clearInterval(holdRef.current); holdRef.current = null }
+  useEffect(() => stopHold, [])
   const [page, setPage] = useState(0)
   // The shop's own rules, read from the server: minimum top-up and what the card saves per machine kind.
   const [info, setInfo] = useState({ minRecharge: 0, saving: { wash: 0, dry: 0 } })
-  // The −/+ buttons move in steps of 5; the floor is the server's minimum top-up, never below one step.
-  const minAmount = Math.max(5, Number(info.minRecharge) || 0)
+  // The −/+ buttons: see startHold; the floor is the shop minimum top-up (admin setting), never below the smallest coin.
+  const minAmount = Math.max(0.1, Number(info.minRecharge) || 0) // the shop's own minimum (admin: Carregamento mínimo); never below the smallest coin
 
   useEffect(() => {
     if (!open) return undefined
     let alive = true
     setPage(0)
     api.request('/pos/card-info', { method: 'GET', expect: 'json', skipAuth: true })
-      .then((r) => { if (alive && r) { setInfo(r); setAmount((a) => Math.max(a, Number(r.minRecharge) || 5)) } })
+      .then((r) => { if (alive && r) { setInfo(r); setAmount((a) => Math.max(a, Number(r.minRecharge) || 0.1)) } })
       .catch(() => {})
     return () => { alive = false }
   }, [open])
@@ -93,13 +96,23 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
   // Free amount: any value from the minimum to 100 EUR, in steps of 0.10 (the smallest coin). 1 EUR on the - / + buttons; or tap
   // the number and type it (numeric keypad). `text` holds what is being typed; null when not typing.
   const clampAmount = (v) => Math.min(100, Math.max(minAmount, Math.round((Number(v) || 0) * 10) / 10))
-  const dec = () => setAmount((a) => clampAmount(a - 1))
-  const inc = () => setAmount((a) => clampAmount(a + 1))
+  // - / +: 0.10 EUR per tap; held down it repeats and speeds up (0.10 -> 0.50 -> 1 -> 5) so 50 EUR is not a hundred taps away.
+  const startHold = (dir) => {
+    stopHold()
+    let ticks = 0
+    const step = () => { ticks += 1; const d = ticks < 8 ? 0.1 : ticks < 20 ? 0.5 : ticks < 35 ? 1 : 5; setAmount((a) => clampAmount(a + dir * d)) }
+    step()
+    holdRef.current = setInterval(step, 120)
+  }
   const amountText = (v) => String(Math.round(v * 100) / 100).replace('.', ',')
   const onType = (e) => {
     let v = e.target.value.replace(/[^0-9.,]/g, '').replace('.', ',')
     const i = v.indexOf(','); if (i >= 0) v = v.slice(0, i + 1) + v.slice(i + 1).replace(/,/g, '').slice(0, 2)
-    setText(v.slice(0, 6))
+    v = v.slice(0, 6)
+    setText(v)
+    // Valid as typed: it counts at once (the pay button must never use an older value); the clamp comes when typing ends.
+    const n = Number(v.replace(',', '.'))
+    if (Number.isFinite(n) && n >= minAmount && n <= 100) setAmount(Math.round(n * 10) / 10)
   }
   const endType = () => { if (text !== null && text !== '') setAmount(clampAmount(text.replace(',', '.'))); setText(null) }
 
@@ -183,8 +196,8 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
             <div className="flex-1 flex flex-col justify-center gap-7">
               <div className="text-center text-xl font-semibold text-slate-500">{tc('selectAmount')}</div>
               <div className="flex items-center justify-between gap-4">
-                <button type="button" aria-label={tc('amountLess')} onClick={dec} className="w-20 h-20 rounded-2xl bg-white border-2 border-slate-200 text-slate-700 text-5xl leading-none flex items-center justify-center active:scale-95">−</button>
-                <div className="flex items-baseline justify-center gap-1 min-w-0">
+                <button type="button" aria-label={tc('amountLess')} onPointerDown={() => startHold(-1)} onPointerUp={stopHold} onPointerLeave={stopHold} onPointerCancel={stopHold} className="select-none touch-none shrink-0 w-20 h-20 rounded-2xl bg-white border-2 border-slate-200 text-slate-700 text-5xl leading-none flex items-center justify-center active:scale-95">−</button>
+                <div className="flex-1 min-w-0 flex items-baseline justify-center gap-1">
                   <input
                     type="text"
                     inputMode="decimal"
@@ -194,11 +207,12 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
                     onChange={onType}
                     onBlur={endType}
                     onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
-                    className="w-[5.2ch] text-center text-7xl font-bold text-[#008770] tracking-tight bg-transparent border-b-4 border-dashed border-emerald-200 focus:border-[#008770] outline-none"
+                    style={{ width: `${Math.max(2, String(text !== null ? text : amountText(amount)).length) + 0.6}ch` }}
+                    className="min-w-0 max-w-full text-center text-6xl font-bold text-[#008770] tracking-tight bg-transparent border-b-4 border-dashed border-emerald-200 focus:border-[#008770] outline-none"
                   />
-                  <span className="text-7xl font-bold text-[#008770]">€</span>
+                  <span className="text-5xl font-bold text-[#008770]">€</span>
                 </div>
-                <button type="button" aria-label={tc('amountMore')} onClick={inc} className="w-20 h-20 rounded-2xl bg-[#008770] text-white text-5xl leading-none flex items-center justify-center active:scale-95">+</button>
+                <button type="button" aria-label={tc('amountMore')} onPointerDown={() => startHold(1)} onPointerUp={stopHold} onPointerLeave={stopHold} onPointerCancel={stopHold} className="select-none touch-none shrink-0 w-20 h-20 rounded-2xl bg-[#008770] text-white text-5xl leading-none flex items-center justify-center active:scale-95">+</button>
               </div>
               <div className="grid grid-cols-4 gap-4">
                 {QUICK.filter((v) => v >= minAmount).map((v) => (
