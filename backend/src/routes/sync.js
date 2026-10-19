@@ -113,6 +113,16 @@ router.post('/push/card', async (req, res) => {
       // created there, so the local and server copies are the SAME row from
       // the moment it exists — no reconciliation needed on a later pull.
       const explicitId = /^[a-f0-9]{24}$/i.test(String(data.id || '')) ? data.id : undefined
+      // A purchase that the shop re-keyed to the chip's own id: rename the row it already holds here (and its sales), so the
+      // same physical card never becomes two cards.
+      if (data.previousCode && String(data.previousCode) !== String(data.code)) {
+        const already = await CardT.findOne({ code: data.code })
+        const old = already ? null : await CardT.findOne({ code: String(data.previousCode) })
+        if (old) {
+          await CardT.findOneAndUpdate({ _id: old._id }, { $set: { code: data.code } })
+          await withTenant(Sale, req).updateMany({ cardCode: String(data.previousCode) }, { cardCode: data.code })
+        }
+      }
       const created = await CardT.findOneAndUpdate(
         { code: data.code },
         {

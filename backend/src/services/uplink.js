@@ -207,6 +207,8 @@ export class Uplink extends EventEmitter {
       contribuinte: card.contribuinte || '',
       marketingOptIn: Boolean(card.marketingOptIn),
       privacyConsentAt: card.privacyConsentAt || null,
+      // The purchase was re-keyed to the chip's own id: the central must RENAME its row, not add a second card.
+      previousCode: card.metadata?.previousCode || undefined,
     })
   }
 
@@ -347,7 +349,7 @@ export class Uplink extends EventEmitter {
       case 'card': {
         // 1) make sure the card exists there (no-op if it does)
         await this.post('/sync/push/card', {
-          create: true, code: p.code, balance: p.balance,
+          create: true, code: p.code, balance: p.balance, previousCode: p.previousCode,
           status: p.status === 'active' ? 'active' : 'pending_write',
           name: p.name, email: p.email, phone: p.phone, contribuinte: p.contribuinte,
           marketingOptIn: Boolean(p.marketingOptIn), privacyConsentAt: p.privacyConsentAt || null,

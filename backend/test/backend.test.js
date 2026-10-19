@@ -208,6 +208,18 @@ describe('WashBubbles backend', function () {
       expect(retry.body.balance).to.equal(20)
     })
 
+    it('a purchase re-keyed to the chip id renames the card here instead of making a second one', async () => {
+      const Card = (await import('../src/models/card.js')).default
+      await Card.create({ tenantId: tenant._id, code: 'OLD-GEN-ID', balance: 5, status: 'pending_write' })
+      const res = await request(app).post('/api/sync/push/card').set('Authorization', `Bearer ${kioskToken}`)
+        .send({ create: true, code: 'CHIP-ID-1', previousCode: 'OLD-GEN-ID', balance: 5, status: 'active' })
+      expect(res.status).to.equal(200)
+      expect(await Card.countDocuments({ tenantId: tenant._id, code: 'OLD-GEN-ID' })).to.equal(0)
+      const all = await Card.find({ tenantId: tenant._id, code: 'CHIP-ID-1' })
+      expect(all).to.have.length(1)
+      expect(all[0].balance).to.equal(5)
+    })
+
     it('refuses a delta with no idempotency key', async () => {
       const res = await request(app).post('/api/sync/push/card')
         .set('Authorization', `Bearer ${kioskToken}`).send({ code: 'SYNC-CARD', delta: 5 })
