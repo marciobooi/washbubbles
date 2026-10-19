@@ -359,6 +359,8 @@ router.post('/cash/pay', requireKiosk, async (req, res) => {
       // never reached any hopper and nobody was told. Now the kiosk gets a flag it
       // can act on.
       console.error(`[gateways] Change of €${change.toFixed(2)} owed on batch ${batchId}: ${changeError}`)
+      // The operator must see this: the customer is owed money out of the till.
+      coinMachine.auditSystem?.('cash.change.owed', { batchId, amount: change, error: changeError })?.catch?.(() => {})
     }
   }
 

@@ -330,6 +330,15 @@ describe('Middleware over the low-level gateway', () => {
       expect(await p).to.include({ success: true, dispensed: 1.5, remaining: 0 })
     })
 
+    it('a hopper fault (status 400) before no-change 0 is NOT a paid-out change', async () => {
+      const mw = withHopper()
+      const p = mw.dispenseChange('hop', 6)
+      await tick()
+      mw.handlePackage({ op: 'hopper-status', code: '400' })
+      mw.handlePackage({ op: 'no-change', data: '0' })
+      expect(await p).to.include({ success: false, dispensed: 0, remaining: 6 })
+    })
+
     it('reports the shortfall the controller could not pay', async () => {
       const mw = withHopper()
       const p = mw.dispenseChange('hop', 2)

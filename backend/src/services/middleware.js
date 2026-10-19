@@ -851,24 +851,31 @@ class Middleware extends EventEmitter {
         return fail('Low-level controller is not connected')
       }
       const reply = this.waitForReply('no-change', { timeoutMs: 60000 })
+      // The hopper says 'hopper-status 400' (empty, jammed, off) BEFORE it answers 'no-change' with a shortfall of 0:
+      // seen on the shop PC 2026-10-19, EUR 6.00 of change owed, nothing paid, and the answer read as success.
+      let hopperFault = null
+      const onHopper = (e) => { if (e && e.ok === false) hopperFault = e.code }
+      this.on('hopper-status', onHopper)
 
       let pkg
       try {
         pkg = await reply
       } catch (err) {
+        this.off('hopper-status', onHopper)
         // Same fallback as the legacy kiosk after 60 s: the customer is owed it.
         this.emit('change-shortfall', { requested: target, dispensed: 0, remaining: target, breakdown: [] })
         return fail(err.message, { unconfirmed: true })
       }
 
-      const unavailable = roundMoney(centsToEuro(pkg.data))
+      this.off('hopper-status', onHopper)
+      const unavailable = hopperFault !== null ? target : roundMoney(centsToEuro(pkg.data))
       const dispensed = roundMoney(Math.max(0, target - unavailable))
       const success = unavailable <= 0
       if (success) this.emit('change-dispensed', { amount: dispensed, breakdown: [] })
       else this.emit('change-shortfall', { requested: target, dispensed, remaining: unavailable, breakdown: [] })
       return {
         success, dispensed, remaining: unavailable, breakdown: [],
-        error: success ? undefined : 'Controller could not pay out the full amount',
+        error: success ? undefined : (hopperFault !== null ? `Hopper fault (status ${hopperFault}): nothing was paid out` : 'Controller could not pay out the full amount'),
       }
     })
   }
