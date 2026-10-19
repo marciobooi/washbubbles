@@ -157,6 +157,11 @@ class CoinMachine extends EventEmitter {
           start_machine: (p) => this.adminStartMachine(p.machineId),
           end_machine: (p) => this.adminEndMachine(p.machineId),
           set_service: (p) => this.setMachineService(p.machineId, p.outOfService, p.status),
+          empty_hopper: async () => {
+            const r = await this.emptyHopper()
+            if (!(r.dispensed > 0)) throw new Error(r.error || 'Nenhuma moeda saiu do hopper')
+            return r
+          },
           sync_now: async () => { await this.downlink?.pullAll?.(); return { success: true } },
         },
       })
@@ -1030,6 +1035,22 @@ class CoinMachine extends EventEmitter {
       return { success: remaining <= 0, refunded: dispensed, remaining, error }
     })().finally(() => { this.refunding = null })
     return this.refunding
+  }
+
+  /**
+   * Pay out EVERYTHING the hopper holds: one huge get-change; the controller answers with the part it could not pay,
+   * so (asked - not paid) is what was inside. The coins drop into the tray: a container must be under it.
+   */
+  async emptyHopper() {
+    if (roundMoney(this.client.getState().balance) > 0) return { dispensed: 0, error: 'Há crédito de um cliente na máquina: espere ou devolva-o primeiro' }
+    const hopper = await Peripheral.findOne(this.scoped({ type: 'hopper', enabled: true }))
+    if (!hopper) return { dispensed: 0, error: 'Nenhum hopper configurado' }
+    const result = await this.dispenseChange(hopper._id, 9999, { timeoutMs: 10 * 60 * 1000 })
+    const dispensed = roundMoney(Number(result?.dispensed) || 0)
+    // Everything that could be paid was paid, so the stock kept by the system is zero (counted by hand again after a refill).
+    if (dispensed > 0 || result?.success !== false) await Peripheral.findOneAndUpdate({ _id: hopper._id }, { $set: { 'hopperConfig.currentCount': 0, 'hopperConfig.currentStock': {} } })
+    await this.auditSystem('hopper.empty', { dispensed, error: result?.error })
+    return { dispensed, error: result?.error, unconfirmed: !!result?.unconfirmed }
   }
 
   /**

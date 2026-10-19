@@ -1240,24 +1240,33 @@ router.post('/hopper/refill', requireAdmin, async (req, res) => {
   res.status(status).json(body)
 })
 
-// POST /admin/hopper/empty — pay out EVERYTHING the hopper holds: a huge get-change; the controller answers with the part it
-// could not pay, so (asked - not paid) is what was inside. The coins drop into the tray: a container must be under it.
+// POST /admin/hopper/empty — pay out everything the hopper holds (coins drop into the tray: a container must be under it).
+// On the shop PC it runs right here; on the central server, which has no hardware, it is queued for the shop (picked up within
+// ~5 s, see services/remoteCommands.js) and the page follows it through GET /admin/commands/:id.
 router.post('/hopper/empty', requireAdmin, async (req, res) => {
   if (req.body?.confirm !== true) return res.status(400).json({ error: 'Confirme o esvaziamento' })
   const { default: coinMachine } = await import('../services/coinMachine.js')
-  if ((coinMachine.client?.getState?.().balance || 0) > 0) return res.status(409).json({ error: 'Há crédito de um cliente na máquina: espere ou devolva-o primeiro' })
-  const PeripheralT = withTenant(Peripheral, req)
-  const hopper = await PeripheralT.findOne({ type: 'hopper', enabled: true })
-  if (!hopper) return res.status(404).json({ error: 'Nenhum hopper configurado' })
-  const ASKED = 9999
-  const result = await coinMachine.dispenseChange(hopper._id, ASKED, { timeoutMs: 10 * 60 * 1000 })
-  const emptied = result?.success === false && result?.unconfirmed !== true && Number(result?.dispensed) > 0
-  const dispensed = Number(result?.dispensed) || 0
-  // Everything that could be paid was paid, so the stock the system keeps is zero now (counted by hand again after a refill).
-  if (dispensed > 0 || result?.success !== false) await PeripheralT.findOneAndUpdate({ _id: hopper._id }, { $set: { 'hopperConfig.currentCount': 0, 'hopperConfig.currentStock': {} } })
-  logAction(req, 'hopper.empty', 'Peripheral', hopper._id, { dispensed, error: result?.error })
-  res.json({ dispensed, emptied, error: result?.error, unconfirmed: !!result?.unconfirmed })
-});
+  if (coinMachine.running) {
+    const r = await coinMachine.emptyHopper()
+    logAction(req, 'hopper.empty', 'Peripheral', null, { dispensed: r.dispensed, error: r.error })
+    return res.json({ queued: false, ...r })
+  }
+  const kiosks = await User.find({ tenantId: req.tenantId, role: 'KIOSK' }).select('_id').lean()
+  if (kiosks.length === 0) return res.status(409).json({ error: 'Nenhum quiosque registado para esta loja' })
+  const SyncCommandT = withTenant(SyncCommand, req)
+  const cmds = []
+  for (const k of kiosks) cmds.push(await SyncCommandT.create({ kioskId: k._id, type: 'empty_hopper', payload: {} }))
+  logAction(req, 'hopper.empty_requested', 'Peripheral', null, {})
+  res.json({ queued: true, commandIds: cmds.map((c) => c._id) })
+})
+
+// GET /admin/commands/:id — state and result of a command queued for the shop.
+router.get('/commands/:id', requireAdmin, async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'Invalid id' })
+  const c = await withTenant(SyncCommand, req).findById(req.params.id).lean()
+  if (!c) return res.status(404).json({ error: 'Command not found' })
+  res.json({ status: c.status, error: c.error, result: c.result, type: c.type })
+})
 
 // POST /admin/day-close/adjust-float — add cash straight to the float (e.g.
 // seeding a starting till), without it counting as bankable sales money.

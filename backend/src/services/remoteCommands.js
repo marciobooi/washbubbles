@@ -93,20 +93,21 @@ export class RemoteCommands extends EventEmitter {
     const id = cmd.id || cmd._id
     const age = cmd.createdAt ? Date.now() - new Date(cmd.createdAt).getTime() : 0
     let error = ''
+    let result
     if (age > this.maxAgeMs) {
       error = 'Expired: the command was older than ' + Math.round(this.maxAgeMs / 1000) + 's when this site got it'
     } else if (!this.handlers[cmd.type]) {
       error = `Unsupported command: ${cmd.type}`
     } else {
       try {
-        await this.handlers[cmd.type](cmd.payload || {})
+        result = await this.handlers[cmd.type](cmd.payload || {})
       } catch (err) {
         error = err?.message || String(err)
       }
     }
     try {
       if (error) await this.call(`/sync/commands/${id}/fail`, 'POST', { error })
-      else await this.call(`/sync/commands/${id}/done`, 'POST', {})
+      else await this.call(`/sync/commands/${id}/done`, 'POST', result === undefined ? {} : { result })
     } catch { /* the result could not be reported; the command ran (or failed) all the same */ }
     this.emit(error ? 'failed' : 'done', { id, type: cmd.type, error })
     if (error) console.warn(`[RemoteCommands] ${cmd.type} failed: ${error}`)

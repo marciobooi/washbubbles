@@ -398,7 +398,8 @@ router.post('/commands/:id/done', async (req, res) => {
     const SyncCommandT = withTenant(SyncCommand, req)
     const cmd = await SyncCommandT.findByIdAndUpdate(req.params.id, {
       status: 'done',
-      executedAt: new Date()
+      executedAt: new Date(),
+      ...(req.body?.result !== undefined ? { result: req.body.result } : {})
     }, { new: true })
     // The shop did it: reflect it on this (central) server's own copy of the machine, so the
     // admin screen shows what really happened and not merely that a request was sent.

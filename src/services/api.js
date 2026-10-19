@@ -378,6 +378,8 @@ export function createApi(config) {
     return request('/admin/hopper/refill', { method: 'POST', json: payload, expect: 'json' })
   }
 
+  function adminCommand(id) { return request(`/admin/commands/${id}`, { method: 'GET', expect: 'json' }) }
+
   function emptyHopper() {
     return request('/admin/hopper/empty', { method: 'POST', json: { confirm: true }, expect: 'json' })
   }
@@ -683,6 +685,7 @@ export function createApi(config) {
     addDayCloseFloat,
     refillHopper,
     emptyHopper,
+    adminCommand,
     refillKioskHopper,
     emailDayCloseReceipt,
 

@@ -12,7 +12,7 @@ const syncCommandSchema = new Schema({
   
   type: { 
     type: String, 
-    enum: ['reboot', 'update_config', 'upload_logs', 'screenshot', 'clear_queue', 'sync_now', 'start_machine', 'end_machine', 'set_service'],
+    enum: ['reboot', 'update_config', 'upload_logs', 'screenshot', 'clear_queue', 'sync_now', 'start_machine', 'end_machine', 'set_service', 'empty_hopper'],
     required: true 
   },
   payload: { type: Schema.Types.Mixed },
@@ -24,6 +24,7 @@ const syncCommandSchema = new Schema({
     index: true
   },
   error: { type: String },
+  result: { type: Schema.Types.Mixed },
   executedAt: { type: Date },
   createdAt: { type: Date, default: Date.now }
 })

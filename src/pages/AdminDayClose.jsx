@@ -22,7 +22,19 @@ export default function AdminDayClose() {
     if (!window.confirm('Vão cair TODAS as moedas do hopper para a bandeja do troco. Já tem um recipiente por baixo? Pode demorar alguns minutos.')) return
     setEmptying(true)
     try {
-      const r = await api.emptyHopper()
+      let r = await api.emptyHopper()
+      if (r.queued) {
+        // Asked of the shop PC through the central server: wait for its answer (it can take minutes with a full hopper).
+        toast({ title: 'Pedido enviado à loja', description: 'As moedas vão começar a cair dentro de segundos.' })
+        const id = r.commandIds?.[0]
+        r = { dispensed: 0, error: 'A loja não respondeu a tempo. Veja se o PC está ligado.' }
+        for (let i = 0; i < 240; i++) {
+          await new Promise((ok) => setTimeout(ok, 3000))
+          const c = await api.adminCommand(id).catch(() => null)
+          if (c?.status === 'done') { r = c.result || { dispensed: 0 }; break }
+          if (c?.status === 'failed') { r = { dispensed: 0, error: c.error }; break }
+        }
+      }
       toast({ title: r.dispensed > 0 ? `Hopper esvaziado: saíram ${fmt(r.dispensed)}€` : 'Não saiu nenhuma moeda', description: r.error || undefined, variant: r.dispensed > 0 ? 'success' : 'destructive' })
     } catch (err) {
       toast({ title: err?.body?.error || 'Erro ao esvaziar o hopper', variant: 'destructive' })
