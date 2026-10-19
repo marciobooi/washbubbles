@@ -369,8 +369,9 @@ function AppInner() {
         const res = await processPayment(items, { method: 'cash', inserted: opts.inserted, couponCode: opts.couponCode })
         if (!res.success) {
           // Forward meaningful errors to the user
-          const msg = res.error?.message || (res.error && res.error.body && res.error.body.error) || tr('payErrorCash')
-          toast({ title: tr('payFailed'), description: msg, variant: 'destructive' })
+          const noCard = res.error?.status === 404 && /card/i.test(String(res.error?.body?.error || res.error?.message || ''))
+          const msg = noCard ? tr('insertCardToRecharge') : (res.error?.message || (res.error && res.error.body && res.error.body.error) || tr('payErrorCash'))
+          toast({ title: noCard ? msg : tr('payFailed'), description: noCard ? undefined : msg, variant: noCard ? 'warning' : 'destructive' })
           return
         }
 

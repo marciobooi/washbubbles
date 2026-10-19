@@ -164,6 +164,13 @@ export const CartProvider = ({ children }) => {
     setCart((c) => c.filter((i) => i.id !== id))
   }
 
+  // A recharge only makes sense while its card is in the reader: when the card goes, its pending top-ups go too.
+  function removeRecharges() {
+    let removed = false
+    setCart((c) => { const rest = c.filter((i) => !(i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge')))); removed = rest.length !== c.length; return rest })
+    return removed
+  }
+
   function clearCart() {
     setCart([])
   }
@@ -173,6 +180,6 @@ export const CartProvider = ({ children }) => {
     try { window.dispatchEvent(new CustomEvent('open-cart')) } catch (e) { console.warn('openCart event failed', e) }
   }
 
-  const value = { cart, addToCart, setQuantity, removeFromCart, clearCart, openCart, credit, resetCredit, refundAt, refundAfter }
+  const value = { cart, addToCart, setQuantity, removeFromCart, removeRecharges, clearCart, openCart, credit, resetCredit, refundAt, refundAfter }
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>
 }

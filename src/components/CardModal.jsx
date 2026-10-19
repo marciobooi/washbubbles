@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { Plus, RotateCcw, ShieldCheck, ChevronLeft, ChevronRight, ArrowLeft, CreditCard, Wifi } from 'lucide-react'
 import { WasherIcon, DryerIcon } from './icons/MachineIcons'
 import api from '@/services/api'
+import { toast } from '@/components/ui/Toast'
 
 const MAX_RECENT = 10 // how many movements the window keeps
 const PAGE_SIZE = 5   // shown per page, flipped with big touch buttons (no inner scrolling)
@@ -85,6 +86,8 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
 
   const proceed = () => {
     if (!amount || amount <= 0) return
+    // No card in the reader: nothing to top up. Say so instead of letting the payment fail later.
+    if (!card?.code) { toast({ title: tc('insertCardToRecharge'), variant: 'warning' }); return }
     addToCart({
       id: `recharge-${Date.now()}`,
       name: `Recarga de Cartão - ${amount}€`,

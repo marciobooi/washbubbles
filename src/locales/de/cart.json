@@ -190,5 +190,7 @@
   "legalTermsShort": "Bedingungen & Regeln",
   "legalComplaints": "Beschwerdebuch",
   "legalComplaintsHint": "Richten Sie die Handykamera auf den QR-Code, um das Online-Beschwerdebuch zu öffnen.",
-  "legalController": "Verantwortlicher"
+  "legalController": "Verantwortlicher",
+  "insertCardToRecharge": "Stecken Sie Ihre Karte zum Aufladen in das Lesegerät",
+  "rechargeRemoved": "Aufladung aus dem Warenkorb entfernt: Die Karte wurde entnommen"
 }

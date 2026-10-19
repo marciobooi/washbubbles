@@ -190,5 +190,7 @@
   "legalTermsShort": "Conditions et règles",
   "legalComplaints": "Livre de réclamations",
   "legalComplaintsHint": "Pointez l’appareil photo de votre téléphone vers le code QR pour ouvrir le livre de réclamations en ligne.",
-  "legalController": "Responsable"
+  "legalController": "Responsable",
+  "insertCardToRecharge": "Insérez votre carte dans le lecteur pour la recharger",
+  "rechargeRemoved": "Recharge retirée du panier : la carte a été retirée"
 }

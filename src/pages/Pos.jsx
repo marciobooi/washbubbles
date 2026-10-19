@@ -13,6 +13,7 @@ import { legalText } from '@/lib/defaultLegal'
 import api from '@/services/api'
 import { useTranslation } from 'react-i18next'
 import { connect, subscribe } from '@/services/websocket'
+import { useCart } from '../context/CartContext'
 
 export default function Pos() {
   const { t } = useTranslation('pos')
@@ -27,6 +28,7 @@ export default function Pos() {
   // Card component moved to src/components/Card.jsx
 
   const navigate = useNavigate()
+  const { removeRecharges } = useCart()
   const [cardOpen, setCardOpen] = React.useState(false)
   const [buyCardOpen, setBuyCardOpen] = React.useState(false)
 
@@ -76,7 +78,11 @@ export default function Pos() {
       if (message.type === 'rfid:card_removed') {
         clearTimeout(removeTimer.current)
         cardInReader.current = false
-        removeTimer.current = setTimeout(() => closeCard(), 3000)
+        removeTimer.current = setTimeout(() => {
+          // The card is really gone: a top-up waiting in the basket for it could never be paid, so it goes too.
+          if (removeRecharges()) toast({ title: i18n.t('rechargeRemoved', { ns: 'cart' }), variant: 'warning' })
+          closeCard()
+        }, 3000)
         return
       }
       if (message.type === 'rfid:card_detected') {
