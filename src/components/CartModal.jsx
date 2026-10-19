@@ -205,6 +205,25 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
     return unsubscribe
   }, [open, total])
 
+  // A card that was ALREADY in the reader when this window opened (put in earlier, to look at the balance): its 'inserted' event
+  // is long gone, so ask the shop what is in the reader and treat it as if it had just been presented.
+  React.useEffect(() => {
+    if (!open) return undefined
+    let alive = true
+    const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
+    const key = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
+    api.request('/middleware/client', { method: 'GET', headers: key ? { Authorization: `ApiKey ${key}` } : undefined, skipAuth: true, expect: 'json' })
+      .then((s) => {
+        if (!alive || !s?.hasCard || !s?.cardNumber) return
+        const code = String(s.cardNumber)
+        setDetectedCardCode(code)
+        if (!confirmedRef.current) pendingCardRef.current = code
+        else setTimeout(() => handleCardPayAutomatic(code), 500)
+      })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [open])
+
   // Pay automatically once the cash inserted covers the cart — whether the coins went in
   // before or after the machine was chosen.
   React.useEffect(() => {
