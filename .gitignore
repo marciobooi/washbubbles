@@ -32,3 +32,5 @@ backend/.baileys-auth/
 
 # Local runtime state (inserted-cash recovery file)
 /backend/data/
+dist-new/
+dist-old/
