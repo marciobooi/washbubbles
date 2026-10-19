@@ -366,7 +366,7 @@ function AppInner() {
         }
 
         // Validate cash via CashGateway (server-side gateway will persist sales atomically)
-        const res = await processPayment(items, { method: 'cash', inserted: opts.inserted, couponCode: opts.couponCode })
+        const res = await processPayment(items, { method: 'cash', inserted: opts.inserted, batchId, couponCode: opts.couponCode })
         if (!res.success) {
           // Forward meaningful errors to the user
           const noCard = res.error?.status === 404 && /card/i.test(String(res.error?.body?.error || res.error?.message || ''))
