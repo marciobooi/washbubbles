@@ -192,5 +192,8 @@
   "legalComplaintsHint": "Richten Sie die Handykamera auf den QR-Code, um das Online-Beschwerdebuch zu öffnen.",
   "legalController": "Verantwortlicher",
   "insertCardToRecharge": "Stecken Sie Ihre Karte zum Aufladen in das Lesegerät",
-  "rechargeRemoved": "Aufladung aus dem Warenkorb entfernt: Die Karte wurde entnommen"
+  "rechargeRemoved": "Aufladung aus dem Warenkorb entfernt: Die Karte wurde entnommen",
+  "holderPhone": "Telefon",
+  "holderEmail": "E-Mail",
+  "holderNif": "Steuer-Nr."
 }

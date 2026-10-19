@@ -192,5 +192,8 @@
   "legalComplaintsHint": "Point your phone camera at the QR code to open the online Complaints Book.",
   "legalController": "Controller",
   "insertCardToRecharge": "Insert your card in the reader to top it up",
-  "rechargeRemoved": "Top-up removed from the basket: the card was taken out"
+  "rechargeRemoved": "Top-up removed from the basket: the card was taken out",
+  "holderPhone": "Phone",
+  "holderEmail": "Email",
+  "holderNif": "Tax ID"
 }

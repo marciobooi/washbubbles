@@ -80,6 +80,12 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
   const code = card?.code ? String(card.code) : ''
   const masked = code ? `•••• ${code.slice(-4)}` : '—'
   const hasBalance = balance > 0
+  // Holder data on a public screen: the name in full, the rest only partly (the last digits / the domain).
+  const clean = (v) => { const s = String(v ?? '').trim(); return s && s.toUpperCase() !== 'SEM NOME' ? s : '' }
+  const hideAll = (v, keep = 3) => (v.length > keep ? '•'.repeat(Math.min(6, v.length - keep)) + ' ' + v.slice(-keep) : v)
+  const hideEmail = (v) => { const [u, d] = v.split('@'); return d ? `${u.slice(0, 1)}•••@${d}` : hideAll(v) }
+  const holder = { name: clean(card?.name), nif: clean(card?.contribuinte), phone: clean(card?.phone), email: clean(card?.email) }
+  const holderRows = [[tc('holderNif'), holder.nif && hideAll(holder.nif)], [tc('holderPhone'), holder.phone && hideAll(holder.phone)], [tc('holderEmail'), holder.email && hideEmail(holder.email)]].filter(([, v]) => v)
 
   const dec = () => setAmount((a) => Math.max(minAmount, a - 5))
   const inc = () => setAmount((a) => Math.min(100, a + 5))
@@ -122,7 +128,13 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
                 </div>
               </div>
               <div className="mt-16 text-3xl font-medium tracking-[0.25em] font-mono relative">{masked}</div>
+              {holder.name && <div className="mt-4 text-2xl font-semibold text-emerald-50 relative truncate">{holder.name}</div>}
             </div>
+            {holderRows.length > 0 && (
+              <div className="-mt-2 flex flex-wrap gap-x-8 gap-y-2 text-lg text-slate-500">
+                {holderRows.map(([k, v]) => (<span key={k}><span className="text-slate-400">{k}: </span><span className="font-semibold text-slate-700">{v}</span></span>))}
+              </div>
+            )}
 
             {/* status + balance */}
             <div className="flex items-center justify-between gap-6 pb-8 border-b border-slate-100">
