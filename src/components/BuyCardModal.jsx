@@ -161,7 +161,6 @@ export default function BuyCardModal({ open, onClose }) {
             customerPhone: formData.phone,
             customerContribuinte: formData.contribuinte,
             customerMarketingOptIn: formData.marketingOptIn,
-          customerPrivacyConsent: hasPersonalData && formData.privacyConsent,
             customerPrivacyConsent: hasPersonalData && formData.privacyConsent,
             batchId: `BATCH-${Date.now()}`
           })
@@ -197,6 +196,7 @@ export default function BuyCardModal({ open, onClose }) {
           customerPhone: formData.phone,
           customerContribuinte: formData.contribuinte,
           customerMarketingOptIn: formData.marketingOptIn,
+          customerPrivacyConsent: hasPersonalData && formData.privacyConsent,
           batchId: `BATCH-${Date.now()}`
         },
         headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined,
