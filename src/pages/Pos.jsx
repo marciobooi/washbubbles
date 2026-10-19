@@ -61,7 +61,9 @@ export default function Pos() {
       }
     } catch (e) {
       console.error('[Pos] Failed to load card data', e)
-      toast({ title: i18n.t('cardLoadError', { ns: 'cart' }), variant: 'destructive' })
+      // 404: the shop does not know this card: a blank one (or one just wiped), not a fault.
+      if (e?.status === 404) toast({ title: i18n.t('cardBlankTitle', { ns: 'cart' }), description: i18n.t('cardBlankText', { ns: 'cart' }), variant: 'warning' })
+      else toast({ title: i18n.t('cardLoadError', { ns: 'cart' }), variant: 'destructive' })
     } finally {
       setCardLoading((n) => Math.max(0, n - 1))
     }

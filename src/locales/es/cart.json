@@ -205,5 +205,7 @@
   "editCancel": "Cancelar",
   "editSaved": "Datos guardados",
   "editError": "No se pudieron guardar los datos",
-  "editCardGone": "Inserte la tarjeta en el lector para editar sus datos"
+  "editCardGone": "Inserte la tarjeta en el lector para editar sus datos",
+  "cardBlankTitle": "Tarjeta en blanco",
+  "cardBlankText": "Esta tarjeta aún no tiene datos ni saldo. Use «Comprar tarjeta» para activarla."
 }

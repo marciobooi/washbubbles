@@ -205,5 +205,7 @@
   "editCancel": "Annuler",
   "editSaved": "Données enregistrées",
   "editError": "Impossible d’enregistrer les données",
-  "editCardGone": "Insérez votre carte dans le lecteur pour modifier vos données"
+  "editCardGone": "Insérez votre carte dans le lecteur pour modifier vos données",
+  "cardBlankTitle": "Carte vierge",
+  "cardBlankText": "Cette carte n’a encore ni données ni solde. Utilisez « Acheter une carte » pour l’activer."
 }

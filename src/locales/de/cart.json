@@ -205,5 +205,7 @@
   "editCancel": "Abbrechen",
   "editSaved": "Daten gespeichert",
   "editError": "Die Daten konnten nicht gespeichert werden",
-  "editCardGone": "Stecken Sie Ihre Karte in das Lesegerät, um Ihre Daten zu bearbeiten"
+  "editCardGone": "Stecken Sie Ihre Karte in das Lesegerät, um Ihre Daten zu bearbeiten",
+  "cardBlankTitle": "Leere Karte",
+  "cardBlankText": "Diese Karte hat noch keine Daten und kein Guthaben. Aktivieren Sie sie mit „Karte kaufen“."
 }

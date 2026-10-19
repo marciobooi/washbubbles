@@ -205,5 +205,7 @@
   "editCancel": "Cancel",
   "editSaved": "Details saved",
   "editError": "Could not save the details",
-  "editCardGone": "Insert your card in the reader to edit your details"
+  "editCardGone": "Insert your card in the reader to edit your details",
+  "cardBlankTitle": "Blank card",
+  "cardBlankText": "This card has no details or balance yet. Use “Buy card” to activate it."
 }
