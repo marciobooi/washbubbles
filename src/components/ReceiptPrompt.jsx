@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import api from '@/services/api'
 import * as localApi from '@/services/local-api'
 import { formatReceiptText } from '@/lib/receipt'
@@ -17,11 +17,16 @@ import { useTranslation } from 'react-i18next'
  * sale to already exist server-side (the route looks it up by batch), so it
  * only shows when `batchId` came from a network-settled payment.
  */
-export default function ReceiptPrompt({ items, batchId, kioskKey, onClose }) {
+export default function ReceiptPrompt({ items, batchId, kioskKey, onClose, onHold }) {
   const { t } = useTranslation('cart')
   const [email, setEmail] = useState('')
   const [sending, setSending] = useState(false)
   const [printing, setPrinting] = useState(false)
+  const [focused, setFocused] = useState(false)
+  // The countdown that closes this popup (in App) stops while the customer is typing, or a send / print is running.
+  const busy = focused || email.length > 0 || sending || printing
+  useEffect(() => { onHold?.(busy) }, [busy])
+  useEffect(() => () => onHold?.(false), [])
 
   const canPrint = localApi.isElectron && items && items.length > 0
   const canEmail = Boolean(batchId)
@@ -85,6 +90,8 @@ export default function ReceiptPrompt({ items, batchId, kioskKey, onClose }) {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
             placeholder="o.seu@email.com"
             className="flex-1 min-w-0 px-2 py-1.5 text-sm rounded-lg border border-neutral-300"
           />

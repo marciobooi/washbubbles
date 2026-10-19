@@ -124,13 +124,15 @@ function AppInner() {
   const [wifiVoucher, setWifiVoucher] = React.useState(null)
   const [receiptBatchId, setReceiptBatchId] = React.useState(null)
   const [receiptItems, setReceiptItems] = React.useState(null)
+  // While the customer is typing the email (or a send/print is running) the receipt popup must stay: no countdown.
+  const [receiptHold, setReceiptHold] = React.useState(false)
   // Auto-dismiss so a previous customer's "want a receipt?" card doesn't sit
   // in the corner through the next customer's whole visit.
   React.useEffect(() => {
     if (!receiptBatchId && !receiptItems) return
-    const t = setTimeout(() => { setReceiptBatchId(null); setReceiptItems(null) }, 30000)
+    const t = setTimeout(() => { setReceiptBatchId(null); setReceiptItems(null); setReceiptHold(false) }, receiptHold ? 180000 : 30000)
     return () => clearTimeout(t)
-  }, [receiptBatchId, receiptItems])
+  }, [receiptBatchId, receiptItems, receiptHold])
   // Count of externally-dispatched modal opens (e.g., CardModal in `Pos`)
   const [externalModalCount, setExternalModalCount] = React.useState(0)
 
@@ -658,7 +660,8 @@ function AppInner() {
         items={receiptItems}
         batchId={receiptBatchId}
         kioskKey={(typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null) || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY}
-        onClose={() => { setReceiptBatchId(null); setReceiptItems(null) }}
+        onHold={setReceiptHold}
+        onClose={() => { setReceiptBatchId(null); setReceiptItems(null); setReceiptHold(false) }}
       />
       <HelpTutorial run={helpOpen} onClose={() => setHelpOpen(false)} />
 
