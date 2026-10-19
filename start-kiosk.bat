@@ -42,5 +42,5 @@ rem screen is opened below: this script runs hidden, so a "pause" here would jus
 powershell -NoProfile -Command "$u='http://127.0.0.1:%PORT%/api/health'; for($i=0;$i -lt 150;$i++){ try{ if((Invoke-WebRequest $u -UseBasicParsing -TimeoutSec 2).StatusCode -eq 200){ exit 0 } }catch{}; Start-Sleep 2 }; exit 1"
 if errorlevel 1 echo Backend did not become healthy in time - see logs\backend.log >> "logs\kiosk-start.log"
 
-start "" msedge --kiosk "http://localhost:%PORT%" --edge-kiosk-type=fullscreen --no-first-run
+start "" msedge --kiosk "http://localhost:%PORT%" --edge-kiosk-type=fullscreen --no-first-run --disable-features=Translate,TranslateUI,msEdgeTranslate --disable-translate --disable-infobars
 endlocal
