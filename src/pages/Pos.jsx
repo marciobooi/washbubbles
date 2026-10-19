@@ -68,6 +68,21 @@ export default function Pos() {
   }
 
   // Subscribe to WS events: RFID tap auto-loads card and opens modal
+  // A card that is ALREADY in the reader when this page loads (after a reload, or the screen refreshing itself): the card events
+  // were missed, so ask the shop what is in the reader and show it, as if it had just been put in.
+  React.useEffect(() => {
+    const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
+    const kioskKey = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
+    api.request('/middleware/client', { method: 'GET', headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined, skipAuth: true, expect: 'json' })
+      .then((s) => {
+        if (s?.hasCard && s?.cardNumber) {
+          cardInReader.current = true
+          loadCard(s.cardNumber).then(() => { if (cardInReader.current) setCardOpen(true) })
+        }
+      })
+      .catch(() => {})
+  }, [])
+
   React.useEffect(() => {
     connect()
     const unsub = subscribe((message) => {
