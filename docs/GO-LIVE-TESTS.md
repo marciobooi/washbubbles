@@ -255,7 +255,8 @@ Steps (on the PC, PowerShell, in `C:\washbubbles`):
 ### 13.3 Washers
 - [ ] Paid start of a washer with exact cash; Ocupado on the kiosk **and** in the central admin within seconds
 - [ ] A washer is held for its price-row duration (60 min if none is set) when its signal never shows it running
-- [ ] Lavar 1 and Lavar 6: set interface + port in the admin first (both are empty on Hetzner); check Lavar 1 polarity
+- [x] Lavar 1: interface Int 1 / port 2, polarity high (occupied = signal on) verified with a paid 10.50 EUR wash on 2026-10-19: `activate-machine` 200, `machine-started`, held 45 min, central shows `working`
+- [x] Lavar 6: really out of order (owner, 2026-10-19): nothing to configure, skip until it is repaired
 
 ### 13.4 Cards
 - [ ] Buy a card WITHOUT inserting money: the Pay button stays disabled; pressing nothing charges nothing
