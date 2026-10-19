@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react'
 import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
 import Modal from '@/components/ui/Modal'
-import { PiggyBank } from 'lucide-react'
+import { PiggyBank, Trash2 } from 'lucide-react'
 import DayCloseForm from '@/components/dayClose/DayCloseForm'
 import HopperRefillModal from '@/components/dayClose/HopperRefillModal'
 import { fmt, fmtDenomLabel, DiscrepancyPill, ALL_CASH_DENOMS, CoinChipGrid, buildDenomState, denomSum } from '@/components/dayClose/shared'
@@ -17,6 +17,17 @@ export default function AdminDayClose() {
   const [floatModalOpen, setFloatModalOpen] = useState(false)
   const [tab, setTab] = useState('fecho') // 'fecho' | 'hopper' | 'historico'
   const [refillOpen, setRefillOpen] = useState(false)
+  const [emptying, setEmptying] = useState(false)
+  async function emptyHopper() {
+    if (!window.confirm('Vão cair TODAS as moedas do hopper para a bandeja do troco. Já tem um recipiente por baixo? Pode demorar alguns minutos.')) return
+    setEmptying(true)
+    try {
+      const r = await api.emptyHopper()
+      toast({ title: r.dispensed > 0 ? `Hopper esvaziado: saíram ${fmt(r.dispensed)}€` : 'Não saiu nenhuma moeda', description: r.error || undefined, variant: r.dispensed > 0 ? 'success' : 'destructive' })
+    } catch (err) {
+      toast({ title: err?.body?.error || 'Erro ao esvaziar o hopper', variant: 'destructive' })
+    } finally { setEmptying(false) }
+  }
 
   const loadSummary = useCallback(async () => {
     setSummaryLoading(true)
@@ -89,6 +100,9 @@ export default function AdminDayClose() {
           <p className="text-sm text-emerald-900">Reforço: moedas que traz de fora para o hopper (por exemplo, acabaram as de 1€). Sobe o stock do hopper e entra como fundo, nunca como venda.</p>
           <button type="button" onClick={() => setRefillOpen(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-primary-600 text-white text-sm font-semibold px-4 py-2 shadow-sm">
             <PiggyBank className="w-4 h-4" strokeWidth={1.8} /> Fazer reforço
+          </button>
+          <button type="button" disabled={emptying} onClick={emptyHopper} className="inline-flex items-center gap-1.5 rounded-xl border border-rose-300 bg-white text-rose-700 text-sm font-semibold px-4 py-2 shadow-sm disabled:opacity-60">
+            <Trash2 className="w-4 h-4" strokeWidth={1.8} /> {emptying ? 'A esvaziar…' : 'Esvaziar hopper'}
           </button>
         </div>
       )}

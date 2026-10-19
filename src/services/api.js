@@ -378,6 +378,10 @@ export function createApi(config) {
     return request('/admin/hopper/refill', { method: 'POST', json: payload, expect: 'json' })
   }
 
+  function emptyHopper() {
+    return request('/admin/hopper/empty', { method: 'POST', json: { confirm: true }, expect: 'json' })
+  }
+
   function refillKioskHopper(payload, opts) {
     const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
     return request('/pos/hopper/refill', { method: 'POST', json: payload, headers, skipAuth: true, expect: 'json' })
@@ -678,6 +682,7 @@ export function createApi(config) {
     createDayClose,
     addDayCloseFloat,
     refillHopper,
+    emptyHopper,
     refillKioskHopper,
     emailDayCloseReceipt,
 

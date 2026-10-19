@@ -1240,6 +1240,25 @@ router.post('/hopper/refill', requireAdmin, async (req, res) => {
   res.status(status).json(body)
 })
 
+// POST /admin/hopper/empty — pay out EVERYTHING the hopper holds: a huge get-change; the controller answers with the part it
+// could not pay, so (asked - not paid) is what was inside. The coins drop into the tray: a container must be under it.
+router.post('/hopper/empty', requireAdmin, async (req, res) => {
+  if (req.body?.confirm !== true) return res.status(400).json({ error: 'Confirme o esvaziamento' })
+  const { default: coinMachine } = await import('../services/coinMachine.js')
+  if ((coinMachine.client?.getState?.().balance || 0) > 0) return res.status(409).json({ error: 'Há crédito de um cliente na máquina: espere ou devolva-o primeiro' })
+  const PeripheralT = withTenant(Peripheral, req)
+  const hopper = await PeripheralT.findOne({ type: 'hopper', enabled: true })
+  if (!hopper) return res.status(404).json({ error: 'Nenhum hopper configurado' })
+  const ASKED = 9999
+  const result = await coinMachine.dispenseChange(hopper._id, ASKED, { timeoutMs: 10 * 60 * 1000 })
+  const emptied = result?.success === false && result?.unconfirmed !== true && Number(result?.dispensed) > 0
+  const dispensed = Number(result?.dispensed) || 0
+  // Everything that could be paid was paid, so the stock the system keeps is zero now (counted by hand again after a refill).
+  if (dispensed > 0 || result?.success !== false) await PeripheralT.findOneAndUpdate({ _id: hopper._id }, { $set: { 'hopperConfig.currentCount': 0, 'hopperConfig.currentStock': {} } })
+  logAction(req, 'hopper.empty', 'Peripheral', hopper._id, { dispensed, error: result?.error })
+  res.json({ dispensed, emptied, error: result?.error, unconfirmed: !!result?.unconfirmed })
+});
+
 // POST /admin/day-close/adjust-float — add cash straight to the float (e.g.
 // seeding a starting till), without it counting as bankable sales money.
 router.post('/day-close/adjust-float', requireAdmin, async (req, res) => {

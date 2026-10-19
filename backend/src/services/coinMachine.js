@@ -1035,9 +1035,9 @@ class CoinMachine extends EventEmitter {
   /**
    * Dispense change
    */
-  async dispenseChange(hopperId, amount) {
+  async dispenseChange(hopperId, amount, opts = {}) {
     try {
-      const result = await this.middleware.dispenseChange(hopperId, amount)
+      const result = await this.middleware.dispenseChange(hopperId, amount, opts)
       
       this.emit('change-dispensed', { amount })
       

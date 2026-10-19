@@ -834,7 +834,7 @@ class Middleware extends EventEmitter {
   }
 
   /** `get-change`: the controller pays from its own hoppers and answers `no-change` with the shortfall in cents. */
-  dispenseChangeViaGateway(amount) {
+  dispenseChangeViaGateway(amount, { timeoutMs = 60000 } = {}) {
     return this.serializeGateway(async () => {
       const target = roundMoney(amount)
       const fail = (error, extra = {}) => ({ success: false, error, dispensed: 0, remaining: target, breakdown: [], ...extra })
@@ -850,7 +850,7 @@ class Middleware extends EventEmitter {
       if (!this.sendPackage({ op: 'get-change', data: euroToCents(target) })) {
         return fail('Low-level controller is not connected')
       }
-      const reply = this.waitForReply('no-change', { timeoutMs: 60000 })
+      const reply = this.waitForReply('no-change', { timeoutMs })
       // The hopper says 'hopper-status 400' (empty, jammed, off) BEFORE it answers 'no-change' with a shortfall of 0:
       // seen on the shop PC 2026-10-19, EUR 6.00 of change owed, nothing paid, and the answer read as success.
       let hopperFault = null
@@ -1870,13 +1870,13 @@ class Middleware extends EventEmitter {
    * the caller can tell the customer the truth. The old version reported
    * `{success:true}` on a jam and left the shortfall invisible.
    */
-  async dispenseChange(peripheralId, amount) {
+  async dispenseChange(peripheralId, amount, opts = {}) {
     const target = roundMoney(amount)
     if (!(target > 0)) return { success: true, dispensed: 0, remaining: 0, breakdown: [] }
 
     const hoppers = this.getHoppersFor(peripheralId)
     if (hoppers.length === 0) {
-      if (this.gatewayPeripherals('hopper').length > 0) return this.dispenseChangeViaGateway(target)
+      if (this.gatewayPeripherals('hopper').length > 0) return this.dispenseChangeViaGateway(target, opts)
       return { success: false, error: 'No hopper connected', dispensed: 0, remaining: target, breakdown: [] }
     }
 
