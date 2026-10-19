@@ -109,7 +109,13 @@ export default function ReceiptPrompt({ items, batchId, kioskKey, onClose, onHol
         </div>
       )}
 
-      <button onClick={onClose} className="text-xs text-neutral-400 hover:text-neutral-600 mt-2 underline underline-offset-2">
+      <button
+        type="button"
+        onClick={() => { onHold?.(false); onClose() }}
+        className={busy
+          ? "w-full h-16 mt-4 rounded-xl border-2 border-neutral-300 text-neutral-600 text-2xl font-semibold active:bg-neutral-100"
+          : "w-full h-12 mt-3 rounded-lg border border-neutral-300 text-neutral-600 text-base font-semibold active:bg-neutral-100"}
+      >
         {t('rcNoThanks')}
       </button>
     </div>
