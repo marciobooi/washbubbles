@@ -2,7 +2,7 @@
 #   git fetch; if origin/main has news: pull (fast-forward only), install dependencies if package files changed,
 #   build the screen into dist-new and swap it in, restart ONLY the backend (src\index.js; run-backend.bat starts it
 #   again), check /api/health. If anything fails it goes back to the previous commit and the previous screen.
-#   The kiosk browser is restarted at the end so the new screen is loaded.
+#   The kiosk browser is never touched: the screen reloads itself when it sees a new build and nobody is using it.
 # Manual run:  powershell -NoProfile -ExecutionPolicy Bypass -File scripts\kiosk-update.ps1 [-DryRun] [-Force]
 param([switch]$DryRun, [switch]$Force)
 
@@ -88,12 +88,6 @@ if ($back) {
   Log 'backend restarted and healthy'
 } elseif (-not (Healthy 30)) { Rollback 'backend not healthy' }
 
-# Reload the kiosk screen (the browser runs in the logged-in user's session: its own task starts it again).
-if ($front -or $back) {
-  Get-Process msedge -ErrorAction SilentlyContinue | Stop-Process -Force
-  Start-Sleep 3
-  & schtasks /run /tn 'WashBubbles Kiosk' 2>&1 | Out-Null
-  Log 'kiosk screen reloaded'
-}
+# The kiosk browser is NEVER closed from here: the screen sees the new build by itself (src/lib/autoReload.js) and reloads when nobody is touching it.
 Log "done: now at $((Invoke-Git rev-parse --short HEAD).Trim())"
 } finally { Remove-Item $lock -Force -ErrorAction SilentlyContinue }

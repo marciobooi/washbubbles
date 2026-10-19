@@ -7,6 +7,7 @@ import App from './App'
 import OnScreenKeyboard from './components/OnScreenKeyboard'
 import './lib/i18n'
 import './index.css'
+import { startAutoReload } from './lib/autoReload'
 
 const queryClient = new QueryClient()
 
@@ -22,4 +23,5 @@ createRoot(document.getElementById('root')).render(
     </QueryClientProvider>
 
 )
-// self-update test 1792435180
+
+startAutoReload()
