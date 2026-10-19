@@ -197,5 +197,13 @@
   "holderEmail": "E-mail",
   "holderNif": "NIF",
   "insertCardTitle": "Insérez votre carte dans le lecteur",
-  "insertCardText": "Votre solde, l’historique et les recharges s’affichent ici dès que la carte est lue."
+  "insertCardText": "Votre solde, l’historique et les recharges s’affichent ici dès que la carte est lue.",
+  "editData": "Modifier mes données",
+  "editTitle": "Mes données",
+  "editHint": "Ces données sont conservées avec votre carte, pour vous.",
+  "editSave": "Enregistrer",
+  "editCancel": "Annuler",
+  "editSaved": "Données enregistrées",
+  "editError": "Impossible d’enregistrer les données",
+  "editCardGone": "Insérez votre carte dans le lecteur pour modifier vos données"
 }

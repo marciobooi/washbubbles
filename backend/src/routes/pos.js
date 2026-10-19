@@ -563,6 +563,28 @@ router.get('/cards/:code/history', cardLookupLimiter, requireKiosk, async (req, 
   res.json({ card, transactions })
 })
 
+// The holder edits their own data on the kiosk. Only while THAT card is in the reader (they hold it), kiosk key required.
+router.post('/cards/:code/profile', cardLookupLimiter, requireKiosk, async (req, res) => {
+  const code = String(req.params.code)
+  const st = coinMachine.client?.getState?.() || {}
+  if (!(st.hasCard && String(st.cardNumber) === code)) return res.status(409).json({ error: 'Insira o cartão no leitor para editar os dados', code: 'card-not-in-reader' })
+  const cut = (v, n) => String(v ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, n)
+  const name = cut(req.body?.name, 80), email = cut(req.body?.email, 120), phone = cut(req.body?.phone, 30), contribuinte = cut(req.body?.contribuinte, 20)
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Email inválido', code: 'bad-email' })
+  const hasData = Boolean(name || email || phone || contribuinte)
+  const Card = (await import('../models/card.js')).default
+  const CardT = withTenant(Card, req)
+  const card = await CardT.findOne({ code })
+  if (!card) return res.status(404).json({ error: 'Card not found' })
+  // Personal data needs the holder's authorisation (GDPR): ticked now, or given before.
+  if (hasData && !req.body?.privacyConsent && !card.privacyConsentAt) return res.status(400).json({ error: 'Consentimento em falta', code: 'consent-required' })
+  const set = { name, email, phone, contribuinte, marketingOptIn: hasData && Boolean(req.body?.marketingOptIn) }
+  if (!hasData) set.privacyConsentAt = null
+  else if (req.body?.privacyConsent && !card.privacyConsentAt) set.privacyConsentAt = new Date()
+  const updated = await CardT.findOneAndUpdate({ code }, { $set: set }, { new: true }).lean()
+  res.json({ success: true, card: updated })
+})
+
 // Mark card as written after RFID write
 router.post('/card/mark-written/:code', requireKiosk, async (req, res) => {
   const code = req.params.code

@@ -5,13 +5,15 @@ import { Plus, RotateCcw, ShieldCheck, ChevronLeft, ChevronRight, ArrowLeft, Cre
 import { WasherIcon, DryerIcon } from './icons/MachineIcons'
 import api from '@/services/api'
 import { toast } from '@/components/ui/Toast'
+import CardEditModal from './CardEditModal'
 
 const MAX_RECENT = 10 // how many movements the window keeps
 const PAGE_SIZE = 5   // shown per page, flipped with big touch buttons (no inner scrolling)
 const QUICK = [5, 10, 20, 50]
 
 // `onRecharge` used to be accepted here and never called — the cart-based flow superseded it.
-export default function CardModal({ open, onClose, transactions = [], balance = 0, card = null }) {
+export default function CardModal({ open, onClose, transactions = [], balance = 0, card = null, onProfileSaved }) {
+  const [editOpen, setEditOpen] = React.useState(false)
   const { addToCart, openCart } = useCart()
   const { t, i18n } = useTranslation('pos')
   const { t: tc } = useTranslation('cart')
@@ -144,6 +146,7 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
               <div className="mt-16 text-3xl font-medium tracking-[0.25em] font-mono relative">{masked}</div>
               {holder.name && <div className="mt-4 text-2xl font-semibold text-emerald-50 relative truncate">{holder.name}</div>}
             </div>
+            <button type="button" onClick={() => setEditOpen(true)} className="-mt-3 self-start h-14 px-6 rounded-xl border-2 border-slate-200 text-slate-600 font-semibold text-xl active:bg-slate-50">{tc('editData')}</button>
             {holderRows.length > 0 && (
               <div className="-mt-2 flex flex-wrap gap-x-8 gap-y-2 text-lg text-slate-500">
                 {holderRows.map(([k, v]) => (<span key={k}><span className="text-slate-400">{k}: </span><span className="font-semibold text-slate-700">{v}</span></span>))}
@@ -266,6 +269,7 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
           </section>
         </div>
       </div>
+      <CardEditModal open={editOpen} card={card} onClose={() => setEditOpen(false)} onSaved={(c) => onProfileSaved?.(c)} />
     </div>
   )
 }

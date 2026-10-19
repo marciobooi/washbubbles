@@ -197,5 +197,13 @@
   "holderEmail": "Email",
   "holderNif": "NIF",
   "insertCardTitle": "Insira o cartão no leitor",
-  "insertCardText": "O saldo, o histórico e as recargas aparecem aqui assim que o cartão for lido."
+  "insertCardText": "O saldo, o histórico e as recargas aparecem aqui assim que o cartão for lido.",
+  "editData": "Editar dados",
+  "editTitle": "Os meus dados",
+  "editHint": "Estes dados ficam guardados no seu cartão para si.",
+  "editSave": "Guardar",
+  "editCancel": "Cancelar",
+  "editSaved": "Dados guardados",
+  "editError": "Não foi possível guardar os dados",
+  "editCardGone": "Insira o cartão no leitor para editar os dados"
 }

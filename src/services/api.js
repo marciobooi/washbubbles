@@ -379,6 +379,13 @@ export function createApi(config) {
     return request('/admin/hopper/refill', { method: 'POST', json: payload, expect: 'json' })
   }
 
+  function blankCardAtReader() { return request('/admin/cards/blank-reader', { method: 'POST', json: { confirm: true }, expect: 'json' }) }
+
+  function updateCardProfile(code, payload, opts) {
+    const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
+    return request(`/pos/cards/${encodeURIComponent(code)}/profile`, { method: 'POST', json: payload, headers, skipAuth: true, expect: 'json' })
+  }
+
   function adminCommand(id) { return request(`/admin/commands/${id}`, { method: 'GET', expect: 'json' }) }
 
   function emptyHopper() {
@@ -687,6 +694,8 @@ export function createApi(config) {
     refillHopper,
     emptyHopper,
     adminCommand,
+    updateCardProfile,
+    blankCardAtReader,
     refillKioskHopper,
     emailDayCloseReceipt,
 

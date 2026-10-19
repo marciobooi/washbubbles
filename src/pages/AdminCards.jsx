@@ -23,6 +23,28 @@ export default function AdminCards() {
     contribuinte: ''
   })
   const [saving, setSaving] = useState(false)
+  const [blanking, setBlanking] = useState(false)
+  async function blankCard() {
+    if (!window.confirm('Vai APAGAR o nome, o NIF e o saldo do cartão que está no leitor da loja (experiência). Só para cartões de teste. Continuar?')) return
+    setBlanking(true)
+    try {
+      let r = await api.blankCardAtReader()
+      if (r.queued) {
+        const id = r.commandIds?.[0]
+        r = { error: 'A loja não respondeu a tempo' }
+        for (let i = 0; i < 40; i++) {
+          await new Promise((ok) => setTimeout(ok, 3000))
+          const c = await api.adminCommand(id).catch(() => null)
+          if (c?.status === 'done') { r = c.result || {}; break }
+          if (c?.status === 'failed') { r = { error: c.error }; break }
+        }
+      }
+      if (r.code) { toast({ title: `Cartão ${r.code} apagado`, description: `Tinha: ${r.name || 'sem nome'}, ${Number(r.balance || 0).toFixed(2)}€` }); loadCards() }
+      else toast({ title: 'Não foi possível apagar o cartão', description: r.error, variant: 'destructive' })
+    } catch (e) {
+      toast({ title: e?.body?.error || 'Erro ao apagar o cartão', variant: 'destructive' })
+    } finally { setBlanking(false) }
+  }
 
   useEffect(() => {
     loadCards()
@@ -199,6 +221,14 @@ export default function AdminCards() {
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold">Cartões de Cliente</h2>
         <div className="flex items-center gap-3">
+          <button
+            onClick={blankCard}
+            disabled={blanking}
+            className="flex items-center gap-2 px-4 py-2 border border-rose-300 text-rose-700 bg-white rounded hover:bg-rose-50 transition-colors disabled:opacity-60"
+          >
+            <X className="h-4 w-4" />
+            {blanking ? 'A apagar…' : 'Limpar cartão no leitor'}
+          </button>
           <button
             onClick={openCreateForm}
             className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"

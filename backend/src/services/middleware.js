@@ -928,6 +928,28 @@ class Middleware extends EventEmitter {
     })
   }
 
+  /**
+   * Wipe the card that is at the reader: `write-card` with `new:true` and empty name / tax id / balance (what a blank card reports).
+   * EXPERIMENTAL on this controller (2026-10-19): the first card it is tried on shows whether `new:true` is honoured. A second
+   * attempt with balance "0" is made if the first is refused.
+   */
+  blankCardViaGateway() {
+    return this.serializeGateway(async () => {
+      if (!this.lastCard) throw new Error('Não há nenhum cartão no leitor')
+      const before = { cardId: String(this.lastCard.cardId), name: this.lastCard.name || '', nif: this.lastCard.nif || '', balance: centsToEuro(this.lastCard.balance) }
+      let lastCode = ''
+      for (const balance of [' ', '0']) {
+        if (!this.sendPackage({ op: 'write-card', data: { cardId: before.cardId, name: ' ', nif: ' ', balance, new: true, admin: false } })) {
+          throw new Error('Low-level controller is not connected — cannot write card')
+        }
+        const pkg = await this.waitForReply('write-card', { timeoutMs: 30000, accept: (p) => p.code !== undefined && String(p.code) !== '200' })
+        lastCode = String(pkg.code)
+        if (lastCode === '201') return { success: true, before }
+      }
+      throw new Error(`O controlador recusou apagar o cartão (code ${lastCode})`)
+    })
+  }
+
   /** `print-receipt`: the controller formats the ticket from a structured object. */
   async printViaGateway(peripheral, content) {
     const blank = ' ' // the controller's printer chokes on empty strings

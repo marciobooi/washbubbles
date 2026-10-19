@@ -411,6 +411,10 @@ router.post('/commands/:id/done', async (req, res) => {
       executedAt: new Date(),
       ...(req.body?.result !== undefined ? { result: req.body.result } : {})
     }, { new: true })
+    // A card wiped at the shop: forget it here too (its sales stay).
+    if (cmd && cmd.type === 'blank_card' && req.body?.result?.code) {
+      await withTenant(Card, req).findOneAndDelete({ code: String(req.body.result.code) }).catch(() => {})
+    }
     // The shop did it: reflect it on this (central) server's own copy of the machine, so the
     // admin screen shows what really happened and not merely that a request was sent.
     if (cmd && (cmd.type === 'start_machine' || cmd.type === 'end_machine') && cmd.payload?.machineId && mongoose.isValidObjectId(cmd.payload.machineId)) {

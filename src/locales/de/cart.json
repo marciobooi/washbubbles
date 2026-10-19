@@ -197,5 +197,13 @@
   "holderEmail": "E-Mail",
   "holderNif": "Steuer-Nr.",
   "insertCardTitle": "Stecken Sie Ihre Karte in das Lesegerät",
-  "insertCardText": "Guthaben, Verlauf und Aufladungen erscheinen hier, sobald die Karte gelesen wurde."
+  "insertCardText": "Guthaben, Verlauf und Aufladungen erscheinen hier, sobald die Karte gelesen wurde.",
+  "editData": "Daten bearbeiten",
+  "editTitle": "Meine Daten",
+  "editHint": "Diese Daten werden für Sie zusammen mit Ihrer Karte gespeichert.",
+  "editSave": "Speichern",
+  "editCancel": "Abbrechen",
+  "editSaved": "Daten gespeichert",
+  "editError": "Die Daten konnten nicht gespeichert werden",
+  "editCardGone": "Stecken Sie Ihre Karte in das Lesegerät, um Ihre Daten zu bearbeiten"
 }

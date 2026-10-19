@@ -162,6 +162,7 @@ class CoinMachine extends EventEmitter {
             if (!(r.dispensed > 0)) throw new Error(r.error || 'Nenhuma moeda saiu do hopper')
             return r
           },
+          blank_card: async () => this.blankCardAtReader(),
           sync_now: async () => { await this.downlink?.pullAll?.(); return { success: true } },
         },
       })
@@ -1035,6 +1036,17 @@ class CoinMachine extends EventEmitter {
       return { success: remaining <= 0, refunded: dispensed, remaining, error }
     })().finally(() => { this.refunding = null })
     return this.refunding
+  }
+
+  /** Wipe the card at the reader and forget it here (its sales stay: that money really came in). */
+  async blankCardAtReader() {
+    const res = await this.middleware.blankCardViaGateway()
+    const code = res.before.cardId
+    const CardPurchase = (await import('../models/cardPurchase.js')).default
+    await Card.deleteMany(this.scoped({ code }))
+    await CardPurchase.deleteMany(this.scoped({ cardCode: code }))
+    await this.auditSystem('card.blanked', res.before)
+    return { code, name: res.before.name, balance: res.before.balance }
   }
 
   /**

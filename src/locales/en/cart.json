@@ -197,5 +197,13 @@
   "holderEmail": "Email",
   "holderNif": "Tax ID",
   "insertCardTitle": "Insert your card in the reader",
-  "insertCardText": "Your balance, history and top-ups appear here as soon as the card is read."
+  "insertCardText": "Your balance, history and top-ups appear here as soon as the card is read.",
+  "editData": "Edit details",
+  "editTitle": "My details",
+  "editHint": "These details are kept with your card, for you.",
+  "editSave": "Save",
+  "editCancel": "Cancel",
+  "editSaved": "Details saved",
+  "editError": "Could not save the details",
+  "editCardGone": "Insert your card in the reader to edit your details"
 }
