@@ -423,6 +423,18 @@ class CoinMachine extends EventEmitter {
       subject = 'Controlador reiniciado - verificar leitor de notas'
       message = 'A sessão com o controlador é nova. O leitor de notas pode ter ficado desligado: se a luz estiver apagada, volte a ligar o cabo do leitor.'
     }
+    // A NEW controller session (the PC just started, or the controller restarted): the controller has switched the bill acceptor off
+    // and a plain reconnect does not bring it back, only the complete peripheral list does. Send it by ourselves, once per session,
+    // so nobody has to re-seat a cable after a reboot. (A backend restart alone keeps the old session: nothing is sent.)
+    if (s.controller === 'disconnected') this.autoReinitDone = false
+    else if (s.controller === 'connected' && Number(s.sessionAgeMs) < 5 * 60_000 && !this.autoReinitDone) {
+      this.autoReinitDone = true
+      const timer = setTimeout(() => {
+        console.log('[Bridge] new controller session: re-initialising the peripherals')
+        this.middleware.reinitPeripherals(['all']).catch((e) => console.error('[Bridge] re-init failed:', e.message))
+      }, 8000)
+      timer.unref?.()
+    }
     if (!subject) return
     if (this.lastBridgeAlert && now - this.lastBridgeAlert.at < 10 * 60_000 && this.lastBridgeAlert.subject === subject) return
     this.lastBridgeAlert = { at: now, subject }

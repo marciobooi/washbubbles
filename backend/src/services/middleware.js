@@ -664,6 +664,20 @@ class Middleware extends EventEmitter {
       if (protocol === 'ccTalk' || protocol === 'rs232') entry.baudRate = String(p.baudRate || 9600)
       per.push(entry)
     }
+    // The controller's list is the HARDWARE set and always complete: a peripheral the app has switched off (for instance a broken
+    // printer) or does not hold a connection for is still sent with its verified entry, otherwise the list comes out short and the
+    // controller drops it (2026-10-19: with the printer disabled the list had 5 entries and the card reader vanished).
+    if (types.length === ALL.length) {
+      const DEFAULT = {
+        bill_acceptor: { protocol: 'ccTalk', type: 'bill-acceptor', addr: '40', baudRate: '9600' },
+        hopper: { protocol: 'ccTalk', type: 'hopper', addr: '3', baudRate: '9600' },
+        coin_acceptor: { protocol: 'ccTalk', type: 'coin-acceptor', addr: '2', baudRate: '9600' },
+        printer: { protocol: 'rs232', type: 'printer', addr: '', baudRate: '9600' },
+        rfid_reader: { protocol: 'spi', type: 'rfid-rw', addr: '' },
+        card_dispenser: { protocol: 'pulse', type: 'card-dispenser', addr: '22' },
+      }
+      for (const ty of ALL) if (!per.some((e) => e.type === TYPE_KEY[ty])) per.push({ ...DEFAULT[ty] })
+    }
     // Always in the controller's own order, whatever order the peripherals were attached in.
     const rank = (e) => types.findIndex((ty) => TYPE_KEY[ty] === e.type)
     per.sort((x, y) => rank(x) - rank(y))

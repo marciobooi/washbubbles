@@ -47,6 +47,19 @@ describe('Re-initialise controller peripherals after (re)connect', () => {
     ])
   })
 
+  it('all is ALWAYS the complete six: a disabled printer and a missing reader are still sent (a short list drops devices)', async () => {
+    const { mw, sent } = build([
+      { type: 'bill_acceptor', protocol: 'cctalk', address: '40' },
+      { type: 'coin_acceptor', protocol: 'cctalk', address: '2' },
+      { type: 'hopper', protocol: 'cctalk', address: '3' },
+      { type: 'card_dispenser', protocol: 'pulse', address: '22' },
+      { type: 'printer', protocol: 'rs232', address: '', enabled: false },
+    ])
+    await mw.reinitPeripherals(['all'])
+    expect(sent[0].per.map((e) => e.type)).to.deep.equal(['bill-acceptor', 'hopper', 'coin-acceptor', 'printer', 'rfid-rw', 'card-dispenser'])
+    expect(sent[0].per.find((e) => e.type === 'printer')).to.deep.equal({ protocol: 'rs232', type: 'printer', addr: '', baudRate: '9600' })
+  })
+
   it('does nothing when the controller is not connected, or there is nothing to address', async () => {
     const off = build([{ type: 'bill_acceptor', protocol: 'cctalk', address: '40' }], false)
     expect((await off.mw.reinitPeripherals()).sent).to.equal(false)
