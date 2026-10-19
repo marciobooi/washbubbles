@@ -292,6 +292,10 @@ Steps (on the PC, PowerShell, in `C:\washbubbles`):
 - 33 EUR of change from a 35 EUR credit: `get-change 3300` -> `no-change 0` and 33 EUR really dropped, so **`no-change` = the part NOT paid (0 = all paid)**, as the code assumes. Both dryers in one payment, the home screen after payment, the credit zeroed as the change starts: verified.
 - The empty-hopper command answered `no-change 16640` for a 9999 EUR request: still odd (see 13.5c).
 
+- Dryers (Secar 7): 10 EUR = ONE `activate-machine impulses 5`, controller 200, the machine held until exactly 75 min later; the all-at-once mode works, no need for `DRYER_IMPULSE_MODE=staggered`. Tested and fine: not enough money (nothing starts, credit stays), cash first then choose a machine (the cart does not pay by itself), cycle changes, 2 machines in one purchase.
+- **Door open on a running dryer (Secar 7 and Secar 11): NO change at all** in `status_int` (interfaces 16 and 15 stay `00000001`), no `machine-*` event, backend keeps `doorClosed: true`. The dryer door is not on a signal we read; the system only knows paid time. Ask the installer / Krebe whether the door has an output.
+- Secar 7 and Secar 11 never show `occupied: true` from the signal while running (held by the paid time).
+
 ### 13.5c LOW PRIORITY, later (2026-10-19)
 - [ ] Hopper jam of 2026-10-19 was a 0.05 EUR coin jam (`hopper-status 400`); the code now treats a hopper fault before `no-change` as nothing paid. Skipped for now: count the coins of the Esvaziar-hopper test. The controller answered `no-change 16640` (166.40 EUR): if the container holds about that, `no-change` is the amount PAID, and `dispenseChangeViaGateway` + `emptyHopper` must be changed to read it so; until then do not trust the "saíram X EUR" figure of the button (it may have booked 9832.60).
 - [ ] Refill the hopper with 2 EUR, 1 EUR and 0.50 EUR coins and count them in the Hopper e reforço menu; then the change test (3 EUR for a 2 EUR machine, 6 EUR for a 2 EUR machine) and note what drops.
