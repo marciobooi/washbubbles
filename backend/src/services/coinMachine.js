@@ -12,6 +12,7 @@ import { broadcastMachine, broadcastMachines, broadcastHardwareEvent } from '../
 import { roundMoney } from '../utils/money.js'
 import { isChannelBusy } from './lowLevel.js'
 import { CardSync } from './cardSync.js'
+import { isBlankCard } from './blankCard.js'
 import { Uplink } from './uplink.js'
 import { Downlink } from './downlink.js'
 import { RemoteCommands } from './remoteCommands.js'
@@ -594,7 +595,7 @@ class CoinMachine extends EventEmitter {
     const { cardNumber } = data
 
     // A BLANK card at the reader (just dispensed after a purchase): write the purchase onto it now.
-    if (data.card && String(data.card.new) === 'true' && String(data.card.admin) !== 'true') {
+    if (data.card && isBlankCard(data.card)) {
       this.currentBlank = String(data.card.cardId)
       await this.activatePendingCard(this.currentBlank)
       return

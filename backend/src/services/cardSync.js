@@ -14,6 +14,7 @@
  *
  * Reference: docs/SHOP-HARDWARE-AND-COMMUNICATIONS.md §13
  */
+import { isBlankCard } from './blankCard.js'
 import EventEmitter from 'events'
 import mongoose from 'mongoose'
 import Card, { onCardChanged } from '../models/card.js'
@@ -216,7 +217,7 @@ export class CardSync extends EventEmitter {
     // A blank card (no id yet) is the card-purchase flow's business, not ours. The controller reports a
     // blank card with new:"true" and a made-up id; adopting that id created a second, empty card and the
     // purchased balance was never written.
-    if (!code || String(cardData?.new) === 'true') return { status: 'skipped', reason: 'blank-card' }
+    if (!code || isBlankCard(cardData)) return { status: 'skipped', reason: 'blank-card' }
     const rawCents = Number(cardData?.balance)
     if (!Number.isFinite(rawCents) || rawCents < 0) {
       return { status: 'invalid', reason: 'unreadable card data' }
