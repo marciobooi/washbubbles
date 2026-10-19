@@ -477,6 +477,16 @@ export default function AdminCards() {
                           )}
                         </div>
 
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Create/Edit Form Modal */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={closeForm}>
@@ -625,15 +635,6 @@ export default function AdminCards() {
                 )}
                 {saving ? 'A guardar...' : 'Guardar'}
               </button>
-            </div>
-          </div>
-        </div>
-      )}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
             </div>
           </div>
         </div>
