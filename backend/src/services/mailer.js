@@ -52,7 +52,12 @@ export async function sendMail({ to, subject, text, html }) {
   const fromName = process.env.MAIL_FROM_NAME
   const from = fromName ? `"${fromName.replace(/"/g, "'")}" <${address}>` : address
   if (t) {
-    await t.sendMail({ from, to, subject, text, html })
+    const info = await t.sendMail({ from, to, subject, text, html })
+    // Say what the mail server answered (the recipient is shown only in part: it is a customer's address).
+    const hide = (addr) => String(addr).replace(/^(.).*(@.*)$/, '$1***$2')
+    const acc = (info?.accepted || []).map(hide).join(',') || '-'
+    const rej = (info?.rejected || []).map(hide).join(',')
+    console.log(`mailer: "${subject}" accepted by the mail server for ${acc}${rej ? ` REJECTED ${rej}` : ''} (${info?.response || ''})`)
   } else {
     console.log('mailer: transport not configured, printing message:')
     console.log('to:', to)
