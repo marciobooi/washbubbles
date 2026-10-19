@@ -207,5 +207,9 @@
   "editError": "Impossible d’enregistrer les données",
   "editCardGone": "Insérez votre carte dans le lecteur pour modifier vos données",
   "cardBlankTitle": "Carte vierge",
-  "cardBlankText": "Cette carte n’a encore ni données ni solde. Utilisez « Acheter une carte » pour l’activer."
+  "cardBlankText": "Cette carte n’a encore ni données ni solde. Utilisez « Acheter une carte » pour l’activer.",
+  "payNoBalance": "Solde insuffisant sur la carte. Rechargez-la ou payez en espèces.",
+  "payNoBalanceAmt": "Solde insuffisant sur la carte ({{balance}} disponibles). Rechargez-la ou payez en espèces.",
+  "payNoCash": "Espèces insuffisantes. Insérez le montant manquant.",
+  "payCardUnknown": "Carte non reconnue."
 }

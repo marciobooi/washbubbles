@@ -73,6 +73,16 @@ function checkoutBatchId(items) {
   return `batch-${Math.abs(hash).toString(36)}`
 }
 
+// The server answers in English ('Insufficient balance', ...): say it in the customer's language.
+function friendlyPayError(err, raw, tr) {
+  const s = String(raw || '')
+  const bal = err?.body?.balance
+  if (/insufficient balance/i.test(s)) return Number.isFinite(Number(bal)) ? tr('payNoBalanceAmt', { balance: `${Number(bal).toFixed(2)}€` }) : tr('payNoBalance')
+  if (/insufficient (cash|payment|credits)/i.test(s)) return tr('payNoCash')
+  if (/card not found/i.test(s)) return tr('payCardUnknown')
+  return s
+}
+
 export default function App() {
   return (
     <BrandingProvider>
@@ -333,7 +343,7 @@ function AppInner() {
               return
             }
           } catch (e) {
-            const msg = e?.message || tr('payErrorCash')
+            const msg = friendlyPayError(e, e?.message, tr) || tr('payErrorCash')
             toast({ title: tr('payFailed'), description: msg, variant: 'destructive' })
             return
           }
@@ -359,7 +369,7 @@ function AppInner() {
               return
             }
           } catch (e) {
-            const msg = e?.message || tr('payErrorCash')
+            const msg = friendlyPayError(e, e?.message, tr) || tr('payErrorCash')
             toast({ title: tr('payFailed'), description: msg, variant: 'destructive' })
             return
           }
@@ -370,7 +380,7 @@ function AppInner() {
         if (!res.success) {
           // Forward meaningful errors to the user
           const noCard = res.error?.status === 404 && /card/i.test(String(res.error?.body?.error || res.error?.message || ''))
-          const msg = noCard ? tr('insertCardToRecharge') : (res.error?.message || (res.error && res.error.body && res.error.body.error) || tr('payErrorCash'))
+          const msg = noCard ? tr('insertCardToRecharge') : friendlyPayError(res.error, res.error?.message || (res.error && res.error.body && res.error.body.error), tr) || tr('payErrorCash')
           toast({ title: noCard ? msg : tr('payFailed'), description: noCard ? undefined : msg, variant: noCard ? 'warning' : 'destructive' })
           return
         }
@@ -433,7 +443,7 @@ function AppInner() {
               return
             }
           } catch (e) {
-            const msg = e?.message || tr('payErrorCard')
+            const msg = friendlyPayError(e, e?.message, tr) || tr('payErrorCard')
             toast({ title: tr('payErrorCard'), description: msg, variant: 'destructive' })
             return
           }
@@ -458,7 +468,7 @@ function AppInner() {
               return
             }
           } catch (e) {
-            const msg = e?.message || tr('payErrorCard')
+            const msg = friendlyPayError(e, e?.message, tr) || tr('payErrorCard')
             toast({ title: tr('payErrorCard'), description: msg, variant: 'destructive' })
             return
           }
@@ -479,7 +489,7 @@ function AppInner() {
           const res = await processPayment(machineItems, { method: 'card', cardCode, batchId, kioskKey, couponCode: opts.couponCode })
           if (!res.success) {
             const status = res.error?.status || res.error?.response?.status
-            const msg = res.error?.message || (res.error && res.error.body && res.error.body.error) || res.error || 'Erro desconhecido'
+            const msg = friendlyPayError(res.error, res.error?.message || (res.error && res.error.body && res.error.body.error) || res.error || 'Erro desconhecido', tr)
             if (status === 409) {
               toast({ title: tr('machineBusy'), description: String(msg), variant: 'destructive' })
             } else {

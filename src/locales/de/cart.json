@@ -207,5 +207,9 @@
   "editError": "Die Daten konnten nicht gespeichert werden",
   "editCardGone": "Stecken Sie Ihre Karte in das Lesegerät, um Ihre Daten zu bearbeiten",
   "cardBlankTitle": "Leere Karte",
-  "cardBlankText": "Diese Karte hat noch keine Daten und kein Guthaben. Aktivieren Sie sie mit „Karte kaufen“."
+  "cardBlankText": "Diese Karte hat noch keine Daten und kein Guthaben. Aktivieren Sie sie mit „Karte kaufen“.",
+  "payNoBalance": "Nicht genug Guthaben auf der Karte. Laden Sie sie auf oder zahlen Sie bar.",
+  "payNoBalanceAmt": "Nicht genug Guthaben auf der Karte (Guthaben: {{balance}}). Laden Sie sie auf oder zahlen Sie bar.",
+  "payNoCash": "Nicht genug Bargeld. Werfen Sie den fehlenden Betrag ein.",
+  "payCardUnknown": "Karte nicht erkannt."
 }

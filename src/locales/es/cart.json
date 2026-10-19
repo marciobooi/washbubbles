@@ -207,5 +207,9 @@
   "editError": "No se pudieron guardar los datos",
   "editCardGone": "Inserte la tarjeta en el lector para editar sus datos",
   "cardBlankTitle": "Tarjeta en blanco",
-  "cardBlankText": "Esta tarjeta aún no tiene datos ni saldo. Use «Comprar tarjeta» para activarla."
+  "cardBlankText": "Esta tarjeta aún no tiene datos ni saldo. Use «Comprar tarjeta» para activarla.",
+  "payNoBalance": "Saldo insuficiente en la tarjeta. Recárguela o pague en efectivo.",
+  "payNoBalanceAmt": "Saldo insuficiente en la tarjeta (tiene {{balance}}). Recárguela o pague en efectivo.",
+  "payNoCash": "Efectivo insuficiente. Introduzca el importe que falta.",
+  "payCardUnknown": "Tarjeta no reconocida."
 }
