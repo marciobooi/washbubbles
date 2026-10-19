@@ -337,6 +337,19 @@ router.post('/cash/pay', requireKiosk, async (req, res) => {
     try { await broadcastMachine(updated) } catch (e) { console.error('[gateways] broadcastMachine error', e) }
   }
 
+  // The cash in the session is spent the moment the change starts to come out: from then on credit makes no sense, and nothing
+  // (the idle refund, a second tap) may pay it out again. The SERVER does this, not the screen: when the screen gave up waiting for a
+  // big payout the credit stayed and the same 35 EUR was paid out twice (2026-10-19). Only what the customer put in after this
+  // payment was worked out stays; change the hopper could not pay is put back below.
+  let sessionLeft = 0
+  try {
+    const st = coinMachine.client?.getState?.()
+    if (st) {
+      sessionLeft = roundMoney(Math.max(0, Number(st.balance || 0) - insertedNum))
+      coinMachine.client.restoreBalances({ balance: sessionLeft, balanceCard: st.balanceCard })
+    }
+  } catch (e) { console.error('[gateways] could not settle the session credit:', e.message) }
+
   // Trigger hopper to dispense change if any is due
   let changeDispensed = false
   let changeError = null
@@ -359,6 +372,11 @@ router.post('/cash/pay', requireKiosk, async (req, res) => {
       // never reached any hopper and nobody was told. Now the kiosk gets a flag it
       // can act on.
       console.error(`[gateways] Change of €${change.toFixed(2)} owed on batch ${batchId}: ${changeError}`)
+      // Give the unpaid change back as credit (it is owed to the customer; the operator pays it by hand or the refund retries).
+      try {
+        const st = coinMachine.client?.getState?.()
+        if (st) coinMachine.client.restoreBalances({ balance: roundMoney(Number(st.balance || 0) + change), balanceCard: st.balanceCard })
+      } catch { /* the audit entry below already tells the operator */ }
       // The operator must see this: the customer is owed money out of the till.
       coinMachine.auditSystem?.('cash.change.owed', { batchId, amount: change, error: changeError })?.catch?.(() => {})
     }

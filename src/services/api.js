@@ -344,7 +344,8 @@ export function createApi(config) {
 
   function gatewayCashPay(payload, opts) {
     const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
-    return request('/gateways/cash/pay', { method: 'POST', json: payload, expect: 'json', headers, skipAuth: true })
+    // A big change payout (coins one by one) takes much longer than the usual 15 s: do not give up while the hopper pays.
+    return request('/gateways/cash/pay', { method: 'POST', json: payload, expect: 'json', headers, skipAuth: true, timeoutMs: 120000 })
   }
 
   // Post-purchase guest-WiFi voucher (batchId of a wash/dry sale)
