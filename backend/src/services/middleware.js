@@ -2443,6 +2443,9 @@ class Middleware extends EventEmitter {
         this.emit('card-removed', pkg.data)
         break
       case 'bridge-status': // from the local hardware bridge, not from the controller
+        // The bridge reports as soon as this program connects to it, BEFORE the application has subscribed: keep the last one so a
+        // late subscriber (coinMachine) still sees it, with the session age brought up to date.
+        this.bridgeStatus = { ...pkg, receivedAt: Date.now() }
         this.emit('bridge-status', pkg)
         break
       case 'has-card':

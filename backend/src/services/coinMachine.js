@@ -409,6 +409,12 @@ class CoinMachine extends EventEmitter {
       this.handleBridgeStatus(s).catch((e) => console.error('[Bridge] status handling failed:', e.message))
     })
     this.subscriptions.push(bridgeSub)
+    // The first status of a run arrives before the line above exists: handle the one the middleware kept.
+    const kept = this.middleware.bridgeStatus
+    if (kept) {
+      const age = Number(kept.sessionAgeMs) + (Date.now() - (kept.receivedAt || Date.now()))
+      this.handleBridgeStatus({ ...kept, sessionAgeMs: age }).catch((e) => console.error('[Bridge] status handling failed:', e.message))
+    }
   }
 
   /** Warn the operator when the controller session is new or lost (the bill acceptor may be off). */
