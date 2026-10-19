@@ -440,8 +440,8 @@ export default function AdminPeripherals() {
               </div>
 
               <div className="flex items-center gap-2 pb-4 mb-4 border-b border-black/[0.06]">
-                <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${getStatusDotColor(peripheral.status)}`} />
-                <span className="text-sm font-medium text-[#1c2530]">{getStatusText(peripheral.status)}</span>
+                <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${peripheral.enabled === false ? 'bg-neutral-400' : getStatusDotColor(peripheral.status)}`} />
+                <span className="text-sm font-medium text-[#1c2530]">{peripheral.enabled === false ? 'Desativada (fora de serviço)' : getStatusText(peripheral.status)}</span>
               </div>
 
               <div className="flex items-center justify-between">
