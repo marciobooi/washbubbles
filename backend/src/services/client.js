@@ -67,7 +67,9 @@ class Client extends EventEmitter {
     // on cash-mode payments — so this method zeroed a spent-down balance that had
     // never been written back, and the card kept its original DB value. That is
     // unlimited free washes: pay by "cash", card balance never actually drops.
-    await this.saveCardBalance()
+    // If an admin forgot this card while it sat in the reader there is nothing to save to: warn and still clear the session
+    // (it used to stop here and the deleted card stayed "in the reader").
+    try { await this.saveCardBalance() } catch (e) { console.warn(`[Client] ${e.message}`) }
 
     this.client.name = null
     this.client.addr = null
