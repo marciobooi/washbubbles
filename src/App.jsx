@@ -1,4 +1,4 @@
-import { Link, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { Link, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import React from 'react'
 import { useTranslation, Trans } from 'react-i18next'
 import Pos from './pages/Pos'
@@ -193,6 +193,9 @@ function AppInner() {
 
   const anyModalOpen = externalModalCount > 0 || cartOpen || helpOpen
   const location = useLocation()
+  const navigate = useNavigate()
+  // After a purchase the customer is done: back to the home screen (the receipt prompt and toasts live above the routes).
+  const goHome = () => { if (/^\/pos\/./.test(window.location.pathname)) navigate('/pos') }
   // Show compact Home button when any modal is open or when viewing machines (e.g. /pos/machines)
   const showHome = anyModalOpen || location.pathname.startsWith('/pos/machines')
 
@@ -324,6 +327,7 @@ function AppInner() {
               resetCredit()
               clearCart()
               setCartOpen(false)
+              goHome()
               return
             }
           } catch (e) {
@@ -349,6 +353,7 @@ function AppInner() {
               resetCredit()
               clearCart()
               setCartOpen(false)
+              goHome()
               return
             }
           } catch (e) {
@@ -390,6 +395,7 @@ function AppInner() {
         resetCredit()
         clearCart()
         setCartOpen(false)
+        goHome()
         return
       }
 
@@ -420,6 +426,7 @@ function AppInner() {
               toast({ title: tr('paidCard'), variant: 'success' })
               clearCart()
               setCartOpen(false)
+              goHome()
               return
             }
           } catch (e) {
@@ -444,6 +451,7 @@ function AppInner() {
               toast({ title: tr('paidCard'), variant: 'success' })
               clearCart()
               setCartOpen(false)
+              goHome()
               return
             }
           } catch (e) {
@@ -489,6 +497,7 @@ function AppInner() {
           toast({ title: tr('paidCard'), variant: 'success' })
           clearCart()
           setCartOpen(false)
+          goHome()
           return
         }
 
@@ -511,6 +520,7 @@ function AppInner() {
         toast({ title: tr('paidCard'), variant: 'success' })
         clearCart()
         setCartOpen(false)
+        goHome()
       } catch (e) {
         console.warn('Failed to persist card transactions', e)
         const status = e?.status || e?.response?.status || (e?.body && e.body.status)
