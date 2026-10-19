@@ -287,6 +287,10 @@ Steps (on the PC, PowerShell, in `C:\washbubbles`):
 - [ ] **Fecho**: "Para o banco" defaults to everything counted minus the coins that refill the hopper to target; lowering it keeps the smallest note(s) (e.g. one 5 EUR) in the till; only 5/10/20 notes are offered; "Retirar da caixa" lists N x coin and the notes; confirm the close and see the history entry; after it, the accepted ledger starts from zero.
 - [ ] **Books follow the cash**: a card sold for 10 with 5 credit shows 10 in cash sales/till, nothing more when the 5 is spent later (that day only shows in "Consumo de cartões", information); a top-up counts once, when the cash enters; a cash refund reduces the till.
 
+### 13.5c LOW PRIORITY, later (2026-10-19)
+- [ ] Hopper jam of 2026-10-19 was a 0.05 EUR coin jam (`hopper-status 400`); the code now treats a hopper fault before `no-change` as nothing paid. Skipped for now: count the coins of the Esvaziar-hopper test. The controller answered `no-change 16640` (166.40 EUR): if the container holds about that, `no-change` is the amount PAID, and `dispenseChangeViaGateway` + `emptyHopper` must be changed to read it so; until then do not trust the "saíram X EUR" figure of the button (it may have booked 9832.60).
+- [ ] Refill the hopper with 2 EUR, 1 EUR and 0.50 EUR coins and count them in the Hopper e reforço menu; then the change test (3 EUR for a 2 EUR machine, 6 EUR for a 2 EUR machine) and note what drops.
+
 ### 13.6 Admin / central
 - [ ] A machine's occupied/free in the central admin follows the shop (5 s)
 - [ ] A price / machine / setting change reaches the shop in seconds (sync_now); edited straight in the database, within 30 s
