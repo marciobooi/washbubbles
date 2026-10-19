@@ -86,7 +86,8 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
   // A dryer is sold in blocks of 15 minutes and the customer picks how many with + / -. If the money is
   // already there the cart used to pay the instant it opened, so the number was never chosen. For dryers
   // nothing is paid until the customer presses "Confirmar", and changing the number asks again.
-  const needsConfirm = cart.some((i) => i.type === 'dry')
+  // Every payment waits for the customer's tap on "Confirmar e iniciar" (washers too): nothing is charged by itself.
+  const needsConfirm = cart.length > 0
   const cartSig = cart.map((i) => `${i.id}:${i.quantity || 1}`).join('|')
   const [confirmedSig, setConfirmedSig] = React.useState(null)
   const confirmed = !needsConfirm || confirmedSig === cartSig
@@ -257,7 +258,9 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
       console.log('[CartModal] Local card detected:', card.code)
       setDetectedCardCode(card.code)
       toast({ title: t('cardDetected'), variant: 'success' })
-      setTimeout(() => handleCardPayAutomatic(card.code), 500)
+      // nothing is charged until the customer confirms
+      if (!confirmedRef.current) pendingCardRef.current = card.code
+      else setTimeout(() => handleCardPayAutomatic(card.code), 500)
     }
     const onBlocked = ({ status }) => {
       toast({
