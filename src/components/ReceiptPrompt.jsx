@@ -17,14 +17,17 @@ import { useTranslation } from 'react-i18next'
  * sale to already exist server-side (the route looks it up by batch), so it
  * only shows when `batchId` came from a network-settled payment.
  */
-export default function ReceiptPrompt({ items, batchId, kioskKey, onClose, onHold }) {
+export default function ReceiptPrompt({ items, batchId, kioskKey, onClose, onHold, defaultEmail = '' }) {
   const { t } = useTranslation('cart')
   const [email, setEmail] = useState('')
   const [sending, setSending] = useState(false)
   const [printing, setPrinting] = useState(false)
   const [focused, setFocused] = useState(false)
+  const [edited, setEdited] = useState(false)
+  // A customer's card with an email: it comes filled in (they can still change it). Only while they have not typed anything.
+  useEffect(() => { if (defaultEmail && !edited && !email) setEmail(defaultEmail) }, [defaultEmail])
   // The countdown that closes this popup (in App) stops while the customer is typing, or a send / print is running.
-  const busy = focused || email.length > 0 || sending || printing
+  const busy = focused || (edited && email.length > 0) || sending || printing
   useEffect(() => { onHold?.(busy) }, [busy])
   useEffect(() => () => onHold?.(false), [])
 
@@ -93,7 +96,7 @@ export default function ReceiptPrompt({ items, batchId, kioskKey, onClose, onHol
           <input
             type="email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => { setEdited(true); setEmail(e.target.value) }}
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
             placeholder="o.seu@email.com"

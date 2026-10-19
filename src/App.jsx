@@ -159,6 +159,19 @@ function AppInner() {
   const [receiptItems, setReceiptItems] = React.useState(null)
   // While the customer is typing the email (or a send/print is running) the receipt popup must stay: no countdown.
   const [receiptHold, setReceiptHold] = React.useState(false)
+  // The email of the customer's card (if one is in the reader): it comes pre-filled on the receipt popup.
+  const [receiptEmail, setReceiptEmail] = React.useState('')
+  React.useEffect(() => {
+    if (!(receiptBatchId || receiptItems)) { setReceiptEmail(''); return undefined }
+    if (!cardIn) return undefined
+    let alive = true
+    const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
+    const key = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
+    api.request(`/pos/cards/${encodeURIComponent(cardIn)}/history`, { method: 'GET', headers: key ? { Authorization: `ApiKey ${key}` } : undefined, skipAuth: true, expect: 'json' })
+      .then((r) => { const e = String(r?.card?.email || '').trim(); if (alive && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) setReceiptEmail(e) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [receiptBatchId, receiptItems, cardIn])
   // Auto-dismiss so a previous customer's "want a receipt?" card doesn't sit
   // in the corner through the next customer's whole visit.
   React.useEffect(() => {
@@ -705,6 +718,7 @@ function AppInner() {
         batchId={receiptBatchId}
         kioskKey={(typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null) || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY}
         onHold={setReceiptHold}
+        defaultEmail={receiptEmail}
         onClose={() => { setReceiptBatchId(null); setReceiptItems(null); setReceiptHold(false) }}
       />
       <HelpTutorial run={helpOpen} onClose={() => setHelpOpen(false)} />
