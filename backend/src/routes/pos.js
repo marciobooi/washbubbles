@@ -1,3 +1,4 @@
+import { getEmailBrand } from '../services/emailBrand.js'
 import express from 'express'
 import Machine from '../models/machine.js'
 import Sale from '../models/sale.js'
@@ -729,7 +730,7 @@ router.post('/receipt', requireKiosk, async (req, res) => {
     to: email,
     subject: 'O seu recibo',
     text,
-    html: renderEmailHtml({ title: 'O seu recibo', preheader: `Total: €${roundMoney(total).toFixed(2)}`, bodyHtml }),
+    html: renderEmailHtml({ title: 'O seu recibo', preheader: `Total: €${roundMoney(total).toFixed(2)}`, bodyHtml, brand: await getEmailBrand(req.tenantId) }),
   })
   res.json({ success: true })
 })

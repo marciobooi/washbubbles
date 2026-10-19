@@ -110,6 +110,7 @@ router.post('/forgot-password', passwordResetLimiter, async (req, res) => {
     try {
       const { sendMail } = await import('../services/mailer.js')
       const { renderEmailHtml, emailButton } = await import('../services/emailTemplate.js')
+      const { getEmailBrand } = await import('../services/emailBrand.js')
       const bodyHtml = `
         <p>You requested a password reset.</p>
         <p>Click the button below to choose a new password. This link expires in 1 hour.</p>
@@ -120,7 +121,7 @@ router.post('/forgot-password', passwordResetLimiter, async (req, res) => {
         to: user.email,
         subject: 'Password reset',
         text: `You requested a password reset. Click the link to change your password: ${link}`,
-        html: renderEmailHtml({ title: 'Reset your password', preheader: 'Set a new password for your account.', bodyHtml }),
+        html: renderEmailHtml({ title: 'Reset your password', preheader: 'Set a new password for your account.', bodyHtml, brand: await getEmailBrand(user.tenantId) }),
       })
     } catch (err) {
       console.error('failed to send reset email', err)

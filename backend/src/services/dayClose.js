@@ -7,6 +7,7 @@
  * so the two never drift into disagreeing about the opening-float chain,
  * the period boundary, or the concurrency guard.
  */
+import { getEmailBrand } from './emailBrand.js'
 import Sale from '../models/sale.js'
 import DayClose from '../models/dayClose.js'
 import { withTenant } from './tenant.js'
@@ -411,7 +412,7 @@ export async function emailDayCloseReceipt(req, id, email) {
     to: email,
     subject: 'Fecho de Caixa',
     text: formatDayCloseReceiptText(dc),
-    html: renderEmailHtml({ title: 'Fecho de Caixa', bodyHtml: formatDayCloseReceiptHtml(dc) }),
+    html: renderEmailHtml({ title: 'Fecho de Caixa', bodyHtml: formatDayCloseReceiptHtml(dc), brand: await getEmailBrand(req.tenantId) }),
   })
   return { status: 200, body: { success: true } }
 }

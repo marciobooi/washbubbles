@@ -1,3 +1,4 @@
+import { getEmailBrand } from '../services/emailBrand.js'
 import express from 'express'
 import mongoose from 'mongoose'
 import { requireAdmin, requireSuperAdmin, requireStaffRead, requireAnyStaff, requireTechnician } from '../middleware/auth.js'
@@ -1129,7 +1130,7 @@ router.post('/marketing/broadcast', requireAdmin, async (req, res) => {
   const recipients = await CardT.find({ marketingOptIn: true, email: { $nin: [null, ''] } }).select('email').lean()
 
   const bodyHtml = `<p>${escapeHtmlMultiline(message)}</p>`
-  const html = renderEmailHtml({ title: subject, bodyHtml })
+  const html = renderEmailHtml({ title: subject, bodyHtml, brand: await getEmailBrand(req.tenantId) })
 
   let sent = 0
   let failed = 0

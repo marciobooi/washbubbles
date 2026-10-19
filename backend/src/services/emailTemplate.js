@@ -53,14 +53,18 @@ export function emailButton(label, href) {
  * and a footer with real contact facts (same ones the public landing page
  * uses — see views/landing.js's DEFAULT_CONTENT.brand).
  */
-export function renderEmailHtml({ title, preheader, bodyHtml }) {
+export function renderEmailHtml({ title, preheader, bodyHtml, brand = {} }) {
+  // The shop's own name, logo and contact from the admin (services/emailBrand.js) win over the built-in defaults.
+  const pick = (v, d) => (v && String(v).trim() ? String(v).trim() : d)
+  const B = { name: pick(brand.name, BRAND.name), address: pick(brand.address, BRAND.address), phone: pick(brand.phone, BRAND.phone), email: pick(brand.email, BRAND.email) }
+  const logo = pick(brand.logo, LOGO_URL)
   return `<!DOCTYPE html>
 <html lang="pt-PT">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
-<title>${escapeHtml(title || BRAND.name)}</title>
+<title>${escapeHtml(title || B.name)}</title>
 </head>
 <body style="margin:0; padding:0; background:${PRIMARY_BG}; font-family:Arial,Helvetica,sans-serif;">
   ${preheader ? `<div style="display:none; max-height:0; overflow:hidden; opacity:0; mso-hide:all;">${escapeHtml(preheader)}</div>` : ''}
@@ -70,8 +74,8 @@ export function renderEmailHtml({ title, preheader, bodyHtml }) {
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;">
           <tr>
             <td align="center" style="padding-bottom:24px;">
-              <img src="${LOGO_URL}" width="56" height="56" alt="${escapeHtml(BRAND.name)}" style="display:block;">
-              <div style="margin-top:10px; font-family:Arial,Helvetica,sans-serif; font-size:18px; font-weight:bold; color:${INK};">${escapeHtml(BRAND.name)}</div>
+              <img src="${escapeHtml(logo)}" width="56" height="56" alt="${escapeHtml(B.name)}" style="display:block;">
+              <div style="margin-top:10px; font-family:Arial,Helvetica,sans-serif; font-size:18px; font-weight:bold; color:${INK};">${escapeHtml(B.name)}</div>
               <div style="font-family:Arial,Helvetica,sans-serif; font-size:11px; letter-spacing:1px; text-transform:uppercase; color:${INK_SOFT};">Laundry &amp; Ironing</div>
             </td>
           </tr>
@@ -85,8 +89,8 @@ export function renderEmailHtml({ title, preheader, bodyHtml }) {
           </tr>
           <tr>
             <td align="center" style="padding:24px 12px 0; font-family:Arial,Helvetica,sans-serif; font-size:12px; color:${INK_SOFT}; line-height:1.6;">
-              ${escapeHtml(BRAND.name)} &middot; ${escapeHtml(BRAND.address)}<br>
-              ${escapeHtml(BRAND.phone)} &middot; <a href="mailto:${escapeHtml(BRAND.email)}" style="color:${PRIMARY_DARK};">${escapeHtml(BRAND.email)}</a>
+              ${escapeHtml(B.name)} &middot; ${escapeHtml(B.address)}<br>
+              ${escapeHtml(B.phone)} &middot; <a href="mailto:${escapeHtml(B.email)}" style="color:${PRIMARY_DARK};">${escapeHtml(B.email)}</a>
             </td>
           </tr>
         </table>
