@@ -67,7 +67,11 @@ export default function ReceiptPrompt({ items, batchId, kioskKey, onClose, onHol
   }
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 bg-white rounded-xl shadow-2xl border border-neutral-200 p-4 max-w-xs">
+    // While the email is being typed the on-screen keyboard covers the bottom of the screen: the card moves to the top, big,
+    // so what is typed stays in view.
+    <div className={busy
+      ? "fixed top-28 left-1/2 -translate-x-1/2 z-[70] w-[min(90vw,760px)] bg-white rounded-2xl shadow-2xl border border-neutral-200 p-6"
+      : "fixed bottom-4 right-4 z-40 bg-white rounded-xl shadow-2xl border border-neutral-200 p-4 max-w-xs"}>
       <div className="flex items-center gap-2 text-primary-700 mb-2">
         <Mail className="h-5 w-5" />
         <span className="font-semibold text-sm">{t('rcWant')}</span>
@@ -93,12 +97,12 @@ export default function ReceiptPrompt({ items, batchId, kioskKey, onClose, onHol
             onFocus={() => setFocused(true)}
             onBlur={() => setFocused(false)}
             placeholder="o.seu@email.com"
-            className="flex-1 min-w-0 px-2 py-1.5 text-sm rounded-lg border border-neutral-300"
+            className={busy ? "flex-1 min-w-0 px-4 py-3 text-2xl rounded-xl border-2 border-primary-400" : "flex-1 min-w-0 px-2 py-1.5 text-sm rounded-lg border border-neutral-300"}
           />
           <button
             onClick={send}
             disabled={sending}
-            className="px-3 py-1.5 rounded-lg bg-primary-600 text-white text-sm font-semibold disabled:opacity-50"
+            className={busy ? "px-6 py-3 rounded-xl bg-primary-600 text-white text-2xl font-semibold disabled:opacity-50" : "px-3 py-1.5 rounded-lg bg-primary-600 text-white text-sm font-semibold disabled:opacity-50"}
           >
             {sending ? '...' : t('rcSend')}
           </button>
