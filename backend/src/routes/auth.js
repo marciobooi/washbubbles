@@ -73,7 +73,7 @@ router.post('/login', loginLimiter, async (req, res) => {
 router.post('/change-password', requireAuth, async (req, res) => {
   const { currentPassword, newPassword } = req.body
   if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Missing fields' })
-  if (typeof newPassword !== 'string' || newPassword.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters' })
+  if (typeof newPassword !== 'string' || newPassword.length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters' })
 
   const user = req.userModel
   if (!user) return res.status(401).json({ error: 'Unauthorized' })

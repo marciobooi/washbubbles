@@ -2,7 +2,7 @@ import React from 'react'
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar'
 import { AppSidebar } from '@/components/app-sidebar'
 import NavSearch from '@/components/NavSearch'
-import { LogOut, Bell, Sun, Moon, ChevronDown, User } from 'lucide-react'
+import { LogOut, Bell, Sun, Moon, ChevronDown, User, KeyRound } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import { useAuth } from '../context/AuthContext'
 import { useNavigate, useLocation, Navigate, Outlet } from 'react-router-dom'
@@ -43,6 +43,15 @@ export default function AdminDashboard() {
   const { logout, role } = useAuth()
   const navigate = useNavigate()
   const [dark, setDark] = useTheme()
+  // The role chip opens a small menu: change my password / sign out (every dashboard role, the operator included).
+  const [menuOpen, setMenuOpen] = React.useState(false)
+  const menuRef = React.useRef(null)
+  React.useEffect(() => {
+    if (!menuOpen) return undefined
+    const close = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false) }
+    document.addEventListener('pointerdown', close)
+    return () => document.removeEventListener('pointerdown', close)
+  }, [menuOpen])
 
   const handleLogout = () => {
     logout()
@@ -52,7 +61,7 @@ export default function AdminDashboard() {
   const roleLabel = role === 'SUPERADMIN' ? 'Superadmin' : role === 'OPERATOR' ? 'Operador' : 'Admin'
   // An operator sees ONE page: whatever address they open, they land on Operações.
   const here = useLocation()
-  if (role === 'OPERATOR' && !here.pathname.startsWith('/admin/operations')) return <Navigate to="/admin/operations" replace />
+  if (role === 'OPERATOR' && !here.pathname.startsWith('/admin/operations') && !here.pathname.startsWith('/admin/profile')) return <Navigate to="/admin/operations" replace />
 
   return (
     <SidebarProvider>
@@ -85,22 +94,29 @@ export default function AdminDashboard() {
                   </button>
                 </div>
 
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        aria-label="Perfil"
-                        onClick={() => navigate('/admin/profile')}
-                        className="flex items-center gap-2 h-10 pl-[3px] pr-3.5 rounded-full border border-black/[0.09] cursor-pointer transition-colors duration-150 hover:bg-[#eeebe4]"
-                      >
-                        <User className="h-[15px] w-[15px]" strokeWidth={1.8} />
-                        <span className="text-[13.5px] font-bold text-[#1c2530]">{roleLabel}</span>
-                        <ChevronDown className="h-[13px] w-[13px]" strokeWidth={2} />
+                <div className="relative" ref={menuRef}>
+                  <button
+                    aria-label="Conta"
+                    aria-haspopup="menu"
+                    aria-expanded={menuOpen}
+                    onClick={() => setMenuOpen((o) => !o)}
+                    className="flex items-center gap-2 h-10 pl-[10px] pr-3.5 rounded-full border border-black/[0.09] cursor-pointer transition-colors duration-150 hover:bg-[#eeebe4]"
+                  >
+                    <User className="h-[15px] w-[15px]" strokeWidth={1.8} />
+                    <span className="text-[13.5px] font-bold text-[#1c2530]">{roleLabel}</span>
+                    <ChevronDown className={`h-[13px] w-[13px] transition-transform ${menuOpen ? 'rotate-180' : ''}`} strokeWidth={2} />
+                  </button>
+                  {menuOpen && (
+                    <div role="menu" className="absolute right-0 top-12 z-50 w-60 rounded-2xl border border-black/[0.09] bg-white p-1.5 shadow-lg">
+                      <button role="menuitem" onClick={() => { setMenuOpen(false); navigate('/admin/profile') }} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#1c2530] hover:bg-[#f5f2ec]">
+                        <KeyRound className="h-4 w-4" strokeWidth={1.8} /> Alterar palavra-passe
                       </button>
-                    </TooltipTrigger>
-                    <TooltipContent sideOffset={6}>Perfil</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                      <button role="menuitem" onClick={() => { setMenuOpen(false); handleLogout() }} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#1c2530] hover:bg-[#f5f2ec]">
+                        <LogOut className="h-4 w-4" strokeWidth={1.8} /> Sair
+                      </button>
+                    </div>
+                  )}
+                </div>
 
                 <TooltipProvider>
                   <Tooltip>
