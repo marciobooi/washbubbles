@@ -173,3 +173,16 @@ describe('Eupago state words', () => {
     for (const w of ['liquidada', '', undefined, 'xyz']) expect(isKnownState(w), String(w)).to.equal(false)
   })
 })
+
+describe('Eupago does not answer', function () {
+  this.timeout(30000)
+  it('a broken call is reported as uncertain, never as a clean refusal', async () => {
+    const { createMbway } = await import('../src/services/eupago.js')
+    const r = await createMbway({ env: 'sandbox', apiKey: 'k', amount: 5, phone: '912345678', identifier: 'x', fetchImpl: async () => { throw new Error('socket hang up') } })
+    expect(r.ok).to.equal(false)
+    expect(r.uncertain).to.equal(true)
+    const refused = await createMbway({ env: 'sandbox', apiKey: 'k', amount: 5, phone: '912345678', identifier: 'x', fetchImpl: async () => ({ status: 400, json: async () => ({ code: 'AMOUNT_INVALID', text: 'bad' }) }) })
+    expect(refused.uncertain).to.equal(undefined)
+    expect(refused.code).to.equal('AMOUNT_INVALID')
+  })
+})

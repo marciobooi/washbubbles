@@ -12,7 +12,8 @@ import { creditCard, applyCardDelta } from '../services/cardBalance.js'
 import { cardLookupLimiter } from '../middleware/rateLimits.js'
 import coinMachine from '../services/coinMachine.js'
 import { findUsableCoupon, applyCouponDiscount, redeemCoupon } from '../services/coupons.js'
-import { startPayment, pollPayment, cancelPayment, mbwaySettings, MIN_AMOUNT as MBWAY_MIN } from '../services/mbway.js'
+import { startPayment, pollPayment, cancelPayment, priceCart, mbwaySettings, MIN_AMOUNT as MBWAY_MIN } from '../services/mbway.js'
+import * as mbwayLink from '../services/mbwayLinkClient.js'
 
 const router = express.Router()
 
@@ -420,6 +421,55 @@ router.post('/mbway/start', requireKiosk, async (req, res) => {
     if (!coinMachine.running) return res.status(409).json({ error: 'MB WAY is only available at the shop', code: 'mbway-off' })
     const { items, phone, batchId, couponCode } = req.body || {}
     res.status(201).json(await startPayment({ tenantId: req.tenantId, items, phone, batchId, couponCode }, { resolveMachineLines, isRecharge }))
+  } catch (e) { mbwayFail(res, e) }
+})
+
+// MB WAY by QR: the screen shows a QR code, the customer types their number on THEIR phone (a page on the central server), the shop
+// picks the number up and starts the payment itself. The cart is remembered here (in memory) for the 10 minutes the link lives.
+const mbwayLinks = new Map()
+const dropOldLinks = () => { const now = Date.now(); for (const [k, v] of mbwayLinks) if (v.expiresAt < now - 60_000) mbwayLinks.delete(k) }
+
+router.post('/mbway/link', requireKiosk, async (req, res) => {
+  try {
+    if (!coinMachine.running) return res.status(409).json({ error: 'MB WAY is only available at the shop', code: 'mbway-off' })
+    const { items, batchId, couponCode } = req.body || {}
+    const { resolved } = await priceCart({ tenantId: req.tenantId, items, couponCode }, { resolveMachineLines, isRecharge })
+    const link = await mbwayLink.createLink({ amount: resolved.total, machines: resolved.lines.map((l) => l.machine.name) })
+    dropOldLinks()
+    mbwayLinks.set(link.token, { tenantId: String(req.tenantId), items, batchId, couponCode, expiresAt: new Date(link.expiresAt).getTime(), paymentId: null })
+    res.status(201).json({ token: link.token, url: link.url, amount: resolved.total, expiresAt: link.expiresAt })
+  } catch (e) { mbwayFail(res, e) }
+})
+
+// One QR = one session: giving it up (back, cancel, error, retry, panel closed) ends it for good.
+router.post('/mbway/link/:token/cancel', requireKiosk, async (req, res) => {
+  const entry = mbwayLinks.get(req.params.token)
+  if (entry && entry.tenantId === String(req.tenantId) && !entry.paymentId) mbwayLinks.delete(req.params.token)
+  await mbwayLink.cancelLink(req.params.token)
+  res.json({ ok: true })
+})
+
+router.get('/mbway/link/:token', requireKiosk, async (req, res) => {
+  try {
+    const entry = mbwayLinks.get(req.params.token)
+    if (!entry || entry.tenantId !== String(req.tenantId)) return res.status(404).json({ status: 'not-found' })
+    if (entry.paymentId) return res.json({ status: 'started', payment: await pollPayment({ tenantId: req.tenantId, id: entry.paymentId }) })
+    if (entry.starting) return res.json({ status: 'waiting' })
+    const r = await mbwayLink.fetchPhone(req.params.token)
+    if (r.status === 'phone_received' && r.phone) {
+      entry.starting = true
+      try {
+        const payment = await startPayment({ tenantId: req.tenantId, items: entry.items, phone: r.phone, batchId: entry.batchId, couponCode: entry.couponCode }, { resolveMachineLines, isRecharge })
+        entry.paymentId = payment.id
+        return res.json({ status: 'started', payment })
+      } catch (e) {
+        mbwayLinks.delete(req.params.token)
+        await mbwayLink.cancelLink(req.params.token)
+        return res.json({ status: 'error', code: e.code || 'error', error: e.message })
+      }
+    }
+    if (r.status === 'expired' || r.status === 'not-found') return res.json({ status: 'expired' })
+    res.json({ status: 'waiting' })
   } catch (e) { mbwayFail(res, e) }
 })
 

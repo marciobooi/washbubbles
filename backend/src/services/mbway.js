@@ -39,18 +39,23 @@ export async function mbwaySettings(tenantId) {
   }
 }
 
-export async function startPayment({ tenantId, items, phone, batchId, couponCode }, { resolveMachineLines, isRecharge }) {
+/** Price a cart of machines from the server's own tables and check it can be paid with MB WAY. Throws a coded error otherwise. */
+export async function priceCart({ tenantId, items, couponCode }, { resolveMachineLines, isRecharge }) {
   const cfg = await mbwaySettings(tenantId)
   if (!cfg.enabled || !cfg.apiKey) throw err(409, 'mbway-off', 'MB WAY is not available')
   if (!Array.isArray(items) || items.length === 0) throw err(400, 'empty-cart', 'Empty cart')
   if (items.some(isRecharge)) throw err(400, 'mbway-machines-only', 'MB WAY pays machines only; a recharge is paid in cash')
-  const p9 = normalizePhone(phone)
-  if (!p9) throw err(400, 'bad-phone', 'Invalid phone number')
-
   const coupon = couponCode ? await findUsableCoupon(tenantId, couponCode) : null
   const resolved = await resolveMachineLines(items, withTenant(Machine, { tenantId }), withTenant(Price, { tenantId }), 'cash', coupon)
   if (!resolved.ok) throw Object.assign(err(resolved.status, 'cart-refused', resolved.error?.error || 'Cart refused'), { detail: resolved.error })
   if (resolved.total < MIN_AMOUNT) throw err(400, 'below-minimum', `MB WAY needs at least ${MIN_AMOUNT.toFixed(2)} EUR`)
+  return { cfg, coupon, resolved }
+}
+
+export async function startPayment({ tenantId, items, phone, batchId, couponCode }, deps) {
+  const p9 = normalizePhone(phone)
+  if (!p9) throw err(400, 'bad-phone', 'Invalid phone number')
+  const { cfg, coupon, resolved } = await priceCart({ tenantId, items, couponCode }, deps)
 
   const identifier = `wb-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
   const now = Date.now()
@@ -62,7 +67,9 @@ export async function startPayment({ tenantId, items, phone, batchId, couponCode
   const r = await createMbway({ env: cfg.env, apiKey: cfg.apiKey, amount: resolved.total, phone: p9, identifier, fetchImpl })
   if (!r.ok) {
     await MbwayPayment.updateOne({ _id: payment._id }, { $set: { status: 'failed', error: `${r.code} ${r.text}`.trim() } })
-    throw Object.assign(err(502, 'eupago-refused', r.text), { eupagoCode: r.code })
+    // No answer from Eupago: the request MAY exist and the customer may approve it. Without a reference we cannot follow it: tell the operator.
+    if (r.uncertain) await alertOperator(tenantId, 'MB WAY: o pedido pode ter sido criado', `Sem resposta do Eupago (${r.text}) ao pedir ${resolved.total.toFixed(2)} EUR, identificador ${identifier}. Se aparecer um pagamento com este identificador no backoffice do Eupago, a máquina não arrancou: devolver o valor.`)
+    throw Object.assign(err(r.uncertain ? 504 : 502, r.uncertain ? 'eupago-no-answer' : 'eupago-refused', r.text), { eupagoCode: r.code })
   }
   const saved = await MbwayPayment.findByIdAndUpdate(payment._id, { $set: { reference: r.reference, transactionId: r.transactionId } }, { new: true })
   return view(saved)

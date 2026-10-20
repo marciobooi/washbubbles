@@ -231,5 +231,14 @@
   "mbwayMinimum": "MB WAY benötigt mindestens 1,00 €.",
   "mbwayOff": "MB WAY ist nicht verfügbar.",
   "mbwayStartFailed": "Zahlung erhalten, aber die Maschine ist nicht gestartet. Bitte wenden Sie sich an die Theke: Der Betrag wird erstattet.",
-  "mbwayPaid": "Mit MB WAY bezahlt"
+  "mbwayPaid": "Mit MB WAY bezahlt",
+  "mbwayChoose": "Wie möchten Sie Ihre MB-WAY-Nummer angeben?",
+  "mbwayScan": "QR-Code mit dem Handy scannen",
+  "mbwayType": "Nummer hier eingeben",
+  "mbwayScanTitle": "Scannen Sie diesen Code mit der Handykamera",
+  "mbwayScanHint": "Öffnen Sie die Seite, geben Sie Ihre MB-WAY-Nummer ein und tippen Sie auf Bezahlen. Hier geht alles von selbst weiter.",
+  "mbwayQrValid": "Dieser Code gilt nur für diese Zahlung: {{time}}",
+  "mbwayLinkFailed": "Der Code konnte nicht erstellt werden. Geben Sie die Nummer hier ein.",
+  "mbwayLinkExpired": "Der Code ist abgelaufen. Erstellen Sie einen neuen.",
+  "mbwayCartChanged": "Der Einkauf hat sich inzwischen geändert. Gehen Sie zurück und versuchen Sie es erneut."
 }

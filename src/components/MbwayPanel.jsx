@@ -1,6 +1,7 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { Smartphone } from 'lucide-react'
+import QRCode from 'qrcode'
 import api from '@/services/api'
 import { toast } from '@/components/ui/Toast'
 
@@ -18,13 +19,52 @@ const mmss = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Ma
  */
 export default function MbwayPanel({ items, total, couponCode, batchId, onPaid, onClose }) {
   const { t } = useTranslation('cart')
-  const [step, setStep] = React.useState('phone') // phone | sending | waiting | problem
+  const [step, setStep] = React.useState('choose') // choose | qr | phone | sending | waiting | problem
+  // ONE QR = ONE session: a new code every time, and giving the screen up (back, cancel, error, retry, close) ends the code for good
+  const [link, setLink] = React.useState(null) // { token, url, qr }
+  const linkRef = React.useRef(null)
   const [phone, setPhone] = React.useState('')
   const [pay, setPay] = React.useState(null)
   const [problem, setProblem] = React.useState('')
   const [now, setNow] = React.useState(Date.now())
   const alive = React.useRef(true)
-  React.useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
+  const dropLink = React.useCallback(() => {
+    const l = linkRef.current
+    linkRef.current = null
+    if (l) call(`/link/${l.token}/cancel`, { method: 'POST' }).catch(() => {})
+  }, [])
+  React.useEffect(() => { alive.current = true; return () => { alive.current = false; dropLink() } }, [dropLink])
+
+  async function chooseQr() {
+    setStep('sending')
+    try {
+      const r = await call('/link', { method: 'POST', json: { items: items.map((i) => ({ _id: i._id || i.productId || i.id, quantity: i.quantity })), batchId, couponCode: couponCode || undefined } })
+      const qr = await QRCode.toDataURL(r.url, { width: 560, margin: 1, errorCorrectionLevel: 'M' })
+      if (!alive.current) { call(`/link/${r.token}/cancel`, { method: 'POST' }).catch(() => {}); return }
+      linkRef.current = { token: r.token }
+      setLink({ token: r.token, url: r.url, qr, expiresAt: r.expiresAt }); setStep('qr')
+    } catch (e) {
+      if (!alive.current) return
+      setProblem(t('mbwayLinkFailed')); setStep('problem')
+    }
+  }
+  function backToChoose() { dropLink(); setLink(null); setPay(null); setStep('choose') }
+
+  // QR on screen: ask the shop every 2 s whether the customer has typed the number on their phone
+  React.useEffect(() => {
+    if (step !== 'qr' || !link) return undefined
+    const tick = setInterval(() => setNow(Date.now()), 1000)
+    const poll = setInterval(async () => {
+      try {
+        const r = await call(`/link/${link.token}`)
+        if (!alive.current) return
+        if (r.status === 'started') { linkRef.current = null; setPay(r.payment); setLink(null); setStep('waiting') }
+        else if (r.status === 'expired' || r.status === 'not-found') { linkRef.current = null; setProblem(t('mbwayLinkExpired')); setLink(null); setStep('problem') }
+        else if (r.status === 'error') { linkRef.current = null; setProblem(r.code === 'below-minimum' ? t('mbwayMinimum') : r.code === 'cart-refused' ? t('mbwayCartChanged') : t('mbwayRefused')); setLink(null); setStep('problem') }
+      } catch { /* the shop is busy for a moment: ask again */ }
+    }, 2000)
+    return () => { clearInterval(tick); clearInterval(poll) }
+  }, [step, link?.token])
 
   async function send() {
     const digits = phone.replace(/\D/g, '')
@@ -62,6 +102,7 @@ export default function MbwayPanel({ items, total, couponCode, batchId, onPaid, 
   }, [step, pay?.id])
 
   async function cancel() {
+    dropLink()
     if (step === 'waiting' && pay) { try { await call(`/${pay.id}/cancel`, { method: 'POST' }) } catch { /* the shop keeps following it */ } }
     onClose?.()
   }
@@ -82,6 +123,25 @@ export default function MbwayPanel({ items, total, couponCode, batchId, onPaid, 
           </div>
         </div>
 
+        {step === 'choose' && (
+          <>
+            <div className="text-2xl font-semibold text-slate-700">{t('mbwayChoose')}</div>
+            <button type="button" onClick={chooseQr} className="min-h-[96px] rounded-2xl bg-[#d3101c] text-white font-bold text-3xl active:scale-[0.98] px-6">{t('mbwayScan')}</button>
+            <button type="button" onClick={() => setStep('phone')} className="min-h-[96px] rounded-2xl bg-white border-2 border-slate-300 text-slate-800 font-bold text-3xl active:scale-[0.98] px-6">{t('mbwayType')}</button>
+            <button type="button" onClick={cancel} className="h-[72px] rounded-2xl bg-slate-100 text-slate-600 font-bold text-2xl active:scale-[0.98]">{t('mbwayBack')}</button>
+          </>
+        )}
+
+        {step === 'qr' && link && (
+          <>
+            <div className="text-2xl font-semibold text-slate-700 text-center">{t('mbwayScanTitle')}</div>
+            <img src={link.qr} alt="QR" className="mx-auto w-[360px] h-[360px] rounded-2xl border-2 border-slate-200" />
+            <div className="text-xl text-slate-600 text-center">{t('mbwayScanHint')}</div>
+            <div className="text-center text-slate-500 text-lg tabular-nums">{t('mbwayQrValid', { time: mmss(new Date(link.expiresAt).getTime() - now) })}</div>
+            <button type="button" onClick={backToChoose} className="h-[72px] rounded-2xl bg-slate-100 text-slate-600 font-bold text-2xl active:scale-[0.98]">{t('mbwayBack')}</button>
+          </>
+        )}
+
         {(step === 'phone' || step === 'sending') && (
           <>
             <div className="text-2xl font-semibold text-slate-700">{t('mbwayPhoneLabel')}</div>
@@ -92,7 +152,7 @@ export default function MbwayPanel({ items, total, couponCode, batchId, onPaid, 
               ))}
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <button type="button" onClick={cancel} className="h-[72px] rounded-2xl bg-slate-100 text-slate-600 font-bold text-2xl active:scale-[0.98]">{t('mbwayBack')}</button>
+              <button type="button" onClick={backToChoose} className="h-[72px] rounded-2xl bg-slate-100 text-slate-600 font-bold text-2xl active:scale-[0.98]">{t('mbwayBack')}</button>
               <button type="button" disabled={step === 'sending' || phone.length < 9} onClick={send} className="h-[72px] rounded-2xl bg-[#d3101c] text-white font-bold text-2xl disabled:opacity-40 active:scale-[0.98]">{step === 'sending' ? t('mbwaySending') : t('mbwaySend')}</button>
             </div>
           </>
@@ -114,7 +174,7 @@ export default function MbwayPanel({ items, total, couponCode, batchId, onPaid, 
             <div className="rounded-2xl bg-rose-50 border-2 border-rose-200 p-6 text-center text-2xl font-semibold text-rose-800">{problem}</div>
             <div className="grid grid-cols-2 gap-4">
               <button type="button" onClick={onClose} className="h-[72px] rounded-2xl bg-slate-100 text-slate-600 font-bold text-2xl active:scale-[0.98]">{t('mbwayBack')}</button>
-              <button type="button" onClick={() => { setPay(null); setStep('phone') }} className="h-[72px] rounded-2xl bg-[#d3101c] text-white font-bold text-2xl active:scale-[0.98]">{t('mbwayRetry')}</button>
+              <button type="button" onClick={backToChoose} className="h-[72px] rounded-2xl bg-[#d3101c] text-white font-bold text-2xl active:scale-[0.98]">{t('mbwayRetry')}</button>
             </div>
           </>
         )}

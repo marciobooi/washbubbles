@@ -17,6 +17,7 @@ import { resolveTenant } from './middleware/tenant.js'
 import gatewaysRoutes from './routes/gateways.js'
 import middlewareRoutes from './routes/middleware.js'
 import syncRoutes from './routes/sync.js'
+import * as mbwayLinkRoutes from './routes/mbwayLink.js'
 import wifiRoutes from './routes/wifi.js'
 import publicRoutes from './routes/public.js'
 import kioskWatchdog from './services/kioskWatchdog.js'
@@ -64,6 +65,10 @@ app.use('/api/middleware', middlewareRoutes)
 
 // Sync routes (offline-first POS ↔ server)
 app.use('/api/sync', syncRoutes)
+
+// MB WAY by QR: the shop creates / picks up (kiosk key); the customer's phone opens /pagar/<token> and types their number
+app.use('/api/mbway-link', mbwayLinkRoutes.shopRouter)
+app.use(mbwayLinkRoutes.publicRouter)
 
 // Guest WiFi vouchers (post-purchase)
 app.use('/api/wifi', wifiRoutes)

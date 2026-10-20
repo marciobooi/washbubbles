@@ -59,6 +59,7 @@ export async function buildTestApp() {
   const gatewaysRoutes = (await import('../src/routes/gateways.js')).default
   const syncRoutes = (await import('../src/routes/sync.js')).default
   const wifiRoutes = (await import('../src/routes/wifi.js')).default
+  const mbwayLinkRoutes = await import('../src/routes/mbwayLink.js')
 
   const app = express()
   app.use(cors())
@@ -71,6 +72,8 @@ export async function buildTestApp() {
   app.use('/api/gateways', gatewaysRoutes)
   app.use('/api/sync', syncRoutes)
   app.use('/api/wifi', wifiRoutes)
+  app.use('/api/mbway-link', mbwayLinkRoutes.shopRouter)
+  app.use(mbwayLinkRoutes.publicRouter)
   app.get('/api/health', (req, res) => res.json({ ok: true }))
   // Mirrors index.js: without this an async throw would kill the test process
   // instead of surfacing as a 500.

@@ -49,11 +49,18 @@ async function http(fetchImpl, url, init, timeoutMs = 15000) {
 }
 
 export async function createMbway({ env, apiKey, amount, phone, identifier, fetchImpl = globalThis.fetch }) {
-  const { status, body } = await http(fetchImpl, `${baseFor(env)}/api/v1.02/mbway/create`, {
+  // The official WooCommerce plugin waits up to 60 s for this call. If it breaks (timeout, network) we do NOT know whether the request was
+  // created: the answer says so (`uncertain`) and the caller reports it instead of pretending nothing happened.
+  let status, body
+  try {
+    ;({ status, body } = await http(fetchImpl, `${baseFor(env)}/api/v1.02/mbway/create`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: `ApiKey ${apiKey}` },
-    body: JSON.stringify({ payment: { amount: { value: Number(Number(amount).toFixed(2)), currency: 'EUR' }, identifier, customerPhone: phone, countryCode: '+351' } }),
-  })
+    body: JSON.stringify({ payment: { amount: { value: Number(Number(amount).toFixed(2)), currency: 'EUR' }, identifier, customerPhone: phone, countryCode: '+351' }, customer: { notify: false } }),
+    }, 30000))
+  } catch (e) {
+    return { ok: false, uncertain: true, httpStatus: 0, code: 'NO_ANSWER', text: e.name === 'AbortError' ? 'timeout' : e.message }
+  }
   if (status === 201 && body && body.transactionStatus === 'Success' && body.reference) {
     return { ok: true, transactionId: String(body.transactionID || ''), reference: String(body.reference) }
   }
