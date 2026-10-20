@@ -33,12 +33,15 @@ describe('Dryer blocks: one impulse now, one more every block', function () {
     saved.middleware = coinMachine.middleware
     coinMachine.tenantId = tenant._id
     coinMachine.running = true
+    saved.balance = coinMachine.client.client.balance
+    coinMachine.client.client.balance = 100 // the cash really inserted in the session: the pay routes check it
     coinMachine.middleware = { sendMachineActivation: async (m, iface, n) => { sent.push(m.name); impulses.push(n); if (coinMachine.__fail) throw new Error('controller offline') } }
     coinMachine.__fail = false
   })
   afterEach(() => {
     coinMachine.tenantId = saved.tenantId
     coinMachine.running = saved.running
+    coinMachine.client.client.balance = saved.balance
     coinMachine.middleware = saved.middleware
     delete coinMachine.__fail
   })

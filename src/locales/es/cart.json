@@ -212,5 +212,6 @@
   "payNoBalanceAmt": "Saldo insuficiente en la tarjeta (tiene {{balance}}). Recárguela o pague en efectivo.",
   "payNoCash": "Efectivo insuficiente. Introduzca el importe que falta.",
   "payCardUnknown": "Tarjeta no reconocida.",
-  "cardInReaderAria": "Tarjeta en el lector: ver mi tarjeta"
+  "cardInReaderAria": "Tarjeta en el lector: ver mi tarjeta",
+  "payRechargeCashOnly": "Las recargas solo se pagan en efectivo: introduzca el importe en monedas o billetes."
 }

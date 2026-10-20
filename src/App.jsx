@@ -448,7 +448,11 @@ function AppInner() {
         return
       }
 
-      // Card flow
+      // Card flow. A recharge is never paid with a card (the server refuses it too): only cash puts money on a card.
+      if (items.some((i) => i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge')))) {
+        toast({ title: tr('payRechargeCashOnly'), variant: 'warning' })
+        return
+      }
       // If a cardCode is provided, use CardGateway to charge machines and post recharges server-side first
       const cardCode = opts.cardCode || null
 

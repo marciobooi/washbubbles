@@ -212,5 +212,6 @@
   "payNoBalanceAmt": "Nicht genug Guthaben auf der Karte (Guthaben: {{balance}}). Laden Sie sie auf oder zahlen Sie bar.",
   "payNoCash": "Nicht genug Bargeld. Werfen Sie den fehlenden Betrag ein.",
   "payCardUnknown": "Karte nicht erkannt.",
-  "cardInReaderAria": "Karte im Lesegerät: meine Karte öffnen"
+  "cardInReaderAria": "Karte im Lesegerät: meine Karte öffnen",
+  "payRechargeCashOnly": "Aufladungen können nur bar bezahlt werden: Werfen Sie den Betrag als Münzen oder Scheine ein."
 }

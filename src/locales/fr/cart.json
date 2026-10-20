@@ -212,5 +212,6 @@
   "payNoBalanceAmt": "Solde insuffisant sur la carte ({{balance}} disponibles). Rechargez-la ou payez en espèces.",
   "payNoCash": "Espèces insuffisantes. Insérez le montant manquant.",
   "payCardUnknown": "Carte non reconnue.",
-  "cardInReaderAria": "Carte dans le lecteur : voir ma carte"
+  "cardInReaderAria": "Carte dans le lecteur : voir ma carte",
+  "payRechargeCashOnly": "Les recharges se paient uniquement en espèces : insérez le montant en pièces ou billets."
 }

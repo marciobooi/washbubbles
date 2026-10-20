@@ -308,7 +308,10 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
     }
   }
 
+  // A recharge is money IN: only cash pays it. A card in the reader must never pay (or 'pay') a cart that holds one.
+  const cartHasRecharge = () => cart.some((i) => i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge')))
   async function handleCardPayAutomatic(code) {
+    if (cartHasRecharge()) { toast({ title: t('payRechargeCashOnly'), variant: 'warning' }); return }
     // Auto-pay with detected card
     console.log('[CartModal] Auto-processing card payment with code:', code)
     setCheckingCard(true)

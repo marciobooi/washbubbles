@@ -115,6 +115,13 @@ router.post('/cards/:code/topup', requireKiosk, async (req, res) => {
   if (!parsed.ok) return res.status(400).json({ error: parsed.error })
   const topUp = parsed.value
 
+  // The money must really be in the machine: the cash of the session pays the top-up (it used to be credited on the screen's word).
+  const session = coinMachine.client?.getState?.()
+  if (!coinMachine.running || !session || roundMoney(session.balance) + 0.005 < topUp) {
+    return res.status(409).json({ error: 'Insert the cash first', code: 'cash-not-inserted', inserted: roundMoney(session?.balance || 0) })
+  }
+  coinMachine.client.restoreBalances({ balance: roundMoney(session.balance - topUp), balanceCard: session.balanceCard })
+
   const CardT = withTenant(Card, req)
   const SaleT = withTenant(Sale, req)
   let card = await CardT.findOne({ code })
@@ -151,12 +158,11 @@ router.post('/card/pay', requireKiosk, async (req, res) => {
   // The previous version credited recharges and debited machines inside the same
   // loop that could `return` on a 404/409, so a bad line left the card credited
   // with revenue booked and no wash started — money the day-close can't explain.
+  // A recharge is money IN: it is only ever paid in cash (POST /cash/pay, which checks the cash really inserted). It used to be
+  // credited here with no cash at all, so a cart holding only a recharge, paid with the card in the reader, gave free credit
+  // (2026-10-20: two recharges of 10 EUR, nothing paid).
+  if (items.some(isRecharge)) return res.status(400).json({ error: 'Recharge must be paid in cash', code: 'recharge-needs-cash' })
   const rechargeLines = []
-  for (const r of items.filter(isRecharge)) {
-    const parsed = parseAmount(r.amount ?? r.price)
-    if (!parsed.ok) return res.status(400).json({ error: `Recharge line: ${parsed.error}` })
-    rechargeLines.push({ amount: parsed.value, item: r })
-  }
 
   const resolved = await resolveMachineLines(items.filter((i) => !isRecharge(i)), MachineT, withTenant(Price, req), 'card', coupon)
   if (!resolved.ok) return res.status(resolved.status).json(resolved.error)
@@ -238,6 +244,12 @@ router.post('/cash/pay', requireKiosk, async (req, res) => {
   const parsedInserted = parseAmount(inserted, { allowZero: true })
   if (!parsedInserted.ok) return res.status(400).json({ error: `inserted: ${parsedInserted.error}` })
   const insertedNum = parsedInserted.value
+
+  // On the shop PC the cash really inserted is known: the screen's 'inserted' can never be more than that.
+  if (coinMachine.running) {
+    const have = roundMoney(coinMachine.client?.getState?.().balance || 0)
+    if (insertedNum > have + 0.005) return res.status(409).json({ error: 'Cash inserted does not cover this', code: 'cash-not-inserted', inserted: have })
+  }
 
   const SaleT = withTenant(Sale, req)
   const MachineT = withTenant(Machine, req)
