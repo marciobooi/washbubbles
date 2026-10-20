@@ -316,7 +316,7 @@ router.post('/recharge', requireKiosk, async (req, res) => {
   const sale = await SaleT.create({
     amount: rechargeAmount,
     items,
-    method: method || 'card',
+    method: 'cash', // money in is always cash (the 'card' label the client sends is only the target card)
     batchId,
     inserted: insertedNum,
     change: changeAmount,

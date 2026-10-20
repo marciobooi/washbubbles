@@ -65,6 +65,15 @@ saleSchema.index({ tenantId: 1, cardCode: 1, createdAt: -1 })
 
 // Announce NEW sales only (an update, e.g. flagging a sale refunded, is not new
 // money). The central uplink queues each one for the server.
+// THE RULE (2026-10-20): a card is never credited with anything but cash. A NEW recharge sale must be a cash sale; any code path
+// that tries to book one with another method (the 'recharge paid with the card' hole) fails here, whatever route it came from.
+saleSchema.pre('validate', function (next) {
+  if (this.isNew && this.type === 'recharge' && this.method !== 'cash' && !(this.metadata && this.metadata.voided)) {
+    return next(new Error('A card recharge can only be paid in cash'))
+  }
+  next()
+})
+
 saleSchema.pre('save', function (next) { this.$locals.wasNew = this.isNew; next() })
 saleSchema.post('save', function (doc) {
   if (doc.$locals.wasNew) modelEvents.emit('sale:created', doc)

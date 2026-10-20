@@ -62,3 +62,26 @@ describe('no card credit without cash really inserted', function () {
     expect(m).to.exist
   })
 })
+
+describe('the rule lives in the Sale model too: a recharge can only ever be booked as cash', function () {
+  this.timeout(20000)
+  let tenant, Sale
+  before(async () => { await startTestDb(); Sale = (await import('../src/models/sale.js')).default })
+  after(async () => { await stopTestDb() })
+  beforeEach(async () => { await clearTestDb(); ;({ tenant } = await seedTenantAndUsers()) })
+
+  it('refuses a new recharge sale with method card (or none)', async () => {
+    for (const method of ['card', undefined, 'kiosk']) {
+      let err = null
+      try { await Sale.create({ tenantId: tenant._id, amount: 10, type: 'recharge', method }) } catch (e) { err = e }
+      expect(err, `method ${method}`).to.be.an('error')
+      expect(err.message).to.contain('only be paid in cash')
+    }
+  })
+  it('accepts a cash recharge, and does not touch card payments or old/voided rows', async () => {
+    await Sale.create({ tenantId: tenant._id, amount: 10, type: 'recharge', method: 'cash' })
+    await Sale.create({ tenantId: tenant._id, amount: 3.6, type: 'payment', method: 'card' })
+    await Sale.create({ tenantId: tenant._id, amount: 0, type: 'recharge', method: 'card', metadata: { voided: { amount: 10 } } })
+    expect(await Sale.countDocuments({ tenantId: tenant._id })).to.equal(3)
+  })
+})
