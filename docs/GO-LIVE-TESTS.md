@@ -319,7 +319,7 @@ Steps (on the PC, PowerShell, in `C:\washbubbles`):
 - [ ] Free recharge: type 3,30 in My card, pay 3.30 in coins, balance +3.30
 - [ ] Pay a washer with the card (card already in the reader): the button "Confirmar e iniciar", card debited once, the home screen after
 - [ ] Receipt e-mail arrives with the shop's logo (inbox and spam)
-- [ ] Tatiana signs in on a phone: only Operações; Iniciar and Parar reach the shop in seconds; she changes her password
+- [x] Tatiana signs in on a phone: only Operações (owner 2026-10-20: "top"). Still open: Iniciar / Parar reaching the shop in seconds, and her changing the password
 - [ ] Edit the holder data on the kiosk (consent box) and see it in the admin
 - [ ] Reboot with the PC left alone: no password prompt, the screen opens, the acceptor works
 
