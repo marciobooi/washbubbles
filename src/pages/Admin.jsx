@@ -12,7 +12,7 @@ export default function Admin() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    if (role === 'ADMIN' || role === 'SUPERADMIN') {
+    if (role === 'ADMIN' || role === 'SUPERADMIN' || role === 'OPERATOR') {
       navigate('/admin/operations')
     }
   }, [role, navigate])

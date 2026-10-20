@@ -10,7 +10,7 @@ const userSchema = new Schema({
   password: { type: String, required: true },
   // Enumerated so a role can never be set to an arbitrary string from a request
   // body — the last line of defence behind the route-level role checks.
-  role: { type: String, default: 'USER', enum: ['USER', 'KIOSK', 'ADMIN', 'SUPERADMIN', 'STAFF', 'TECHNICIAN'] },
+  role: { type: String, default: 'USER', enum: ['USER', 'KIOSK', 'ADMIN', 'SUPERADMIN', 'STAFF', 'TECHNICIAN', 'OPERATOR'] },
   apiKey: { type: String, default: null },
   resetPasswordToken: { type: String, default: null },
   resetPasswordExpires: { type: Date, default: null },

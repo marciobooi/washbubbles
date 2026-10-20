@@ -67,6 +67,9 @@ export function requireRole(...allowed) {
 }
 
 export const requireAdmin = requireRole('ADMIN', 'SUPERADMIN')
+// OPERATOR (a shop assistant): may only start or release a machine by hand, nothing else in the dashboard.
+export const requireMachineOperator = requireRole('ADMIN', 'SUPERADMIN', 'OPERATOR')
+export const requireDashboardUser = requireRole('ADMIN', 'SUPERADMIN', 'STAFF', 'TECHNICIAN', 'OPERATOR')
 export const requireSuperAdmin = requireRole('SUPERADMIN')
 export const requireKiosk = requireRole('KIOSK')
 

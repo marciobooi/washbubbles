@@ -25,7 +25,7 @@ import {
 // keeps the wrong role from seeing a link that would 403 anyway.
 const navItems = [
   { title: 'Visão Geral', url: '/admin/overview', Icon: LayoutDashboard, roles: ['ADMIN', 'SUPERADMIN', 'STAFF'] },
-  { title: 'Operações', url: '/admin/operations', Icon: Activity },
+  { title: 'Operações', url: '/admin/operations', Icon: Activity, roles: ['ADMIN', 'SUPERADMIN', 'OPERATOR'] },
   { title: 'Máquinas', url: '/admin/machines', Icon: Cpu, roles: ['ADMIN', 'SUPERADMIN', 'STAFF', 'TECHNICIAN'] },
   { title: 'Manutenção', url: '/admin/maintenance', Icon: Wrench, roles: ['ADMIN', 'SUPERADMIN', 'TECHNICIAN'] },
   { title: 'Interfaces', url: '/admin/interfaces', Icon: PlugZap },

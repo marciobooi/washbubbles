@@ -3,6 +3,7 @@ import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
 import { Play, Square, X, Power, Wrench, CheckCircle2, RefreshCw } from 'lucide-react'
 import { connect, subscribe } from '@/services/websocket'
+import { useAuth } from '../context/AuthContext'
 
 function WashIcon(props) {
   return (
@@ -35,6 +36,9 @@ function StatusDot({ status }) {
 }
 
 export default function AdminOperations() {
+  // An OPERATOR (shop assistant) only gets Iniciar / Parar: the service-state buttons (Avariar, Offline, ...) are for the admin.
+  const { role } = useAuth()
+  const isOperator = role === 'OPERATOR'
   const [machines, setMachines] = React.useState([])
   const [loading, setLoading] = React.useState(false)
 
@@ -119,7 +123,11 @@ export default function AdminOperations() {
     }
   }
   const startMachine = (m) => runAdminAction(m, 'start')
-  const stopMachine = (m) => runAdminAction(m, 'end')
+  // The system frees the machine, but the cycles already sent are INSIDE the machine: say so before.
+  const stopMachine = (m) => {
+    const ok = window.confirm(`Parar ${m.name}?\n\nIsto liberta a máquina no sistema, mas os ciclos já pagos ficam dentro da própria máquina (continua pronta a trabalhar). Cancele-os também na máquina: botão de parar ou desligar da corrente.`)
+    if (ok) runAdminAction(m, 'end')
+  }
   const setOffline = (m) => setMachineStatus(m, 'offline', 'Offline')
   const setOnline = (m) => setMachineStatus(m, 'free', 'Livre')
   // "Avariar" / "Reparado": the machine's own status enum already has a
@@ -188,18 +196,18 @@ export default function AdminOperations() {
           {m.status === 'working' && (
             <ActionButton onClick={() => stopMachine(m)} variant="secondary" Icon={Square}>Parar</ActionButton>
           )}
-          {m.status === 'reserved' && (
+          {!isOperator && m.status === 'reserved' && (
             <ActionButton onClick={() => setMachineStatus(m, 'free', 'Livre')} variant="secondary" Icon={X}>Cancelar</ActionButton>
           )}
-          {m.status === 'fault' ? (
+          {isOperator ? null : m.status === 'fault' ? (
             <ActionButton onClick={() => setRepaired(m)} variant="primary" Icon={CheckCircle2} full>Reparada</ActionButton>
           ) : (
             <ActionButton onClick={() => setFault(m)} variant="secondary" Icon={Wrench}>Avariar</ActionButton>
           )}
-          {m.status !== 'offline' && m.status !== 'fault' && (
+          {!isOperator && m.status !== 'offline' && m.status !== 'fault' && (
             <ActionButton onClick={() => setOffline(m)} variant="secondary" Icon={Power}>Offline</ActionButton>
           )}
-          {m.status === 'offline' && (
+          {!isOperator && m.status === 'offline' && (
             <ActionButton onClick={() => setOnline(m)} variant="secondary" Icon={Power}>Online</ActionButton>
           )}
         </div>

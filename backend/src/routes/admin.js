@@ -1,7 +1,7 @@
 import { getEmailBrand } from '../services/emailBrand.js'
 import express from 'express'
 import mongoose from 'mongoose'
-import { requireAdmin, requireSuperAdmin, requireStaffRead, requireAnyStaff, requireTechnician } from '../middleware/auth.js'
+import { requireAdmin, requireSuperAdmin, requireStaffRead, requireAnyStaff, requireTechnician, requireMachineOperator, requireDashboardUser } from '../middleware/auth.js'
 import MaintenanceTicket from '../models/maintenanceTicket.js'
 import Coupon from '../models/coupon.js'
 import { sendMail } from '../services/mailer.js'
@@ -40,7 +40,13 @@ const router = express.Router()
 // Any dashboard role (ADMIN/SUPERADMIN/STAFF/TECHNICIAN) can reach this
 // router at all; individual routes narrow further with requireAdmin,
 // requireStaffRead or requireTechnician below.
-router.use(requireAnyStaff)
+router.use(requireDashboardUser)
+// ...but an OPERATOR reaches ONLY the machine list and the manual start / release of a machine: every other route answers 403 for them.
+const OPERATOR_ALLOWED = (req) => (req.method === 'GET' && req.path === '/machines') || (req.method === 'POST' && /^\/machines\/[^/]+\/(start|end)$/.test(req.path))
+router.use((req, res, next) => {
+  if (req.userModel?.role === 'OPERATOR' && !OPERATOR_ALLOWED(req)) return res.status(403).json({ error: 'Forbidden' })
+  next()
+})
 
 // A change to what the shop must follow (machines, prices, settings, interfaces, peripherals) is
 // made here on the central server. Tell the shop to pull it NOW instead of waiting for its
@@ -277,8 +283,8 @@ async function machineAdminAction(req, res, kind) {
   logAction(req, `machine.admin_${kind}_requested`, 'Machine', machine._id, { name: machine.name })
   res.json({ success: true, queued: true, commandIds: cmds.map((c) => c._id) })
 }
-router.post('/machines/:id/start', requireAdmin, (req, res, next) => machineAdminAction(req, res, 'start').catch(next))
-router.post('/machines/:id/end', requireAdmin, (req, res, next) => machineAdminAction(req, res, 'end').catch(next))
+router.post('/machines/:id/start', requireMachineOperator, (req, res, next) => machineAdminAction(req, res, 'start').catch(next))
+router.post('/machines/:id/end', requireMachineOperator, (req, res, next) => machineAdminAction(req, res, 'end').catch(next))
 
 // POST /admin/machines/:id/service — logs a manual maintenance visit and
 // resolves the machine's open ticket, if any.

@@ -686,7 +686,7 @@ function AppInner() {
               backend's requireAdmin/requireStaffRead/requireTechnician guards
               are the real enforcement — this is just so the wrong role lands
               on an explicit "not allowed" redirect instead of a broken page. */}
-          <Route path="/admin" element={<RequireAdmin roles={['ADMIN', 'SUPERADMIN', 'STAFF', 'TECHNICIAN']}><AdminDashboard /></RequireAdmin>}>
+          <Route path="/admin" element={<RequireAdmin roles={['ADMIN', 'SUPERADMIN', 'STAFF', 'TECHNICIAN', 'OPERATOR']}><AdminDashboard /></RequireAdmin>}>
             <Route index element={<Navigate to="overview" replace />} />
             {/* Backwards-compat: support legacy /admin/dashboard URLs */}
             <Route path="dashboard" element={<Navigate to="overview" replace />} />
@@ -702,7 +702,7 @@ function AppInner() {
             <Route path="cards" element={<AdminCards />} />
             <Route path="transactions" element={<AdminTransactions />} />
             <Route path="day-close" element={<AdminDayClose />} />
-            <Route path="operations" element={<RequireAdmin><AdminOperations /></RequireAdmin>} />
+            <Route path="operations" element={<RequireAdmin roles={['ADMIN', 'SUPERADMIN', 'OPERATOR']}><AdminOperations /></RequireAdmin>} />
             <Route path="settings" element={<RequireAdmin><AdminSettings /></RequireAdmin>} />
             <Route path="audit-log" element={<RequireAdmin><AdminAuditLog /></RequireAdmin>} />
             <Route path="profile" element={<AdminProfile />} />

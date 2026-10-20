@@ -5,7 +5,7 @@ import NavSearch from '@/components/NavSearch'
 import { LogOut, Bell, Sun, Moon, ChevronDown, User } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import { useAuth } from '../context/AuthContext'
-import { useNavigate, Outlet } from 'react-router-dom'
+import { useNavigate, useLocation, Navigate, Outlet } from 'react-router-dom'
 
 // The admin redesign only specifies a light "alabaster" theme — every color
 // here is a hardcoded hex, not a `--background`/`--card` token — so there is
@@ -49,7 +49,10 @@ export default function AdminDashboard() {
     navigate('/admin/login')
   }
 
-  const roleLabel = role === 'SUPERADMIN' ? 'Superadmin' : 'Admin'
+  const roleLabel = role === 'SUPERADMIN' ? 'Superadmin' : role === 'OPERATOR' ? 'Operador' : 'Admin'
+  // An operator sees ONE page: whatever address they open, they land on Operações.
+  const here = useLocation()
+  if (role === 'OPERATOR' && !here.pathname.startsWith('/admin/operations')) return <Navigate to="/admin/operations" replace />
 
   return (
     <SidebarProvider>
