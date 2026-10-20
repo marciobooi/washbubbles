@@ -164,6 +164,81 @@ describe('MB WAY payment (Eupago, simulated)', function () {
     const p = await request(app).get(`/api/gateways/mbway/${s.body.id}`).set(auth())
     expect(p.body.status).to.equal('expired')
   })
+
+  it('the machine only starts when Eupago says paid: pending, refused, expired and cancelled all leave it FREE and untouched', async () => {
+    await turnOn()
+    for (const outcome of ['pendente', 'expirada', 'cancelada']) {
+      await MbwayPayment.deleteMany({})
+      state = outcome
+      const s = await start()
+      expect(s.status, outcome).to.equal(201)
+      await MbwayPayment.updateOne({ _id: s.body.id }, { $set: { lastPolledAt: new Date(0) } })
+      await request(app).get(`/api/gateways/mbway/${s.body.id}`).set(auth())
+      expect(started, outcome).to.have.length(0)
+      expect((await Machine.findOne({ name: 'Lavar 1' })).status, outcome).to.equal('free')
+    }
+    // cancelled at the kiosk
+    await MbwayPayment.deleteMany({})
+    state = 'pendente'
+    const s = await start()
+    await request(app).post(`/api/gateways/mbway/${s.body.id}/cancel`).set(auth())
+    expect(started).to.have.length(0)
+    expect((await Machine.findOne({ name: 'Lavar 1' })).status).to.equal('free')
+    expect(await Sale.countDocuments({})).to.equal(0)
+  })
+
+  it('a machine with an MB WAY request waiting cannot be sold to anyone else (cash, a second MB WAY); once it is over it is free again', async () => {
+    await turnOn()
+    const s = await start()
+    expect(s.status).to.equal(201)
+    const second = await start({ batchId: 'b-2' })
+    expect(second.status).to.equal(409)
+    coinMachine.client.client.balance = 20 // cash really inserted, so the refusal below is the reservation and nothing else
+    const cash = await request(app).post('/api/gateways/cash/pay').set(auth()).send({ items: [{ _id: await machineId() }], inserted: 10.5, batchId: 'b-cash' })
+    expect(cash.status).to.equal(409)
+    expect(cash.body.code).to.equal('mbway-in-progress')
+    coinMachine.client.client.balance = 0
+    await request(app).post(`/api/gateways/mbway/${s.body.id}/cancel`).set(auth())
+    const again = await start({ batchId: 'b-3' }) // typed the number wrong: cancel and try again is allowed
+    expect(again.status).to.equal(201)
+  })
+
+  it('what the customer saw is what is charged: another total is refused and Eupago is never asked', async () => {
+    await turnOn()
+    const r = await start({ expectedAmount: 9.5 })
+    expect(r.status).to.equal(409)
+    expect(r.body.code).to.equal('price-changed')
+    expect(calls).to.have.length(0)
+    const ok = await start({ expectedAmount: 10.5 })
+    expect(ok.status).to.equal(201)
+  })
+
+  it('no extra credit, no change, no card touched: cash already in the machine stays as it was, nothing is dispensed, the amount is exactly the price', async () => {
+    await turnOn()
+    const Card = (await import('../src/models/card.js')).default
+    await Card.create({ tenantId: tenant._id, code: 'C-1', balance: 7, status: 'active' })
+    coinMachine.client.client.balance = 5
+    coinMachine.client.updateCredits()
+    let dispensed = 0
+    const savedMw = coinMachine.middleware
+    coinMachine.middleware = { ...(savedMw || {}), dispenseChange: async () => { dispensed += 1; return { success: true } } }
+    const s = await start()
+    state = 'paga'
+    await MbwayPayment.updateOne({ _id: s.body.id }, { $set: { lastPolledAt: new Date(0) } })
+    const p = await request(app).get(`/api/gateways/mbway/${s.body.id}`).set(auth())
+    coinMachine.middleware = savedMw
+    expect(p.body.status).to.equal('started')
+    expect(dispensed).to.equal(0)
+    expect(coinMachine.client.getState().balance).to.equal(5)          // the cash inserted by someone else is untouched
+    expect((await Card.findOne({ code: 'C-1' })).balance).to.equal(7) // no card credit, no card debit
+    const sale = await Sale.findOne({})
+    expect(sale.amount).to.equal(10.5)
+    expect(sale.inserted).to.equal(0)
+    expect(sale.change).to.equal(0)
+    expect(sale.type).to.equal('payment')
+    expect(await Sale.countDocuments({ type: 'recharge' })).to.equal(0)
+    coinMachine.client.client.balance = 0
+  })
 })
 
 describe('Eupago state words', () => {

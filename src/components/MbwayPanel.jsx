@@ -17,7 +17,7 @@ const mmss = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Ma
  * MB WAY at the kiosk: the customer types the phone number, approves in the MB WAY app (5 minutes) and the machines start by
  * themselves when the shop sees the payment (it asks Eupago every 2 s). Machines only; a recharge is cash only.
  */
-export default function MbwayPanel({ items, total, couponCode, batchId, onPaid, onClose }) {
+export default function MbwayPanel({ items, total, couponCode, batchId, onPaid, onClose, onAbandon }) {
   const { t } = useTranslation('cart')
   const [step, setStep] = React.useState('choose') // choose | qr | phone | sending | waiting | problem
   // ONE QR = ONE session: a new code every time, and giving the screen up (back, cancel, error, retry, close) ends the code for good
@@ -28,6 +28,8 @@ export default function MbwayPanel({ items, total, couponCode, batchId, onPaid, 
   const [problem, setProblem] = React.useState('')
   const [now, setNow] = React.useState(Date.now())
   const alive = React.useRef(true)
+  // Once a payment was REQUESTED, cancelling or failing ends the purchase: the cart is emptied (nothing was charged, the machine is untouched).
+  const requested = React.useRef(false)
   const dropLink = React.useCallback(() => {
     const l = linkRef.current
     linkRef.current = null
@@ -58,9 +60,9 @@ export default function MbwayPanel({ items, total, couponCode, batchId, onPaid, 
       try {
         const r = await call(`/link/${link.token}`)
         if (!alive.current) return
-        if (r.status === 'started') { linkRef.current = null; setPay(r.payment); setLink(null); setStep('waiting') }
+        if (r.status === 'started') { linkRef.current = null; requested.current = true; setPay(r.payment); setLink(null); setStep('waiting') }
         else if (r.status === 'expired' || r.status === 'not-found') { linkRef.current = null; setProblem(t('mbwayLinkExpired')); setLink(null); setStep('problem') }
-        else if (r.status === 'error') { linkRef.current = null; setProblem(r.code === 'below-minimum' ? t('mbwayMinimum') : r.code === 'cart-refused' ? t('mbwayCartChanged') : t('mbwayRefused')); setLink(null); setStep('problem') }
+        else if (r.status === 'error') { linkRef.current = null; setProblem(r.code === 'below-minimum' ? t('mbwayMinimum') : (r.code === 'cart-refused' || r.code === 'price-changed') ? t('mbwayCartChanged') : t('mbwayRefused')); setLink(null); setStep('problem') }
       } catch { /* the shop is busy for a moment: ask again */ }
     }, 2000)
     return () => { clearInterval(tick); clearInterval(poll) }
@@ -71,14 +73,15 @@ export default function MbwayPanel({ items, total, couponCode, batchId, onPaid, 
     if (!/^(?:00351|351)?9\d{8}$/.test(digits)) { toast({ title: t('mbwayBadPhone'), variant: 'warning' }); return }
     setStep('sending')
     try {
-      const body = { items: items.map((i) => ({ _id: i._id || i.productId || i.id, quantity: i.quantity })), phone: digits, batchId, couponCode: couponCode || undefined }
+      const body = { items: items.map((i) => ({ _id: i._id || i.productId || i.id, quantity: i.quantity })), phone: digits, batchId, couponCode: couponCode || undefined, expectedAmount: Number(total) }
       const r = await call('/start', { method: 'POST', json: body })
       if (!alive.current) return
+      requested.current = true
       setPay(r); setStep('waiting')
     } catch (e) {
       if (!alive.current) return
       const code = e?.body?.code
-      setProblem(code === 'bad-phone' ? t('mbwayBadPhone') : code === 'below-minimum' ? t('mbwayMinimum') : code === 'mbway-off' ? t('mbwayOff') : (e?.body?.error ? t('mbwayRefused') : t('mbwayFailed')))
+      setProblem(code === 'bad-phone' ? t('mbwayBadPhone') : code === 'below-minimum' ? t('mbwayMinimum') : code === 'mbway-off' ? t('mbwayOff') : (code === 'price-changed' || code === 'cart-refused') ? t('mbwayCartChanged') : (e?.body?.error ? t('mbwayRefused') : t('mbwayFailed')))
       setStep('problem')
     }
   }
@@ -103,7 +106,11 @@ export default function MbwayPanel({ items, total, couponCode, batchId, onPaid, 
 
   async function cancel() {
     dropLink()
-    if (step === 'waiting' && pay) { try { await call(`/${pay.id}/cancel`, { method: 'POST' }) } catch { /* the shop keeps following it */ } }
+    if (step === 'waiting' && pay) {
+      try { await call(`/${pay.id}/cancel`, { method: 'POST' }) } catch { /* the shop keeps following it */ }
+      onAbandon?.() // a payment was requested and the customer gave up: the cart is emptied
+      return
+    }
     onClose?.()
   }
 
@@ -163,6 +170,7 @@ export default function MbwayPanel({ items, total, couponCode, batchId, onPaid, 
             <div className="rounded-2xl bg-amber-50 border-2 border-amber-200 p-6 text-center">
               <div className="text-3xl font-bold text-slate-900">{t('mbwayWaiting')}</div>
               <div className="text-xl text-slate-600 mt-2">{t('mbwayWaitingHint', { phone: pay?.phone || '' })}</div>
+            <div className="text-2xl font-bold text-slate-900 mt-3">{t('mbwayAmount', { amount: `${Number(pay?.amount ?? total).toFixed(2).replace('.', ',')}€` })}</div>
               <div className="text-6xl font-black text-[#d3101c] tabular-nums mt-4">{mmss(left)}</div>
             </div>
             <button type="button" onClick={cancel} className="h-[72px] rounded-2xl bg-slate-100 text-slate-600 font-bold text-2xl active:scale-[0.98]">{t('mbwayCancel')}</button>
@@ -172,10 +180,14 @@ export default function MbwayPanel({ items, total, couponCode, batchId, onPaid, 
         {step === 'problem' && (
           <>
             <div className="rounded-2xl bg-rose-50 border-2 border-rose-200 p-6 text-center text-2xl font-semibold text-rose-800">{problem}</div>
+            {requested.current ? (
+              <button type="button" onClick={() => onAbandon?.()} className="h-[72px] rounded-2xl bg-slate-100 text-slate-700 font-bold text-2xl active:scale-[0.98]">{t('mbwayOk')}</button>
+            ) : (
             <div className="grid grid-cols-2 gap-4">
               <button type="button" onClick={onClose} className="h-[72px] rounded-2xl bg-slate-100 text-slate-600 font-bold text-2xl active:scale-[0.98]">{t('mbwayBack')}</button>
               <button type="button" onClick={backToChoose} className="h-[72px] rounded-2xl bg-[#d3101c] text-white font-bold text-2xl active:scale-[0.98]">{t('mbwayRetry')}</button>
             </div>
+            )}
           </>
         )}
       </div>

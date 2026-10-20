@@ -240,5 +240,6 @@
   "mbwayQrValid": "This code is for this payment only: {{time}}",
   "mbwayLinkFailed": "The code could not be made. Type the number here.",
   "mbwayLinkExpired": "The code expired. Make a new one.",
-  "mbwayCartChanged": "The purchase changed meanwhile. Go back and try again."
+  "mbwayCartChanged": "The purchase changed meanwhile. Go back and try again.",
+  "mbwayOk": "OK"
 }

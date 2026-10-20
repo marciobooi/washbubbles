@@ -52,10 +52,13 @@ export async function priceCart({ tenantId, items, couponCode }, { resolveMachin
   return { cfg, coupon, resolved }
 }
 
-export async function startPayment({ tenantId, items, phone, batchId, couponCode }, deps) {
+export async function startPayment({ tenantId, items, phone, batchId, couponCode, expectedAmount }, deps) {
   const p9 = normalizePhone(phone)
   if (!p9) throw err(400, 'bad-phone', 'Invalid phone number')
   const { cfg, coupon, resolved } = await priceCart({ tenantId, items, couponCode }, deps)
+  // The amount is fixed by the shop from its own prices. If the customer was shown another figure (a promo ended, a price changed while
+  // the QR was on screen), nothing is charged: the session ends and a new one shows the new amount.
+  if (expectedAmount !== undefined && Math.abs(roundMoney(expectedAmount) - resolved.total) > 0.005) throw err(409, 'price-changed', 'The price changed')
 
   const identifier = `wb-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
   const now = Date.now()

@@ -784,6 +784,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
           couponCode={couponCode}
           batchId={mbwayBatch.current}
           onClose={() => setMbwayOpen(false)}
+          onAbandon={() => { setMbwayOpen(false); clearCart(); onClose() }}
           onPaid={(r) => { setMbwayOpen(false); onMbwayPaid(r, cart, mbwayBatch.current) }}
         />
       )}

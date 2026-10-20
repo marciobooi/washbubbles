@@ -14,6 +14,7 @@ import coinMachine from '../services/coinMachine.js'
 import { findUsableCoupon, applyCouponDiscount, redeemCoupon } from '../services/coupons.js'
 import { startPayment, pollPayment, cancelPayment, priceCart, mbwaySettings, MIN_AMOUNT as MBWAY_MIN } from '../services/mbway.js'
 import * as mbwayLink from '../services/mbwayLinkClient.js'
+import MbwayPayment from '../models/mbwayPayment.js'
 
 const router = express.Router()
 
@@ -66,6 +67,11 @@ export async function resolveMachineLines(items, MachineT, PriceT, method, coupo
     if (!machine) return { ok: false, status: 404, error: { error: 'Machine not found', machineRef: ref } }
     if (machine.status === 'working') {
       return { ok: false, status: 409, error: { error: 'Machine already in use', machineId: machine._id } }
+    }
+    // An MB WAY request is waiting for its customer to approve: nobody else may buy this machine meanwhile (otherwise the payment arrives
+    // and the machine is gone). It frees itself when that request is paid, refused, or its window is over.
+    if (await MbwayPayment.exists({ tenantId: machine.tenantId, status: 'pending', 'lines.machineId': machine._id, expiresAt: { $gt: new Date(Date.now() - 90_000) } })) {
+      return { ok: false, status: 409, error: { error: 'Machine reserved by an MB WAY payment in progress', code: 'mbway-in-progress', machineId: machine._id } }
     }
     if (machine.outOfService || machine.status === 'offline' || machine.status === 'fault') {
       return { ok: false, status: 409, error: { error: 'Machine out of service', machineId: machine._id } }
@@ -419,8 +425,8 @@ router.get('/mbway/config', requireKiosk, async (req, res) => {
 router.post('/mbway/start', requireKiosk, async (req, res) => {
   try {
     if (!coinMachine.running) return res.status(409).json({ error: 'MB WAY is only available at the shop', code: 'mbway-off' })
-    const { items, phone, batchId, couponCode } = req.body || {}
-    res.status(201).json(await startPayment({ tenantId: req.tenantId, items, phone, batchId, couponCode }, { resolveMachineLines, isRecharge }))
+    const { items, phone, batchId, couponCode, expectedAmount } = req.body || {}
+    res.status(201).json(await startPayment({ tenantId: req.tenantId, items, phone, batchId, couponCode, expectedAmount: Number.isFinite(Number(expectedAmount)) ? Number(expectedAmount) : undefined }, { resolveMachineLines, isRecharge }))
   } catch (e) { mbwayFail(res, e) }
 })
 
@@ -436,7 +442,7 @@ router.post('/mbway/link', requireKiosk, async (req, res) => {
     const { resolved } = await priceCart({ tenantId: req.tenantId, items, couponCode }, { resolveMachineLines, isRecharge })
     const link = await mbwayLink.createLink({ amount: resolved.total, machines: resolved.lines.map((l) => l.machine.name) })
     dropOldLinks()
-    mbwayLinks.set(link.token, { tenantId: String(req.tenantId), items, batchId, couponCode, expiresAt: new Date(link.expiresAt).getTime(), paymentId: null })
+    mbwayLinks.set(link.token, { tenantId: String(req.tenantId), items, batchId, couponCode, amount: resolved.total, expiresAt: new Date(link.expiresAt).getTime(), paymentId: null })
     res.status(201).json({ token: link.token, url: link.url, amount: resolved.total, expiresAt: link.expiresAt })
   } catch (e) { mbwayFail(res, e) }
 })
@@ -459,7 +465,7 @@ router.get('/mbway/link/:token', requireKiosk, async (req, res) => {
     if (r.status === 'phone_received' && r.phone) {
       entry.starting = true
       try {
-        const payment = await startPayment({ tenantId: req.tenantId, items: entry.items, phone: r.phone, batchId: entry.batchId, couponCode: entry.couponCode }, { resolveMachineLines, isRecharge })
+        const payment = await startPayment({ tenantId: req.tenantId, items: entry.items, phone: r.phone, batchId: entry.batchId, couponCode: entry.couponCode, expectedAmount: entry.amount }, { resolveMachineLines, isRecharge })
         entry.paymentId = payment.id
         return res.json({ status: 'started', payment })
       } catch (e) {

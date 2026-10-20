@@ -240,5 +240,6 @@
   "mbwayQrValid": "Este código solo vale para este pago: {{time}}",
   "mbwayLinkFailed": "No se pudo generar el código. Escriba el número aquí.",
   "mbwayLinkExpired": "El código caducó. Genere uno nuevo.",
-  "mbwayCartChanged": "La compra cambió entretanto. Vuelva atrás e inténtelo de nuevo."
+  "mbwayCartChanged": "La compra cambió entretanto. Vuelva atrás e inténtelo de nuevo.",
+  "mbwayOk": "OK"
 }
