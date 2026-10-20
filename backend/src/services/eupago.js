@@ -22,7 +22,7 @@ export function normalizePhone(raw) {
 /** 912 345 678 -> "9•• ••• 678": what is kept and shown (the full number is not stored). */
 export const maskPhone = (p) => (p && p.length === 9 ? `${p[0]}•• ••• ${p.slice(-3)}` : '')
 
-const PAID = ['paga', 'pago', 'paid', 'success', 'sucesso']
+const PAID = ['paga', 'transferida', 'pago', 'paid', 'success', 'sucesso']   // docs.eupago.pt/reference/transactions: paga, transferida (paid and already transferred)
 const FAILED = ['expirada', 'expired', 'cancelada', 'cancelado', 'cancelled', 'canceled', 'erro', 'error', 'rejeitada', 'rejected', 'recusada', 'falhada', 'failed']
 const PENDING = ['pendente', 'pending']
 

@@ -11,6 +11,7 @@ describe('Eupago helpers', () => {
   })
   it('only "paid" words mean paid; anything unknown is pending, never paid', () => {
     expect(normalizeState('paga')).to.equal('paid')
+    expect(normalizeState('transferida')).to.equal('paid')
     expect(normalizeState('pendente')).to.equal('pending')
     expect(normalizeState('qualquer coisa')).to.equal('pending')
     expect(normalizeState(undefined)).to.equal('pending')
