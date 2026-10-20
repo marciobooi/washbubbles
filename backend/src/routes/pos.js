@@ -269,6 +269,15 @@ router.post('/recharge', requireKiosk, async (req, res) => {
   if (insertedNum < rechargeAmount) {
     return res.status(400).json({ error: 'Inserted amount is less than the recharge amount' })
   }
+  // On the shop PC the cash really inserted is known: no recharge without it, and the cash is spent by this recharge.
+  if (coinMachine.running) {
+    const st = coinMachine.client?.getState?.() || {}
+    const have = roundMoney(st.balance || 0)
+    if (insertedNum > have + 0.005 || have + 0.005 < rechargeAmount) {
+      return res.status(409).json({ error: 'Insert the cash first', code: 'cash-not-inserted', inserted: have })
+    }
+    coinMachine.client.restoreBalances({ balance: roundMoney(Math.max(0, have - insertedNum)), balanceCard: st.balanceCard })
+  }
   // Change is always derived here, never taken from the request — a client-supplied
   // `change` is a request to empty the hopper.
   const changeAmount = roundMoney(insertedNum - rechargeAmount)
@@ -338,6 +347,9 @@ router.post('/recharge', requireKiosk, async (req, res) => {
     } catch (e) {
       changeError = e.message
       console.error('[pos] Failed to dispense change:', e.message)
+    }
+    if (!changeDispensed && coinMachine.running) {
+      try { const st2 = coinMachine.client.getState(); coinMachine.client.restoreBalances({ balance: roundMoney((st2.balance || 0) + changeAmount), balanceCard: st2.balanceCard }) } catch { /* the audit/log below still tells the operator */ }
     }
     if (!changeDispensed) {
       // The sale is already recorded, so the shortfall is attributable. Tell the

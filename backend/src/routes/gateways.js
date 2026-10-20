@@ -131,7 +131,7 @@ router.post('/cards/:code/topup', requireKiosk, async (req, res) => {
   // Atomic: a concurrent top-up on the same card must not overwrite this one.
   card = await creditCard(CardT, { _id: card._id }, topUp)
 
-  const sale = await SaleT.create({ amount: topUp, items: [{ type: 'recharge', amount: topUp }], method: 'card', batchId, inserted: topUp, change: 0, type: 'recharge', cardId: card._id, cardCode: card.code })
+  const sale = await SaleT.create({ amount: topUp, items: [{ type: 'recharge', amount: topUp }], method: 'cash', batchId, inserted: topUp, change: 0, type: 'recharge', cardId: card._id, cardCode: card.code })
 
   res.json({ success: true, sale, card })
 })

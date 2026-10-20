@@ -308,6 +308,11 @@ Steps (on the PC, PowerShell, in `C:\washbubbles`):
 - **E-mail:** the PC now has the MAIL_* settings; the receipt finds its sale (the cash payment sends its batchId); the template uses the shop's logo, name and contact from the admin. To check: the receipt really arrives (log line "accepted by the mail server").
 - **Admin:** OPERATOR role (user `tatiana`, central server): only Operações, only Iniciar / Parar; every other route answers 403; "Parar" warns that paid cycles stay inside the machine. Role menu with "Alterar palavra-passe" / "Sair" for every user (minimum 8 characters). The create / edit card window works again.
 
+### RULE (2026-10-20): no money in, no card credit
+- **Found:** two recharges of 10 EUR were credited with NOTHING paid (a recharge in the cart, paid "with the card" that was in the reader; `/gateways/card/pay` added the recharge lines to the balance with no cash check). 20 EUR of free credit: card `-1173654100` (+10, 4.50 left) and `-91859025` (+10, spent on a machine). The balances were zeroed and the two sales voided (audit `card.manual_debit`, `metadata.voided`).
+- **Rules now enforced on the SERVER (tests in `noFreeCredit.test.js`):** (1) card pay refuses any recharge line; (2) a top-up (`/gateways/cards/:code/topup`) and `/pos/recharge` need the cash really in the session and spend it; (3) `/gateways/cash/pay` cannot claim more cash than the session holds. The screen never pays a recharge by card either.
+- **Still to build (ideas):** a daily check that every card balance = cash recharges + new-card credit - card payments, with an operator alert on any difference; an alert when a recharge sale is not cash.
+
 ### To test next (new, not yet run on the real screen)
 - [ ] Free recharge: type 3,30 in My card, pay 3.30 in coins, balance +3.30
 - [ ] Pay a washer with the card (card already in the reader): the button "Confirmar e iniciar", card debited once, the home screen after
