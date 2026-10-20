@@ -66,10 +66,10 @@ export default function AdminUsers(){
     try {
       // validate passwords when creating or when provided on update
       if (!editing) {
-        if (!password || password.length < 6) throw new Error('Password must be at least 6 characters')
+        if (!password || password.length < 8) throw new Error('A palavra-passe deve ter pelo menos 8 caracteres')
         if (password !== confirmPassword) throw new Error('Passwords do not match')
       } else if (password) {
-        if (password.length < 6) throw new Error('Password must be at least 6 characters')
+        if (password.length < 8) throw new Error('A palavra-passe deve ter pelo menos 8 caracteres')
         if (password !== confirmPassword) throw new Error('Passwords do not match')
       }
 
@@ -205,7 +205,7 @@ export default function AdminUsers(){
               <input type="password" className="w-full mt-2 p-2 border rounded" placeholder="Confirmar password" value={confirmPassword} onChange={(e)=>setConfirmPassword(e.target.value)} />
             </div>
 
-            <div className="md:col-span-2 text-xs text-muted-foreground">Password mínima: 6 caracteres. Deixe em branco para não alterar.</div>
+            <div className="md:col-span-2 text-xs text-muted-foreground">Password mínima: 8 caracteres. Deixe em branco para não alterar.</div>
 
           <div className="md:col-span-2 flex justify-end gap-2 mt-4">
             <Button variant="outline" type="button" onClick={() => setModalOpen(false)}><X className="h-4 w-4 mr-2" />Cancelar</Button>

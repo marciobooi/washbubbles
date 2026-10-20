@@ -126,6 +126,7 @@ router.get('/users', requireAdmin, async (req, res) => {
 router.post('/users', requireAdmin, async (req, res) => {
   const { username, role, password } = req.body
   if (!username) return res.status(400).json({ error: 'Missing username' })
+  if (password && (typeof password !== 'string' || password.length < 8)) return res.status(400).json({ error: 'Password must be at least 8 characters' })
 
   // If password is provided, hash it; otherwise generate a random password (and return it)
   let hash
@@ -332,7 +333,7 @@ router.put('/maintenance/:id', requireTechnician, async (req, res) => {
 // These MUST go through withTenant. With bare `User.findByIdAndUpdate` a tenant-A
 // admin could PUT any superadmin's id with a new password and role and take over
 // the whole platform from one low-value account.
-const ASSIGNABLE_ROLES = ['USER', 'KIOSK', 'ADMIN', 'STAFF', 'TECHNICIAN']
+const ASSIGNABLE_ROLES = ['USER', 'KIOSK', 'ADMIN', 'STAFF', 'TECHNICIAN', 'OPERATOR']
 
 router.get('/users/:id', requireAdmin, async (req, res) => {
   const UserT = withTenant(User, req)
@@ -353,8 +354,8 @@ router.put('/users/:id', requireAdmin, async (req, res) => {
     update.role = role
   }
   if (password) {
-    if (typeof password !== 'string' || password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' })
+    if (typeof password !== 'string' || password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' })
     }
     update.password = await bcrypt.hash(password, 10)
   }

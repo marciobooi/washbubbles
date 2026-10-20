@@ -44,3 +44,26 @@ describe('OPERATOR role: a shop assistant can only start or release a machine', 
     }
   })
 })
+
+describe('an admin can create and edit OPERATOR users', function () {
+  this.timeout(20000)
+  let app, adminToken, User
+  before(async () => { await startTestDb(); app = await buildTestApp(); User = (await import('../src/models/user.js')).default })
+  after(async () => { await stopTestDb() })
+  beforeEach(async () => { await clearTestDb(); const { admin } = await seedTenantAndUsers(); adminToken = signToken(admin) })
+
+  it('creates one, and changes an existing user to OPERATOR (was "Invalid role")', async () => {
+    const c = await request(app).post('/api/admin/users').set('Authorization', `Bearer ${adminToken}`).send({ username: 'nova', role: 'OPERATOR', password: 'op-pass-1234' })
+    expect(c.status).to.be.oneOf([200, 201])
+    const u = await User.findOne({ username: 'nova' })
+    expect(u.role).to.equal('OPERATOR')
+    const other = await User.create({ username: 'outra', role: 'STAFF', password: 'x', tenantId: u.tenantId })
+    const r = await request(app).put(`/api/admin/users/${other._id}`).set('Authorization', `Bearer ${adminToken}`).send({ role: 'OPERATOR' })
+    expect(r.status).to.equal(200)
+    expect((await User.findById(other._id)).role).to.equal('OPERATOR')
+  })
+  it('refuses a password shorter than 8', async () => {
+    const r = await request(app).post('/api/admin/users').set('Authorization', `Bearer ${adminToken}`).send({ username: 'curta', role: 'OPERATOR', password: 'short' })
+    expect(r.status).to.equal(400)
+  })
+})
