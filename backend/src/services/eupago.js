@@ -22,13 +22,20 @@ export function normalizePhone(raw) {
 /** 912 345 678 -> "9•• ••• 678": what is kept and shown (the full number is not stored). */
 export const maskPhone = (p) => (p && p.length === 9 ? `${p[0]}•• ••• ${p.slice(-3)}` : '')
 
+const PAID = ['paga', 'pago', 'paid', 'success', 'sucesso']
+const FAILED = ['expirada', 'expired', 'cancelada', 'cancelado', 'cancelled', 'canceled', 'erro', 'error', 'rejeitada', 'rejected', 'recusada', 'falhada', 'failed']
+const PENDING = ['pendente', 'pending']
+
 /** Eupago's own word for the state -> ours. Unknown words are treated as "pending" (never as paid). */
 export function normalizeState(word) {
   const s = String(word ?? '').trim().toLowerCase()
-  if (['paga', 'pago', 'paid', 'success', 'sucesso'].includes(s)) return 'paid'
-  if (['expirada', 'expired', 'cancelada', 'cancelado', 'cancelled', 'canceled', 'erro', 'error', 'rejeitada', 'rejected', 'recusada', 'falhada', 'failed'].includes(s)) return 'failed'
+  if (PAID.includes(s)) return 'paid'
+  if (FAILED.includes(s)) return 'failed'
   return 'pending'
 }
+
+/** A word we have seen or expect. Anything else is reported (the "paid" spelling was never observed on the sandbox). */
+export const isKnownState = (word) => { const s = String(word ?? '').trim().toLowerCase(); return PAID.includes(s) || FAILED.includes(s) || PENDING.includes(s) }
 
 async function http(fetchImpl, url, init, timeoutMs = 15000) {
   const ctrl = new AbortController()

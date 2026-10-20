@@ -14,7 +14,7 @@ import Machine from '../models/machine.js'
 import Sale from '../models/sale.js'
 import Price from '../models/price.js'
 import { withTenant } from './tenant.js'
-import { createMbway, referenceState, normalizePhone, maskPhone } from './eupago.js'
+import { createMbway, referenceState, normalizePhone, maskPhone, isKnownState } from './eupago.js'
 import { roundMoney } from '../utils/money.js'
 import { findUsableCoupon, redeemCoupon } from './coupons.js'
 
@@ -123,6 +123,11 @@ async function check(p) {
   const late = Date.now() > p.expiresAt.getTime() + GRACE_MS
   if (!cfg.apiKey) return p
   const r = await referenceState({ env: cfg.env, apiKey: cfg.apiKey, reference: p.reference, fetchImpl })
+  // A word for the state that we do not know: never treated as paid, but never ignored either.
+  if (r.state && !isKnownState(r.raw) && !String(p.error || '').startsWith('Estado desconhecido')) {
+    await MbwayPayment.updateOne({ _id: p._id }, { $set: { error: `Estado desconhecido do Eupago: ${r.raw}` } })
+    await alertOperator(p.tenantId, 'MB WAY: estado desconhecido no Eupago', `Referência ${p.reference} devolveu "${r.raw}" e o sistema não sabe se é pago. Veja o pagamento no backoffice do Eupago e avise o programador.`)
+  }
   if (r.state === 'paid') {
     if (p.status === 'pending') return finalizePaid(p)
     if (p.status === 'cancelled') {

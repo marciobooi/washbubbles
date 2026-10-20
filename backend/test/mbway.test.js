@@ -164,3 +164,11 @@ describe('MB WAY payment (Eupago, simulated)', function () {
     expect(p.body.status).to.equal('expired')
   })
 })
+
+describe('Eupago state words', () => {
+  it('knows the words it has seen or expects, and flags any other', async () => {
+    const { isKnownState } = await import('../src/services/eupago.js')
+    for (const w of ['pendente', 'paga', 'expirada', 'Paid']) expect(isKnownState(w), w).to.equal(true)
+    for (const w of ['liquidada', '', undefined, 'xyz']) expect(isKnownState(w), String(w)).to.equal(false)
+  })
+})
