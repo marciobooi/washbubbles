@@ -13,7 +13,7 @@ Done 2026-10-10 (PC on, SSH over Tailscale): everything tracked in git copied to
 - [x] Screen rebuilt with the kiosk key, backend restarted by the boot task
 - [x] Backend log shows `Low-level controller connected` and `[Downlink] in step with central`
 - [ ] **Hopper has coins in it**: note how many and of which values (owner to check at the machine)
-- [ ] Press F5 on the kiosk (or restart Edge) so it runs the new screen
+- [x] Press F5 on the kiosk (or restart Edge) so it runs the new screen  **DONE: the screen now reloads itself when idle after every update**
 
 ## 0a. Operating rule: only one PC at a time
 
@@ -36,7 +36,7 @@ switched on only when the admin is at the shop or at a quiet time, and then the 
 
 ## 2. Bills — unfinished from before
 
-- [ ] **€10 bill is credited**: put the note in again (it was swallowed uncredited while being read); log must say
+- [x] **€10 bill is credited**: put the note in again (it was swallowed uncredited while being read); log must say  **DONE 2026-10-19: `bill-inserted 10` -> `Bill accepted: 10.00`, credit +10 (several times)**
       `Bill accepted: €10.00` and the badge goes up by €10. The table (`billEqTable`: `"10"`→10) was saved but this
       was never confirmed
 - [x] **€5 bill** (code `5`, credited and refunded as coins, 2026-10-10): insert one, read the code from the log (`bill-inserted`), add it to `billEqTable` in Hetzner, insert again
@@ -72,10 +72,10 @@ switched on only when the admin is at the shop or at a quiet time, and then the 
 
 ## 4. Change from the hopper (never tested)
 
-- [ ] Buy something cheaper than the cash inserted: change is paid out, exact amount, coins in the tray
-- [ ] Change when the hopper cannot cover it: the shortfall is reported to the customer and logged (no silent loss)
+- [x] Buy something cheaper than the cash inserted: change is paid out, exact amount, coins in the tray  **DONE 2026-10-19: 35 EUR credit, 2 EUR dryer, `get-change 3300` -> 33 EUR really dropped (and 4 x 1 EUR coins paid 2 dryers with no change due)**
+- [ ] Change when the hopper cannot cover it: the shortfall is reported to the customer and logged (no silent loss)  **FOUND 2026-10-19: a jammed hopper answered `hopper-status 400` + `no-change 0`; it was read as paid (6 EUR owed, nothing dropped). FIXED (a hopper fault = nothing paid, change stays as credit + operator audit `cash.change.owed`, unit test); not yet seen again at the machine**
 - [ ] `hopperCoinValue`/`hopperMaxDispenseCoins` are right for the coins actually loaded
-- [ ] Hopper stock counter (`hopperConfig.currentCount`) goes down after payouts and survives a restart/pull
+- [ ] Hopper stock counter (`hopperConfig.currentCount`) goes down after payouts and survives a restart/pull  **N/A for now: the stock per coin stays a manual count (13.5b/13.5c)**
 
 - [x] **Which coins does the controller pay?** (owner 2026-10-10: mixed coins, exact total, accepted as fine; biggest-first not controllable from the app) (2026-10-10 owner, EUR 10 refund: total exact, but the mix of coins was random, not biggest-first; the controller chooses, ask the vendor for a per-coin / priority option) In the shop the app only sends the total to the controller (`get-change`, in cents) and the
       controller chooses the coins, so "biggest coins first" has to be seen at the machine. For each of €0.30, €1.70, €3.80, €5.00 and €9.90:
@@ -93,14 +93,14 @@ switched on only when the admin is at the shop or at a quiet time, and then the 
 
 First settle the wiring (see §9), then:
 
-- [ ] Pick a machine that is wired, empty and safe to run; pay the **exact** amount in cash (no change involved)
-- [ ] Log shows `activate-machine sent via controller: interface <addr>, channel <n>` and the washer really starts
-- [ ] Machine turns "Ocupado" on the kiosk and in the central admin, and frees itself when the cycle ends
-- [ ] **Pulse timing**: `tOn=5 / tOff=1` is an unverified unit. If nothing starts, the pulse is probably too short
-- [ ] Pay with more cash than the price: machine starts **and** change is paid (§4)
+- [x] Pick a machine that is wired, empty and safe to run; pay the **exact** amount in cash (no change involved)  **DONE 2026-10-19: Lavar 1 (10.50), Secar 7/8/9/11**
+- [x] Log shows `activate-machine sent via controller: interface <addr>, channel <n>` and the washer really starts  **DONE: `activate-machine` code 200 + `machine-started`; the machine signal turns busy**
+- [ ] Machine turns "Ocupado" on the kiosk and in the central admin, and frees itself when the cycle ends  **PARTLY: Ocupado on the kiosk and in the central seen (Lavar 1). Frees itself at the end of the cycle: not confirmed yet**
+- [x] **Pulse timing**: `tOn=5 / tOff=1` is an unverified unit. If nothing starts, the pulse is probably too short  **DONE: machines start; 5 impulses in one command = 75 min, so `tOn=5 / tOff=1` is fine**
+- [x] Pay with more cash than the price: machine starts **and** change is paid (§4)  **DONE 2026-10-19: machine started and 33 EUR of change paid**
 - [ ] Pay with card balance; pay with part cash + part card
-- [ ] A dryer: the time bought = impulses × 15 min (`tImp`); polarity `low` machines read busy/free correctly
-- [ ] Two machines in one cart start both
+- [x] A dryer: the time bought = impulses × 15 min (`tImp`); polarity `low` machines read busy/free correctly  **DONE: 5 x 15 min = 75 min exactly (Secar 7). Polarity of the low machines: only observed, not systematically checked**
+- [x] Two machines in one cart start both  **DONE 2026-10-19: Secar 8 + 9 in one payment (and later again)**
 
 ## 5b. What do the machines actually tell the app? (find missing or unused signals)
 
@@ -123,7 +123,7 @@ come from the machines and the controller themselves, or from the maker or the P
       Save the raw log lines into `docs/` (what happened at the machine, with the time, next to each controller message)
 - [ ] **List every message type (`op`) the controller sends** over a full day and count them. Any `op` the app does not handle
       is a candidate for a missing feature (the backend should log unknown ones; check that it does)
-- [ ] **`status_int` bit strings**: each interface answers with 8 bits (for example `00000010`), but the app only reads the last two
+- [ ] **`status_int` bit strings**: each interface answers with 8 bits (for example `00000010`), but the app only reads the last two  **PARTLY 2026-10-19: opening the door of Secar 7 and 11 changes NO bit. Start / finish / power cut not tried**
       (the two channels). Switch things at the machine (open the door, start, finish, cut power to the interface) and see which of
       the **other bits** change. They may carry door open, door locked, fault or "cycle finished"
 - [ ] The app already decodes `fault`, `occupied`, `doorLocked`, `doorClosed` per machine (visible in the log as
@@ -133,7 +133,7 @@ come from the machines and the controller themselves, or from the maker or the P
       central admin, and the operator is alerted
 - [ ] Does any machine report a **remaining time**, a **program**, a **cycle counter** or an **error code**? If yes: show it in the
       admin/kiosk; if not, say so here, so we stop looking
-- [ ] Polarity per machine (`activation` high/low): confirm busy and free are not swapped on any machine (lavar 1 and lavar 5 read busy at rest)
+- [x] Polarity per machine (`activation` high/low): confirm busy and free are not swapped on any machine (lavar 1 and lavar 5 read busy at rest)  **DONE: Lavar 1 verified; Lavar 4 and 5 are really running (owner), nothing swapped**
 - [ ] Write down which signals we **do not use yet** and decide, one by one: show to the customer, show to the operator, alert on, ignore
 - [ ] Ask the vendor for the full list of machine and interface messages (also the open questions in `docs/SHOP-HARDWARE-AND-COMMUNICATIONS.md` §11)
 
@@ -142,13 +142,13 @@ come from the machines and the controller themselves, or from the maker or the P
 - [ ] Hetzner admin → Operações → **Iniciar** on a wired, empty machine: it starts within ~5 s without payment;
       the admin shows "Pedido enviado ao posto", then "Ocupado" once the shop confirms
 - [ ] Same from the PC's own admin (`http://localhost:3000`): starts at once
-- [ ] **Parar** frees the machine in the system (the controller has no stop command: a running cycle finishes by itself)
+- [x] **Parar** frees the machine in the system (the controller has no stop command: a running cycle finishes by itself)  **CONFIRMED 2026-10-19 (owner): the machine keeps its paid cycles; the admin now warns before Parar**
 - [ ] Start on an unwired / already running machine is refused with a readable reason
 - [ ] A command sent while the PC is offline is **not** run hours later (older than 2 min = expired)
 
 ## 7. Receipt printer (never tested)
 
-- [ ] Print a receipt from the kiosk after a sale (`print-receipt`): paper comes out, readable, correct total
+- [ ] Print a receipt from the kiosk after a sale (`print-receipt`): paper comes out, readable, correct total  **BLOCKED 2026-10-19: the printer is really broken (owner); disabled in the admin. Test after the repair**
 - [ ] Out-of-paper / printer fault: shown as a peripheral problem, the sale is not blocked
 - [ ] Email receipt (needs the mailbox password, see §12)
 
@@ -156,17 +156,17 @@ come from the machines and the controller themselves, or from the maker or the P
 
 - [x] Present a card: it is read (`card-inserted`), balance shown (owner 2026-10-10, after the kiosk got `rfid:card_detected`)
 - [x] Recharge a card with cash; balance written to the card **and** to the database, and synced to Hetzner — chip write seen: `write-card` 1470 -> `201 ok`, card 14.70, Hetzner 14.70 (2026-10-10; the first attempt lost the EUR 10 to a stale save, fixed in fa4dc70, credited by hand with audit `card.manual_credit`)
-- [ ] Buy a new card: the dispenser releases one, it is written (`write-card` 201) and activated
+- [x] Buy a new card: the dispenser releases one, it is written (`write-card` 201) and activated  **DONE 2026-10-19: dispenser released it, `write-card` 201, activated with 5.00 (three times)**
 - [ ] Card removed mid-way: no double credit, unspent cash goes onto the card
 - [ ] Blocked / `pending_write` card: the right message
 - [ ] `get-version` gets no reply from the controller (known); check it does not matter
 
 ## 9. Machine wiring — decide and fix in Hetzner (source of truth)
 
-- [ ] **Lavar 1**: PC has INT 6 (addr 16) port 1, Hetzner has **nothing**. Decide the true wiring and set it in Hetzner
+- [x] **Lavar 1**: PC has INT 6 (addr 16) port 1, Hetzner has **nothing**. Decide the true wiring and set it in Hetzner  **DONE: now Int 1 / port 2 on both and verified with a real cycle**
 - [ ] **Lavar 2**: INT 6 port 2 on both — confirm it is physically right
 - [ ] Walk every machine (1–9): the interface + port in the admin is the washer/dryer you are standing at
-- [ ] **Lavar 1 and Lavar 5 read busy** from the controller although nobody uses them: real, or wrong polarity
+- [x] **Lavar 1 and Lavar 5 read busy** from the controller although nobody uses them: real, or wrong polarity  **DONE: not a fault (4 and 5 were running; Lavar 1 reads free at rest and busy while running)**
       (`activation` high/low)? Fix before real customers
 - [ ] The pull cannot *remove* a field: clearing a machine's interface in Hetzner does not clear it on the PC
       (needs `$unset` support in `services/downlink.js`)
@@ -180,16 +180,16 @@ come from the machines and the controller themselves, or from the maker or the P
 
 ## 11. Reboot and power cut
 
-- [ ] Restart the PC: it logs in by itself, backend up before login, Edge opens full-screen kiosk, Tailscale/SSH back
+- [x] Restart the PC: it logs in by itself, backend up before login, Edge opens full-screen kiosk, Tailscale/SSH back  **DONE 2026-10-20 23:42: signed in by itself in 11 s (no password), backend up before login, Edge full-screen kiosk, SSH back**
 - [ ] Power cut with credit inside: after power returns the credit is back (≤30 min) and is refunded after 2 min
-- [ ] Backend crash: `run-backend.bat` restarts it, the kiosk page recovers by itself
+- [x] Backend crash: `run-backend.bat` restarts it, the kiosk page recovers by itself  **DONE: `run-backend.bat` restarted it every time it was stopped on 2026-10-19/20; the kiosk page recovered**
 - [ ] Windows Update must not reboot the PC in opening hours (set active hours / policy)
 
 ## 12. Loose ends
 
-- [ ] **Passwords**: admin/kiosk passwords were printed in a chat during setup — rotate them and the kiosk API key
-- [ ] Email: set `MAIL_PASS` for `marcacoes@freshbubbles.pt` in `backend\.env` / `.env.docker`; send a real receipt and a password reset
-- [ ] Windows auto-login has no password: confirm that is acceptable (physical access = full access)
+- [ ] **Passwords**: admin/kiosk passwords were printed in a chat during setup — rotate them and the kiosk API key  **STILL OPEN, and a new one: the password of the operator `tatiana` was typed in a chat on 2026-10-20 (she should change it at first sign-in: Alterar palavra-passe)**
+- [ ] Email: set `MAIL_PASS` for `marcacoes@freshbubbles.pt` in `backend\.env` / `.env.docker`; send a real receipt and a password reset  **PARTLY 2026-10-19: the PC has the MAIL_* settings (copied from Hetzner) and the log now prints the mail server answer. Still to confirm: a receipt really arrives, and a password-reset mail**
+- [ ] Windows auto-login has no password: confirm that is acceptable (physical access = full access)  **UPDATE 2026-10-20: auto-login now uses the account password stored by Windows (netplwiz); the account is a Microsoft account, so a password change breaks it until netplwiz is redone**
 - [ ] TeamViewer is installed on the PC: keep or remove; Tailscale is the way in
 - [ ] Old PC is switched off; decide when to wipe it. Keep its config backup until all machines are verified
 - [ ] Backups: MongoDB on the PC (daily dump) and Hetzner
