@@ -7,6 +7,7 @@ import api from '@/services/api'
 import { toast } from '@/components/ui/Toast'
 import * as websocket from '@/services/websocket'
 import * as localApi from '@/services/local-api'
+import MbwayPanel from './MbwayPanel'
 
 let cachedLogo = null
 function useShopLogo() {
@@ -25,7 +26,7 @@ function useShopLogo() {
   return logo
 }
 
-export default function CartModal({ open, onClose, onPay = () => {}, onClear = () => {} }) {
+export default function CartModal({ open, onClose, onPay = () => {}, onClear = () => {}, onMbwayPaid = () => {} }) {
   const { t, i18n } = useTranslation('cart')
   const shopLogo = useShopLogo()
   const { cart, removeFromCart, clearCart, credit, setQuantity } = useCart()
@@ -33,6 +34,20 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
   // Staff-only manual payment, for when the coin acceptor or card reader is down.
   // Gated behind the operator's admin PIN so a customer cannot self-serve a wash.
   const [showPinPrompt, setShowPinPrompt] = React.useState(false)
+  // MB WAY (Eupago): offered only when the admin has switched it on (setting payments.mbway.enabled, OFF by default)
+  const [mbwayEnabled, setMbwayEnabled] = React.useState(false)
+  const [mbwayOpen, setMbwayOpen] = React.useState(false)
+  const mbwayBatch = React.useRef('')
+  React.useEffect(() => {
+    if (!open) { setMbwayOpen(false); return undefined }
+    let alive = true
+    const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
+    const key = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
+    api.request('/gateways/mbway/config', { headers: key ? { Authorization: `ApiKey ${key}` } : undefined, skipAuth: true, expect: 'json' })
+      .then((r) => { if (alive) setMbwayEnabled(Boolean(r?.enabled)) })
+      .catch(() => { if (alive) setMbwayEnabled(false) })
+    return () => { alive = false }
+  }, [open])
   const [pin, setPin] = React.useState('')
   const [pinError, setPinError] = React.useState(null)
   const [checkingPin, setCheckingPin] = React.useState(false)
@@ -738,6 +753,15 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
                         </button>
                       )}
                     </div>
+                    {mbwayEnabled && !cart.some((i) => i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge'))) && !(credit > 0) && total >= 1 && (
+                      <button
+                        type="button"
+                        onClick={() => { mbwayBatch.current = `mw-${Date.now().toString(36)}`; setMbwayOpen(true) }}
+                        className="w-full min-h-[56px] py-3 px-4 rounded-xl bg-[#d3101c] text-white font-bold text-base sm:text-lg shadow-sm active:scale-[0.99]"
+                      >
+                        {t('mbwayButton')}
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => { setPinError(null); setShowPinPrompt(true) }}
@@ -753,6 +777,16 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
           </>
         )}
       </div>
+      {mbwayOpen && (
+        <MbwayPanel
+          items={cart}
+          total={total}
+          couponCode={couponCode}
+          batchId={mbwayBatch.current}
+          onClose={() => setMbwayOpen(false)}
+          onPaid={(r) => { setMbwayOpen(false); onMbwayPaid(r, cart, mbwayBatch.current) }}
+        />
+      )}
       {/* Card pay prompt */}
       {showCardPrompt && (
         <Modal open={showCardPrompt} onClose={() => setShowCardPrompt(false)} title={t('cardPayTitle')}>

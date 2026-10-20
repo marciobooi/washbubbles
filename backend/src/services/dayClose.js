@@ -45,10 +45,11 @@ export async function findLastDashboardClose(DayCloseT) {
  *  - refunds are negative rows of the same type/method as the sale they reverse, so they net out naturally.
  */
 export function tallySales(sales) {
-  let cash = 0, card = 0, change = 0, prepaid = 0, cashPrepaid = 0
+  let cash = 0, card = 0, mbway = 0, change = 0, prepaid = 0, cashPrepaid = 0
   for (const s of sales) {
     const amt = Number(s.amount || 0)
     if (s.method === 'cash') cash += amt
+    else if (s.method === 'mbway') mbway += amt   // paid online (Eupago): money in the bank, never in the till
     else card += amt
     // Money that was put ON a card, to be spent later: a top-up, or the starting credit that comes with a new card.
     // It sits in the till today, but it is a prepayment: the sale is recorded when the card is spent.
@@ -61,11 +62,12 @@ export function tallySales(sales) {
   }
   const r = (n) => Number(n.toFixed(2))
   return {
-    totalCash: r(cash), totalCard: r(card), totalChangeDispensed: r(change),
+    totalCash: r(cash), totalCard: r(card), totalMbway: r(mbway), totalChangeDispensed: r(change),
     totalRecharges: r(prepaid),
     // The books follow the cash: money is recorded when it enters the till (sales, new cards, top-ups).
     // What customers later spend from their cards is shown for information only (totalCard) — it is not added again.
-    totalSales: r(cash),
+    // MB WAY is a real sale (revenue) that did not touch the till: it is in totalSales but never in the cash to count.
+    totalSales: r(cash + mbway),
     cashSales: r(cash - cashPrepaid),
   }
 }
@@ -103,6 +105,7 @@ export async function getDayCloseSummary(req) {
     cashSales: tally.cashSales,
     totalRecharges: tally.totalRecharges,
     totalCard: tally.totalCard,
+    totalMbway: tally.totalMbway,
     totalSales: tally.totalSales,
     expectedCash,
     salesCount: sales.length,
@@ -230,6 +233,7 @@ export async function createDayClose(req, {
       notes: String(notes || '').slice(0, 500),
       totalCash: tc,
       totalCard: tk,
+      totalMbway: tally.totalMbway,
       totalRecharges: tally.totalRecharges,
       totalSales: tally.totalSales,
       salesCount: sales.length,
@@ -314,6 +318,7 @@ export async function createFloatAdjustment(req, { amount, denominations = [], n
       floatLeft: expectedCash,
       totalCash: tc,
       totalCard: tk,
+      totalMbway: tally.totalMbway,
       totalRecharges: tally.totalRecharges,
       totalSales: tally.totalSales,
       salesCount: sales.length,

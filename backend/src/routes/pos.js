@@ -810,7 +810,7 @@ router.get('/settings/:key', async (req, res) => {
   // isn't meaningful information, and the kiosk needs all of this before a
   // customer session even authenticates as anything (the banner carousel is
   // the very first thing rendered on the homepage).
-  if (!key.startsWith('branding.') && !key.startsWith('cardPurchase.') && !key.startsWith('loyaltyCard.') && !key.startsWith('wifi.') && !key.startsWith('legal.') && key !== 'kioskLockEnabled' && key !== 'banners' && key !== 'bannersTranslations') {
+  if (!key.startsWith('branding.') && !key.startsWith('cardPurchase.') && !key.startsWith('loyaltyCard.') && !key.startsWith('wifi.') && !key.startsWith('legal.') && key !== 'payments.mbway.enabled' && key !== 'kioskLockEnabled' && key !== 'banners' && key !== 'bannersTranslations') {
     return res.status(404).json({ error: 'Not found' })
   }
   const SettingT = withTenant(Setting, req)

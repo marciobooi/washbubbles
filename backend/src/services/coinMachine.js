@@ -168,6 +168,8 @@ class CoinMachine extends EventEmitter {
         },
       })
       this.remoteCommands.start()
+      // MB WAY payments nobody is waiting for any more are still followed to the end (see services/mbway.js).
+      import('./mbway.js').then((m) => m.startSweeper()).catch((e) => console.error('[MBWAY] sweeper not started:', e.message))
 
       // Cash already inserted survives a crash / power cut. Restore FIRST, then
       // start persisting (subscribing saves the current state immediately, which

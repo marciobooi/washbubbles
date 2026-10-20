@@ -35,3 +35,18 @@ describe('Day close: what counts as cash, as a sale, and as a top-up', () => {
     expect(tallySales(sales).totalChangeDispensed).to.equal(3)
   })
 })
+
+describe('MB WAY in the day close: revenue, never till cash', () => {
+  it('counts in the sales but not in the cash, and not as card consumption', async () => {
+    const { tallySales } = await import('../src/services/dayClose.js')
+    const t = tallySales([
+      { method: 'cash', type: 'payment', amount: 5 },
+      { method: 'mbway', type: 'payment', amount: 10.5 },
+      { method: 'card', type: 'payment', amount: 3.6 },
+    ])
+    expect(t.totalCash).to.equal(5)
+    expect(t.totalMbway).to.equal(10.5)
+    expect(t.totalCard).to.equal(3.6)
+    expect(t.totalSales).to.equal(15.5)
+  })
+})

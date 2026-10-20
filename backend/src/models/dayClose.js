@@ -17,7 +17,8 @@ const dayCloseSchema = new Schema({
   totalCash:   { type: Number, default: 0 }, // cash sales in this period
   totalCard:   { type: Number, default: 0 }, // spent from card balances in this period — INFORMATION only, not accounted
   totalRecharges: { type: Number, default: 0 }, // cash put ON cards (in the till, but a prepayment, not a sale)
-  totalSales:  { type: Number, default: 0 }, // = totalCash: the books follow the cash that entered the till
+  totalMbway:  { type: Number, default: 0 }, // paid with MB WAY (bank, not the till)
+  totalSales:  { type: Number, default: 0 }, // = totalCash + totalMbway: the books follow the money that entered (till or bank)
 
   // ── Cash reconciliation ──
   openingFloat:  { type: Number, default: 0 }, // float carried over from the previous close

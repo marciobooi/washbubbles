@@ -195,6 +195,7 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <StatCard label="Fundo inicial"     value={`${fmt(summary.openingFloat)}€`} color="neutral" />
             <StatCard label="Vendas dinheiro"   value={`${fmt(summary.cashSales ?? summary.totalCash)}€`}    color="green" sub={summary.totalRecharges ? `+ ${fmt(summary.totalRecharges)}€ em recargas` : undefined} />
+            {Number(summary.totalMbway) > 0 && <StatCard label="MB WAY" value={`${fmt(summary.totalMbway)}€`} color="green" sub="pago no banco: não está na caixa" />}
             <StatCard label="Consumo de cartões" value={`${fmt(summary.totalCard)}€`}    color="blue" sub="só informativo, não entra na contabilidade" />
             <StatCard label="Esperado em caixa" value={`${fmt(summary.expectedCash)}€`} color="orange" bold
               sub={`${summary.salesCount} transaccoes`} />

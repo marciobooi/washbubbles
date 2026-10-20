@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Scale, Palette, ShieldCheck, Wifi as WifiIcon, Bell, MessageCircle, SlidersHorizontal, Image as ImageIcon, Plus, Trash2, ArrowUp, ArrowDown, Globe, Eye, EyeOff } from 'lucide-react'
+import { CreditCard as CardIcon, Scale, Palette, ShieldCheck, Wifi as WifiIcon, Bell, MessageCircle, SlidersHorizontal, Image as ImageIcon, Plus, Trash2, ArrowUp, ArrowDown, Globe, Eye, EyeOff } from 'lucide-react'
 import { DEFAULT_BANNERS } from '@/lib/defaultBanners'
 import { DEFAULT_LANDING_CONTENT } from '@/lib/defaultLandingContent'
 import LandingTranslations from '@/components/LandingTranslations'
@@ -34,6 +34,7 @@ const HIDDEN_ADVANCED_KEYS = new Set([
   'wifi.enabled',
   'whatsapp.enabled',
   'loyaltyCard.cost', 'loyaltyCard.credit', 'loyaltyCard.minRecharge',
+  'payments.mbway.enabled', 'payments.mbway.env', 'payments.mbway.apiKey',
 ])
 
 const TABS = [
@@ -43,6 +44,7 @@ const TABS = [
   { id: 'legal', label: 'Legal / RGPD', Icon: Scale },
   { id: 'staff', label: 'Staff & Manutenção', Icon: ShieldCheck },
   { id: 'wifi', label: 'WiFi', Icon: WifiIcon },
+  { id: 'payments', label: 'Pagamentos', Icon: CardIcon },
   { id: 'alerts', label: 'Alertas', Icon: Bell },
   { id: 'whatsapp', label: 'WhatsApp', Icon: MessageCircle },
   { id: 'advanced', label: 'Avançado', Icon: SlidersHorizontal },
@@ -88,6 +90,12 @@ export default function AdminSettings(){
 
   // WiFi voucher helper state
   const [wifiEnabled, setWifiEnabled] = useState(false)
+  // MB WAY (Eupago): OFF until the admin switches it on here
+  const [mbwayEnabled, setMbwayEnabled] = useState(false)
+  const [mbwayEnv, setMbwayEnv] = useState('sandbox')
+  const [mbwayKey, setMbwayKey] = useState('')
+  const [mbwayShowKey, setMbwayShowKey] = useState(false)
+  const [savingMbway, setSavingMbway] = useState(false)
   const [savingWifiToggle, setSavingWifiToggle] = useState(false)
   const [wifiDuration, setWifiDuration] = useState('60')
   const [wifiSsid, setWifiSsid] = useState('')
@@ -324,6 +332,41 @@ export default function AdminSettings(){
     } catch (e) { console.warn('loadStaffSettings failed', e) }
   }
 
+  async function loadMbwaySettings() {
+    try {
+      const en = await api.getSetting('payments.mbway.enabled').catch(() => null)
+      const env = await api.getSetting('payments.mbway.env').catch(() => null)
+      const key = await api.getSetting('payments.mbway.apiKey').catch(() => null)
+      setMbwayEnabled(Boolean(en && (en.value === true || en.value === 'true')))
+      setMbwayEnv(env && env.value === 'production' ? 'production' : 'sandbox')
+      setMbwayKey(key && key.value ? String(key.value) : '')
+    } catch (e) { console.warn('loadMbwaySettings failed', e) }
+  }
+
+  async function saveMbwayConfig(e) {
+    e?.preventDefault?.()
+    setSavingMbway(true)
+    try {
+      await api.setSetting({ key: 'payments.mbway.env', value: mbwayEnv })
+      await api.setSetting({ key: 'payments.mbway.apiKey', value: mbwayKey.trim() })
+      toast({ title: 'Definições do MB WAY guardadas', description: 'A loja recebe-as em poucos minutos.', variant: 'success' })
+    } catch (err) { console.error(err); toast({ title: 'Erro ao guardar', variant: 'destructive' }) }
+    finally { setSavingMbway(false) }
+  }
+
+  async function toggleMbway(next) {
+    if (next && !mbwayKey.trim()) { toast({ title: 'Escreva primeiro a chave API do Eupago e guarde', variant: 'destructive' }); return }
+    setSavingMbway(true)
+    setMbwayEnabled(next)
+    try {
+      await api.setSetting({ key: 'payments.mbway.env', value: mbwayEnv })
+      await api.setSetting({ key: 'payments.mbway.apiKey', value: mbwayKey.trim() })
+      await api.setSetting({ key: 'payments.mbway.enabled', value: next })
+      toast({ title: next ? 'MB WAY ativado' : 'MB WAY desativado', description: 'O quiosque atualiza em poucos minutos.', variant: 'success' })
+    } catch (err) { console.error(err); setMbwayEnabled(!next); toast({ title: 'Erro ao guardar', variant: 'destructive' }) }
+    finally { setSavingMbway(false) }
+  }
+
   async function loadWifiSettings() {
     try {
       const enabled = await api.getSetting('wifi.enabled').catch(() => null)
@@ -349,7 +392,7 @@ export default function AdminSettings(){
     } catch (e) { console.warn('loadWhatsappSettings failed', e) }
   }
 
-  useEffect(() => { load(); loadBranding(); loadLegal(); loadBannerSettings(); loadLandingContent(); loadStaffSettings(); loadWifiSettings(); loadAlertsSettings(); loadWhatsappSettings() }, [])
+  useEffect(() => { load(); loadBranding(); loadLegal(); loadBannerSettings(); loadLandingContent(); loadStaffSettings(); loadWifiSettings(); loadMbwaySettings(); loadAlertsSettings(); loadWhatsappSettings() }, [])
 
   // While WhatsApp is enabled but not yet connected, poll for the QR code /
   // connection state — same "poll a status endpoint while pairing" idea the
@@ -1321,6 +1364,51 @@ export default function AdminSettings(){
       )}
 
       {/* WiFi Voucher */}
+      {activeTab === 'payments' && (
+      <Card>
+        <CardHeader>
+          <CardTitle>MB WAY (Eupago)</CardTitle>
+          <CardDescription>Pagamento das máquinas no telemóvel do cliente</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="flex items-start justify-between gap-4 max-w-xl">
+            <div>
+              <div className="font-medium text-sm">Aceitar MB WAY no quiosque</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Desligado por omissão. Quando ligado, a janela de pagamento oferece MB WAY: o cliente escreve o número, aprova no telemóvel
+                (tem 5 minutos) e a máquina arranca sozinha quando o Eupago confirma. Só paga máquinas: as recargas são sempre em dinheiro.
+                Mínimo 1,00€. O quiosque confirma o pagamento diretamente no Eupago, sem precisar de webhook.
+              </p>
+            </div>
+            <button type="button" role="switch" aria-checked={mbwayEnabled} onClick={() => toggleMbway(!mbwayEnabled)} disabled={savingMbway}
+              className={`shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 ${mbwayEnabled ? 'bg-primary-600' : 'bg-neutral-300'}`}>
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${mbwayEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+            </button>
+          </div>
+
+          <form onSubmit={saveMbwayConfig} className="border-t pt-4 space-y-3 max-w-md">
+            <div className="space-y-2">
+              <Label htmlFor="mbwayEnv">Ambiente</Label>
+              <select id="mbwayEnv" value={mbwayEnv} onChange={(e) => setMbwayEnv(e.target.value)} className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm">
+                <option value="sandbox">Teste (sandbox): os pagamentos não são reais</option>
+                <option value="production">Produção: dinheiro real</option>
+              </select>
+              {mbwayEnv === 'production' && <p className="text-xs text-amber-700">Produção: cada pagamento é dinheiro real. Confirme que a chave é a da conta de produção.</p>}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="mbwayKey">Chave API do Eupago</Label>
+              <div className="flex gap-2">
+                <Input id="mbwayKey" type={mbwayShowKey ? 'text' : 'password'} autoComplete="off" placeholder="xxxx-xxxx-xxxx-xxxx-xxxx" value={mbwayKey} onChange={(e) => setMbwayKey(e.target.value)} />
+                <Button type="button" variant="outline" size="sm" onClick={() => setMbwayShowKey((s) => !s)} aria-label="Mostrar ou esconder a chave">{mbwayShowKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</Button>
+              </div>
+              <p className="text-xs text-muted-foreground">Encontra-se no backoffice do Eupago: Canais → Listagem de Canais. A chave de teste só funciona no ambiente de teste.</p>
+            </div>
+            <Button type="submit" size="sm" disabled={savingMbway}>{savingMbway ? 'A guardar…' : 'Guardar'}</Button>
+          </form>
+        </CardContent>
+      </Card>
+      )}
+
       {activeTab === 'wifi' && (
       <Card>
         <CardHeader>

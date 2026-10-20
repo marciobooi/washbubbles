@@ -12,11 +12,12 @@ import { creditCard, applyCardDelta } from '../services/cardBalance.js'
 import { cardLookupLimiter } from '../middleware/rateLimits.js'
 import coinMachine from '../services/coinMachine.js'
 import { findUsableCoupon, applyCouponDiscount, redeemCoupon } from '../services/coupons.js'
+import { startPayment, pollPayment, cancelPayment, mbwaySettings, MIN_AMOUNT as MBWAY_MIN } from '../services/mbway.js'
 
 const router = express.Router()
 
 /** True when a cart line is a card recharge rather than a machine payment. */
-function isRecharge(item) {
+export function isRecharge(item) {
   return Boolean(
     (item.type && String(item.type).toLowerCase().includes('recarga')) ||
     (item.id && String(item.id).startsWith('recharge'))
@@ -55,7 +56,7 @@ export function promoIsActive(price, now = new Date()) {
  *   computed by the kiosk itself for a network-settled sale.
  * @returns {{ok: true, lines: Array, total: number} | {ok: false, status: number, error: object}}
  */
-async function resolveMachineLines(items, MachineT, PriceT, method, coupon = null) {
+export async function resolveMachineLines(items, MachineT, PriceT, method, coupon = null) {
   const lines = []
   for (const it of items) {
     const ref = it._id || it.id
@@ -399,6 +400,35 @@ router.post('/cash/pay', requireKiosk, async (req, res) => {
   }
 
   res.json({ success: true, sales, total: chargedTotal, inserted: insertedNum, change, changeDispensed, changeError, failed: failedLines })
+})
+
+// ---- MB WAY (Eupago): the admin switches it on or off (setting payments.mbway.enabled, OFF by default) -----------------------------
+// The whole flow runs on the shop PC, which asks Eupago and reads the answer itself (services/mbway.js). Machines only.
+const mbwayFail = (res, e) => {
+  const status = e.status || 500
+  if (status >= 500 && !e.code) console.error('[MBWAY]', e)
+  res.status(status).json({ error: e.message, code: e.code || 'error', ...(e.detail ? { detail: e.detail } : {}) })
+}
+
+router.get('/mbway/config', requireKiosk, async (req, res) => {
+  const cfg = await mbwaySettings(req.tenantId)
+  res.json({ enabled: Boolean(cfg.enabled && cfg.apiKey && coinMachine.running), minAmount: MBWAY_MIN })
+})
+
+router.post('/mbway/start', requireKiosk, async (req, res) => {
+  try {
+    if (!coinMachine.running) return res.status(409).json({ error: 'MB WAY is only available at the shop', code: 'mbway-off' })
+    const { items, phone, batchId, couponCode } = req.body || {}
+    res.status(201).json(await startPayment({ tenantId: req.tenantId, items, phone, batchId, couponCode }, { resolveMachineLines, isRecharge }))
+  } catch (e) { mbwayFail(res, e) }
+})
+
+router.get('/mbway/:id', requireKiosk, async (req, res) => {
+  try { res.json(await pollPayment({ tenantId: req.tenantId, id: req.params.id })) } catch (e) { mbwayFail(res, e) }
+})
+
+router.post('/mbway/:id/cancel', requireKiosk, async (req, res) => {
+  try { res.json(await cancelPayment({ tenantId: req.tenantId, id: req.params.id })) } catch (e) { mbwayFail(res, e) }
 })
 
 export default router

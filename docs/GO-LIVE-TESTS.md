@@ -315,6 +315,14 @@ Steps (on the PC, PowerShell, in `C:\washbubbles`):
 - [ ] Still to run: a real cash recharge after the fix (the balance rises only after the money, the sale is booked as cash)
 - ~~**Still to build (ideas):**~~ (dropped by the owner) a daily check that every card balance = cash recharges + new-card credit - card payments, with an operator alert on any difference; an alert when a recharge sale is not cash.
 
+### MB WAY (Eupago), built 2026-10-20, OFF by default
+- Admin -> Definições -> **Pagamentos**: switch "Aceitar MB WAY no quiosque" (default OFF), Ambiente (Teste / Produção) and the Eupago API key. The sandbox key was given by the owner; production needs the production key.
+- The shop PC asks Eupago and **confirms the payment itself** (`POST /clientes/rest_api/multibanco/info`, `estado_referencia`), so no webhook is needed. Machines only (a recharge is cash only). Minimum 1.00 EUR (the sandbox refused 0.50). The customer has 5 minutes; a payment nobody is waiting for is still followed to the end (late payments are reported, never lost). MB WAY sales are booked with method `mbway`: revenue in the day close, never in the till cash.
+- [ ] Sandbox end to end with a machine: switch it on, pay a free machine with MB WAY in the sandbox (the real machine starts!), see the sale `mbway`, the day close row, the receipt e-mail
+- [ ] A payment that is never approved: expires after 5 min, nothing starts, nothing booked
+- [ ] Cancel at the kiosk, then approve anyway: the operator is alerted (`paid_unclaimed`)
+- [ ] Production: switch the environment, a real 1.00 EUR payment, the refund path in the Eupago backoffice (a paid MB WAY whose machine did not start is reported by e-mail; the refund is made by hand there)
+
 ### To test next (new, not yet run on the real screen)
 - [ ] Free recharge: type 3,30 in My card, pay 3.30 in coins, balance +3.30
 - [ ] Pay a washer with the card (card already in the reader): the button "Confirmar e iniciar", card debited once, the home screen after

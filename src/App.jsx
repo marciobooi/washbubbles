@@ -332,6 +332,20 @@ function AppInner() {
     }
   }
 
+  // MB WAY: the shop has seen the payment and the machines are already running; what is left is what follows any purchase.
+  function handleMbwayPaid(res, items, batchId) {
+    const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
+    const kioskKey = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
+    toast({ title: tr('mbwayPaid'), variant: 'success' })
+    try { const names = items.map((i) => i.name).filter(Boolean); if (names.length) showMachineNotice(names) } catch { /* cosmetic */ }
+    tryShowWifiVoucher(items, batchId, kioskKey)
+    setReceiptBatchId(batchId)
+    setReceiptItems(items)
+    clearCart()
+    setCartOpen(false)
+    goHome()
+  }
+
   async function handlePay(items, opts = { useFidelity: false }) {
     try {
       const method = opts && opts.method === 'cash' ? 'cash' : 'card'
@@ -715,7 +729,7 @@ function AppInner() {
         </Routes>
       </main>
 
-      <CartModal open={cartOpen} onClose={() => setCartOpen(false)} onPay={handlePay} />
+      <CartModal open={cartOpen} onClose={() => setCartOpen(false)} onPay={handlePay} onMbwayPaid={handleMbwayPaid} />
       <WifiQrModal open={Boolean(wifiVoucher)} onClose={() => setWifiVoucher(null)} voucher={wifiVoucher} />
       <ReceiptPrompt
         items={receiptItems}

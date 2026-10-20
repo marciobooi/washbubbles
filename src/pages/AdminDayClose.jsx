@@ -179,7 +179,7 @@ export default function AdminDayClose() {
                         <DetailBlock title="Periodo">
                           <InfoRow label="Inicio" value={dc.periodFrom ? new Date(dc.periodFrom).toLocaleString('pt-PT') : '-'} />
                           <InfoRow label="Fim" value={new Date(dc.periodTo || dc.createdAt).toLocaleString('pt-PT')} />
-                          <InfoRow label="Vendas" value={`${fmt(dc.totalSales)}€ (${fmt(dc.totalCash)} din + ${fmt(dc.totalCard)} cart)`} />
+                          <InfoRow label="Vendas" value={`${fmt(dc.totalSales)}€ (${fmt(dc.totalCash)} din${Number(dc.totalMbway) > 0 ? ` + ${fmt(dc.totalMbway)} MB WAY` : ''} + ${fmt(dc.totalCard)} cart)`} />
                           <InfoRow label="Fundo inicial" value={`${fmt(dc.openingFloat)}€`} />
                           {dc.totalChangeDispensed > 0 && <InfoRow label="Troco dispensado" value={`${fmt(dc.totalChangeDispensed)}€`} />}
                         </DetailBlock>
