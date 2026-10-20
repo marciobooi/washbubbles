@@ -311,7 +311,9 @@ Steps (on the PC, PowerShell, in `C:\washbubbles`):
 ### RULE (2026-10-20): no money in, no card credit
 - **Found:** two recharges of 10 EUR were credited with NOTHING paid (a recharge in the cart, paid "with the card" that was in the reader; `/gateways/card/pay` added the recharge lines to the balance with no cash check). 20 EUR of free credit: card `-1173654100` (+10, 4.50 left) and `-91859025` (+10, spent on a machine). The balances were zeroed and the two sales voided (audit `card.manual_debit`, `metadata.voided`).
 - **Rules now enforced on the SERVER (tests in `noFreeCredit.test.js`):** (1) card pay refuses any recharge line; (2) a top-up (`/gateways/cards/:code/topup`) and `/pos/recharge` need the cash really in the session and spend it; (3) `/gateways/cash/pay` cannot claim more cash than the session holds. The screen never pays a recharge by card either.
-- **Still to build (ideas):** a daily check that every card balance = cash recharges + new-card credit - card payments, with an operator alert on any difference; an alert when a recharge sale is not cash.
+- **TESTED 2026-10-20 (owner, real screen): a recharge can no longer be paid with the card balance.** The owner decided the extra alert e-mail and the daily balance check are not needed.
+- [ ] Still to run: a real cash recharge after the fix (the balance rises only after the money, the sale is booked as cash)
+- ~~**Still to build (ideas):**~~ (dropped by the owner) a daily check that every card balance = cash recharges + new-card credit - card payments, with an operator alert on any difference; an alert when a recharge sale is not cash.
 
 ### To test next (new, not yet run on the real screen)
 - [ ] Free recharge: type 3,30 in My card, pay 3.30 in coins, balance +3.30
