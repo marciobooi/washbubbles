@@ -207,17 +207,17 @@ the latest code first (copy the files, build the screen, restart ONLY the backen
 ### 13.0a ONE-TIME: make the shop PC a real git checkout, so everything stays in sync with one `git pull`
 Until now the PC has been updated by copying files by hand, so it may have drifted from the repo in places nobody listed.
 Do this once, with the owner present, before the first pull of 13.0:
-- [ ] Back up first: copy `C:\washbubbles` to `C:\washbubbles-backup-<date>` (code only; `backend\.env`, `backend\data\`, `logs\` must be kept as they are)
-- [ ] Check whether it already is a checkout: `git rev-parse --is-inside-work-tree` and `git remote -v` (expected remote: `https://github.com/marciobooi/washbubbles.git`, branch `main`)
-- [ ] If it is NOT: `git init`, `git remote add origin https://github.com/marciobooi/washbubbles.git`, `git fetch origin`, then `git reset --hard origin/main`
+- [x] Back up first: copy `C:\washbubbles` to `C:\washbubbles-backup-<date>` (code only; `backend\.env`, `backend\data\`, `logs\` must be kept as they are)  **DONE 2026-10-19: C:\washbubbles-backup-20261019**
+- [x] Check whether it already is a checkout: `git rev-parse --is-inside-work-tree` and `git remote -v` (expected remote: `https://github.com/marciobooi/washbubbles.git`, branch `main`)  **DONE: it was NOT (hand-copied)**
+- [x] If it is NOT: `git init`, `git remote add origin https://github.com/marciobooi/washbubbles.git`, `git fetch origin`, then `git reset --hard origin/main`  **DONE via a git bundle, then the SSH deploy key**
       (`reset --hard` only touches tracked files: `.env`, `.env.*`, `node_modules/`, `dist/`, `logs/`, `backend\data\` are ignored or untracked and stay)
-- [ ] `git config core.autocrlf true` on the PC (Windows line endings) and `git config pull.ff only` (a pull must never create a merge commit on the PC)
-- [ ] The repo is on GitHub: if it is private, the PC needs a read-only credential (deploy key or fine-grained token); store it in Windows Credential Manager, never in the repo
-- [ ] Compare what the PC had with the repo before the reset: `git diff --stat` on the hand-copied files; anything that differs and is not in the repo is a local edit to keep or discard (ask before discarding)
-- [ ] `npm install` in `backend\` and in the root only if `package.json` / `package-lock.json` changed in the pull
-- [ ] Afterwards: `git status` is clean, `git log --oneline -1` equals the repo's latest, and an update is always: `git pull`, build the screen, restart only the backend if backend files changed
-- [ ] Do the same on the Hetzner server check: `/opt/washbubbles` is already a checkout (deploys use `git pull`); confirm its commit equals the PC's
-- [ ] Write the final update procedure into this file (one short block) so it is the single place to look
+- [x] `git config core.autocrlf true` on the PC (Windows line endings) and `git config pull.ff only` (a pull must never create a merge commit on the PC)  **DONE**
+- [x] The repo is on GitHub: if it is private, the PC needs a read-only credential (deploy key or fine-grained token); store it in Windows Credential Manager, never in the repo  **DONE: read-only SSH deploy key `shop-pc-a8-max` (core.sshCommand in the repo config); Hetzner has its own**
+- [x] Compare what the PC had with the repo before the reset: `git diff --stat` on the hand-copied files; anything that differs and is not in the repo is a local edit to keep or discard (ask before discarding)  **DONE: 65 files differed, none was a local edit (all older repo versions)**
+- [x] `npm install` in `backend\` and in the root only if `package.json` / `package-lock.json` changed in the pull  **DONE (the updater does it when a package file changes)**
+- [x] Afterwards: `git status` is clean, `git log --oneline -1` equals the repo's latest, and an update is always: `git pull`, build the screen, restart only the backend if backend files changed  **DONE**
+- [x] Do the same on the Hetzner server check: `/opt/washbubbles` is already a checkout (deploys use `git pull`); confirm its commit equals the PC's  **DONE: it pulls main by itself every minute (cron) with rollback**
+- [x] Write the final update procedure into this file (one short block) so it is the single place to look  **DONE: see "Shop PC updates itself" at the end of this file**
 
 ### 13.0 THEN: bring the code up to date (git pull)
 Last code copied to the PC was the dryer "one command, n impulses" change (`efc088c`). Everything after it is in the repo
@@ -226,43 +226,43 @@ but NOT on the PC yet; it is all screen (frontend) work, so **no backend restart
 - docs / checklist updates
 
 Steps (on the PC, PowerShell, in `C:\washbubbles`):
-- [ ] Check it is a git checkout: `git rev-parse --is-inside-work-tree` (if it is NOT: the files have been copied by hand so far; either `git init` + `git remote add origin <repo>` + `git fetch` + `git reset --hard origin/main`, or keep copying the changed files)
-- [ ] `git status` is clean (hand-copied files may show as modified: that is fine, the pull makes them match; `.env` and `logs\` are untracked and must stay)
-- [ ] `git pull origin main` (branch `main`); note the commit now on the PC: `git log --oneline -1` should be the latest of the repo
-- [ ] Build the screen with the kiosk key from `backend\.env` (`VITE_KIOSK_API_KEY` = the `KIOSK_API_KEY` line), then press **F5** on the kiosk
-- [ ] Backend: restart ONLY if backend files changed in the pull (`git diff --stat <old>..HEAD -- backend`); restart = stop the node process whose command line has `src\index.js`, never every node process (the bridge is also node)
-- [ ] Confirm: health 200, bridge + backend both running, `status_per` lists six, a coin credits; then do 13.1 onwards
+- [x] Check it is a git checkout: `git rev-parse --is-inside-work-tree` (if it is NOT: the files have been copied by hand so far; either `git init` + `git remote add origin <repo>` + `git fetch` + `git reset --hard origin/main`, or keep copying the changed files)  **DONE**
+- [x] `git status` is clean (hand-copied files may show as modified: that is fine, the pull makes them match; `.env` and `logs\` are untracked and must stay)  **DONE**
+- [x] `git pull origin main` (branch `main`); note the commit now on the PC: `git log --oneline -1` should be the latest of the repo  **DONE: now automatic (task WashBubbles Update, every minute)**
+- [x] Build the screen with the kiosk key from `backend\.env` (`VITE_KIOSK_API_KEY` = the `KIOSK_API_KEY` line), then press **F5** on the kiosk  **DONE: automatic; the screen reloads itself when idle**
+- [x] Backend: restart ONLY if backend files changed in the pull (`git diff --stat <old>..HEAD -- backend`); restart = stop the node process whose command line has `src\index.js`, never every node process (the bridge is also node)  **DONE: automatic, only src\index.js**
+- [x] Confirm: health 200, bridge + backend both running, `status_per` lists six, a coin credits; then do 13.1 onwards  **DONE 2026-10-19/20 (three reboots)**
 
 ### 13.1 Money and the controller
-- [ ] After the PC boots: bridge task running (`WashBubbles Bridge`), backend connected through it, `status_per` lists the six peripherals in order
+- [x] After the PC boots: bridge task running (`WashBubbles Bridge`), backend connected through it, `status_per` lists the six peripherals in order  **DONE 2026-10-20: bridge 23:42:50, backend 23:42:56, status_per lists the six**
 - [ ] Bill acceptor light on after a **backend restart** (the bridge keeps the session): verified once on 2026-10-11, repeat
-- [ ] **PC reboot**: bridge and backend come back by themselves; the operator alert "controller session new" arrives; re-seat the acceptor cable and note the light
-- [ ] Coins 0.10 / 0.20 / 0.50 / 1 / 2 and notes 5 / 10 / 20 credit; the 50 note is spat out (the acceptor must never stack it)
-- [ ] Refund after 2 minutes pays the exact total; the badge and countdown disappear by themselves (no F5)
+- [ ] **PC reboot**: bridge and backend come back by themselves; the operator alert "controller session new" arrives; re-seat the acceptor cable and note the light  **PARTLY 2026-10-20: bridge + backend came back by themselves and the NEW automatic re-init of the six peripherals fired (the acceptor no longer needs a cable re-seat). Not yet seen: the operator alert e-mail "controller session new" (its trigger was fixed the same day)**
+- [ ] Coins 0.10 / 0.20 / 0.50 / 1 / 2 and notes 5 / 10 / 20 credit; the 50 note is spat out (the acceptor must never stack it)  **PARTLY 2026-10-19: notes 5/10/20 and coins 0.10, 0.20, 1, 2 credit. Still open: the 0.50 coin and the 50 note being spat out (no 50 note at hand)**
+- [ ] Refund after 2 minutes pays the exact total; the badge and countdown disappear by themselves (no F5)  **NOT CLEAN: the idle refund paid 35 EUR twice on 2026-10-19 (a screen time-out left the credit); fixed (the server zeroes the credit as the change starts). Repeat**
 - [ ] Controller session lost (pull the controller network cable 10 s): alert "Controlador desligado", then recovery without a restart
 
 ### 13.2 Dryers: blocks of 15 minutes
-- [ ] Insert 4.00 EUR for **2 blocks** on a free dryer (Secar 7, 8 or 9): the log shows ONE `activate-machine ... impulses 2`; the dryer shows 30 min
-- [ ] 3 blocks (6.00) gives 45 min; the 8-block limit (16.00) is accepted
-- [ ] If a 2-block purchase gives only 15 min: pulses too close together (interface tOn 5 / tOff 1 never verified); try `DRYER_IMPULSE_MODE=staggered`
-- [ ] Cash already inserted, then choose a dryer: the cart does **not** pay by itself; the cycles can be changed; "Confirmar e iniciar" pays
+- [x] Insert 4.00 EUR for **2 blocks** on a free dryer (Secar 7, 8 or 9): the log shows ONE `activate-machine ... impulses 2`; the dryer shows 30 min  **DONE 2026-10-19 (owner) and 5 blocks = ONE `activate-machine impulses 5`, 75 min exactly**
+- [x] 3 blocks (6.00) gives 45 min; the 8-block limit (16.00) is accepted  **DONE (owner): 2/3 blocks and the 8-block limit OK**
+- [x] If a 2-block purchase gives only 15 min: pulses too close together (interface tOn 5 / tOff 1 never verified); try `DRYER_IMPULSE_MODE=staggered`  **NOT NEEDED: the all-at-once mode works**
+- [x] Cash already inserted, then choose a dryer: the cart does **not** pay by itself; the cycles can be changed; "Confirmar e iniciar" pays  **DONE (owner)**
 - [ ] Change the cycles after confirming: it asks again
 - [ ] Pay a dryer with the **card** (card price, 0.20 cheaper per block): same confirm step, card debited once, chip rewritten
 - [ ] Secar 10: the signal line on interface 15 channel 2 is dead; after a paid start it stays "Ocupado" for n x 15 min (time block) and then frees itself
-- [ ] Not enough money inserted: nothing starts, the credit stays; controller offline at payment: nothing charged, readable message
-- [ ] Door open / machine signals while a dryer runs (open the door): note the `machine-*` events and the 8 status bits
+- [x] Not enough money inserted: nothing starts, the credit stays; controller offline at payment: nothing charged, readable message  **DONE (owner): nothing starts, the credit stays. Controller-offline case not run**
+- [x] Door open / machine signals while a dryer runs (open the door): note the `machine-*` events and the 8 status bits  **DONE 2026-10-19: NO signal for the door (Secar 7 and 11); the dryer stops by itself and needs its own button**
 
 ### 13.3 Washers
-- [ ] Paid start of a washer with exact cash; Ocupado on the kiosk **and** in the central admin within seconds
+- [x] Paid start of a washer with exact cash; Ocupado on the kiosk **and** in the central admin within seconds  **DONE 2026-10-19: Lavar 1, 10.50 EUR, Ocupado in the central within a minute**
 - [ ] A washer is held for its price-row duration (60 min if none is set) when its signal never shows it running
 - [x] Lavar 1: interface Int 1 / port 2, polarity high (occupied = signal on) verified with a paid 10.50 EUR wash on 2026-10-19: `activate-machine` 200, `machine-started`, held 45 min, central shows `working`
 - [x] Lavar 6: really out of order (owner, 2026-10-19): nothing to configure, skip until it is repaired
 
 ### 13.4 Cards
 - [ ] Buy a card WITHOUT inserting money: the Pay button stays disabled; pressing nothing charges nothing
-- [ ] **Buy a card** (cost 10, credit 5): the coins inserted are consumed (no leftover), the card is dispensed, presented at the reader it is written automatically and becomes active, 5.00 on screen; the card keeps the chip's own id
-- [ ] The same card read again: 5.00, name/email/phone present in the central admin, no second empty card
-- [ ] **Recharge** 10 in cash with the card in the reader: balance +10 on screen, chip rewritten, Hetzner updated, one sale with the card code
+- [x] **Buy a card** (cost 10, credit 5): the coins inserted are consumed (no leftover), the card is dispensed, presented at the reader it is written automatically and becomes active, 5.00 on screen; the card keeps the chip's own id  **DONE 2026-10-19: card released, written and activated with 5.00, the chip's own id; consent now stored (privacyConsentAt)**
+- [x] The same card read again: 5.00, name/email/phone present in the central admin, no second empty card  **DONE: 5.00 and the data are in the central. FOUND AND FIXED: a second (old-code) card appeared in the central; it is now renamed, not duplicated**
+- [x] **Recharge** 10 in cash with the card in the reader: balance +10 on screen, chip rewritten, Hetzner updated, one sale with the card code  **DONE 2026-10-19 (20 EUR): balance 5 -> 25 on the chip and in the database, one recharge sale with the card code**
 - [ ] Take the card out: after about 3 s the card window closes and the kiosk is back on the home screen
 - [ ] Card present + cash credit at once, pay a washer: card price used, no phantom credit moved onto the card
 - [ ] **Card in -> loading -> window** (2026-10-12): put a card in on the home screen: the bubble panel "A ler o cartão…" appears at once, then the "My card" window opens already filled (balance, history). Check it does not just flash (if the read is instant, add a ~300 ms minimum)
@@ -299,19 +299,36 @@ Steps (on the PC, PowerShell, in `C:\washbubbles`):
 - Secar 7 and Secar 11 never show `occupied: true` from the signal while running (held by the paid time).
 - Opening the door stops the dryer by itself and it only runs again after pressing the button on the machine (owner, 2026-10-19). The system cannot see this: the paid time keeps counting, so a customer who pauses loses those minutes on our clock (the machine can still be running when the screen shows it free, or the reverse). Needs the door signal (13.7).
 
+
+### Result 2026-10-19/20: what else was proven (and found) today
+- **Starts by itself after a reboot (2026-10-20 23:42):** the Windows session opens without a password (netplwiz re-entered; before, `0xC000006D` failures), `start-kiosk.bat` opens the screen, the bridge and the backend start as SYSTEM before any login, the peripherals are re-initialised automatically on a new controller session. A task `WashBubbles Kiosk Watch` reopens the screen if the browser is not running. Still the owner's: BIOS "Restore on AC Power Loss = Power On" (the GEEKOM A8 may not offer it; otherwise a smart plug / UPS).
+- **Hopper:** a coin jam (0.05) gave `hopper-status 400`; the code treats a hopper fault before `no-change` as nothing paid. "Esvaziar hopper" (central admin -> the shop) and "Limpar cartão no leitor" (experimental: wiping a chip works, the reader still reports new:false, so a wiped chip counts as blank).
+- **Cards from China:** DESFire, not read by this reader (no `card-inserted`). Buy MIFARE Classic 1K 13.56 MHz after reading a working card with an NFC app; ask Kitsec for the sector key.
+- **Kiosk:** home screen after every purchase; no automatic payment (always "Confirmar e iniciar"); a card already in the reader is recognised (payment window, My card window); card icon with the last 4 digits in the header; free recharge amount (any value from the shop minimum, 0.10 steps, held buttons speed up); holder name/NIF/phone/email shown (partly hidden) and "Editar dados"; receipt popup keeps its place while typing, pre-filled with the card's e-mail, a real "Não, obrigado" button; server errors translated; no browser translate bubble.
+- **E-mail:** the PC now has the MAIL_* settings; the receipt finds its sale (the cash payment sends its batchId); the template uses the shop's logo, name and contact from the admin. To check: the receipt really arrives (log line "accepted by the mail server").
+- **Admin:** OPERATOR role (user `tatiana`, central server): only Operações, only Iniciar / Parar; every other route answers 403; "Parar" warns that paid cycles stay inside the machine. Role menu with "Alterar palavra-passe" / "Sair" for every user (minimum 8 characters). The create / edit card window works again.
+
+### To test next (new, not yet run on the real screen)
+- [ ] Free recharge: type 3,30 in My card, pay 3.30 in coins, balance +3.30
+- [ ] Pay a washer with the card (card already in the reader): the button "Confirmar e iniciar", card debited once, the home screen after
+- [ ] Receipt e-mail arrives with the shop's logo (inbox and spam)
+- [ ] Tatiana signs in on a phone: only Operações; Iniciar and Parar reach the shop in seconds; she changes her password
+- [ ] Edit the holder data on the kiosk (consent box) and see it in the admin
+- [ ] Reboot with the PC left alone: no password prompt, the screen opens, the acceptor works
+
 ### 13.5c LOW PRIORITY, later (2026-10-19)
 - [ ] Hopper jam of 2026-10-19 was a 0.05 EUR coin jam (`hopper-status 400`); the code now treats a hopper fault before `no-change` as nothing paid. Skipped for now: count the coins of the Esvaziar-hopper test. The controller answered `no-change 16640` (166.40 EUR): if the container holds about that, `no-change` is the amount PAID, and `dispenseChangeViaGateway` + `emptyHopper` must be changed to read it so; until then do not trust the "saíram X EUR" figure of the button (it may have booked 9832.60).
 - [ ] Refill the hopper with 2 EUR, 1 EUR and 0.50 EUR coins and count them in the Hopper e reforço menu; then the change test (3 EUR for a 2 EUR machine, 6 EUR for a 2 EUR machine) and note what drops.
 
 ### 13.6 Admin / central
-- [ ] A machine's occupied/free in the central admin follows the shop (5 s)
+- [x] A machine's occupied/free in the central admin follows the shop (5 s)  **DONE 2026-10-19 (Lavar 1)**
 - [ ] A price / machine / setting change reaches the shop in seconds (sync_now); edited straight in the database, within 30 s
 - [ ] Offline / Avariar buttons keep the machine's interface, port, weight and polarity (partial update)
 
 ### 13.7 Needs information, not just a test
-- [ ] **Printer**: the controller lists it with error -1 (not answering). Need its real baud rate / port from Kitsec or the installer, then ONE correct complete `config_per` list (memory: reference-controller-config-per) with the owner present
+- [ ] **Printer**: the controller lists it with error -1 (not answering). Need its real baud rate / port from Kitsec or the installer, then ONE correct complete `config_per` list (memory: reference-controller-config-per) with the owner present  **UPDATE 2026-10-19: the printer is really broken (owner); it is switched off in the admin (Desativada). Test again after the repair**
 - [ ] `per-notification` messages from the controller: log which occur and decide what the app does
-- [ ] Lavar 1 / Lavar 5 busy-at-rest readings: confirm polarity per machine with a real cycle
+- [x] Lavar 1 / Lavar 5 busy-at-rest readings: confirm polarity per machine with a real cycle  **DONE: Lavar 1 verified with a real cycle; Lavar 4 and 5 working = correct (owner)**
 - [ ] Model and year of each of the 9 machines into the admin; manuals from Krebe / ICT
 
 ## How to run a test with me

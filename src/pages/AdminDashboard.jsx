@@ -118,16 +118,6 @@ export default function AdminDashboard() {
                   )}
                 </div>
 
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <TopbarIconButton aria-label="Sair" onClick={handleLogout}>
-                        <LogOut className="h-4 w-4" strokeWidth={1.7} />
-                      </TopbarIconButton>
-                    </TooltipTrigger>
-                    <TooltipContent sideOffset={6}>Logout</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
               </div>
             </header>
 
