@@ -5,6 +5,8 @@ import cors from 'cors'
 import jwt from 'jsonwebtoken'
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret'
+// Machine activations are spaced out on real hardware; tests do not wait for that pause.
+process.env.ACTIVATION_GAP_MS = process.env.ACTIVATION_GAP_MS || '0'
 
 /**
  * Mint a token directly, the same way POST /api/auth/login does — for tests

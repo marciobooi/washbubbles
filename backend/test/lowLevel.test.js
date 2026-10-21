@@ -279,6 +279,30 @@ describe('Middleware over the low-level gateway', () => {
     expect(mw.sent).to.deep.equal([{ op: 'activate-machine', data: [{ id: '12', chn: '2', impulses: '1' }] }])
   })
 
+  it('several activations at once are sent one at a time with a pause (3 dryers paid together: one never started)', async () => {
+    const mw = gatewayMiddleware()
+    mw.activationGap = 60
+    const at = []
+    const origSend = mw.sendPackage.bind(mw)
+    mw.sendPackage = (pkg) => { at.push(Date.now()); return origSend(pkg) }
+    const iface = { _id: 'i4', name: 'Int 4', address: 14 }
+    await Promise.all([
+      mw.sendMachineActivation({ _id: 'a', name: 'Secar 8', port: 2 }, iface),
+      mw.sendMachineActivation({ _id: 'b', name: 'Secar 9', port: 1 }, iface),
+      mw.sendMachineActivation({ _id: 'c', name: 'Secar 11', port: 1 }, { _id: 'i5', name: 'Int 5', address: 15 }),
+    ])
+    expect(mw.sent.map((p) => p.data[0].id + '/' + p.data[0].chn)).to.deep.equal(['14/2', '14/1', '15/1']) // in order
+    expect(at[1] - at[0]).to.be.at.least(50)
+    expect(at[2] - at[1]).to.be.at.least(50)
+  })
+
+  it('a failed activation does not block the next one, and still reports its own error', async () => {
+    const mw = gatewayMiddleware({ connected: false })
+    mw.activationGap = 0
+    let e1; try { await mw.sendMachineActivation({ _id: 'a', port: 1 }, { _id: 'i1', address: 11 }) } catch (e) { e1 = e }
+    expect(e1?.message).to.match(/not connected/)
+  })
+
   it('refuses to report an activation when the controller is unreachable', async () => {
     const mw = gatewayMiddleware({ connected: false })
     let err

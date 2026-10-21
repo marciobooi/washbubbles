@@ -168,6 +168,8 @@ function isPcscSuccess(resp) {
 export const SHOP_COIN_CODES = { '4': 0.1, '5': 0.2, '6': 0.5, '7': 1, '8': 2 }
 export const SHOP_BILL_CODES = { '5': 5, '10': 10, '20': 20 }
 
+const sleepMs = (ms) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve())
+
 class Middleware extends EventEmitter {
   constructor() {
     super()
@@ -830,7 +832,27 @@ class Middleware extends EventEmitter {
   }
 
   /** Activate a machine channel through the controller (`activate-machine`). */
-  async activateViaGateway(machine, iface, impulses = null) {
+  /**
+   * Activations go to the controller ONE AT A TIME, with a pause between them. Paying for three dryers at once
+   * (2026-10-21 16:06:40) sent three commands within milliseconds: the controller answered 200 to all, but
+   * Secar 9 (same interface as Secar 8, sent 4 log lines later) never started, while the program showed it busy.
+   * Re-sending it later worked. A pause after each command gives the interface time to finish with the previous one.
+   */
+  activationGapMs() {
+    if (Number.isFinite(this.activationGap)) return this.activationGap
+    const env = Number(process.env.ACTIVATION_GAP_MS)
+    return Number.isFinite(env) && env >= 0 ? env : 1200
+  }
+
+  activateViaGateway(machine, iface, impulses = null) {
+    const run = () => this.sendActivation(machine, iface, impulses)
+    const result = (this.activationChain || Promise.resolve()).then(run, run)
+    // The next one waits for this one to be sent AND for the pause, whether it worked or not.
+    this.activationChain = result.then(() => sleepMs(this.activationGapMs()), () => sleepMs(this.activationGapMs()))
+    return result
+  }
+
+  async sendActivation(machine, iface, impulses = null) {
     const item = {
       id: String(iface.address),
       chn: String(machine.port),
