@@ -323,3 +323,42 @@
     background: white !important;
   }
 }
+
+/* ---------------------------------------------------------------------------------------------------------------
+   Admin dark theme (the sun / moon switch in the admin top bar adds `admin-dark` to the admin shell).
+   The admin pages use a small palette of hard-coded colours, so dark mode re-maps exactly those, plus the theme tokens
+   the shared components read. Nothing here touches the kiosk.
+   --------------------------------------------------------------------------------------------------------------- */
+.admin-dark {
+  color-scheme: dark;
+  --background: #101417; --foreground: #e6eaed;
+  --card: #1b2126; --card-foreground: #e6eaed;
+  --popover: #1b2126; --popover-foreground: #e6eaed;
+  --secondary: #242b31; --secondary-foreground: #e6eaed;
+  --muted: #20272c; --muted-foreground: #9aa3a8;
+  --border: rgba(255, 255, 255, 0.12); --input: rgba(255, 255, 255, 0.10);
+  --sidebar: #161b1f; --sidebar-foreground: #e6eaed;
+  --sidebar-accent: rgba(255, 255, 255, 0.08); --sidebar-accent-foreground: #e6eaed;
+  --sidebar-border: rgba(255, 255, 255, 0.10);
+}
+:is(.admin-dark, .admin-dark *):is([class~="bg-[#f5f2ec]"]) { background-color: #101417 !important; }
+:is(.admin-dark, .admin-dark *):is([class~="bg-white"], [class~="bg-card"]) { background-color: #1b2126 !important; }
+:is(.admin-dark, .admin-dark *):is([class~="bg-[#f7f5f1]"], [class~="bg-neutral-100"], [class~="bg-gray-100"], [class~="bg-[#f0f4f2]"], [class~="bg-[#eef2f5]"], [class~="bg-[#e4e7f0]"]) { background-color: #242b31 !important; }
+:is(.admin-dark, .admin-dark *):is([class~="bg-neutral-50"]) { background-color: #20272c !important; }
+:is(.admin-dark, .admin-dark *):is([class~="bg-[#eeebe4]"], [class~="bg-[#eee9df]"], [class~="bg-neutral-300"], [class~="bg-[#1c2530]"]) { background-color: #2f3a42 !important; }
+:is(.admin-dark, .admin-dark *):is([class~="bg-[#ecfdf5]"]) { background-color: #12352c !important; }
+:is(.admin-dark, .admin-dark *):is([class~="bg-[#fef2f2]"]) { background-color: #3a1d1d !important; }
+:is(.admin-dark, .admin-dark *):is([class~="bg-[#f7eac8]"]) { background-color: #4a3e1a !important; }
+:is(.admin-dark, .admin-dark *):is([class~="bg-[#a9e0bc]"]) { background-color: #1f4a35 !important; }
+:is(.admin-dark, .admin-dark *):is([class~="hover:bg-[#f7f5f1]"], [class~="hover:bg-[#eeebe4]"], [class~="hover:bg-[#f5f2ec]"], [class~="hover:bg-neutral-50"]):hover { background-color: #2d353c !important; }
+:is(.admin-dark, .admin-dark *):is([class~="text-[#1c2530]"], [class~="text-neutral-800"], [class~="text-slate-800"], [class~="text-gray-800"]) { color: #e6eaed !important; }
+:is(.admin-dark, .admin-dark *):is([class~="text-[#3a352c]"], [class~="text-neutral-700"], [class~="text-neutral-600"]) { color: #c7cdd1 !important; }
+:is(.admin-dark, .admin-dark *):is([class~="text-[#8a8478]"], [class~="text-neutral-400"], [class~="text-neutral-500"], [class~="text-slate-500"]) { color: #9aa3a8 !important; }
+:is(.admin-dark, .admin-dark *):is([class~="text-[#4b5573]"]) { color: #aab4d0 !important; }
+:is(.admin-dark, .admin-dark *):is([class~="text-[#0f2a2c]"], [class~="text-[#0c2b26]"], [class~="text-[#3d5f57]"]) { color: #cfe8e3 !important; }
+:is(.admin-dark, .admin-dark *):is([class~="text-[#0d6b60]"]) { color: #5fd3c3 !important; }
+:is(.admin-dark, .admin-dark *):is([class~="text-[#047857]"]) { color: #4ade80 !important; }
+:is(.admin-dark, .admin-dark *):is([class~="text-[#b91c1c]"]) { color: #f87171 !important; }
+:is(.admin-dark, .admin-dark *):is([class*="border-black"], [class~="border-neutral-100"], [class~="border-neutral-200"], [class~="border-neutral-300"], [class~="border-slate-200"], [class~="border"]) { border-color: rgba(255, 255, 255, 0.12) !important; }
+:is(.admin-dark, .admin-dark *):is(input, select, textarea) { background-color: #20272c; color: #e6eaed; }
+:is(.admin-dark, .admin-dark *) ::placeholder { color: #7b858b; }

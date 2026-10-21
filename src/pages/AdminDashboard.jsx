@@ -7,13 +7,8 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/comp
 import { useAuth } from '../context/AuthContext'
 import { useNavigate, useLocation, Navigate, Outlet } from 'react-router-dom'
 
-// The admin redesign only specifies a light "alabaster" theme — every color
-// here is a hardcoded hex, not a `--background`/`--card` token — so there is
-// no real dark palette for this screen to switch to yet. The toggle still
-// reflects and remembers the pressed state (so it looks and feels alive) but
-// deliberately stops short of flipping `document.documentElement`'s `dark`
-// class, which would otherwise dim these pages' cards while leaving their
-// hardcoded dark text in place and unreadable.
+// Light "alabaster" is the design; dark is a re-mapping of its hard-coded colours (see `.admin-dark` in index.css),
+// switched on by the class on the admin shell below. The choice is remembered per browser.
 const THEME_KEY = 'app.theme'
 
 function useTheme() {
@@ -65,7 +60,7 @@ export default function AdminDashboard() {
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen w-full bg-[#f5f2ec] text-[#1c2530]">
+      <div className={`flex min-h-screen w-full bg-[#f5f2ec] text-[#1c2530] ${dark ? 'admin-dark' : ''}`}>
         <AppSidebar />
         <SidebarInset>
           <div className="flex flex-1 flex-col gap-4 min-w-0 px-4 sm:px-6 py-5">
