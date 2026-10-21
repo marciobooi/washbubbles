@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react'
 import Modal from '@/components/ui/Modal'
 import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
+import { WasherIcon, DryerIcon } from './icons/MachineIcons'
 
 function getKioskApiKey() {
   const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
@@ -64,49 +65,85 @@ export default function StaffMachinesModal({ open, onClose, pin }) {
   const gap = (m) => (Number(m?.tImp) > 0 ? Number(m.tImp) : 15)
   const setBlocks = (b) => setDry((d) => ({ ...d, blocks: Math.min(8, Math.max(1, b)) }))
 
+  const isFree = (m) => !m.outOfService && m.status !== 'working' && m.status !== 'fault' && m.status !== 'offline' && m.status !== 'reserved'
+  const wash = machines.filter((m) => (m.type || 'wash') !== 'dry')
+  const dryers = machines.filter((m) => m.type === 'dry')
+  const freeCount = machines.filter(isFree).length
+  const workingCount = machines.filter((m) => m.status === 'working').length
+
+  const Tile = ({ m }) => {
+    const working = m.status === 'working'
+    const free = isFree(m)
+    const stopping = confirmStop === m._id
+    const label = m.outOfService ? 'Fora de serviço' : m.status === 'fault' ? 'Avariada' : m.status === 'reserved' ? 'Reservada' : m.status === 'offline' ? 'Offline' : working ? 'Ocupada' : 'Livre'
+    const tone = working
+      ? (stopping ? 'border-red-500 bg-red-50' : 'border-amber-300 bg-amber-50')
+      : free ? 'border-teal-200 bg-white active:bg-teal-50' : 'border-neutral-200 bg-neutral-100 opacity-60'
+    const dot = working ? 'bg-amber-500' : free ? 'bg-teal-500' : 'bg-neutral-400'
+    const Icon = m.type === 'dry' ? DryerIcon : WasherIcon
+    const action = working ? (stopping ? 'Confirmar?' : 'Parar') : free ? 'Iniciar' : null
+    const pill = working ? (stopping ? 'bg-red-600 text-white' : 'bg-white text-amber-800 border border-amber-300') : 'bg-teal-600 text-white'
+    return (
+      <button
+        type="button"
+        disabled={busyId === m._id || (!working && !free)}
+        onClick={() => (working ? stopTap(m) : m.type === 'dry' ? setDry({ m, blocks: 1 }) : run(m, 'start'))}
+        className={`flex flex-col items-center gap-2 rounded-3xl border-2 px-3 pt-4 pb-3 text-center transition active:scale-[0.97] disabled:cursor-default ${tone}`}
+      >
+        <Icon animated={working} className="w-16 h-16" />
+        <div className="text-xl font-extrabold text-neutral-800 leading-tight">{m.name}</div>
+        <div className="flex items-center gap-1.5 text-sm font-semibold text-neutral-600"><span className={`w-2.5 h-2.5 rounded-full ${dot}`} />{label}</div>
+        <div className="h-9 flex items-center">
+          {action && <span className={`px-5 py-1.5 rounded-full text-base font-bold ${pill}`}>{busyId === m._id ? '…' : action}</span>}
+        </div>
+      </button>
+    )
+  }
+
+  const Section = ({ title, list }) => (list.length === 0 ? null : (
+    <section>
+      <h3 className="m-0 mb-2 text-sm font-bold uppercase tracking-wider text-neutral-500">{title}</h3>
+      <div className="grid grid-cols-3 gap-3">
+        {list.map((m) => <Tile key={m._id} m={m} />)}
+      </div>
+    </section>
+  ))
+
   return (
     <Modal open={open} onClose={onClose} title="Máquinas" wide>
-      <div className="space-y-4">
-        <p className="text-sm text-neutral-600">Iniciar ou libertar uma máquina sem pagamento. As secadoras perguntam quantos ciclos.</p>
-        {loading ? <div className="py-8 text-center text-neutral-500">A carregar…</div> : (
-          <div className="grid grid-cols-2 gap-3">
-            {machines.map((m) => {
-              const st = m.outOfService ? STATUS.offline : (STATUS[m.status] || STATUS.free)
-              const canStart = !m.outOfService && m.status !== 'working' && m.status !== 'fault' && m.status !== 'offline'
-              return (
-                <div key={m._id} className="rounded-2xl border border-neutral-200 p-3 flex flex-col gap-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="font-bold text-lg">{m.name}</div>
-                    <div className="flex items-center gap-1.5 text-sm font-semibold text-neutral-700"><span className={`w-2.5 h-2.5 rounded-full ${st.dot}`} />{m.outOfService ? 'Fora de serviço' : st.label}</div>
-                  </div>
-                  {canStart && (
-                    <button disabled={busyId === m._id} onClick={() => (m.type === 'dry' ? setDry({ m, blocks: 1 }) : run(m, 'start'))} className="h-14 rounded-xl bg-teal-600 text-white text-xl font-bold disabled:opacity-50 active:scale-95">Iniciar</button>
-                  )}
-                  {m.status === 'working' && (
-                    <button disabled={busyId === m._id} onClick={() => stopTap(m)} className={`h-14 rounded-xl text-xl font-bold disabled:opacity-50 active:scale-95 ${confirmStop === m._id ? 'bg-red-600 text-white' : 'border border-neutral-300 text-neutral-800'}`}>{confirmStop === m._id ? 'Confirmar parar?' : 'Parar'}</button>
-                  )}
-                </div>
-              )
-            })}
-          </div>
+      <div className="space-y-5">
+        <header className="pr-14">
+          <h2 className="m-0 text-3xl font-extrabold text-neutral-800">Máquinas</h2>
+          <p className="m-0 mt-1 text-base text-neutral-500">
+            {loading ? 'A carregar…' : `${freeCount} ${freeCount === 1 ? 'livre' : 'livres'} · ${workingCount} ${workingCount === 1 ? 'ocupada' : 'ocupadas'}`}
+            <span className="block text-sm mt-0.5">Toque numa máquina livre para a iniciar, ou numa ocupada para a libertar.</span>
+          </p>
+        </header>
+        {!loading && (
+          <>
+            <Section title="Lavagem" list={wash} />
+            <Section title="Secagem" list={dryers} />
+          </>
         )}
-        <button onClick={onClose} className="w-full py-3 rounded-xl border text-lg">Fechar</button>
       </div>
 
       {dry && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
-            <h3 className="m-0 mb-1 text-xl font-extrabold">Iniciar {dry.m.name}</h3>
+          <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-xl">
+            <div className="flex items-center gap-3 mb-1">
+              <DryerIcon animated={false} className="w-12 h-12" />
+              <h3 className="m-0 text-2xl font-extrabold">{dry.m.name}</h3>
+            </div>
             <p className="m-0 mb-4 text-neutral-600">Quantos ciclos de {gap(dry.m)} min?</p>
             <div className="flex items-center justify-center gap-5 mb-2">
-              <button type="button" aria-label="Menos um ciclo" onClick={() => setBlocks(dry.blocks - 1)} disabled={dry.blocks <= 1} className="w-16 h-16 rounded-full border text-4xl font-bold disabled:opacity-40">−</button>
-              <div className="text-center min-w-[110px]"><div className="text-5xl font-extrabold tabular-nums">{dry.blocks}</div><div className="text-sm text-neutral-500">{dry.blocks === 1 ? 'ciclo' : 'ciclos'}</div></div>
-              <button type="button" aria-label="Mais um ciclo" onClick={() => setBlocks(dry.blocks + 1)} disabled={dry.blocks >= 8} className="w-16 h-16 rounded-full border text-4xl font-bold disabled:opacity-40">+</button>
+              <button type="button" aria-label="Menos um ciclo" onClick={() => setBlocks(dry.blocks - 1)} disabled={dry.blocks <= 1} className="w-16 h-16 rounded-full border-2 text-4xl font-bold disabled:opacity-40 active:scale-95">−</button>
+              <div className="text-center min-w-[110px]"><div className="text-6xl font-extrabold tabular-nums">{dry.blocks}</div><div className="text-sm text-neutral-500">{dry.blocks === 1 ? 'ciclo' : 'ciclos'}</div></div>
+              <button type="button" aria-label="Mais um ciclo" onClick={() => setBlocks(dry.blocks + 1)} disabled={dry.blocks >= 8} className="w-16 h-16 rounded-full border-2 text-4xl font-bold disabled:opacity-40 active:scale-95">+</button>
             </div>
             <div className="text-center text-lg font-semibold mb-5">{dry.blocks * gap(dry.m)} min no total</div>
             <div className="grid grid-cols-2 gap-3">
-              <button type="button" onClick={() => setDry(null)} className="h-14 rounded-xl border text-lg font-semibold">Cancelar</button>
-              <button type="button" onClick={() => { const d = dry; setDry(null); run(d.m, 'start', d.blocks) }} className="h-14 rounded-xl bg-teal-600 text-white text-xl font-bold">Iniciar</button>
+              <button type="button" onClick={() => setDry(null)} className="h-14 rounded-2xl border-2 text-lg font-semibold active:scale-95">Cancelar</button>
+              <button type="button" onClick={() => { const d = dry; setDry(null); run(d.m, 'start', d.blocks) }} className="h-14 rounded-2xl bg-teal-600 text-white text-xl font-bold active:scale-95">Iniciar</button>
             </div>
           </div>
         </div>
