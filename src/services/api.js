@@ -384,6 +384,14 @@ export function createApi(config) {
     const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
     return request('/pos/card/gift', { method: 'POST', json: payload, headers, skipAuth: true, expect: 'json' })
   }
+  function staffStartMachine(id, payload, opts) {
+    const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
+    return request(`/pos/staff/machines/${id}/start`, { method: 'POST', json: payload, headers, skipAuth: true, expect: 'json' })
+  }
+  function staffEndMachine(id, payload, opts) {
+    const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
+    return request(`/pos/staff/machines/${id}/end`, { method: 'POST', json: payload, headers, skipAuth: true, expect: 'json' })
+  }
   function adminGiftCard(payload) { return request('/admin/cards/gift', { method: 'POST', json: payload, expect: 'json' }) }
 
   function blankCardAtReader() { return request('/admin/cards/blank-reader', { method: 'POST', json: { confirm: true }, expect: 'json' }) }
@@ -708,6 +716,8 @@ export function createApi(config) {
     updateCardProfile,
     blankCardAtReader,
     giftKioskCard,
+    staffStartMachine,
+    staffEndMachine,
     adminGiftCard,
     refillKioskHopper,
     emailDayCloseReceipt,

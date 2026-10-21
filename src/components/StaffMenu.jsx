@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react'
-import { Settings, Lock, Wallet, Gift } from 'lucide-react'
+import { Settings, Lock, Wallet, Gift, WashingMachine } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import api from '@/services/api'
 import { useKioskLock } from '@/context/KioskLockContext'
 import KioskDayCloseModal from '@/components/KioskDayCloseModal'
 import GiftCardForm from '@/components/GiftCardForm'
+import StaffMachinesModal from '@/components/StaffMachinesModal'
 
 function getKioskApiKey() {
   const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
@@ -31,6 +32,7 @@ export default function StaffMenu() {
   const [showChooser, setShowChooser] = useState(false)
   const [showDayClose, setShowDayClose] = useState(false)
   const [showGift, setShowGift] = useState(false)
+  const [showMachines, setShowMachines] = useState(false)
   const [giftBusy, setGiftBusy] = useState(false)
   const [giftResult, setGiftResult] = useState(null) // { ok, text }
 
@@ -64,12 +66,12 @@ export default function StaffMenu() {
 
   // Staff left the kiosk with the staff area open: after a minute with no touch it closes by itself and the PIN is
   // forgotten, so the next person who walks up needs the PIN again.
-  const staffOpen = showPinPrompt || showChooser || showGift || showDayClose
+  const staffOpen = showPinPrompt || showChooser || showGift || showDayClose || showMachines
   useEffect(() => {
     if (!staffOpen) return undefined
     let timer
     const leave = () => {
-      setShowPinPrompt(false); setShowChooser(false); setShowGift(false); setShowDayClose(false)
+      setShowPinPrompt(false); setShowChooser(false); setShowGift(false); setShowDayClose(false); setShowMachines(false)
       setPin(''); setPinError(null); setVerifiedPin(null); setGiftResult(null)
     }
     const arm = () => { clearTimeout(timer); timer = setTimeout(leave, STAFF_IDLE_MS) }
@@ -149,6 +151,17 @@ export default function StaffMenu() {
             </button>
 
             <button
+              onClick={() => { setShowChooser(false); setShowMachines(true) }}
+              className="w-full flex items-center gap-3 rounded-xl border border-neutral-200 hover:border-teal-400 hover:bg-teal-50 px-4 py-4 text-left transition"
+            >
+              <WashingMachine className="w-6 h-6 text-teal-600 shrink-0" aria-hidden />
+              <div>
+                <div className="font-semibold text-neutral-800">Máquinas</div>
+                <div className="text-xs text-neutral-500">Iniciar ou libertar uma máquina sem pagamento</div>
+              </div>
+            </button>
+
+            <button
               onClick={() => { setShowChooser(false); setGiftResult(null); setShowGift(true) }}
               className="w-full flex items-center gap-3 rounded-xl border border-neutral-200 hover:border-teal-400 hover:bg-teal-50 px-4 py-4 text-left transition"
             >
@@ -176,6 +189,8 @@ export default function StaffMenu() {
           </div>
         </Modal>
       )}
+
+      <StaffMachinesModal open={showMachines} pin={verifiedPin} onClose={() => { setShowMachines(false); setVerifiedPin(null) }} />
 
       {showGift && (
         <Modal open={showGift} onClose={() => { setShowGift(false); setVerifiedPin(null) }} title="Cartão de oferta">

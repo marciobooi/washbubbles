@@ -389,20 +389,27 @@ router.post('/recharge', requireKiosk, async (req, res) => {
  * false, and NO CARD WAS EVER DISPENSED while the customer was charged in full
  * and told "Card dispensed. Please insert card into reader to activate."
  */
-// POST /pos/card/gift — hand a card to a customer for free (staff PIN on every call). Default credit is zero.
-// Only WRONG PINs count against the limit (5 per 15 min): a legitimate PIN, however many cards, never locks staff out.
-const giftPinFails = new Map() // ip -> { n, since }
-router.post('/card/gift', requireKiosk, async (req, res) => {
+// Staff PIN for the actions below (gift card, machine start/stop). Only WRONG PINs count against the limit
+// (5 per 15 min): a legitimate PIN, however many actions, never locks staff out. Answers the request itself when refused.
+const staffPinFails = new Map() // ip -> { n, since }
+async function requireStaffPin(req, res) {
   const ip = req.ip || 'unknown'
-  const rec = giftPinFails.get(ip)
-  if (rec && Date.now() - rec.since > 15 * 60_000) giftPinFails.delete(ip)
-  if ((giftPinFails.get(ip)?.n || 0) >= 5) return res.status(429).json({ error: 'Too many PIN attempts, please try again later.' })
+  const rec = staffPinFails.get(ip)
+  if (rec && Date.now() - rec.since > 15 * 60_000) staffPinFails.delete(ip)
+  if ((staffPinFails.get(ip)?.n || 0) >= 5) { res.status(429).json({ error: 'Too many PIN attempts, please try again later.' }); return false }
   const pinCheck = await checkAdminPin(req, req.body?.pin)
   if (!pinCheck.ok) {
-    if (pinCheck.status === 401) { const r = giftPinFails.get(ip) || { n: 0, since: Date.now() }; r.n++; giftPinFails.set(ip, r) }
-    return res.status(pinCheck.status).json({ error: pinCheck.error })
+    if (pinCheck.status === 401) { const r = staffPinFails.get(ip) || { n: 0, since: Date.now() }; r.n++; staffPinFails.set(ip, r) }
+    res.status(pinCheck.status).json({ error: pinCheck.error })
+    return false
   }
-  giftPinFails.delete(ip)
+  staffPinFails.delete(ip)
+  return true
+}
+
+// POST /pos/card/gift — hand a card to a customer for free (staff PIN on every call). Default credit is zero.
+router.post('/card/gift', requireKiosk, async (req, res) => {
+  if (!(await requireStaffPin(req, res))) return
   try {
     const { issueGiftCard } = await import('../services/giftCard.js')
     const b = req.body || {}
@@ -415,6 +422,25 @@ router.post('/card/gift', requireKiosk, async (req, res) => {
     res.status(e.status || 500).json({ error: e.message || 'Gift card failed' })
   }
 })
+
+// POST /pos/staff/machines/:id/start|end — start (dryers: 1..8 cycles) or release a machine with no payment, from the kiosk,
+// behind the staff PIN. Same action as the admin's Iniciar / Parar, and recorded the same way.
+for (const kind of ['start', 'end']) {
+  router.post(`/staff/machines/:id/${kind}`, requireKiosk, async (req, res) => {
+    if (!(await requireStaffPin(req, res))) return
+    if (!coinMachine.running) return res.status(409).json({ error: 'Este posto não tem as máquinas ligadas' })
+    try {
+      const blocks = Math.min(8, Math.max(1, Math.floor(Number(req.body?.blocks)) || 1))
+      const result = kind === 'start' ? await coinMachine.adminStartMachine(req.params.id, blocks) : await coinMachine.adminEndMachine(req.params.id)
+      const { logAction } = await import('../services/auditLog.js')
+      logAction(req, `machine.admin_${kind}`, 'Machine', req.params.id, { by: 'staff PIN (kiosk)', ...(kind === 'start' ? { blocks } : {}) })
+      if (kind === 'start') await withTenant(Sale, req).create({ machineId: req.params.id, amount: 0, type: 'admin_start', method: 'cash', metadata: { by: 'staff PIN (kiosk)', blocks } }).catch(() => {})
+      res.json({ success: true, ...result })
+    } catch (e) {
+      res.status(400).json({ error: e.message })
+    }
+  })
+}
 
 router.post('/card/purchase', requireKiosk, async (req, res) => {
   const { inserted, customerName, customerEmail, customerPhone, customerContribuinte, customerMarketingOptIn, customerPrivacyConsent, batchId, localId } = req.body

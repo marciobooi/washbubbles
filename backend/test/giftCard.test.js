@@ -154,3 +154,74 @@ describe('Gift card — shows up centrally (transactions, card history, audit tr
     expect(audit2.body.filter((a) => a.action === 'card.gift_issued')).to.have.length(1)
   })
 })
+
+describe('Staff machines on the kiosk (PIN) — start with cycles / release by hand', function () {
+  this.timeout(30000)
+  let app, tenant, kiosk, coinMachine, Machine, Interface, Setting, Sale, sent
+  const saved = {}
+  const auth = () => ({ Authorization: `ApiKey ${kiosk.apiKey}` })
+  const call = (id, kind, body) => request(app).post(`/api/pos/staff/machines/${id}/${kind}`).set(auth()).send(body)
+
+  before(async () => {
+    await startTestDb(); await clearTestDb()
+    app = await buildTestApp()
+    ;({ tenant, kiosk } = await seedTenantAndUsers())
+    Machine = (await import('../src/models/machine.js')).default
+    Interface = (await import('../src/models/interface.js')).default
+    Setting = (await import('../src/models/setting.js')).default
+    Sale = (await import('../src/models/sale.js')).default
+    coinMachine = (await import('../src/services/coinMachine.js')).default
+    await Setting.create({ tenantId: tenant._id, key: 'adminPin', value: '4321' })
+    saved.running = coinMachine.running; saved.send = coinMachine.middleware.sendMachineActivation
+    coinMachine.running = true
+    coinMachine.tenantId = tenant._id
+    sent = []
+    coinMachine.middleware.sendMachineActivation = async (m, iface, impulses) => { sent.push({ machine: m.name, impulses: impulses ?? null }) }
+  })
+  after(async () => { coinMachine.running = saved.running; coinMachine.middleware.sendMachineActivation = saved.send; await stopTestDb() })
+
+  const mk = async (name, type, port) => {
+    const iface = (await Interface.findOne({ tenantId: tenant._id })) || (await Interface.create({ tenantId: tenant._id, name: 'Int K', address: '14', serialNumber: 'SN-K', status: 'active' }))
+    return Machine.create({ tenantId: tenant._id, name, type, weight: 8, interfaceId: iface._id, port, tImp: type === 'dry' ? 15 : null })
+  }
+
+  it('no PIN or a wrong PIN: nothing starts, nothing stops', async () => {
+    const m = await mk('Secar K1', 'dry', 1)
+    expect((await call(m._id, 'start', {})).status).to.equal(400)
+    expect((await call(m._id, 'start', { pin: '0000' })).status).to.equal(401)
+    expect(sent).to.have.length(0)
+    expect((await Machine.findById(m._id)).status).to.equal('free')
+  })
+
+  it('with the PIN a dryer starts for the chosen cycles (1..8), is recorded as a 0 EUR admin start, and can be released', async () => {
+    const m = await mk('Secar K2', 'dry', 2)
+    const r = await call(m._id, 'start', { pin: '4321', blocks: 3 })
+    expect(r.status).to.equal(200)
+    expect(r.body.blocks).to.equal(3)
+    expect(sent.at(-1)).to.deep.equal({ machine: 'Secar K2', impulses: 3 })
+    expect((await Machine.findById(m._id)).status).to.equal('working')
+    const sale = await Sale.findOne({ machineId: m._id, type: 'admin_start' })
+    expect(sale.amount).to.equal(0)
+    expect(sale.metadata.blocks).to.equal(3)
+    expect((await call(m._id, 'start', { pin: '4321' })).status).to.equal(400) // already running: no second pulse
+    expect((await call(m._id, 'end', { pin: '4321' })).status).to.equal(200)
+    expect((await Machine.findById(m._id)).status).to.equal('free')
+    const big = await mk('Secar K3', 'dry', 3)
+    expect((await call(big._id, 'start', { pin: '4321', blocks: 99 })).body.blocks).to.equal(8)
+  })
+
+  it('a washer starts with one click, and a machine out of service is refused', async () => {
+    const w = await mk('Lavar K1', 'wash', 4)
+    expect((await call(w._id, 'start', { pin: '4321', blocks: 5 })).status).to.equal(200)
+    expect(sent.at(-1).impulses).to.equal(null)
+    const bad = await mk('Lavar K2', 'wash', 5)
+    await Machine.findByIdAndUpdate(bad._id, { outOfService: true })
+    expect((await call(bad._id, 'start', { pin: '4321' })).status).to.equal(400)
+  })
+
+  it('five wrong PINs lock the actions for that kiosk; a right PIN before that never does', async () => {
+    const m = await mk('Secar K9', 'dry', 6)
+    for (let i = 0; i < 5; i++) expect((await call(m._id, 'start', { pin: '1111' })).status).to.equal(401)
+    expect((await call(m._id, 'start', { pin: '4321' })).status).to.equal(429)
+  })
+})
