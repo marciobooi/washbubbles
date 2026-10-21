@@ -26,6 +26,13 @@ const ROWS_NUMERIC = [
   ['.', '0', '-'],
 ]
 
+// A PIN (inputmode="numeric") takes digits only: no dot, no minus. Amounts (decimal / type=number) keep ROWS_NUMERIC.
+const ROWS_DIGITS = [
+  ['1', '2', '3'],
+  ['4', '5', '6'],
+  ['7', '8', '9'],
+]
+
 const TEXT_TYPES = new Set(['text', 'password', 'email', 'search', 'tel', 'url', 'number', ''])
 
 function isEditable(el) {
@@ -39,6 +46,11 @@ function wantsNumeric(el) {
   const type = (el.getAttribute('type') || '').toLowerCase()
   const mode = (el.getAttribute('inputmode') || '').toLowerCase()
   return type === 'number' || type === 'tel' || mode === 'numeric' || mode === 'decimal' || mode === 'tel'
+}
+
+function wantsDigitsOnly(el) {
+  const type = (el.getAttribute('type') || '').toLowerCase()
+  return (el.getAttribute('inputmode') || '').toLowerCase() === 'numeric' && type !== 'number' && type !== 'tel'
 }
 
 function setNativeValue(el, value) {
@@ -120,6 +132,7 @@ export default function OnScreenKeyboard() {
         return
       }
     }
+    if (wantsDigitsOnly(el) && !/^\d$/.test(key)) return // a PIN field only ever receives digits
     if (el.value.length - (end - start) + key.length > maxLength) return
     const ch = shift && key.length === 1 ? key.toUpperCase() : key
     setNativeValue(el, el.value.slice(0, start) + ch + el.value.slice(end))
@@ -129,7 +142,8 @@ export default function OnScreenKeyboard() {
   }
 
   const numeric = wantsNumeric(target)
-  const rows = numeric ? ROWS_NUMERIC : symbols ? ROWS_SYMBOLS : ROWS_ALPHA
+  const digitsOnly = numeric && wantsDigitsOnly(target)
+  const rows = digitsOnly ? ROWS_DIGITS : numeric ? ROWS_NUMERIC : symbols ? ROWS_SYMBOLS : ROWS_ALPHA
   const keyBase = 'select-none rounded-xl bg-white text-neutral-800 font-semibold shadow active:scale-95 active:bg-teal-100 flex items-center justify-center'
 
   return (
@@ -160,6 +174,7 @@ export default function OnScreenKeyboard() {
             </>
           )}
           <button type="button" className={`${keyBase} h-16 w-24 text-3xl`} onClick={() => press('BACKSPACE')} aria-label="Apagar">⌫</button>
+          {digitsOnly && <button type="button" className={`${keyBase} h-16 flex-1 text-3xl`} onClick={() => press('0')}>0</button>}
           <button type="button" className={`${keyBase} h-16 w-28 text-2xl bg-teal-600 text-white`} onClick={() => press('ENTER')}>OK</button>
           <button type="button" className={`${keyBase} h-16 w-20 text-2xl`} onClick={() => setDismissed(target)} aria-label={i18n.t('kbClose', { ns: 'cart' })}>✕</button>
         </div>
