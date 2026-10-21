@@ -15,7 +15,10 @@ import { CashSessionStore } from '../src/services/cashSession.js'
 import { CoinMachine } from '../src/services/coinMachine.js'
 import { creditCard, debitCard } from '../src/services/cardBalance.js'
 
-const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms))
+// The waits below are for background work (queueing a sale, a flush) to settle. A shared CI runner is several times
+// slower than a laptop and the fixed waits flaked there (twice on GitHub, never locally): wait longer on CI.
+const SLOWNESS = process.env.CI ? 6 : 1
+const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms * SLOWNESS))
 
 /** A central server that can be offline, erroring, or fine — and records what it received. */
 function fakeCentral() {
@@ -60,6 +63,7 @@ describe('Uplink — offline-first queue to the central server', function () {
   beforeEach(() => { central = fakeCentral(); uplink = mkUplink(); uplink.start() })
   afterEach(async () => {
     uplink.stop()
+    await tick(60) // let a late queueing from this test finish BEFORE the clean-up, or it leaks into the next test
     await Promise.all([Sale, Card, DayClose, AuditLog, SyncOutbox].map((M) => M.deleteMany({ tenantId: tenant._id })))
   })
 
