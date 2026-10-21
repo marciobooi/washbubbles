@@ -10,8 +10,10 @@
 import User from '../models/user.js'
 import { sendAlertForTenant } from './alerts.js'
 
-const STALE_MS = 15 * 60 * 1000
-const CHECK_INTERVAL_MS = 5 * 60 * 1000
+// The shop asks the central server for work every few seconds, so two quiet minutes already means no internet
+// (this is what makes the admin's Start/Stop fail). One e-mail per outage, one when it is back.
+const STALE_MS = 2 * 60 * 1000
+const CHECK_INTERVAL_MS = 30 * 1000
 
 let timer = null
 
@@ -24,11 +26,12 @@ async function checkOnce() {
       await sendAlertForTenant(
         k.tenantId,
         'Quiosque offline',
-        `O quiosque "${k.username}" não comunica com o servidor há mais de ${Math.round(STALE_MS / 60000)} minutos.`
+        `O quiosque "${k.username}" não comunica com o servidor há mais de ${Math.round(STALE_MS / 60000)} minutos (sem internet na loja?). Enquanto isso, o quiosque continua a funcionar com dinheiro e as vendas ficam guardadas para enviar quando a ligação voltar. O Iniciar/Parar do admin não chega à loja.`
       )
       await User.findByIdAndUpdate(k._id, { offlineAlertSent: true })
     } else if (!isStale && k.offlineAlertSent) {
       await User.findByIdAndUpdate(k._id, { offlineAlertSent: false })
+      await sendAlertForTenant(k.tenantId, 'Quiosque online outra vez', `O quiosque "${k.username}" voltou a comunicar com o servidor.`)
     }
   }
 }

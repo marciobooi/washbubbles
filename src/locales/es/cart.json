@@ -241,5 +241,7 @@
   "mbwayLinkFailed": "No se pudo generar el código. Escriba el número aquí.",
   "mbwayLinkExpired": "El código caducó. Genere uno nuevo.",
   "mbwayCartChanged": "La compra cambió entretanto. Vuelva atrás e inténtelo de nuevo.",
-  "mbwayOk": "OK"
+  "mbwayOk": "OK",
+  "connOnline": "En línea",
+  "connOffline": "Sin conexión"
 }

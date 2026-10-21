@@ -50,9 +50,10 @@ describe('Operator alerts', () => {
   })
 
   describe('kioskWatchdog.checkOnce', () => {
-    it('flags a kiosk stale for over 15 minutes and does not re-flag it on the next check', async () => {
+    it('flags a kiosk quiet for over 2 minutes (and not one quiet for 1) and does not re-flag it on the next check', async () => {
       const User = (await import('../src/models/user.js')).default
-      const staleTime = new Date(Date.now() - 20 * 60000)
+      const staleTime = new Date(Date.now() - 3 * 60000)
+      const recent = await User.create({ tenantId, username: 'quiet-1min', password: 'x', role: 'KIOSK', lastSeen: new Date(Date.now() - 60000) })
       const kiosk = await User.create({
         tenantId, username: 'stale-kiosk', password: 'x', role: 'KIOSK', lastSeen: staleTime,
       })
@@ -60,6 +61,7 @@ describe('Operator alerts', () => {
       await kioskWatchdog.checkOnce()
       let reloaded = await User.findById(kiosk._id)
       expect(reloaded.offlineAlertSent).to.equal(true)
+      expect((await User.findById(recent._id)).offlineAlertSent).to.not.equal(true)
 
       // A second check while still stale must not error or double-send —
       // offlineAlertSent should simply stay true.

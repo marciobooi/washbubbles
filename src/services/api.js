@@ -564,6 +564,9 @@ export function createApi(config) {
   function adminStartMachine(id) {
     return request(`/admin/machines/${id}/start`, { method: 'POST', expect: 'json' });
   }
+  function adminShopStatus() {
+    return request('/admin/shop-status', { method: 'GET', expect: 'json' });
+  }
   function adminEndMachine(id) {
     return request(`/admin/machines/${id}/end`, { method: 'POST', expect: 'json' });
   }
@@ -685,6 +688,7 @@ export function createApi(config) {
     activateMachine,
     adminStartMachine,
     adminEndMachine,
+    adminShopStatus,
 
     // Day Close
     getDayCloseSummary,
@@ -768,6 +772,7 @@ export const {
   activateMachine,
   adminStartMachine,
   adminEndMachine,
+  adminShopStatus,
   getDayCloseSummary,
   getDayCloses,
   createDayClose,

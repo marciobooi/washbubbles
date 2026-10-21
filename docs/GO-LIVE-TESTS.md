@@ -177,6 +177,11 @@ come from the machines and the controller themselves, or from the maker or the P
 - [ ] Sales and card changes queue (`SyncOutbox`) and **all arrive in Hetzner, once each**, after reconnecting
 - [ ] A fresh PC offline on day one still recognises coins (fallback codes, §2) and loads machines/prices stored locally
 - [ ] Central admin shows the shop as stale/offline sensibly while it is disconnected
+- [x] 2026-10-21 (real outage, ~11 min, 15:57–16:08 UTC): sales made during it (16:06) reached Hetzner; outbox 173 sent / 0 pending; PC and Hetzner agree on sales sum (292.80 €), card balances and every sale (59 + 2 central-only `admin_start` 0 € rows, by design)
+- [ ] Kiosk badge: green dot when online, amber "Offline" pill within ~25 s of unplugging, green again after reconnecting
+- [ ] Admin Operações: banner "A loja está sem ligação" within ~45 s offline; Iniciar/Parar answer "sem ligação" (nothing queued) instead of "pedido enviado"
+- [ ] E-mail "Quiosque offline" ~2 min after unplugging, and "Quiosque online outra vez" after reconnecting
+- [ ] After reconnecting, offline sales arrive in seconds (no waiting for the uplink back-off) and Hetzner prices/settings are pulled again
 
 ## 11. Reboot and power cut
 

@@ -42,7 +42,7 @@ const router = express.Router()
 // requireStaffRead or requireTechnician below.
 router.use(requireDashboardUser)
 // ...but an OPERATOR reaches ONLY the machine list and the manual start / release of a machine: every other route answers 403 for them.
-const OPERATOR_ALLOWED = (req) => (req.method === 'GET' && req.path === '/machines') || (req.method === 'POST' && /^\/machines\/[^/]+\/(start|end)$/.test(req.path))
+const OPERATOR_ALLOWED = (req) => (req.method === 'GET' && (req.path === '/machines' || req.path === '/shop-status')) || (req.method === 'POST' && /^\/machines\/[^/]+\/(start|end)$/.test(req.path))
 router.use((req, res, next) => {
   if (req.userModel?.role === 'OPERATOR' && !OPERATOR_ALLOWED(req)) return res.status(403).json({ error: 'Forbidden' })
   next()
@@ -255,6 +255,17 @@ router.delete('/machines/:id', requireAdmin, async (req, res) => {
 // On a server that has the hardware (the shop PC) it happens right here. On the central
 // server, which has none, it is queued as a remote command that the shop picks up within a
 // few seconds (services/remoteCommands.js) and reports back on.
+// A shop is online if it contacted the central server in the last 45 s (it polls every 5 s).
+const SHOP_ONLINE_MS = 45_000
+const shopOnline = (lastSeen) => Boolean(lastSeen) && Date.now() - new Date(lastSeen).getTime() < SHOP_ONLINE_MS
+
+// GET /admin/shop-status — is the shop talking to us right now? (drives the banner on the operations page)
+router.get('/shop-status', requireMachineOperator, async (req, res) => {
+  const kiosks = await User.find({ tenantId: req.tenantId, role: 'KIOSK' }).select('lastSeen').lean()
+  const last = kiosks.map((k) => k.lastSeen).filter(Boolean).sort((a, b) => new Date(b) - new Date(a))[0] || null
+  res.json({ known: kiosks.length > 0, online: kiosks.some((k) => shopOnline(k.lastSeen)), lastSeen: last, offlineSeconds: last ? Math.round((Date.now() - new Date(last).getTime()) / 1000) : null })
+})
+
 async function machineAdminAction(req, res, kind) {
   const MachineT = withTenant(Machine, req)
   const machine = await MachineT.findById(req.params.id)
@@ -274,8 +285,13 @@ async function machineAdminAction(req, res, kind) {
     }
   }
 
-  const kiosks = await User.find({ tenantId: req.tenantId, role: 'KIOSK' }).select('_id').lean()
+  const kiosks = await User.find({ tenantId: req.tenantId, role: 'KIOSK' }).select('_id lastSeen').lean()
   if (kiosks.length === 0) return res.status(409).json({ error: 'No shop kiosk is registered for this tenant' })
+  // The shop asks for commands every few seconds. If it has not for a while it is offline, and a command
+  // would only expire (older than 2 min it is refused on purpose): say so now instead of pretending it was sent.
+  if (!kiosks.some((k) => shopOnline(k.lastSeen))) {
+    return res.status(409).json({ error: 'A loja está sem ligação à internet neste momento, por isso não recebe o pedido. Tente de novo quando voltar (o quiosque na loja continua a funcionar com dinheiro).', code: 'shop-offline' })
+  }
   const SyncCommandT = withTenant(SyncCommand, req)
   const cmds = []
   for (const k of kiosks) {

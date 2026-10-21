@@ -241,5 +241,7 @@
   "mbwayLinkFailed": "The code could not be made. Type the number here.",
   "mbwayLinkExpired": "The code expired. Make a new one.",
   "mbwayCartChanged": "The purchase changed meanwhile. Go back and try again.",
-  "mbwayOk": "OK"
+  "mbwayOk": "OK",
+  "connOnline": "Online",
+  "connOffline": "Offline"
 }

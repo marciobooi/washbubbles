@@ -168,6 +168,14 @@ class CoinMachine extends EventEmitter {
         },
       })
       this.remoteCommands.start()
+      // Back online after an outage: send what piled up now (the uplink's own back-off can be minutes) and refresh prices/settings.
+      this.remoteCommands.on('online', () => {
+        console.log('[Sync] central server reachable again — sending what was recorded offline')
+        if (this.uplink) this.uplink.nextTryAt = 0
+        this.uplink?.flush?.().catch(() => {})
+        this.downlink?.pullAll?.().catch?.(() => {})
+      })
+      this.remoteCommands.on('offline', () => console.warn('[Sync] central server not reachable — working offline, everything is kept and sent later'))
       // MB WAY payments nobody is waiting for any more are still followed to the end (see services/mbway.js).
       import('./mbway.js').then((m) => m.startSweeper()).catch((e) => console.error('[MBWAY] sweeper not started:', e.message))
 

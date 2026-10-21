@@ -17,6 +17,7 @@ import ReceiptPrompt from './components/ReceiptPrompt'
 import { ToastProvider, toast } from './components/ui/Toast'
 import HelpTutorial from './components/HelpTutorial'
 import LanguageSwitcher from './components/LanguageSwitcher'
+import ConnectionBadge from './components/ConnectionBadge'
 import DevCardPreview from './pages/DevCardPreview'
 import Loading from './components/ui/loading'
 import DevCartPreview from './pages/DevCartPreview'
@@ -667,6 +668,7 @@ function AppInner() {
               {location.pathname.startsWith('/admin') && tenant && (
                 <div className="text-sm text-primary-700 mr-2">{tenant.name}</div>
               )}
+              {location.pathname.startsWith('/pos') && <ConnectionBadge />}
               {location.pathname.startsWith('/pos') && <LanguageSwitcher />}
 
               <button aria-label={tr('ariaHelp')} className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-2xl border border-slate-200 shadow-sm active:scale-95 focus:outline-none" onClick={() => setHelpOpen(true)} title={tr('ariaHelp')}>

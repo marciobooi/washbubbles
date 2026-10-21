@@ -742,6 +742,23 @@ describe('Admin start/end without payment', function () {
   })
   after(async () => { await stopTestDb() })
 
+  it('shop offline: nothing is queued (it would only expire) and the admin is told why; shop-status says so', async () => {
+    const SyncCommand = (await import('../src/models/syncCommand.js')).default
+    const User = (await import('../src/models/user.js')).default
+    await User.findByIdAndUpdate(kiosk._id, { lastSeen: new Date(Date.now() - 5 * 60_000) })
+    const res = await request(app).post(`/api/admin/machines/${machine._id}/start`).set('Authorization', `Bearer ${adminToken}`)
+    expect(res.status).to.equal(409)
+    expect(res.body.code).to.equal('shop-offline')
+    expect(await SyncCommand.countDocuments({ kioskId: kiosk._id })).to.equal(0)
+    const st = await request(app).get('/api/admin/shop-status').set('Authorization', `Bearer ${adminToken}`)
+    expect(st.body).to.include({ known: true, online: false })
+    expect(st.body.offlineSeconds).to.be.greaterThan(250)
+    // back online: the shop's next request marks it seen
+    await User.findByIdAndUpdate(kiosk._id, { lastSeen: new Date() })
+    const st2 = await request(app).get('/api/admin/shop-status').set('Authorization', `Bearer ${adminToken}`)
+    expect(st2.body.online).to.equal(true)
+  })
+
   it('on the central server (no hardware) it queues a command for the shop and leaves the machine alone', async () => {
     const SyncCommand = (await import('../src/models/syncCommand.js')).default
     const res = await request(app).post(`/api/admin/machines/${machine._id}/start`).set('Authorization', `Bearer ${adminToken}`)

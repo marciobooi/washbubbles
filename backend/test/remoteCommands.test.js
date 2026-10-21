@@ -19,6 +19,38 @@ function fakeCentral(commands) {
 const mk = (central, handlers, extra = {}) => new RemoteCommands({ handlers, url: 'http://central.test/api', apiKey: 'k', fetchImpl: central.fetch, ...extra })
 const now = () => new Date().toISOString()
 
+describe('RemoteCommands — connection state (kiosk badge, back-online catch-up)', () => {
+  it('is online after an answer, goes offline after 20 s without one, and says so once each way', async () => {
+    const c = fakeCentral([])
+    const r = mk(c, {})
+    const events = []
+    r.on('online', () => events.push('online')).on('offline', () => events.push('offline'))
+    expect(r.connection().online).to.equal(false) // nothing heard yet
+    await r.poll()
+    expect(r.connection().online).to.equal(true)
+    expect(events).to.deep.equal([]) // the first answer is not a "came back"
+    c.mode = 'offline'
+    await r.poll()
+    expect(r.connection().online).to.equal(true) // one missed poll is not an outage
+    expect(events).to.deep.equal([])
+    r.lastOkAt = Date.now() - 25_000 // 25 s of silence
+    await r.poll()
+    expect(r.connection().online).to.equal(false)
+    expect(events).to.deep.equal(['offline'])
+    await r.poll()
+    expect(events).to.deep.equal(['offline']) // not repeated
+    c.mode = 'ok'
+    await r.poll()
+    expect(r.connection().online).to.equal(true)
+    expect(events).to.deep.equal(['offline', 'online'])
+  })
+
+  it('a standalone install (no central server) reports nothing to be offline from', () => {
+    const r = new RemoteCommands({ url: '', apiKey: '' })
+    expect(r.connection()).to.include({ enabled: false, online: null })
+  })
+})
+
 describe('RemoteCommands — the central admin asks, the shop does', () => {
   it('is disabled without URL and key, and asks nothing', async () => {
     const c = fakeCentral([])

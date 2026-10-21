@@ -36,6 +36,28 @@ export class RemoteCommands extends EventEmitter {
     this.fetch = fetchImpl
     this.timer = null
     this.busy = null
+    this.lastOkAt = null // last time the central server answered us
+    this.connected = null // null = not tried yet
+  }
+
+  /** Did the central server answer within the last `withinMs`? (the shop asks every few seconds) */
+  isOnline(withinMs = 20_000) {
+    return Boolean(this.lastOkAt) && Date.now() - this.lastOkAt < withinMs
+  }
+
+  /** What the kiosk badge and the admin show. `enabled: false` = no central server on this install (nothing to be offline from). */
+  connection() {
+    return { enabled: this.enabled, online: this.enabled ? this.isOnline() : null, lastOkAt: this.lastOkAt ? new Date(this.lastOkAt).toISOString() : null }
+  }
+
+  noteResult(ok) {
+    if (ok) this.lastOkAt = Date.now()
+    // One missed poll is not an outage: it takes more than 20 s without an answer.
+    const now = ok ? true : this.isOnline() ? this.connected : false
+    if (now === this.connected) return
+    const was = this.connected
+    this.connected = now
+    if (was !== null) this.emit(now ? 'online' : 'offline')
   }
 
   get enabled() {
@@ -79,7 +101,9 @@ export class RemoteCommands extends EventEmitter {
       let list
       try {
         list = await (await this.call('/sync/commands', 'GET')).json()
+        this.noteResult(true)
       } catch {
+        this.noteResult(false)
         return results // offline or server down: ask again next time
       }
       if (!Array.isArray(list)) return results

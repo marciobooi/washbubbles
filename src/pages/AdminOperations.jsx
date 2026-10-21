@@ -41,6 +41,15 @@ export default function AdminOperations() {
   const isOperator = role === 'OPERATOR'
   const [machines, setMachines] = React.useState([])
   const [loading, setLoading] = React.useState(false)
+  // Is the shop talking to this server? null = unknown (e.g. this IS the shop PC: nothing to report).
+  const [shop, setShop] = React.useState(null)
+  React.useEffect(() => {
+    let alive = true
+    const poll = () => api.adminShopStatus().then((s) => { if (alive) setShop(s?.known ? s : null) }).catch(() => {})
+    poll()
+    const id = setInterval(poll, 10_000)
+    return () => { alive = false; clearInterval(id) }
+  }, [])
 
   async function load() {
     setLoading(true)
@@ -228,6 +237,13 @@ export default function AdminOperations() {
           Atualizar
         </button>
       </div>
+
+      {shop && !shop.online && (
+        <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 text-amber-900 px-4 py-3 text-sm">
+          <strong>A loja está sem ligação à internet</strong>
+          {shop.offlineSeconds != null ? ` há ${shop.offlineSeconds >= 120 ? Math.round(shop.offlineSeconds / 60) + ' min' : shop.offlineSeconds + ' s'}` : ''}. Iniciar e Parar não chegam à loja até voltar a ligação. No quiosque, as máquinas continuam a funcionar com dinheiro e as vendas são enviadas quando voltar.
+        </div>
+      )}
 
       <div>
         <h4 className="m-0 mb-3.5 text-[13px] uppercase tracking-[0.06em] text-[#8a8478] font-bold">Lavagem</h4>

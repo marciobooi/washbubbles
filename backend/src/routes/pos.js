@@ -43,6 +43,18 @@ const getMachineStatus = async (req, res) => {
 }
 
 router.get('/machine-status', getMachineStatus)
+
+// GET /pos/connection — is this shop talking to the central server right now, and how much is still
+// waiting to be sent? Drives the small online/offline badge on the kiosk. `enabled:false` = a
+// standalone install with no central server: nothing to show.
+router.get('/connection', requireKioskOrAdmin, async (req, res) => {
+  const rc = coinMachine.remoteCommands
+  if (!rc) return res.json({ enabled: false, online: null, pending: 0 })
+  const conn = rc.connection()
+  let pending = 0
+  try { pending = (await coinMachine.uplink?.status?.())?.pending || 0 } catch { /* the badge must never fail */ }
+  res.json({ ...conn, pending })
+})
 // Alias used by frontend hook: `/api/machine`
 router.get('/machine', getMachineStatus)
 
