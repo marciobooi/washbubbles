@@ -7,6 +7,8 @@ const ACTION_LABELS = {
   'transaction.refund': 'Reembolso',
   'card.balance_override': 'Saldo de cartão alterado diretamente',
   'user.role_change': 'Cargo de utilizador alterado',
+  'card.gift_issued': 'Cartão de oferta atribuído',
+  'card.gift_requested': 'Cartão de oferta pedido no admin (a loja emite)',
 }
 
 function actionLabel(action) {

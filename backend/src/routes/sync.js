@@ -17,6 +17,7 @@ import Peripheral from '../models/peripheral.js'
 import SyncCommand from '../models/syncCommand.js'
 import DayClose from '../models/dayClose.js'
 import { roundMoney } from '../utils/money.js'
+import { logAction } from '../services/auditLog.js'
 
 const router = express.Router()
 
@@ -85,6 +86,12 @@ router.post('/push/sale', async (req, res) => {
       // req.user is the decoded token and has no _id — use the loaded document.
       metadata: { localId, posId: req.userModel?._id, syncedAt: new Date() }
     })
+
+    // A gift card handed out at the shop must show in the central audit trail too (the shop's own trail stays on the shop PC).
+    if (sale.type === 'gift_card') {
+      const it = Array.isArray(sale.items) ? sale.items[0] : null
+      await logAction(req, 'card.gift_issued', 'Card', sale.cardId || sale.cardCode, { cardCode: sale.cardCode, credit: Number(it?.credit || 0), by: it?.by || 'loja', source: 'sincronizado da loja' })
+    }
 
     res.json({ success: true, id: sale._id, status: 'created' })
   } catch (err) {

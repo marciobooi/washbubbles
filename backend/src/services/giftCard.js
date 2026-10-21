@@ -64,9 +64,9 @@ export async function issueGiftCard(req, coin, opts = {}) {
   })
   const sale = await withTenant(Sale, req).create({
     amount: 0,
-    items: [{ type: 'card_purchase', amount: 0, cardCode: code, gift: true }],
+    items: [{ type: 'gift_card', name: credit > 0 ? `Cartão de oferta (crédito ${credit.toFixed(2)} €)` : 'Cartão de oferta', amount: 0, credit, cardCode: code, by: opts.by || '' }],
     method: 'gift',
-    type: 'card_purchase',
+    type: 'gift_card',
     cardId: card._id,
     cardCode: code,
     metadata: { gift: true, giftCredit: credit, initialCredit: 0, issuedBy: opts.by || '' },

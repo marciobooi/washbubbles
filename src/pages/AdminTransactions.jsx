@@ -95,6 +95,7 @@ export default function AdminTransactions() {
             <option value="payment">Pagamento</option>
             <option value="recharge">Recarga</option>
             <option value="card_purchase">Compra de cartão</option>
+            <option value="gift_card">Cartão de oferta</option>
             <option value="admin_start">Início manual</option>
             <option value="refund">Reembolso</option>
           </select>
@@ -136,7 +137,7 @@ export default function AdminTransactions() {
                   return acc
                 }, {}))
 
-                const typeLabel = (type) => type === 'payment' ? 'Pagamento' : type === 'recharge' ? 'Recarga' : type === 'refund' ? 'Reembolso' : type
+                const typeLabel = (type) => type === 'payment' ? 'Pagamento' : type === 'recharge' ? 'Recarga' : type === 'refund' ? 'Reembolso' : type === 'card_purchase' ? 'Compra de cartão' : type === 'gift_card' ? 'Cartão de oferta' : type === 'admin_start' ? 'Início manual' : type
 
                 // render grouped rows with expandable details
                 return groups.map((g) => {
@@ -152,7 +153,7 @@ export default function AdminTransactions() {
                         {isRefunded && <span className="ml-2 inline-block px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-xs">Reembolsado</span>}
                       </td>
                       <td className="p-2">{g.items.map(i => (i.machineId ? i.machineId.name : (Array.isArray(i.items) && i.items[0] && (i.items[0].name || i.items[0].type)) || '-')).join(', ')}</td>
-                      <td className="p-2">{(g.items[0] && (g.items[0].method === 'card' ? 'Cartão' : (g.items[0].method === 'cash' ? 'Dinheiro' : g.items[0].method))) || '-'}</td>
+                      <td className="p-2">{(g.items[0] && (g.items[0].method === 'card' ? 'Cartão' : (g.items[0].method === 'cash' ? 'Dinheiro' : g.items[0].method === 'gift' ? 'Oferta' : g.items[0].method))) || '-'}</td>
                       <td className="p-2">{typeof g.amount === 'number' ? g.amount.toFixed(2) : g.amount}</td>
                       <td className="p-2">{g.inserted ? g.inserted.toFixed(2) : '-'}</td>
                       <td className="p-2">{g.change ? g.change.toFixed(2) : '-'}</td>
@@ -181,7 +182,7 @@ export default function AdminTransactions() {
                                   {t.refundReason && <div className="text-xs text-red-600 mt-1">Motivo: {t.refundReason}</div>}
                                 </div>
                                 <div className="text-right">
-                                  <div>{t.method === 'card' ? 'Cartão' : (t.method === 'cash' ? 'Dinheiro' : t.method)}</div>
+                                  <div>{t.method === 'card' ? 'Cartão' : (t.method === 'cash' ? 'Dinheiro' : t.method === 'gift' ? 'Oferta' : t.method)}</div>
                                   <div className="font-semibold">{Number(t.amount).toFixed(2)}€</div>
                                   <div className="text-xs">Inserido: {t.inserted ?? '-'} Troco: {t.change ?? '-'}</div>
                                 </div>

@@ -9,8 +9,8 @@ const saleSchema = new Schema({
   machineId: { type: Schema.Types.ObjectId, ref: 'Machine' },
   amount: { type: Number, required: true },
   items: { type: Schema.Types.Mixed },
-  // Transaction type: payment, recharge, card_purchase, admin_start, etc.
-  type: { type: String, enum: ['payment', 'recharge', 'card_purchase', 'admin_start', 'other', 'refund'], default: 'payment' },
+  // Transaction type: payment, recharge, card_purchase, gift_card (a free card handed out by staff), admin_start, etc.
+  type: { type: String, enum: ['payment', 'recharge', 'card_purchase', 'gift_card', 'admin_start', 'other', 'refund'], default: 'payment' },
   // Payment method (card, cash, kiosk)
   method: { type: String },
   // 'refunded' is set on the ORIGINAL sale once a refund has been issued for

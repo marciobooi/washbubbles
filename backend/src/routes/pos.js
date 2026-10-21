@@ -605,7 +605,8 @@ router.get('/cards/:code/history', cardLookupLimiter, requireKiosk, async (req, 
     id: String(s._id),
     ts: s.createdAt,
     type: s.type || 'payment',
-    amount: s.type === 'payment' ? -Math.abs(s.amount) : Math.abs(s.amount),
+    // a gift card moved no money: what it shows is the free credit it came with
+    amount: s.type === 'gift_card' ? Math.abs(Number(s.metadata?.giftCredit || 0)) : (s.type === 'payment' ? -Math.abs(s.amount) : Math.abs(s.amount)),
     // what was bought, so the kiosk can say "Secar 8" instead of a bare "payment"
     name: (Array.isArray(s.items) ? s.items[0]?.name : s.items?.name) || null,
     machineType: (Array.isArray(s.items) ? s.items[0]?.type : s.items?.type) || null,

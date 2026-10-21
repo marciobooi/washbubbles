@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Settings, Lock, Wallet, Gift } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import api from '@/services/api'
@@ -10,6 +10,9 @@ function getKioskApiKey() {
   const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
   return electronKey || (typeof localStorage !== 'undefined' ? localStorage.getItem('kiosk_api_key') : null) || import.meta.env.VITE_KIOSK_API_KEY
 }
+
+// No touch for this long with the staff area open = it closes and the PIN has to be typed again.
+const STAFF_IDLE_MS = 60_000
 
 /**
  * Discreet, always-present entry point to staff-only kiosk actions: closing
@@ -58,6 +61,23 @@ export default function StaffMenu() {
       setChecking(false)
     }
   }
+
+  // Staff left the kiosk with the staff area open: after a minute with no touch it closes by itself and the PIN is
+  // forgotten, so the next person who walks up needs the PIN again.
+  const staffOpen = showPinPrompt || showChooser || showGift || showDayClose
+  useEffect(() => {
+    if (!staffOpen) return undefined
+    let timer
+    const leave = () => {
+      setShowPinPrompt(false); setShowChooser(false); setShowGift(false); setShowDayClose(false)
+      setPin(''); setPinError(null); setVerifiedPin(null); setGiftResult(null)
+    }
+    const arm = () => { clearTimeout(timer); timer = setTimeout(leave, STAFF_IDLE_MS) }
+    arm()
+    const events = ['pointerdown', 'pointermove', 'keydown', 'touchstart', 'wheel']
+    events.forEach((e) => window.addEventListener(e, arm, true))
+    return () => { clearTimeout(timer); events.forEach((e) => window.removeEventListener(e, arm, true)) }
+  }, [staffOpen])
 
   function closeAll() {
     setShowPinPrompt(false)

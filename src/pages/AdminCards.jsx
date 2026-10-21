@@ -433,11 +433,14 @@ export default function AdminCards() {
               ) : (
                 <div className="space-y-3">
                   {cardHistory.map((tx) => {
-                    const isPositive = tx.type === 'recharge' || tx.type === 'card_purchase'
+                    const isPositive = tx.type === 'recharge' || tx.type === 'card_purchase' || tx.type === 'gift_card'
+                    // a gift card moved no money: show the free credit it came with
+                    const shownAmount = tx.type === 'gift_card' ? Number(tx.metadata?.giftCredit ?? tx.items?.[0]?.credit ?? 0) : Number(tx.amount || 0)
                     const typeLabel = {
                       payment: 'Pagamento',
                       recharge: 'Recarga',
                       card_purchase: 'Compra de Cartão',
+                      gift_card: 'Cartão de oferta',
                       admin_start: 'Início Admin',
                       other: 'Outro'
                     }[tx.type] || tx.type
@@ -465,7 +468,7 @@ export default function AdminCards() {
                           </div>
                           <div className="text-right">
                             <p className={`text-xl font-bold ${isPositive ? 'text-green-600' : 'text-neutral-800'}`}>
-                              {isPositive ? '+' : '-'}€{Math.abs(tx.amount || 0).toFixed(2)}
+                              {isPositive ? '+' : '-'}€{Math.abs(shownAmount).toFixed(2)}
                             </p>
                             {tx.method && (
                               <p className="text-xs text-muted-foreground">

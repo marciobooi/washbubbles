@@ -52,7 +52,7 @@ describe('Gift card — a free card for a customer, credit zero by default', fun
     expect(card.balance).to.equal(0)
     expect(card.status).to.equal('pending_write') // not spendable until written at the reader
     const sale = await Sale.findOne({ cardCode: r.body.cardCode })
-    expect(sale).to.include({ amount: 0, method: 'gift', type: 'card_purchase', change: 0, inserted: 0 })
+    expect(sale).to.include({ amount: 0, method: 'gift', type: 'gift_card', change: 0, inserted: 0 })
     expect(sale.metadata.initialCredit).to.equal(0)
     const cp = await CardPurchase.findOne({ cardCode: r.body.cardCode })
     expect(cp).to.include({ purchasePrice: 0, paymentMethod: 'gift' })
@@ -120,5 +120,37 @@ describe('Gift card — a free card for a customer, credit zero by default', fun
     const tok = signToken(op)
     const r = await request(app).post('/api/admin/cards/gift').set('Authorization', `Bearer ${tok}`).send({ credit: 5 })
     expect(r.status).to.be.oneOf([401, 403])
+  })
+})
+
+describe('Gift card — shows up centrally (transactions, card history, audit trail)', function () {
+  this.timeout(30000)
+  let app, tenant, kiosk, adminToken
+  before(async () => {
+    await startTestDb(); await clearTestDb()
+    app = await buildTestApp()
+    let admin
+    ;({ tenant, kiosk, admin } = await seedTenantAndUsers())
+    adminToken = signToken(admin)
+  })
+  after(async () => { await stopTestDb() })
+
+  it('a gift sale pushed by the shop is a transaction of type gift_card and leaves an audit entry with who and how much', async () => {
+    const push = await request(app).post('/api/sync/push/sale').set({ Authorization: `ApiKey ${kiosk.apiKey}` }).send({
+      local_id: 'g-1', type: 'gift_card', amount: 0, method: 'gift', card_code: '1234567890',
+      items: [{ type: 'gift_card', name: 'Cartão de oferta (crédito 5.00 €)', amount: 0, credit: 5, cardCode: '1234567890', by: 'staff PIN (kiosk)' }],
+    })
+    expect(push.body.status).to.equal('created')
+    const tx = await request(app).get('/api/admin/transactions').set('Authorization', `Bearer ${adminToken}`)
+    const row = tx.body.find((t) => t.cardCode === '1234567890')
+    expect(row).to.include({ type: 'gift_card', method: 'gift', amount: 0 })
+    expect(row.items[0].credit).to.equal(5)
+    const audit = await request(app).get('/api/admin/audit-log').set('Authorization', `Bearer ${adminToken}`)
+    const entry = audit.body.find((a) => a.action === 'card.gift_issued')
+    expect(entry.details).to.include({ cardCode: '1234567890', credit: 5, by: 'staff PIN (kiosk)' })
+    // a retried push does not log it twice
+    await request(app).post('/api/sync/push/sale').set({ Authorization: `ApiKey ${kiosk.apiKey}` }).send({ local_id: 'g-1', type: 'gift_card', amount: 0, method: 'gift' })
+    const audit2 = await request(app).get('/api/admin/audit-log').set('Authorization', `Bearer ${adminToken}`)
+    expect(audit2.body.filter((a) => a.action === 'card.gift_issued')).to.have.length(1)
   })
 })

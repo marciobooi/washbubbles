@@ -68,6 +68,7 @@ export default function CardModal({ open, onClose, transactions = [], balance = 
     const kind = String(tx.machineType || '').toLowerCase()
     if (tx.type === 'recharge') return { title: tc('txRecharge'), tone: 'green', icon: <Plus className="w-7 h-7" strokeWidth={2.5} /> }
     if (tx.type === 'card_purchase') return { title: tc('txCardPurchase'), tone: 'green', icon: <CreditCard className="w-7 h-7" strokeWidth={2.2} /> }
+    if (tx.type === 'gift_card') return { title: tc('txGiftCard'), tone: 'green', icon: <CreditCard className="w-7 h-7" strokeWidth={2.2} /> }
     if (tx.type === 'refund') return { title: tc('txRefund'), tone: 'green', icon: <RotateCcw className="w-7 h-7" strokeWidth={2.2} /> }
     const isDry = kind === 'dry' || /secar|dry|séch|trock/i.test(String(tx.name || ''))
     return {
