@@ -79,7 +79,14 @@ export default function StaffMenu() {
     return () => { clearTimeout(timer); events.forEach((e) => window.removeEventListener(e, arm, true)) }
   }, [staffOpen])
 
+  // Tell the header whether staff mode (PIN accepted) is on, so it can show an Admin badge.
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('kiosk:staff-mode', { detail: { active: Boolean(verifiedPin) } }))
+    return () => { window.dispatchEvent(new CustomEvent('kiosk:staff-mode', { detail: { active: false } })) }
+  }, [verifiedPin])
+
   function closeAll() {
+    setVerifiedPin(null)
     setShowPinPrompt(false)
     setShowChooser(false)
     setPin('')

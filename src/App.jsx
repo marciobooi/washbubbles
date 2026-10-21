@@ -4,7 +4,7 @@ import { useTranslation, Trans } from 'react-i18next'
 import Pos from './pages/Pos'
 import api from './services/api'
 import * as localApi from './services/local-api'
-import { Home, CreditCard } from 'lucide-react'
+import { Home, CreditCard, ShieldCheck } from 'lucide-react'
 import { connect, subscribe } from '@/services/websocket'
 import Machines from './pages/Machines'
 import MachineDetail from './pages/MachineDetail'
@@ -127,6 +127,13 @@ function AppInner() {
   const cartTotalLabel = `${cart.reduce((s, i) => s + Number(i.cashPrice ?? i.price ?? 0) * (i.type === 'dry' ? Number(i.quantity) || 1 : 1), 0).toFixed(2).replace('.', ',')} €`
   const [cartOpen, setCartOpen] = React.useState(false)
   const [helpOpen, setHelpOpen] = React.useState(false)
+  // Staff mode on the kiosk (PIN accepted): the header shows an Admin badge so everyone can see it is on.
+  const [staffMode, setStaffMode] = React.useState(false)
+  React.useEffect(() => {
+    const on = (e) => setStaffMode(Boolean(e.detail?.active))
+    window.addEventListener('kiosk:staff-mode', on)
+    return () => window.removeEventListener('kiosk:staff-mode', on)
+  }, [])
   // Screens (machine list) can ask for the same tutorial the ? button opens
   React.useEffect(() => {
     const open = () => setHelpOpen(true)
@@ -667,6 +674,12 @@ function AppInner() {
               {location.pathname.startsWith('/admin') && <TenantSelector className="mr-2" />}
               {location.pathname.startsWith('/admin') && tenant && (
                 <div className="text-sm text-primary-700 mr-2">{tenant.name}</div>
+              )}
+              {location.pathname.startsWith('/pos') && staffMode && (
+                <span className="inline-flex items-center gap-2 rounded-2xl bg-slate-800 px-4 h-12 text-xl font-bold text-white shadow" role="status" title="Modo admin (PIN)">
+                  <ShieldCheck className="h-6 w-6" aria-hidden />
+                  Admin
+                </span>
               )}
               {location.pathname.startsWith('/pos') && <ConnectionBadge />}
               {location.pathname.startsWith('/pos') && <LanguageSwitcher />}
