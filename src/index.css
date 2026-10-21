@@ -108,10 +108,11 @@
   .glass-card > * { position: relative; z-index: 1; }
 
   /* Admin machines form inputs */
+  /* One look for every field (same as the <Input> component): soft grey fill, light border, 12px corners. */
   input, select, textarea {
-    background-color: var(--color-green-50);
-    border-radius: 8px;
-    border: 1px solid var(--color-green-500);
+    background-color: color-mix(in srgb, var(--color-slate-50) 70%, transparent);
+    border-radius: 12px;
+    border: 1px solid var(--color-slate-200);
   }
 
   .auth-left {
@@ -387,3 +388,13 @@
 :is(.admin-dark, .admin-dark *):is([class~="text-slate-600"], [class~="text-slate-700"], [class~="text-gray-600"], [class~="text-gray-700"]) { color: #c7cdd1 !important; }
 :is(.admin-dark, .admin-dark *):is([class~="text-gray-400"], [class~="text-gray-500"], [class~="text-slate-400"]) { color: #9aa3a8 !important; }
 :is(.admin-dark, .admin-dark *):is([class~="bg-slate-50"], [class~="bg-slate-100"], [class~="bg-gray-50"]) { background-color: #20272c !important; }
+
+/* Every field in the admin looks the same: pages that wrote their own `border p-2 rounded` on a <select> or <input>
+   (square corners, green border) now match the <Input> component. Checkboxes, radios, ranges, colour pickers,
+   files and buttons are left alone. */
+.admin-shell :is(select, textarea, input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"], [type="hidden"], [type="submit"], [type="button"])) {
+  border-radius: 0.75rem !important;
+  border-color: var(--color-slate-200) !important;
+}
+.admin-shell :is(select, textarea, input):focus { border-color: var(--primary) !important; outline: none; box-shadow: 0 0 0 1px var(--ring); }
+.admin-dark :is(select, textarea, input:not([type="checkbox"], [type="radio"])) { border-color: rgba(255, 255, 255, 0.14) !important; }

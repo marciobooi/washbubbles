@@ -60,7 +60,7 @@ export default function AdminDashboard() {
 
   return (
     <SidebarProvider>
-      <div className={`flex min-h-screen w-full bg-[#f5f2ec] text-[#1c2530] ${dark ? 'admin-dark' : ''}`}>
+      <div className={`admin-shell flex min-h-screen w-full bg-[#f5f2ec] text-[#1c2530] ${dark ? 'admin-dark' : ''}`}>
         <AppSidebar />
         <SidebarInset>
           <div className="flex flex-1 flex-col gap-4 min-w-0 px-4 sm:px-6 py-5">
