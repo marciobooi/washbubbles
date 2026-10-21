@@ -23,6 +23,7 @@ export default function AdminTransactions() {
   const [refunding, setRefunding] = useState(false)
   // Opens on today's transactions; "Todos os dias" clears the dates.
   const [filters, setFilters] = useState(() => ({ from: today(), to: today(), type: '' }))
+  const [sortDir, setSortDir] = useState('desc') // 'desc' = newest first (default), 'asc' = oldest first
   const [cols, setCols] = useState(EMPTY_COLS) // per-column filters (the row under the headings)
   const setCol = (k, v) => setCols((c) => ({ ...c, [k]: v }))
   const navigate = useNavigate()
@@ -102,8 +103,13 @@ export default function AdminTransactions() {
           <label className="block text-xs text-muted-foreground mb-1">Até</label>
           <Input type="date" value={filters.to} onChange={(e) => setFilters((f) => ({ ...f, to: e.target.value }))} className="w-40" />
         </div>
-        <Button variant="outline" size="sm" onClick={() => setFilters((f) => ({ ...f, from: today(), to: today() }))}>Hoje</Button>
-        <Button variant="outline" size="sm" onClick={() => setFilters((f) => ({ ...f, from: '', to: '' }))}>Todos os dias</Button>
+        {/* Today is the default and shows as selected; picking any other dates leaves both buttons off. */}
+        <div className="inline-flex rounded-md border overflow-hidden h-10" role="group" aria-label="Período">
+          {[['Hoje', filters.from === today() && filters.to === today(), () => setFilters((f) => ({ ...f, from: today(), to: today() }))], ['Todos os dias', !filters.from && !filters.to, () => setFilters((f) => ({ ...f, from: '', to: '' }))]].map(([label, active, onClick]) => (
+            <button key={label} type="button" onClick={onClick} aria-pressed={active} className={`px-4 text-sm font-semibold ${active ? 'bg-teal-600 text-white' : 'bg-white text-neutral-700 hover:bg-neutral-50'}`}>{label}</button>
+          ))}
+        </div>
+        <Button variant="outline" size="sm" onClick={() => setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))} aria-label="Ordem">{sortDir === 'desc' ? 'Mais recentes primeiro ↓' : 'Mais antigas primeiro ↑'}</Button>
         <Button variant="outline" size="sm" onClick={() => { setCols(EMPTY_COLS); setFilters((f) => ({ ...f, type: '' })) }}>Limpar filtros das colunas</Button>
       </div>
 
@@ -114,8 +120,8 @@ export default function AdminTransactions() {
           <table className="w-full text-sm table-auto">
             <thead>
               <tr>
-                <th className="text-left p-2">Data</th>
-                <th className="text-left p-2">Hora</th>
+                <th className="text-left p-2 cursor-pointer select-none" onClick={() => setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))} title="Clique para inverter a ordem">Data {sortDir === 'desc' ? '↓' : '↑'}</th>
+                <th className="text-left p-2 cursor-pointer select-none" onClick={() => setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))} title="Clique para inverter a ordem">Hora {sortDir === 'desc' ? '↓' : '↑'}</th>
                 <th className="text-left p-2">Tipo</th>
                 <th className="text-left p-2">Máquina</th>
                 <th className="text-left p-2">Método</th>
@@ -195,6 +201,7 @@ export default function AdminTransactions() {
                   return acc
                 }, {}))
                   .filter((g) => (cols.amountMin === '' || g.amount >= Number(cols.amountMin)) && (cols.change === '' || (cols.change === 'with' ? g.change > 0 : g.change <= 0)))
+                groups.sort((a, b) => (sortDir === 'asc' ? 1 : -1) * (new Date(a.createdAt) - new Date(b.createdAt)))
                 const totalShown = groups.reduce((s, g) => s + g.amount, 0)
 
                 const typeLabel = (type) => type === 'payment' ? 'Pagamento' : type === 'recharge' ? 'Recarga' : type === 'refund' ? 'Reembolso' : type === 'card_purchase' ? 'Compra de cartão' : type === 'gift_card' ? 'Cartão de oferta' : type === 'admin_start' ? 'Início manual' : type
