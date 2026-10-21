@@ -141,7 +141,7 @@ export default function AdminOverview() {
           <h3 className="m-0 text-[15px] font-extrabold self-start">Quiosques ativos</h3>
           <div
             className="w-28 h-28 rounded-full flex items-center justify-center mt-1"
-            style={{ background: `conic-gradient(#14b8a6 ${kioskPct}%, #eee9df ${kioskPct}% 100%)` }}
+            style={{ background: `conic-gradient(#14b8a6 ${kioskPct}%, var(--donut-track, #eee9df) ${kioskPct}% 100%)` }}
           >
             <div className="w-[86px] h-[86px] rounded-full bg-card flex flex-col items-center justify-center">
               <span className="font-extrabold text-xl tracking-tight">{activeKiosks} / {kiosks.length}</span>

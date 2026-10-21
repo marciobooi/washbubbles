@@ -340,6 +340,7 @@
   --sidebar: #161b1f; --sidebar-foreground: #e6eaed;
   --sidebar-accent: rgba(255, 255, 255, 0.08); --sidebar-accent-foreground: #e6eaed;
   --sidebar-border: rgba(255, 255, 255, 0.10);
+  --donut-track: #2f3a42;
 }
 :is(.admin-dark, .admin-dark *):is([class~="bg-[#f5f2ec]"]) { background-color: #101417 !important; }
 :is(.admin-dark, .admin-dark *):is([class~="bg-white"], [class~="bg-card"]) { background-color: #1b2126 !important; }
@@ -362,3 +363,6 @@
 :is(.admin-dark, .admin-dark *):is([class*="border-black"], [class~="border-neutral-100"], [class~="border-neutral-200"], [class~="border-neutral-300"], [class~="border-slate-200"], [class~="border"]) { border-color: rgba(255, 255, 255, 0.12) !important; }
 :is(.admin-dark, .admin-dark *):is(input, select, textarea) { background-color: #20272c; color: #e6eaed; }
 :is(.admin-dark, .admin-dark *) ::placeholder { color: #7b858b; }
+/* The Dashboard's "Hoje" card is a light gradient: in dark mode it becomes a dark teal one (its text is re-coloured above). */
+:is(.admin-dark, .admin-dark *):is([class~="from-[#e4f4ef]"]) { --tw-gradient-from: #123a33 !important; }
+:is(.admin-dark, .admin-dark *):is([class~="to-[#cdece2]"]) { --tw-gradient-to: #0c2b26 !important; }
