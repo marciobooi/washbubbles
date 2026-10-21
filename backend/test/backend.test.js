@@ -826,6 +826,55 @@ describe('Admin start/end without payment', function () {
       coinMachine.middleware.sendMachineActivation = saved.send
     }
   })
+
+  it('a dryer started from the admin gets the cycles the admin picked (1..8, like a customer); a washer ignores them', async () => {
+    const coinMachine = (await import('../src/services/coinMachine.js')).default
+    const Machine = (await import('../src/models/machine.js')).default
+    const Interface = (await import('../src/models/interface.js')).default
+    const sent = []
+    const saved = { running: coinMachine.running, tenantId: coinMachine.tenantId, send: coinMachine.middleware.sendMachineActivation }
+    coinMachine.running = true
+    coinMachine.tenantId = tenant._id
+    coinMachine.middleware.sendMachineActivation = async (m, iface, impulses) => { sent.push({ machine: m.name, impulses: impulses ?? null }) }
+    try {
+      const iface = await Interface.create({ tenantId: tenant._id, name: 'Int D', address: '14', serialNumber: 'SN-D-14', status: 'active' })
+      const mk = (name, type, port) => Machine.create({ tenantId: tenant._id, name, type, weight: 8, interfaceId: iface._id, port, tImp: type === 'dry' ? 15 : null })
+      const d1 = await mk('Secar Teste 1', 'dry', 1)
+      const d2 = await mk('Secar Teste 2', 'dry', 2)
+      const w = await mk('Lavar Teste', 'wash', 3)
+      const start = (m, body) => request(app).post(`/api/admin/machines/${m._id}/start`).set('Authorization', `Bearer ${adminToken}`).send(body)
+      const r1 = await start(d1, { blocks: 3 })
+      expect(r1.status).to.equal(200)
+      expect(r1.body.blocks).to.equal(3)
+      expect(sent[0]).to.deep.equal({ machine: 'Secar Teste 1', impulses: 3 })
+      const m1 = await Machine.findById(d1._id)
+      expect(m1.status).to.equal('working')
+      expect(m1.busyUntil).to.be.a('date') // the dryer frees itself when its cycles are over
+      expect(m1.currentProgram).to.match(/3 ciclos/)
+      const r2 = await start(d2, { blocks: 99 })
+      expect(r2.body.blocks).to.equal(8) // never more than a customer could buy
+      expect(sent[1].impulses).to.equal(8)
+      const r3 = await start(w, { blocks: 5 })
+      expect(r3.status).to.equal(200)
+      expect(sent[2].impulses).to.equal(null) // washers: one start, as before
+    } finally {
+      coinMachine.running = saved.running
+      coinMachine.tenantId = saved.tenantId
+      coinMachine.middleware.sendMachineActivation = saved.send
+    }
+  })
+
+  it('on the central server the chosen cycles travel with the command to the shop', async () => {
+    const SyncCommand = (await import('../src/models/syncCommand.js')).default
+    const Machine = (await import('../src/models/machine.js')).default
+    const User = (await import('../src/models/user.js')).default
+    await User.findByIdAndUpdate(kiosk._id, { lastSeen: new Date() })
+    const dry = await Machine.create({ tenantId: tenant._id, name: 'Secar Remota', type: 'dry', weight: 8, tImp: 15 })
+    const res = await request(app).post(`/api/admin/machines/${dry._id}/start`).set('Authorization', `Bearer ${adminToken}`).send({ blocks: 4 })
+    expect(res.body.queued).to.equal(true)
+    const cmd = await SyncCommand.findOne({ type: 'start_machine', 'payload.machineId': String(dry._id) })
+    expect(cmd.payload.blocks).to.equal(4)
+  })
 })
 
 describe('Admin setting: automatic refund time', function () {

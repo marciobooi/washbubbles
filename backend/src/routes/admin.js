@@ -267,6 +267,8 @@ router.get('/shop-status', requireMachineOperator, async (req, res) => {
 })
 
 async function machineAdminAction(req, res, kind) {
+  // Dryers: how many cycles (blocks) to start. Whole number 1..8; the shop clamps again to its own limit.
+  const blocks = Math.min(8, Math.max(1, Math.floor(Number(req.body?.blocks)) || 1))
   const MachineT = withTenant(Machine, req)
   const machine = await MachineT.findById(req.params.id)
   if (!machine) return res.status(404).json({ error: 'Machine not found' })
@@ -274,8 +276,8 @@ async function machineAdminAction(req, res, kind) {
 
   if (coinMachine.running) {
     try {
-      const result = kind === 'start' ? await coinMachine.adminStartMachine(machine._id) : await coinMachine.adminEndMachine(machine._id)
-      logAction(req, `machine.admin_${kind}`, 'Machine', machine._id, { name: machine.name })
+      const result = kind === 'start' ? await coinMachine.adminStartMachine(machine._id, blocks) : await coinMachine.adminEndMachine(machine._id)
+      logAction(req, `machine.admin_${kind}`, 'Machine', machine._id, { name: machine.name, ...(kind === 'start' ? { blocks } : {}) })
       if (kind === 'start') {
         await withTenant(Sale, req).create({ machineId: machine._id, amount: 0, type: 'admin_start', method: 'cash' }).catch(() => {})
       }
@@ -295,7 +297,7 @@ async function machineAdminAction(req, res, kind) {
   const SyncCommandT = withTenant(SyncCommand, req)
   const cmds = []
   for (const k of kiosks) {
-    cmds.push(await SyncCommandT.create({ kioskId: k._id, type: kind === 'start' ? 'start_machine' : 'end_machine', payload: { machineId: String(machine._id) } }))
+    cmds.push(await SyncCommandT.create({ kioskId: k._id, type: kind === 'start' ? 'start_machine' : 'end_machine', payload: kind === 'start' ? { machineId: String(machine._id), blocks } : { machineId: String(machine._id) } }))
   }
   logAction(req, `machine.admin_${kind}_requested`, 'Machine', machine._id, { name: machine.name })
   res.json({ success: true, queued: true, commandIds: cmds.map((c) => c._id) })

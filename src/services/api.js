@@ -561,8 +561,8 @@ export function createApi(config) {
 
   // Start / release a machine with no payment. On the central server this is queued for the
   // shop and answers { queued: true }; on the shop PC it happens at once.
-  function adminStartMachine(id) {
-    return request(`/admin/machines/${id}/start`, { method: 'POST', expect: 'json' });
+  function adminStartMachine(id, blocks) {
+    return request(`/admin/machines/${id}/start`, { method: 'POST', json: blocks > 1 ? { blocks } : undefined, expect: 'json' });
   }
   function adminShopStatus() {
     return request('/admin/shop-status', { method: 'GET', expect: 'json' });

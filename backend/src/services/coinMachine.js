@@ -155,7 +155,7 @@ class CoinMachine extends EventEmitter {
       // is queued on the server and picked up by this poller (no-op unless sync is configured).
       this.remoteCommands = new RemoteCommands({
         handlers: {
-          start_machine: (p) => this.adminStartMachine(p.machineId),
+          start_machine: (p) => this.adminStartMachine(p.machineId, p.blocks),
           end_machine: (p) => this.adminEndMachine(p.machineId),
           set_service: (p) => this.setMachineService(p.machineId, p.outOfService, p.status),
           empty_hopper: async () => {
@@ -1235,7 +1235,7 @@ class CoinMachine extends EventEmitter {
    * Still refuses what would only fail at the washer: no interface/port, inactive interface,
    * machine already running, or no controller link.
    */
-  async adminStartMachine(machineId) {
+  async adminStartMachine(machineId, blocks = 1) {
     const machine = await Machine.findOne(this.scoped({ _id: machineId })).populate('interfaceId')
     if (!machine) throw new Error('Machine not found')
     const iface = machine.interfaceId
@@ -1244,19 +1244,26 @@ class CoinMachine extends EventEmitter {
     if (machine.status === 'working') throw new Error(`${machine.name} is already running`)
     if (machine.outOfService || machine.status === 'offline' || machine.status === 'fault') throw new Error(`${machine.name} is out of service`)
 
+    // A dryer can be started for several cycles (blocks of `tImp` minutes), exactly as a customer picks them.
+    const n = this.blocksFor(machine, { quantity: blocks })
     // Throws if the controller is not connected — nothing is marked running in that case.
-    await this.middleware.sendMachineActivation(machine, iface)
-
-    machine.status = 'working'
-    machine.statusText = 'Ocupado'
-    machine.startedAt = new Date()
-    machine.currentProgram = machine.currentProgram || 'Início manual'
-    await machine.save()
-    this.machines.set(machine.intId || machine._id, { ...machine.toObject(), activatedAt: new Date() })
-    try { await broadcastMachine(machine) } catch { /* the websocket server may not be up in tests */ }
+    if ((machine.type || 'wash') === 'dry') {
+      // startPaidMachine sends the impulses and keeps the cycle clock, so the dryer frees itself at the end.
+      await this.startPaidMachine(machine._id, n)
+    } else {
+      await this.middleware.sendMachineActivation(machine, iface)
+    }
+    const fresh = await Machine.findOne(this.scoped({ _id: machineId }))
+    fresh.status = 'working'
+    fresh.statusText = 'Ocupado'
+    fresh.startedAt = new Date()
+    fresh.currentProgram = n > 1 ? `Início manual (${n} ciclos)` : 'Início manual'
+    await fresh.save()
+    this.machines.set(machine.intId || machine._id, { ...fresh.toObject(), activatedAt: new Date() })
+    try { await broadcastMachine(fresh) } catch { /* the websocket server may not be up in tests */ }
     this.emit('machines-activated', { machineId: String(machine._id), admin: true })
-    console.log(`Machine ${machine.name} started by admin via Interface ${iface.name} (addr=${iface.address}, port=${machine.port})`)
-    return { success: true }
+    console.log(`Machine ${machine.name} started by admin via Interface ${iface.name} (addr=${iface.address}, port=${machine.port}, blocks=${n})`)
+    return { success: true, blocks: n }
   }
 
   /**

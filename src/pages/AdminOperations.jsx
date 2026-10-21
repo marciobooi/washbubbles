@@ -118,20 +118,22 @@ export default function AdminOperations() {
   // Start / end really act on the machine (no payment). On the central server the request is
   // queued for the shop, which does it within seconds; the machine's status here changes when
   // the shop reports back, so it is NOT set optimistically.
-  const runAdminAction = async (m, action) => {
+  const runAdminAction = async (m, action, blocks = 1) => {
     try {
-      const r = action === 'start' ? await api.adminStartMachine(m._id) : await api.adminEndMachine(m._id)
+      const r = action === 'start' ? await api.adminStartMachine(m._id, blocks) : await api.adminEndMachine(m._id)
       if (r?.queued) {
         toast({ title: `Pedido enviado ao posto`, description: `${action === 'start' ? 'Iniciar' : 'Parar'} ${m.name}. O estado atualiza quando o posto confirmar.`, variant: 'success' })
       } else {
-        toast({ title: action === 'start' ? `${m.name} iniciada` : `${m.name} libertada`, variant: 'success' })
+        toast({ title: action === 'start' ? `${m.name} iniciada${blocks > 1 ? ` (${blocks} ciclos)` : ''}` : `${m.name} libertada`, variant: 'success' })
         setMachines((s) => s.map((x) => x._id === m._id ? { ...x, status: action === 'start' ? 'working' : 'free', statusText: action === 'start' ? 'Ocupado' : 'Livre' } : x))
       }
     } catch (e) {
       toast({ title: action === 'start' ? 'Não foi possível iniciar' : 'Não foi possível parar', description: e?.message || String(e), variant: 'destructive' })
     }
   }
-  const startMachine = (m) => runAdminAction(m, 'start')
+  // A dryer is started for a number of cycles, like a customer picks them; a washer just starts.
+  const [dryPick, setDryPick] = React.useState(null) // { m, blocks }
+  const startMachine = (m) => (m.type === 'dry' ? setDryPick({ m, blocks: 1 }) : runAdminAction(m, 'start'))
   // The system frees the machine, but the cycles already sent are INSIDE the machine: say so before.
   const stopMachine = (m) => {
     const ok = window.confirm(`Parar ${m.name}?\n\nIsto liberta a máquina no sistema, mas os ciclos já pagos ficam dentro da própria máquina (continua pronta a trabalhar). Cancele-os também na máquina: botão de parar ou desligar da corrente.`)
@@ -237,6 +239,29 @@ export default function AdminOperations() {
           Atualizar
         </button>
       </div>
+
+      {dryPick && (() => {
+        const gap = Number(dryPick.m.tImp) > 0 ? Number(dryPick.m.tImp) : 15
+        const set = (b) => setDryPick((d) => ({ ...d, blocks: Math.min(8, Math.max(1, b)) }))
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" onClick={() => setDryPick(null)}>
+            <div className="w-full max-w-sm rounded-2xl bg-card p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+              <h3 className="m-0 mb-1 text-lg font-extrabold">Iniciar {dryPick.m.name}</h3>
+              <p className="m-0 mb-4 text-sm text-[#8a8478]">Quantos ciclos de {gap} min?</p>
+              <div className="flex items-center justify-center gap-4 mb-2">
+                <button type="button" aria-label="Menos um ciclo" onClick={() => set(dryPick.blocks - 1)} disabled={dryPick.blocks <= 1} className="w-12 h-12 rounded-full border border-black/[0.12] text-2xl font-bold disabled:opacity-40">−</button>
+                <div className="text-center min-w-[96px]"><div className="text-4xl font-extrabold tabular-nums">{dryPick.blocks}</div><div className="text-xs text-[#8a8478]">{dryPick.blocks === 1 ? 'ciclo' : 'ciclos'}</div></div>
+                <button type="button" aria-label="Mais um ciclo" onClick={() => set(dryPick.blocks + 1)} disabled={dryPick.blocks >= 8} className="w-12 h-12 rounded-full border border-black/[0.12] text-2xl font-bold disabled:opacity-40">+</button>
+              </div>
+              <div className="text-center text-sm font-semibold mb-5">{dryPick.blocks * gap} min no total</div>
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => setDryPick(null)} className="h-11 rounded-full border border-black/[0.12] font-semibold">Cancelar</button>
+                <button type="button" onClick={() => { const d = dryPick; setDryPick(null); runAdminAction(d.m, 'start', d.blocks) }} className="h-11 rounded-full bg-[#1c2530] text-white font-bold">Iniciar</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {shop && !shop.online && (
         <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 text-amber-900 px-4 py-3 text-sm">

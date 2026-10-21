@@ -185,6 +185,8 @@ come from the machines and the controller themselves, or from the maker or the P
 
 - [ ] **Pay 3 dryers at once (e.g. 8, 9, 11; 8 and 9 share interface 14), all three must start.** 2026-10-21 16:06:40: three activation commands went out within milliseconds, the controller answered 200 to all, but Secar 9 never reported `machine-started` (re-sending it later worked) while the program showed it busy. Fix: activations are now sent one at a time with a 1.2 s pause (`ACTIVATION_GAP_MS`). Test again with the three together and check `backend.log` shows a `Machine started` for each. (Secar 10, interface 15 channel 2, has NEVER reported `machine-started` in the whole log: it either has no signal or does not start — check it by hand.)
 
+- [ ] Admin → Operações → Iniciar on a DRYER asks for the number of cycles (1–8, 15 min each); start one with 3 cycles from the central admin (and as Tatiana) and check the dryer gets 3 blocks and the program shows 'Início manual (3 ciclos)'. A washer still starts with one click.
+
 ## 11. Reboot and power cut
 
 - [x] Restart the PC: it logs in by itself, backend up before login, Edge opens full-screen kiosk, Tailscale/SSH back  **DONE 2026-10-20 23:42: signed in by itself in 11 s (no password), backend up before login, Edge full-screen kiosk, SSH back**
