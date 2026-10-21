@@ -2,9 +2,23 @@ import React, { createContext, useContext, useEffect, useState } from 'react'
 
 const AuthContext = createContext()
 
+/** Expiry (ms since epoch) of a JWT, or null when it cannot be read. The server still decides; this only saves the user a dead page. */
+function tokenExpiry(token) {
+  try {
+    const part = String(token).split('.')[1]
+    const json = JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/')))
+    return Number.isFinite(json.exp) ? json.exp * 1000 : null
+  } catch { return null }
+}
+const isExpired = (token) => { const e = token ? tokenExpiry(token) : null; return e != null && e <= Date.now() }
+const inAdmin = () => typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')
+
 export function AuthProvider({ children }) {
-  const [token, setToken] = useState(() => localStorage.getItem('ws_token') || null)
-  const [role, setRole] = useState(() => localStorage.getItem('ws_role') || null)
+  // A token that has already expired is never taken up: the admin would see every page and none would work.
+  const stored = localStorage.getItem('ws_token')
+  const startExpired = isExpired(stored)
+  const [token, setToken] = useState(() => (startExpired ? null : stored || null))
+  const [role, setRole] = useState(() => (startExpired ? null : localStorage.getItem('ws_role') || null))
 
   useEffect(() => {
     if (token) localStorage.setItem('ws_token', token)
@@ -42,6 +56,24 @@ export function AuthProvider({ children }) {
       }
     } catch (err) { /* ignore */ }
   }, [])
+
+  // The session ran out (the clock reached the token's expiry, or the server answered 401 to a request that carried it):
+  // forget it and go to the login page with a short explanation, instead of leaving a dashboard that shows everything and does nothing.
+  const expireSession = () => {
+    if (!inAdmin()) return
+    setToken(null)
+    setRole(null)
+    try { sessionStorage.setItem('ws_expired', '1') } catch { /* private mode: the page just redirects */ }
+    if (window.location.pathname !== '/admin/login') window.location.replace('/admin/login')
+  }
+  useEffect(() => {
+    if (!token) return undefined
+    const onUnauthorized = () => expireSession()
+    window.addEventListener('auth:expired', onUnauthorized)
+    const exp = tokenExpiry(token)
+    const timer = exp ? setTimeout(expireSession, Math.min(Math.max(exp - Date.now(), 0), 2 ** 31 - 1)) : null
+    return () => { window.removeEventListener('auth:expired', onUnauthorized); if (timer) clearTimeout(timer) }
+  }, [token])
 
   const login = ({ token, role }) => {
     setToken(token)

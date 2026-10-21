@@ -78,7 +78,7 @@ export default function StaffMachinesModal({ open, onClose, pin }) {
     const label = m.outOfService ? 'Fora de serviço' : m.status === 'fault' ? 'Avariada' : m.status === 'reserved' ? 'Reservada' : m.status === 'offline' ? 'Offline' : working ? 'Ocupada' : 'Livre'
     const tone = working
       ? (stopping ? 'border-red-500 bg-red-50' : 'border-amber-300 bg-amber-50')
-      : free ? 'border-teal-200 bg-white active:bg-teal-50' : 'border-neutral-200 bg-neutral-100 opacity-60'
+      : free ? 'border-white bg-white shadow-sm active:bg-teal-50' : 'border-transparent bg-white/50 opacity-60'
     const dot = working ? 'bg-amber-500' : free ? 'bg-teal-500' : 'bg-neutral-400'
     const Icon = m.type === 'dry' ? DryerIcon : WasherIcon
     const action = working ? (stopping ? 'Confirmar?' : 'Parar') : free ? 'Iniciar' : null
@@ -100,9 +100,10 @@ export default function StaffMachinesModal({ open, onClose, pin }) {
     )
   }
 
-  const Section = ({ title, list }) => (list.length === 0 ? null : (
-    <section>
-      <h3 className="m-0 mb-2 text-sm font-bold uppercase tracking-wider text-neutral-500">{title}</h3>
+  // Each group sits on its own tinted panel (green for washing, grey for drying) so the two read apart at a glance.
+  const Section = ({ title, list, panel, heading }) => (list.length === 0 ? null : (
+    <section className={`rounded-3xl p-4 ${panel}`}>
+      <h3 className={`m-0 mb-3 text-base font-extrabold uppercase tracking-wider ${heading}`}>{title}</h3>
       <div className="grid grid-cols-3 gap-3">
         {list.map((m) => <Tile key={m._id} m={m} />)}
       </div>
@@ -121,8 +122,8 @@ export default function StaffMachinesModal({ open, onClose, pin }) {
         </header>
         {!loading && (
           <>
-            <Section title="Lavagem" list={wash} />
-            <Section title="Secagem" list={dryers} />
+            <Section title="Lavagem" list={wash} panel="bg-emerald-100/70" heading="text-emerald-800" />
+            <Section title="Secagem" list={dryers} panel="bg-slate-200/70" heading="text-slate-700" />
           </>
         )}
       </div>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router'
 import { useAuth } from '../context/AuthContext'
 import { Input } from '@/components/ui/input'
@@ -14,6 +14,16 @@ export default function LoginForm({ mode = 'admin', embedded = false }) {
   const [apiKey, setApiKey] = useState('')
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
+
+  // Sent here because the session ran out: say so once.
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem('ws_expired')) {
+        sessionStorage.removeItem('ws_expired')
+        toast({ title: 'A sessão expirou', description: 'Entre de novo para continuar.' })
+      }
+    } catch { /* no sessionStorage: nothing to say */ }
+  }, [])
 
 
   const handleSubmit = async (e) => {

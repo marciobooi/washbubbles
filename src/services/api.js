@@ -91,6 +91,8 @@ export function createApi(config) {
     const headers = new Headers(hdrs || {});
     const token = getToken?.();
     const tenantId = getTenantId?.();
+    // Did this request carry the logged-in user's token? Only then can a 401 mean "your session ran out".
+    const carriesSession = !skipAuth && Boolean(token) && !headers.has('Authorization')
     // Only set Bearer Authorization if caller did not provide their own Authorization header and skipAuth is not set
     if (!skipAuth && token && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`);
     // Attach tenant header when available and not already provided
@@ -146,6 +148,10 @@ export function createApi(config) {
         // Non-2xx
         const errMsg = parsed && typeof parsed === 'object' && 'error' in parsed ? parsed.error : res.statusText || 'Request failed';
         const err = new ApiError(errMsg, { status: res.status, body: parsed, response: res });
+        // The session expired (or was revoked): tell the app, which sends the admin to the login page. Not for the login call itself.
+        if (res.status === 401 && carriesSession && !String(path).startsWith('/auth/') && typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('auth:expired'));
+        }
 
         const shouldRetry =
           attempt < retryCfg.retries && retryCfg.statusCodes.includes(res.status);

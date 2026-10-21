@@ -25,6 +25,19 @@ export default function AdminCards() {
   })
   const [saving, setSaving] = useState(false)
   const [blanking, setBlanking] = useState(false)
+  const [giftOpen, setGiftOpen] = useState(false)
+  const [giftBusy, setGiftBusy] = useState(false)
+  async function issueGift(payload) {
+    setGiftBusy(true)
+    try {
+      const r = await api.adminGiftCard(payload)
+      toast({ title: r.queued ? 'Pedido enviado à loja' : 'Cartão libertado', description: 'O cartão sai do distribuidor. Coloque-o no leitor da loja para o ativar.', variant: 'success' })
+      setGiftOpen(false)
+      setTimeout(loadCards, 15000)
+    } catch (e) {
+      toast({ title: 'Não foi possível emitir o cartão', description: e?.body?.error || e?.message, variant: 'destructive' })
+    } finally { setGiftBusy(false) }
+  }
   async function blankCard() {
     if (!window.confirm('Vai APAGAR o nome, o NIF e o saldo do cartão que está no leitor da loja (experiência). Só para cartões de teste. Continuar?')) return
     setBlanking(true)
@@ -229,6 +242,13 @@ export default function AdminCards() {
           >
             <X className="h-4 w-4" />
             {blanking ? 'A apagar…' : 'Limpar cartão no leitor'}
+          </button>
+          <button
+            onClick={() => setGiftOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 border border-teal-300 text-teal-700 bg-white rounded hover:bg-teal-50 transition-colors"
+          >
+            <Gift className="h-4 w-4" />
+            Cartão de oferta
           </button>
           <button
             onClick={openCreateForm}
