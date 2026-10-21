@@ -225,3 +225,31 @@ describe('Staff machines on the kiosk (PIN) — start with cycles / release by h
     expect((await call(m._id, 'start', { pin: '4321' })).status).to.equal(429)
   })
 })
+
+describe('Admin transactions — period filter', function () {
+  this.timeout(30000)
+  let app, tenant, adminToken, Sale
+  before(async () => {
+    await startTestDb(); await clearTestDb()
+    app = await buildTestApp()
+    let admin
+    ;({ tenant, admin } = await seedTenantAndUsers())
+    adminToken = signToken(admin)
+    Sale = (await import('../src/models/sale.js')).default
+    const mk = (amount, createdAt) => Sale.create({ tenantId: tenant._id, amount, type: 'payment', method: 'cash', createdAt })
+    await mk(1, new Date('2026-10-19T10:00:00Z'))
+    await mk(2, new Date('2026-10-20T10:00:00Z'))
+    await mk(3, new Date('2026-10-21T10:00:00Z'))
+  })
+  after(async () => { await stopTestDb() })
+  const get = (qs = '') => request(app).get(`/api/admin/transactions${qs}`).set('Authorization', `Bearer ${adminToken}`)
+
+  it('without a period it lists the newest; with from/to it returns only that period, whatever its age', async () => {
+    expect((await get()).body.map((t) => t.amount)).to.deep.equal([3, 2, 1])
+    const day = await get('?from=2026-10-20T00:00:00.000Z&to=2026-10-20T23:59:59.999Z')
+    expect(day.body.map((t) => t.amount)).to.deep.equal([2])
+    const open = await get('?from=2026-10-20T00:00:00.000Z')
+    expect(open.body.map((t) => t.amount)).to.deep.equal([3, 2])
+    expect((await get('?from=garbage')).body).to.have.length(3) // an unreadable date is ignored, not a 500
+  })
+})

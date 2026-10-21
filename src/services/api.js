@@ -262,8 +262,8 @@ export function createApi(config) {
 
 
   // Transactions
-  function getTransactions() {
-    return request('/admin/transactions', { method: 'GET', expect: 'json' });
+  function getTransactions(query) {
+    return request('/admin/transactions', { method: 'GET', expect: 'json', query });
   }
 
   // CSV exports. `expect: 'blob'` already existed in the fetch helper above

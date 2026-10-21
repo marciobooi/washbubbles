@@ -7,6 +7,13 @@ import { Input } from '@/components/ui/input'
 import api from '@/services/api'
 import { useAuth } from '@/context/AuthContext'
 
+// Today's calendar day (local time) as YYYY-MM-DD: the day the list opens on.
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+const EMPTY_COLS = { machine: '', method: '', amountMin: '', change: '', timeFrom: '', timeTo: '' }
+const methodLabel = (m) => (m === 'card' ? 'Cartão' : m === 'cash' ? 'Dinheiro' : m === 'gift' ? 'Oferta' : m === 'mbway' ? 'MB WAY' : m || '-')
+const fmtDate = (iso) => new Date(iso).toLocaleDateString('pt-PT')
+const fmtTime = (iso) => new Date(iso).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+
 export default function AdminTransactions() {
   const [tx, setTx] = useState([])
   const [loading, setLoading] = useState(false)
@@ -14,7 +21,10 @@ export default function AdminTransactions() {
   const [refundTarget, setRefundTarget] = useState(null) // { _id, amount }
   const [refundReason, setRefundReason] = useState('')
   const [refunding, setRefunding] = useState(false)
-  const [filters, setFilters] = useState({ from: '', to: '', type: '' })
+  // Opens on today's transactions; "Todos os dias" clears the dates.
+  const [filters, setFilters] = useState(() => ({ from: today(), to: today(), type: '' }))
+  const [cols, setCols] = useState(EMPTY_COLS) // per-column filters (the row under the headings)
+  const setCol = (k, v) => setCols((c) => ({ ...c, [k]: v }))
   const navigate = useNavigate()
   const { role } = useAuth()
   const canRefund = role === 'ADMIN' || role === 'SUPERADMIN'
@@ -22,7 +32,11 @@ export default function AdminTransactions() {
   async function load() {
     setLoading(true)
     try {
-      const data = await api.getTransactions()
+      // Ask for the chosen days only (local midnight to 23:59:59), so an older day is not cut off by the server's row cap.
+      const query = {}
+      if (filters.from) query.from = new Date(filters.from + 'T00:00:00').toISOString()
+      if (filters.to) query.to = new Date(filters.to + 'T23:59:59.999').toISOString()
+      const data = await api.getTransactions(query)
       setTx(data)
     } catch (e) {
       console.error(e)
@@ -38,7 +52,7 @@ export default function AdminTransactions() {
     }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [filters.from, filters.to])
 
   async function submitRefund(e) {
     e.preventDefault()
@@ -88,18 +102,9 @@ export default function AdminTransactions() {
           <label className="block text-xs text-muted-foreground mb-1">Até</label>
           <Input type="date" value={filters.to} onChange={(e) => setFilters((f) => ({ ...f, to: e.target.value }))} className="w-40" />
         </div>
-        <div>
-          <label className="block text-xs text-muted-foreground mb-1">Tipo</label>
-          <select className="border p-2 rounded h-10 text-sm" value={filters.type} onChange={(e) => setFilters((f) => ({ ...f, type: e.target.value }))}>
-            <option value="">Todos</option>
-            <option value="payment">Pagamento</option>
-            <option value="recharge">Recarga</option>
-            <option value="card_purchase">Compra de cartão</option>
-            <option value="gift_card">Cartão de oferta</option>
-            <option value="admin_start">Início manual</option>
-            <option value="refund">Reembolso</option>
-          </select>
-        </div>
+        <Button variant="outline" size="sm" onClick={() => setFilters((f) => ({ ...f, from: today(), to: today() }))}>Hoje</Button>
+        <Button variant="outline" size="sm" onClick={() => setFilters((f) => ({ ...f, from: '', to: '' }))}>Todos os dias</Button>
+        <Button variant="outline" size="sm" onClick={() => { setCols(EMPTY_COLS); setFilters((f) => ({ ...f, type: '' })) }}>Limpar filtros das colunas</Button>
       </div>
 
       <div className="bg-white rounded shadow p-4">
@@ -109,6 +114,7 @@ export default function AdminTransactions() {
           <table className="w-full text-sm table-auto">
             <thead>
               <tr>
+                <th className="text-left p-2">Data</th>
                 <th className="text-left p-2">Hora</th>
                 <th className="text-left p-2">Tipo</th>
                 <th className="text-left p-2">Máquina</th>
@@ -118,13 +124,65 @@ export default function AdminTransactions() {
                 <th className="text-left p-2">Troco</th>
                 <th className="text-left p-2 print:hidden">Itens</th>
               </tr>
+              {/* Filters, one per column */}
+              <tr className="print:hidden border-b">
+                <th className="p-1" />
+                <th className="p-1 font-normal">
+                  <div className="flex items-center gap-1">
+                    <input type="time" aria-label="Hora desde" value={cols.timeFrom} onChange={(e) => setCol('timeFrom', e.target.value)} className="w-[5.5rem] border rounded px-1 h-8 text-xs" />
+                    <span className="text-xs text-neutral-400">–</span>
+                    <input type="time" aria-label="Hora até" value={cols.timeTo} onChange={(e) => setCol('timeTo', e.target.value)} className="w-[5.5rem] border rounded px-1 h-8 text-xs" />
+                  </div>
+                </th>
+                <th className="p-1 font-normal">
+                  <select aria-label="Filtrar por tipo" className="border rounded h-8 text-xs w-full" value={filters.type} onChange={(e) => setFilters((f) => ({ ...f, type: e.target.value }))}>
+                    <option value="">Todos</option>
+                    <option value="payment">Pagamento</option>
+                    <option value="recharge">Recarga</option>
+                    <option value="card_purchase">Compra de cartão</option>
+                    <option value="gift_card">Cartão de oferta</option>
+                    <option value="admin_start">Início manual</option>
+                    <option value="refund">Reembolso</option>
+                  </select>
+                </th>
+                <th className="p-1 font-normal"><input type="text" aria-label="Filtrar por máquina" placeholder="Ex: Secar 9" value={cols.machine} onChange={(e) => setCol('machine', e.target.value)} className="w-full border rounded px-2 h-8 text-xs" /></th>
+                <th className="p-1 font-normal">
+                  <select aria-label="Filtrar por método" className="border rounded h-8 text-xs w-full" value={cols.method} onChange={(e) => setCol('method', e.target.value)}>
+                    <option value="">Todos</option>
+                    <option value="cash">Dinheiro</option>
+                    <option value="card">Cartão</option>
+                    <option value="mbway">MB WAY</option>
+                    <option value="gift">Oferta</option>
+                  </select>
+                </th>
+                <th className="p-1 font-normal"><input type="number" min="0" step="0.01" aria-label="Valor mínimo" placeholder="≥ €" value={cols.amountMin} onChange={(e) => setCol('amountMin', e.target.value)} className="w-20 border rounded px-2 h-8 text-xs" /></th>
+                <th className="p-1" />
+                <th className="p-1 font-normal">
+                  <select aria-label="Filtrar por troco" className="border rounded h-8 text-xs w-full" value={cols.change} onChange={(e) => setCol('change', e.target.value)}>
+                    <option value="">Todos</option>
+                    <option value="with">Com troco</option>
+                    <option value="without">Sem troco</option>
+                  </select>
+                </th>
+                <th className="p-1 print:hidden" />
+              </tr>
             </thead>
             <tbody>
               {(() => {
                 let filtered = tx
-                if (filters.from) filtered = filtered.filter((t) => new Date(t.createdAt) >= new Date(filters.from))
-                if (filters.to) filtered = filtered.filter((t) => new Date(t.createdAt) <= new Date(filters.to + 'T23:59:59'))
+                // Day filters use the calendar day on this computer's clock (local midnight to 23:59:59).
+                if (filters.from) filtered = filtered.filter((t) => new Date(t.createdAt) >= new Date(filters.from + 'T00:00:00'))
+                if (filters.to) filtered = filtered.filter((t) => new Date(t.createdAt) <= new Date(filters.to + 'T23:59:59.999'))
                 if (filters.type) filtered = filtered.filter((t) => (t.type || 'payment') === filters.type)
+                // Column filters
+                const hhmm = (t) => { const d = new Date(t.createdAt); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') }
+                if (cols.timeFrom) filtered = filtered.filter((t) => hhmm(t) >= cols.timeFrom)
+                if (cols.timeTo) filtered = filtered.filter((t) => hhmm(t) <= cols.timeTo)
+                if (cols.method) filtered = filtered.filter((t) => (t.method || '') === cols.method)
+                if (cols.machine.trim()) {
+                  const q = cols.machine.trim().toLowerCase()
+                  filtered = filtered.filter((t) => String(t.machineId?.name || (Array.isArray(t.items) && t.items[0] && (t.items[0].name || t.items[0].type)) || '').toLowerCase().includes(q))
+                }
 
                 // Agrupar transacções por batchId (fallback para second-level timestamp para entradas antigas)
                 const groups = Object.values(filtered.reduce((acc, t) => {
@@ -136,24 +194,27 @@ export default function AdminTransactions() {
                   acc[key].change += Number(t.change || 0)
                   return acc
                 }, {}))
+                  .filter((g) => (cols.amountMin === '' || g.amount >= Number(cols.amountMin)) && (cols.change === '' || (cols.change === 'with' ? g.change > 0 : g.change <= 0)))
+                const totalShown = groups.reduce((s, g) => s + g.amount, 0)
 
                 const typeLabel = (type) => type === 'payment' ? 'Pagamento' : type === 'recharge' ? 'Recarga' : type === 'refund' ? 'Reembolso' : type === 'card_purchase' ? 'Compra de cartão' : type === 'gift_card' ? 'Cartão de oferta' : type === 'admin_start' ? 'Início manual' : type
 
                 // render grouped rows with expandable details
-                return groups.map((g) => {
+                const rows = groups.map((g) => {
                   const refundable = canRefund && g.type !== 'refund' && g.items.every((i) => i.status !== 'refunded') && g.items.length === 1
                   const isRefunded = g.items.some((i) => i.status === 'refunded')
                   return (
                   <React.Fragment key={g.key}>
                     <tr className="border-t">
-                      <td className="p-2">{new Date(g.createdAt).toLocaleString()}</td>
+                      <td className="p-2 whitespace-nowrap">{fmtDate(g.createdAt)}</td>
+                      <td className="p-2 whitespace-nowrap tabular-nums">{fmtTime(g.createdAt)}</td>
                       <td className="p-2">
                         {typeLabel(g.type)}
                         {g.type === 'refund' && <span className="ml-2 inline-block px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-xs">Reembolso</span>}
                         {isRefunded && <span className="ml-2 inline-block px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-xs">Reembolsado</span>}
                       </td>
                       <td className="p-2">{g.items.map(i => (i.machineId ? i.machineId.name : (Array.isArray(i.items) && i.items[0] && (i.items[0].name || i.items[0].type)) || '-')).join(', ')}</td>
-                      <td className="p-2">{(g.items[0] && (g.items[0].method === 'card' ? 'Cartão' : (g.items[0].method === 'cash' ? 'Dinheiro' : g.items[0].method === 'gift' ? 'Oferta' : g.items[0].method))) || '-'}</td>
+                      <td className="p-2">{(g.items[0] && methodLabel(g.items[0].method)) || '-'}</td>
                       <td className="p-2">{typeof g.amount === 'number' ? g.amount.toFixed(2) : g.amount}</td>
                       <td className="p-2">{g.inserted ? g.inserted.toFixed(2) : '-'}</td>
                       <td className="p-2">{g.change ? g.change.toFixed(2) : '-'}</td>
@@ -172,7 +233,7 @@ export default function AdminTransactions() {
 
                     {expanded[g.key] && (
                       <tr>
-                        <td colSpan={8} className="p-2 bg-neutral-50">
+                        <td colSpan={9} className="p-2 bg-neutral-50">
                           <div className="space-y-2">
                             {g.items.map((t) => (
                               <div key={t._id} className="p-2 bg-white border rounded flex items-center justify-between">
@@ -194,6 +255,13 @@ export default function AdminTransactions() {
                     )}
                   </React.Fragment>
                 )})
+                return (
+                  <>
+                    <tr className="print:hidden"><td colSpan={9} className="px-2 pt-2 pb-1 text-xs text-neutral-500">{groups.length} {groups.length === 1 ? 'transacção' : 'transacções'} · total {totalShown.toFixed(2)} €</td></tr>
+                    {rows.length === 0 && <tr><td colSpan={9} className="p-6 text-center text-neutral-500">Nenhuma transacção com estes filtros.</td></tr>}
+                    {rows}
+                  </>
+                )
               })()}
             </tbody>
           </table>

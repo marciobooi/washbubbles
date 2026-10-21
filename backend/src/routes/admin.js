@@ -399,9 +399,18 @@ router.delete('/users/:id', requireAdmin, async (req, res) => {
 })
 
 // Transactions (Sales)
+// Optional ?from= & ?to= (ISO instants) limit it to a period, so an older day is never cut off by the row cap.
 router.get('/transactions', requireStaffRead, async (req, res) => {
   const SaleT = withTenant(Sale, req)
-  const tx = await SaleT.find().populate('machineId').populate('cardId').sort({ createdAt: -1 }).limit(200).lean()
+  const q = {}
+  const from = req.query.from ? new Date(String(req.query.from)) : null
+  const to = req.query.to ? new Date(String(req.query.to)) : null
+  if ((from && !Number.isNaN(+from)) || (to && !Number.isNaN(+to))) {
+    q.createdAt = {}
+    if (from && !Number.isNaN(+from)) q.createdAt.$gte = from
+    if (to && !Number.isNaN(+to)) q.createdAt.$lte = to
+  }
+  const tx = await SaleT.find(q).populate('machineId').populate('cardId').sort({ createdAt: -1 }).limit(q.createdAt ? 2000 : 500).lean()
   res.json(tx)
 })
 
