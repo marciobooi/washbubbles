@@ -183,9 +183,9 @@ come from the machines and the controller themselves, or from the maker or the P
 - [ ] E-mail "Quiosque offline" ~2 min after unplugging, and "Quiosque online outra vez" after reconnecting
 - [ ] After reconnecting, offline sales arrive in seconds (no waiting for the uplink back-off) and Hetzner prices/settings are pulled again
 
-- [ ] **Pay 3 dryers at once (e.g. 8, 9, 11; 8 and 9 share interface 14), all three must start.** 2026-10-21 16:06:40: three activation commands went out within milliseconds, the controller answered 200 to all, but Secar 9 never reported `machine-started` (re-sending it later worked) while the program showed it busy. Fix: activations are now sent one at a time with a 1.2 s pause (`ACTIVATION_GAP_MS`). Test again with the three together and check `backend.log` shows a `Machine started` for each. (Secar 10, interface 15 channel 2, has NEVER reported `machine-started` in the whole log: it either has no signal or does not start — check it by hand.)
+- [x] 2026-10-21 confirmed in the shop after the fix: **Pay 3 dryers at once (e.g. 8, 9, 11; 8 and 9 share interface 14), all three must start.** 2026-10-21 16:06:40: three activation commands went out within milliseconds, the controller answered 200 to all, but Secar 9 never reported `machine-started` (re-sending it later worked) while the program showed it busy. Fix: activations are now sent one at a time with a 1.2 s pause (`ACTIVATION_GAP_MS`). Test again with the three together and check `backend.log` shows a `Machine started` for each. (Secar 10, interface 15 channel 2, has NEVER reported `machine-started` in the whole log: it either has no signal or does not start — check it by hand.)
 
-- [ ] Admin → Operações → Iniciar on a DRYER asks for the number of cycles (1–8, 15 min each); start one with 3 cycles from the central admin (and as Tatiana) and check the dryer gets 3 blocks and the program shows 'Início manual (3 ciclos)'. A washer still starts with one click.
+- [x] 2026-10-21 confirmed in the shop (3 cycles sent, works): Admin → Operações → Iniciar on a DRYER asks for the number of cycles (1–8, 15 min each); start one with 3 cycles from the central admin (and as Tatiana) and check the dryer gets 3 blocks and the program shows 'Início manual (3 ciclos)'. A washer still starts with one click.
 
 ## 11. Reboot and power cut
 
