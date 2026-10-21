@@ -1,9 +1,10 @@
 import React, { useState } from 'react'
-import { Settings, Lock, Wallet } from 'lucide-react'
+import { Settings, Lock, Wallet, Gift } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import api from '@/services/api'
 import { useKioskLock } from '@/context/KioskLockContext'
 import KioskDayCloseModal from '@/components/KioskDayCloseModal'
+import GiftCardForm from '@/components/GiftCardForm'
 
 function getKioskApiKey() {
   const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
@@ -26,6 +27,20 @@ export default function StaffMenu() {
   const [verifiedPin, setVerifiedPin] = useState(null) // held only long enough to submit the close it authorised
   const [showChooser, setShowChooser] = useState(false)
   const [showDayClose, setShowDayClose] = useState(false)
+  const [showGift, setShowGift] = useState(false)
+  const [giftBusy, setGiftBusy] = useState(false)
+  const [giftResult, setGiftResult] = useState(null) // { ok, text }
+
+  async function issueGift(payload) {
+    setGiftBusy(true)
+    setGiftResult(null)
+    try {
+      const r = await api.giftKioskCard({ ...payload, pin: verifiedPin }, { apiKey: getKioskApiKey() })
+      setGiftResult({ ok: true, text: r?.message || 'Cartão libertado. Coloque-o no leitor para o ativar.' })
+    } catch (e) {
+      setGiftResult({ ok: false, text: e?.body?.error || e?.message || 'Não foi possível emitir o cartão.' })
+    } finally { setGiftBusy(false) }
+  }
 
   async function verifyPin() {
     setChecking(true)
@@ -106,6 +121,17 @@ export default function StaffMenu() {
               </div>
             </button>
 
+            <button
+              onClick={() => { setShowChooser(false); setGiftResult(null); setShowGift(true) }}
+              className="w-full flex items-center gap-3 rounded-xl border border-neutral-200 hover:border-teal-400 hover:bg-teal-50 px-4 py-4 text-left transition"
+            >
+              <Gift className="w-6 h-6 text-teal-600 shrink-0" aria-hidden />
+              <div>
+                <div className="font-semibold text-neutral-800">Cartão de oferta</div>
+                <div className="text-xs text-neutral-500">Cartão grátis para um cliente (crédito 0 € por defeito)</div>
+              </div>
+            </button>
+
             {lockFeatureEnabled && (
               <button
                 onClick={() => { lock('maintenance'); closeAll() }}
@@ -121,6 +147,22 @@ export default function StaffMenu() {
 
             <button onClick={closeAll} className="w-full py-2 rounded-lg border mt-1">Cancelar</button>
           </div>
+        </Modal>
+      )}
+
+      {showGift && (
+        <Modal open={showGift} onClose={() => { setShowGift(false); setVerifiedPin(null) }} title="Cartão de oferta">
+          {giftResult?.ok ? (
+            <div className="space-y-4 text-center">
+              <div className="text-lg font-semibold text-teal-700">{giftResult.text}</div>
+              <button onClick={() => { setShowGift(false); setVerifiedPin(null) }} className="w-full py-2 rounded-lg bg-teal-600 text-white">OK</button>
+            </div>
+          ) : (
+            <>
+              {giftResult && <div className="mb-3 text-sm text-red-600 font-semibold">{giftResult.text}</div>}
+              <GiftCardForm busy={giftBusy} onSubmit={issueGift} onCancel={() => { setShowGift(false); setVerifiedPin(null) }} />
+            </>
+          )}
         </Modal>
       )}
 

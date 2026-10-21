@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import api from '../services/api'
 import { toast } from '../components/ui/Toast'
-import { CreditCard, Search, RefreshCw, Mail, Phone, User, FileText, X, Calendar, Clock, Plus, Edit2, Save } from 'lucide-react'
+import { CreditCard, Search, RefreshCw, Mail, Phone, User, FileText, X, Calendar, Clock, Plus, Edit2, Save, Gift } from 'lucide-react'
+import GiftCardForm from '../components/GiftCardForm'
 
 export default function AdminCards() {
   const [cards, setCards] = useState([])
@@ -344,6 +345,15 @@ export default function AdminCards() {
           </div>
         </div>
       </div>
+
+      {giftOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !giftBusy && setGiftOpen(false)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold mb-3">Cartão de oferta</h3>
+            <GiftCardForm withDetails busy={giftBusy} onSubmit={issueGift} onCancel={() => setGiftOpen(false)} />
+          </div>
+        </div>
+      )}
 
       {/* Card History Modal */}
       {selectedCard && (

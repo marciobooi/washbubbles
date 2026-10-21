@@ -161,6 +161,9 @@ come from the machines and the controller themselves, or from the maker or the P
 - [ ] Blocked / `pending_write` card: the right message
 - [ ] `get-version` gets no reply from the controller (known); check it does not matter
 
+- [ ] **Gift card (cartão de oferta)**, kiosk: staff button (bottom-left cog) → PIN → Cartão de oferta → credit 0 € (default) → Emitir: the dispenser ejects a card, nothing is charged, present it at the reader → card activates with balance 0,00 €. Repeat with 5 € free credit: the card has 5,00 €, the day close shows NO cash and NO prepaid for it. Wrong PIN 5 times locks that kiosk for 15 min; a correct PIN never does.
+- [ ] Gift card, admin: Cartões → Cartão de oferta (credit default 0, optional name/email/phone): from the central admin the shop ejects the card within seconds (refused with a clear message if the shop is offline); a shop assistant (OPERATOR) does not see/cannot use it. Rules: only staff (PIN or admin) can give free credit, capped at 100 € (GIFT_CARD_MAX_CREDIT), recorded as a 0 € sale with method "gift" and an audit entry.
+
 ## 9. Machine wiring — decide and fix in Hetzner (source of truth)
 
 - [x] **Lavar 1**: PC has INT 6 (addr 16) port 1, Hetzner has **nothing**. Decide the true wiring and set it in Hetzner  **DONE: now Int 1 / port 2 on both and verified with a real cycle**

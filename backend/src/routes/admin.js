@@ -1286,6 +1286,30 @@ router.post('/hopper/empty', requireAdmin, async (req, res) => {
   res.json({ queued: true, commandIds: cmds.map((c) => c._id) })
 })
 
+// POST /admin/cards/gift — a card for a customer, for free; credit default 0. On the shop PC it runs here; on the central server it is
+// queued for the shop (like Iniciar), which ejects the card: present it at the reader to activate it.
+router.post('/cards/gift', requireAdmin, async (req, res) => {
+  const credit = Number(req.body?.credit ?? 0)
+  const info = { credit, customerName: req.body?.customerName, customerEmail: req.body?.customerEmail, customerPhone: req.body?.customerPhone, customerContribuinte: req.body?.customerContribuinte, by: `admin ${req.userModel?.username || ''}`.trim() }
+  const { default: coinMachine } = await import('../services/coinMachine.js')
+  if (coinMachine.running) {
+    try {
+      const { issueGiftCard } = await import('../services/giftCard.js')
+      return res.json({ queued: false, ...(await issueGiftCard(req, coinMachine, info)) })
+    } catch (e) { return res.status(e.status || 500).json({ error: e.message }) }
+  }
+  const { maxGiftCredit } = await import('../services/giftCard.js')
+  if (!(credit >= 0) || credit > maxGiftCredit()) return res.status(400).json({ error: `Crédito inválido (0 a ${maxGiftCredit()} €)` })
+  const kiosks = await User.find({ tenantId: req.tenantId, role: 'KIOSK' }).select('_id lastSeen').lean()
+  if (kiosks.length === 0) return res.status(409).json({ error: 'Nenhum quiosque registado para esta loja' })
+  if (!kiosks.some((k) => shopOnline(k.lastSeen))) return res.status(409).json({ error: 'A loja está sem ligação à internet neste momento. Tente de novo quando voltar.', code: 'shop-offline' })
+  const SyncCommandT = withTenant(SyncCommand, req)
+  const cmds = []
+  for (const k of kiosks) cmds.push(await SyncCommandT.create({ kioskId: k._id, type: 'gift_card', payload: info }))
+  logAction(req, 'card.gift_requested', 'Card', null, { credit })
+  res.json({ queued: true, commandIds: cmds.map((c) => c._id) })
+})
+
 // POST /admin/cards/blank-reader — wipe the card that is in the reader (name, tax id, balance) and forget it. On the shop PC it runs
 // here; on the central server it is queued for the shop, like Esvaziar hopper. EXPERIMENTAL: see Middleware.blankCardViaGateway.
 router.post('/cards/blank-reader', requireAdmin, async (req, res) => {

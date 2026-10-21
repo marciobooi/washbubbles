@@ -164,6 +164,7 @@ class CoinMachine extends EventEmitter {
             return r
           },
           blank_card: async () => this.blankCardAtReader(),
+          gift_card: async (p) => { const { issueGiftCard } = await import('./giftCard.js'); return issueGiftCard({ tenantId: this.tenantId }, this, { ...p, by: p?.by || 'admin (central)' }) },
           sync_now: async () => { await this.downlink?.pullAll?.(); return { success: true } },
         },
       })

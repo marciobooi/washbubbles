@@ -379,6 +379,13 @@ export function createApi(config) {
     return request('/admin/hopper/refill', { method: 'POST', json: payload, expect: 'json' })
   }
 
+  // Gift card (free card, credit default 0): the kiosk sends the staff PIN with every call; the admin is logged in.
+  function giftKioskCard(payload, opts) {
+    const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
+    return request('/pos/card/gift', { method: 'POST', json: payload, headers, skipAuth: true, expect: 'json' })
+  }
+  function adminGiftCard(payload) { return request('/admin/cards/gift', { method: 'POST', json: payload, expect: 'json' }) }
+
   function blankCardAtReader() { return request('/admin/cards/blank-reader', { method: 'POST', json: { confirm: true }, expect: 'json' }) }
 
   function updateCardProfile(code, payload, opts) {
@@ -700,6 +707,8 @@ export function createApi(config) {
     adminCommand,
     updateCardProfile,
     blankCardAtReader,
+    giftKioskCard,
+    adminGiftCard,
     refillKioskHopper,
     emailDayCloseReceipt,
 

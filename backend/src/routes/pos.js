@@ -389,6 +389,33 @@ router.post('/recharge', requireKiosk, async (req, res) => {
  * false, and NO CARD WAS EVER DISPENSED while the customer was charged in full
  * and told "Card dispensed. Please insert card into reader to activate."
  */
+// POST /pos/card/gift — hand a card to a customer for free (staff PIN on every call). Default credit is zero.
+// Only WRONG PINs count against the limit (5 per 15 min): a legitimate PIN, however many cards, never locks staff out.
+const giftPinFails = new Map() // ip -> { n, since }
+router.post('/card/gift', requireKiosk, async (req, res) => {
+  const ip = req.ip || 'unknown'
+  const rec = giftPinFails.get(ip)
+  if (rec && Date.now() - rec.since > 15 * 60_000) giftPinFails.delete(ip)
+  if ((giftPinFails.get(ip)?.n || 0) >= 5) return res.status(429).json({ error: 'Too many PIN attempts, please try again later.' })
+  const pinCheck = await checkAdminPin(req, req.body?.pin)
+  if (!pinCheck.ok) {
+    if (pinCheck.status === 401) { const r = giftPinFails.get(ip) || { n: 0, since: Date.now() }; r.n++; giftPinFails.set(ip, r) }
+    return res.status(pinCheck.status).json({ error: pinCheck.error })
+  }
+  giftPinFails.delete(ip)
+  try {
+    const { issueGiftCard } = await import('../services/giftCard.js')
+    const b = req.body || {}
+    const r = await issueGiftCard(req, coinMachine, {
+      credit: b.credit ?? 0, customerName: b.customerName, customerEmail: b.customerEmail, customerPhone: b.customerPhone,
+      customerContribuinte: b.customerContribuinte, by: 'staff PIN (kiosk)',
+    })
+    res.json({ ...r, message: 'Cartão libertado. Coloque-o no leitor para o activar.' })
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message || 'Gift card failed' })
+  }
+})
+
 router.post('/card/purchase', requireKiosk, async (req, res) => {
   const { inserted, customerName, customerEmail, customerPhone, customerContribuinte, customerMarketingOptIn, customerPrivacyConsent, batchId, localId } = req.body
 
