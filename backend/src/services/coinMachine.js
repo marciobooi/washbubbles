@@ -693,10 +693,48 @@ class CoinMachine extends EventEmitter {
     return job
   }
 
+  /** A card with no id put in the reader by a customer is registered and written (balance 0). Off with AUTO_REGISTER_BLANK_CARDS=false. */
+  get autoRegisterBlankCards() { return String(process.env.AUTO_REGISTER_BLANK_CARDS || 'true').toLowerCase() !== 'false' }
+
+  /**
+   * A blank card, no purchase waiting for it: give it an identity. Its own chip id becomes the card code, the record starts
+   * at ZERO (no money is created: it is loaded with cash like any card), and the id and balance are written onto the chip.
+   *  - a card of ours that already exists under this chip id (the chip was wiped or lost its data) is written back from the
+   *    database instead, so the customer gets their card and balance back;
+   *  - a chip wiped by staff a moment ago ("Limpar cartão") is left alone, so recycling is not undone by the reader's echo.
+   */
+  async registerBlankCard(chipId) {
+    const recent = this.recentlyBlanked?.get(chipId)
+    if (recent && Date.now() - recent < 10 * 60_000) {
+      console.log(`[Card] ${chipId} was wiped by staff a moment ago: not registering it again`)
+      return null
+    }
+    const existing = await Card.findOne(this.scoped({ code: chipId }))
+    if (existing) {
+      if (existing.status === 'blocked') return null
+      console.log(`[Card] blank chip of known card ${chipId}: writing its record (EUR ${Number(existing.balance).toFixed(2)}) back onto the card`)
+      return this.activateCard(chipId)
+    }
+    await Card.create({
+      tenantId: this.tenantId, code: chipId, balance: 0, status: 'pending_write',
+      metadata: { autoRegistered: { at: new Date(), from: 'blank-card-at-reader' } },
+    })
+    await this.auditSystem('card.register_blank', { code: chipId, balance: 0 })
+    console.log(`[Card] blank card ${chipId} registered with EUR 0.00; writing it`)
+    return this.activateCard(chipId)
+  }
+
   /** A blank card was read: write the most recent purchase that is still waiting for its card. */
   async activatePendingCard(chipId = null) {
     const pending = await Card.findOne(this.scoped({ status: 'pending_write', createdAt: { $gte: new Date(Date.now() - 30 * 60_000) } })).sort({ createdAt: -1 })
     if (!pending) {
+      // No purchase is waiting for this card. A customer's own card that has no id yet is registered now (see registerBlankCard).
+      if (chipId && this.autoRegisterBlankCards) {
+        try { return await this.registerBlankCard(String(chipId)) } catch (err) {
+          console.error(`[Card] could not register the blank card ${chipId}: ${err.message}`)
+          return null
+        }
+      }
       console.warn('[Card] A blank card was presented and there is no purchase waiting for one')
       this.emit('card-invalid', { cardNumber: null, reason: 'blank-card-no-purchase' })
       return null
@@ -1074,6 +1112,8 @@ class CoinMachine extends EventEmitter {
     const code = res.before.cardId
     const { forgetCard } = await import('./cardForget.js')
     const gone = await forgetCard(this.tenantId, code)
+    this.recentlyBlanked = this.recentlyBlanked || new Map()
+    this.recentlyBlanked.set(String(code), Date.now())
     await this.auditSystem('card.blanked', { ...res.before, ...gone })
     return { code, name: res.before.name, balance: res.before.balance }
   }

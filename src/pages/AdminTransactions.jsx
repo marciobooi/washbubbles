@@ -9,8 +9,13 @@ import { useAuth } from '@/context/AuthContext'
 
 // Today's calendar day (local time) as YYYY-MM-DD: the day the list opens on.
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
-const EMPTY_COLS = { machine: '', method: '', amountMin: '', change: '', timeFrom: '', timeTo: '' }
+const EMPTY_COLS = { machine: '', card: '', method: '', amountMin: '', change: '', timeFrom: '', timeTo: '' }
 const methodLabel = (m) => (m === 'card' ? 'Cartão' : m === 'cash' ? 'Dinheiro' : m === 'gift' ? 'Oferta' : m === 'mbway' ? 'MB WAY' : m || '-')
+// What a movement was for: sales store `items` as a list (machines) or as a single object (a card recharge).
+const itemList = (t) => (Array.isArray(t.items) ? t.items : t.items && typeof t.items === 'object' ? [t.items] : [])
+const itemName = (t) => itemList(t).map((it) => it.name || it.type).filter(Boolean).join(', ')
+// The card a movement belongs to: its code, plus the holder's name when we have one (cardId is populated by the server).
+const cardLabel = (t) => [t.cardCode || t.cardId?.code || '', t.cardId?.name || ''].filter((x) => String(x).trim()).join(' ')
 const fmtDate = (iso) => new Date(iso).toLocaleDateString('pt-PT')
 const fmtTime = (iso) => new Date(iso).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
@@ -124,6 +129,7 @@ export default function AdminTransactions() {
                 <th className="text-left p-2 cursor-pointer select-none" onClick={() => setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'))} title="Clique para inverter a ordem">Hora {sortDir === 'desc' ? '↓' : '↑'}</th>
                 <th className="text-left p-2">Tipo</th>
                 <th className="text-left p-2">Máquina</th>
+                <th className="text-left p-2">Cartão</th>
                 <th className="text-left p-2">Método</th>
                 <th className="text-left p-2">Valor</th>
                 <th className="text-left p-2">Inserido</th>
@@ -152,6 +158,7 @@ export default function AdminTransactions() {
                   </select>
                 </th>
                 <th className="p-1 font-normal"><input type="text" aria-label="Filtrar por máquina" placeholder="Ex: Secar 9" value={cols.machine} onChange={(e) => setCol('machine', e.target.value)} className="w-full border rounded px-2 h-8 text-xs" /></th>
+                <th className="p-1 font-normal"><input type="text" aria-label="Filtrar por cartão" placeholder="Código ou nome" value={cols.card} onChange={(e) => setCol('card', e.target.value)} className="w-full border rounded px-2 h-8 text-xs" /></th>
                 <th className="p-1 font-normal">
                   <select aria-label="Filtrar por método" className="border rounded h-8 text-xs w-full" value={cols.method} onChange={(e) => setCol('method', e.target.value)}>
                     <option value="">Todos</option>
@@ -185,9 +192,13 @@ export default function AdminTransactions() {
                 if (cols.timeFrom) filtered = filtered.filter((t) => hhmm(t) >= cols.timeFrom)
                 if (cols.timeTo) filtered = filtered.filter((t) => hhmm(t) <= cols.timeTo)
                 if (cols.method) filtered = filtered.filter((t) => (t.method || '') === cols.method)
+                if (cols.card.trim()) {
+                  const q = cols.card.trim().toLowerCase()
+                  filtered = filtered.filter((t) => cardLabel(t).toLowerCase().includes(q))
+                }
                 if (cols.machine.trim()) {
                   const q = cols.machine.trim().toLowerCase()
-                  filtered = filtered.filter((t) => String(t.machineId?.name || (Array.isArray(t.items) && t.items[0] && (t.items[0].name || t.items[0].type)) || '').toLowerCase().includes(q))
+                  filtered = filtered.filter((t) => String(t.machineId?.name || itemName(t) || '').toLowerCase().includes(q))
                 }
 
                 // Agrupar transacções por batchId (fallback para second-level timestamp para entradas antigas)
@@ -220,7 +231,13 @@ export default function AdminTransactions() {
                         {g.type === 'refund' && <span className="ml-2 inline-block px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-xs">Reembolso</span>}
                         {isRefunded && <span className="ml-2 inline-block px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-xs">Reembolsado</span>}
                       </td>
-                      <td className="p-2">{g.items.map(i => (i.machineId ? i.machineId.name : (Array.isArray(i.items) && i.items[0] && (i.items[0].name || i.items[0].type)) || '-')).join(', ')}</td>
+                      <td className="p-2">{g.items.map(i => (i.machineId ? i.machineId.name : itemName(i) || '-')).join(', ')}</td>
+                      <td className="p-2 whitespace-nowrap">{(() => {
+                        const codes = [...new Set(g.items.map((i) => i.cardCode || i.cardId?.code).filter(Boolean))]
+                        if (codes.length === 0) return '-'
+                        const name = g.items.find((i) => i.cardId?.name && String(i.cardId.name).trim())?.cardId.name
+                        return <span title={codes.join(', ')}><span className="font-medium">{codes.join(', ')}</span>{name ? <span className="block text-xs text-neutral-500">{name}</span> : null}</span>
+                      })()}</td>
                       <td className="p-2">{(g.items[0] && methodLabel(g.items[0].method)) || '-'}</td>
                       <td className="p-2">{typeof g.amount === 'number' ? g.amount.toFixed(2) : g.amount}</td>
                       <td className="p-2">{g.inserted ? g.inserted.toFixed(2) : '-'}</td>
@@ -240,13 +257,14 @@ export default function AdminTransactions() {
 
                     {expanded[g.key] && (
                       <tr>
-                        <td colSpan={9} className="p-2 bg-neutral-50">
+                        <td colSpan={10} className="p-2 bg-neutral-50">
                           <div className="space-y-2">
                             {g.items.map((t) => (
                               <div key={t._id} className="p-2 bg-white border rounded flex items-center justify-between">
                                 <div>
-                                  <div className="font-semibold">{t.machineId ? t.machineId.name : '-'}</div>
-                                  <div className="text-xs text-neutral-500">{t.items ? (Array.isArray(t.items) ? t.items.map(it=>it.name||it.type).join(', ') : JSON.stringify(t.items)) : ''}</div>
+                                  <div className="font-semibold">{t.machineId ? t.machineId.name : itemName(t) || '-'}</div>
+                                  {cardLabel(t) && <div className="text-xs text-neutral-600">Cartão: {cardLabel(t)}</div>}
+                                  <div className="text-xs text-neutral-500">{t.machineId && itemName(t) ? itemName(t) : ''}</div>
                                   {t.refundReason && <div className="text-xs text-red-600 mt-1">Motivo: {t.refundReason}</div>}
                                 </div>
                                 <div className="text-right">
@@ -264,8 +282,8 @@ export default function AdminTransactions() {
                 )})
                 return (
                   <>
-                    <tr className="print:hidden"><td colSpan={9} className="px-2 pt-2 pb-1 text-xs text-neutral-500">{groups.length} {groups.length === 1 ? 'transacção' : 'transacções'} · total {totalShown.toFixed(2)} €</td></tr>
-                    {rows.length === 0 && <tr><td colSpan={9} className="p-6 text-center text-neutral-500">Nenhuma transacção com estes filtros.</td></tr>}
+                    <tr className="print:hidden"><td colSpan={10} className="px-2 pt-2 pb-1 text-xs text-neutral-500">{groups.length} {groups.length === 1 ? 'transacção' : 'transacções'} · total {totalShown.toFixed(2)} €</td></tr>
+                    {rows.length === 0 && <tr><td colSpan={10} className="p-6 text-center text-neutral-500">Nenhuma transacção com estes filtros.</td></tr>}
                     {rows}
                   </>
                 )

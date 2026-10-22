@@ -253,3 +253,64 @@ describe('Admin transactions — period filter', function () {
     expect((await get('?from=garbage')).body).to.have.length(3) // an unreadable date is ignored, not a 500
   })
 })
+
+describe('A blank card put in the reader with no purchase waiting is registered (balance 0)', function () {
+  this.timeout(30000)
+  let tenant, coin, Card, Peripheral, written
+  const saved = {}
+  before(async () => {
+    await startTestDb(); await clearTestDb()
+    ;({ tenant } = await seedTenantAndUsers())
+    Card = (await import('../src/models/card.js')).default
+    Peripheral = (await import('../src/models/peripheral.js')).default
+    coin = (await import('../src/services/coinMachine.js')).default
+    await Peripheral.create({ tenantId: tenant._id, name: 'Leitor', type: 'rfid_reader', enabled: true })
+    saved.tenantId = coin.tenantId; saved.write = coin.middleware.writeCardData
+    coin.tenantId = tenant._id
+    written = []
+    coin.middleware.writeCardData = async (_id, data) => { written.push(data); return { ok: true } }
+  })
+  after(async () => { coin.tenantId = saved.tenantId; coin.middleware.writeCardData = saved.write; coin.recentlyBlanked = new Map(); await stopTestDb() })
+  beforeEach(() => { written.length = 0 })
+
+  it('creates the card under the chip id with ZERO balance, writes it, and activates it', async () => {
+    const r = await coin.activatePendingCard('-385895493')
+    expect(r.status).to.equal('active')
+    const c = await Card.findOne({ tenantId: tenant._id, code: '-385895493' })
+    expect(c).to.include({ balance: 0, status: 'active' })
+    expect(c.metadata.autoRegistered.from).to.equal('blank-card-at-reader')
+    expect(written).to.have.length(1)
+    expect(written[0]).to.include({ code: '-385895493', balance: 0 })
+  })
+
+  it('a chip of a card we already know (data lost) gets its record written back, not a second card', async () => {
+    await Card.create({ tenantId: tenant._id, code: 'KNOWN-1', balance: 4.2, status: 'active' })
+    await coin.activatePendingCard('KNOWN-1')
+    expect(await Card.countDocuments({ tenantId: tenant._id, code: 'KNOWN-1' })).to.equal(1)
+    expect(written[0]).to.include({ code: 'KNOWN-1', balance: 4.2 })
+  })
+
+  it('a chip staff just wiped is NOT registered again by the reader echo', async () => {
+    coin.recentlyBlanked = new Map([['WIPED-1', Date.now()]])
+    const r = await coin.activatePendingCard('WIPED-1')
+    expect(r).to.equal(null)
+    expect(await Card.countDocuments({ tenantId: tenant._id, code: 'WIPED-1' })).to.equal(0)
+    expect(written).to.have.length(0)
+  })
+
+  it('a purchase that is waiting still wins: the blank card goes to the purchase, no extra card', async () => {
+    const pending = await Card.create({ tenantId: tenant._id, code: 'PURCHASE-1', balance: 5, status: 'pending_write' })
+    await coin.activatePendingCard('CHIP-77')
+    expect((await Card.findById(pending._id)).code).to.equal('CHIP-77')
+    expect(await Card.countDocuments({ tenantId: tenant._id, code: 'CHIP-77' })).to.equal(1)
+    expect(written[0]).to.include({ code: 'CHIP-77', balance: 5 })
+  })
+
+  it('can be switched off (AUTO_REGISTER_BLANK_CARDS=false): nothing is created', async () => {
+    process.env.AUTO_REGISTER_BLANK_CARDS = 'false'
+    try {
+      expect(await coin.activatePendingCard('OFF-1')).to.equal(null)
+      expect(await Card.countDocuments({ tenantId: tenant._id, code: 'OFF-1' })).to.equal(0)
+    } finally { delete process.env.AUTO_REGISTER_BLANK_CARDS }
+  })
+})
