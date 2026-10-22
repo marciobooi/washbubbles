@@ -56,10 +56,17 @@ describe('Card purchase: the blank card is written as soon as it is read', funct
     expect(bought.cardWritten).to.equal(true)
   })
 
-  it('a blank card with no purchase waiting writes nothing', async () => {
+  it('a blank card with no purchase waiting is registered with ZERO balance (or, switched off, writes nothing)', async () => {
     await Peripheral.create({ tenantId: tenant._id, name: 'RFID', type: 'rfid_reader', enabled: true, status: 'ok' })
+    process.env.AUTO_REGISTER_BLANK_CARDS = 'false'
+    try {
+      await coinMachine.handleCardRead({ cardNumber: '-1', card: { cardId: '-1', new: 'true', admin: 'false' } })
+      expect(written).to.have.length(0)
+    } finally { delete process.env.AUTO_REGISTER_BLANK_CARDS }
     await coinMachine.handleCardRead({ cardNumber: '-1', card: { cardId: '-1', new: 'true', admin: 'false' } })
-    expect(written).to.have.length(0)
+    expect(written).to.have.length(1)
+    expect(written[0]).to.include({ code: '-1', balance: 0 })
+    expect((await Card.findOne({ tenantId: tenant._id, code: '-1' })).status).to.equal('active')
   })
 
   it('a failed write leaves the card pending so the customer can retry', async () => {
