@@ -236,6 +236,13 @@ async function start() {
   const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017/washstore'
   try {
     await connectMongo(MONGODB_URL)
+    // Card balances are whole cents: round away any float dust left by older updates (a no-op when all are exact).
+    try {
+      const { normalizeBalances } = await import('./services/cardBalance.js')
+      const Card = (await import('./models/card.js')).default
+      const n = await normalizeBalances(Card)
+      if (n) console.log(`[Cards] ${n} card balance(s) rounded to whole cents`)
+    } catch (err) { console.warn('[Cards] could not normalise balances:', err.message) }
     
     // Start coin machine system after DB connection
     if (process.env.ENABLE_COIN_MACHINE !== 'false') {

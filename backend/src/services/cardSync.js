@@ -222,7 +222,9 @@ export class CardSync extends EventEmitter {
     if (!Number.isFinite(rawCents) || rawCents < 0) {
       return { status: 'invalid', reason: 'unreadable card data' }
     }
-    const cardBalance = roundMoney(rawCents / 100)
+    // The chip counts in cents. Older software wrote them with float dust ("79.9999999999980" for 80 cents), so the
+    // cents are rounded to the whole number first: 79.999… is 80 cents, EUR 0.80.
+    const cardBalance = roundMoney(Math.round(rawCents) / 100)
     if (cardBalance > this.maxBalance) {
       await this.audit('card.reject', code, { reason: 'balance above ceiling', cardBalance, ceiling: this.maxBalance })
       return { status: 'invalid', reason: `card balance €${cardBalance.toFixed(2)} exceeds the €${this.maxBalance} limit` }

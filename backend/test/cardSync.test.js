@@ -34,6 +34,35 @@ const onCard = (cardId, euros, extra = {}) => ({
   cardId, balance: String(Math.round(euros * 100)), name: '', nif: '', admin: 'false', ...extra,
 })
 
+describe('Card balances are always whole cents', function () {
+  before(async () => { await startTestDb() })
+  after(async () => { await stopTestDb() })
+  let tenant
+  beforeEach(async () => { tenant = await Tenant.create({ name: 'Cents', slug: `cents-${Date.now()}-${Math.random()}` }) })
+  afterEach(async () => { await Card.deleteMany({ tenantId: tenant._id }); await Tenant.deleteOne({ _id: tenant._id }) })
+
+  it('debits and credits leave no float dust (4.7 - 0.1, 3.2 - 1.8, 0.1 + 0.2)', async () => {
+    const c = await Card.create({ tenantId: tenant._id, code: 'R1', balance: 4.7 })
+    expect((await debitCard(Card, { _id: c._id }, 0.1)).balance).to.equal(4.6)
+    await Card.updateOne({ _id: c._id }, { $set: { balance: 3.2 } })
+    expect((await debitCard(Card, { _id: c._id }, 1.8)).balance).to.equal(1.4)
+    await Card.updateOne({ _id: c._id }, { $set: { balance: 0.1 } })
+    expect((await creditCard(Card, { _id: c._id }, 0.2)).balance).to.equal(0.3)
+  })
+
+  it('a balance set with float dust is stored as whole cents; the start-up clean-up rounds older values and leaves exact ones', async () => {
+    const c = await Card.create({ tenantId: tenant._id, code: 'R2', balance: 4.700000000000001 })
+    expect((await Card.findById(c._id).lean()).balance).to.equal(4.7)
+    // an old record written before the rule: force the dust in with a raw write
+    await Card.collection.updateOne({ _id: c._id }, { $set: { balance: 1.4000000000000001 } })
+    await Card.create({ tenantId: tenant._id, code: 'R3', balance: 2.5 })
+    const { normalizeBalances } = await import('../src/services/cardBalance.js')
+    expect(await normalizeBalances(Card)).to.be.at.least(1)
+    expect((await Card.findById(c._id).lean()).balance).to.equal(1.4)
+    expect(await normalizeBalances(Card)).to.equal(0) // idempotent
+  })
+})
+
 describe('decideReconcile', () => {
   const d = (db, card, synced) => decideReconcile({ dbBalance: db, cardBalance: card, syncedBalance: synced })
 
@@ -97,6 +126,14 @@ describe('CardSync (real Mongo test DB, fake controller)', function () {
       expect(c).to.include({ balance: 12.5, name: 'Ana', contribuinte: '123456789', status: 'active', cardSyncedBalance: 12.5 })
       expect(c.metadata.adopted).to.include({ from: 'controller-card', ownerId: 'OWN-7' })
       expect(await auditActions()).to.include('card.adopt')
+    })
+
+    it('a chip that reports 79.9999999999980 cents (old software float dust) is adopted as exactly EUR 0.80', async () => {
+      const r = await sync.reconcile({ cardId: 'LEG-DUST', balance: '79.9999999999980', name: '', nif: '', admin: '', ownerId: 'OWN-9' })
+      expect(r.balance).to.equal(0.8)
+      expect((await cardIn('LEG-DUST')).balance).to.equal(0.8)
+      const r2 = await sync.reconcile({ cardId: 'LEG-DUST2', balance: '309.999999999724', name: '', nif: '', admin: 'false' })
+      expect(r2.balance).to.equal(3.1)
     })
 
     it('does not write back to the card it just adopted (no echo loop)', async () => {

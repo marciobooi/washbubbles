@@ -33,13 +33,35 @@ const EPSILON = 0.005
 export const SPENDABLE = { status: { $nin: ['pending_write', 'blocked'] } }
 
 /**
+ * The new balance is the old one plus the delta, ROUNDED TO WHOLE CENTS inside the same atomic update. A plain
+ * `$inc` on doubles leaves float dust (4.7 - 0.1 stored as 4.699999999999999, 3.2 - 1.8 as 1.4000000000000001), which
+ * then drifts into sums, comparisons and what is written onto the chip.
+ */
+export const balanceUpdate = (delta) => [
+  { $set: { balance: { $round: [{ $add: ['$balance', delta] }, 2] }, updatedAt: new Date() } },
+]
+
+/**
+ * One-off clean-up, safe to run at every start: any card whose stored balance is not a whole number of cents
+ * (float dust from older updates) is rounded. Cards already exact are not touched.
+ * @returns how many cards were corrected
+ */
+export async function normalizeBalances(Model) {
+  const r = await Model.collection.updateMany(
+    { $expr: { $ne: ['$balance', { $round: ['$balance', 2] }] } },
+    [{ $set: { balance: { $round: ['$balance', 2] } } }],
+  )
+  return r.modifiedCount || 0
+}
+
+/**
  * Add to a card's balance atomically.
  * @returns the updated card, or null if it no longer exists.
  */
 export async function creditCard(Model, filter, amount) {
   const delta = roundMoney(amount)
   if (!(delta > 0)) throw new Error('creditCard requires a positive amount')
-  return Model.findOneAndUpdate(filter, { $inc: { balance: delta }, $set: { updatedAt: new Date() } }, { new: true })
+  return Model.findOneAndUpdate(filter, balanceUpdate(delta), { new: true })
 }
 
 /**
@@ -56,7 +78,7 @@ export async function debitCard(Model, filter, amount) {
   if (!(delta > 0)) throw new Error('debitCard requires a positive amount')
   return Model.findOneAndUpdate(
     { ...filter, ...SPENDABLE, balance: { $gte: delta - EPSILON } },
-    { $inc: { balance: -delta }, $set: { updatedAt: new Date() } },
+    balanceUpdate(-delta),
     { new: true }
   )
 }
@@ -72,4 +94,4 @@ export async function applyCardDelta(Model, filter, delta) {
   return debitCard(Model, filter, -d)
 }
 
-export default { creditCard, debitCard, applyCardDelta, SPENDABLE }
+export default { creditCard, debitCard, applyCardDelta, normalizeBalances, balanceUpdate, SPENDABLE }

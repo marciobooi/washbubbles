@@ -5,7 +5,8 @@ const { Schema } = mongoose
 const cardSchema = new Schema({
   tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', required: true, index: true },
   code: { type: String, required: true }, // public card code
-  balance: { type: Number, default: 0 },
+  // Always a whole number of cents: float dust (4.700000000000001) is rounded away wherever a balance is set.
+  balance: { type: Number, default: 0, set: (v) => Math.round(Number(v) * 100) / 100 },
   // Loyalty bonus accrued on recharges. `services/client.js` reads and writes this;
   // without the field, Mongoose strict mode dropped every write silently and all
   // loyalty bonus was permanently lost.
