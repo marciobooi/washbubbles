@@ -43,6 +43,18 @@ export async function applyCentralKey(rawKey, { serverUrl, coin, fetchImpl = glo
   const url = String(serverUrl || process.env.SYNC_SERVER_URL || '').replace(/\/+$/, '')
   if (!url) return { ok: false, code: 'no-server', message: 'Este posto ainda não tem o endereço do servidor. Indique-o também.' }
 
+  // A PC installed for one shop is locked to it (SHOP_TENANT_ID, written by the installer): another shop's key is refused, so a
+  // PC that already holds a shop's data can never start mixing in another shop's.
+  if (process.env.SHOP_TENANT_ID) {
+    try {
+      const w = await fetchImpl(`${url}/installer/whoami`, { headers: { Authorization: `ApiKey ${key}` }, signal: AbortSignal.timeout?.(10_000) })
+      if (w.ok) {
+        const { tenantId } = await w.json()
+        if (tenantId && tenantId !== process.env.SHOP_TENANT_ID) return { ok: false, code: 'rejected', message: 'Esta chave é de OUTRA loja. Este posto está bloqueado à sua loja; para o mudar de loja é preciso reinstalá-lo.' }
+      }
+    } catch { /* offline: the check below reports it */ }
+  }
+
   let res
   try {
     res = await fetchImpl(`${url}/sync/pull/settings`, { headers: { Authorization: `ApiKey ${key}` }, signal: AbortSignal.timeout?.(10_000) })

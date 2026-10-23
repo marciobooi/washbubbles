@@ -24,6 +24,7 @@ import * as mbwayLinkRoutes from './routes/mbwayLink.js'
 import wifiRoutes from './routes/wifi.js'
 import publicRoutes from './routes/public.js'
 import kioskWatchdog from './services/kioskWatchdog.js'
+import { startDomainWatcher } from './services/domainWatcher.js'
 
 // Enforce presence of JWT secret in production-like environments
 if (!process.env.JWT_SECRET) {
@@ -290,6 +291,8 @@ async function start() {
       }
     }
     kioskWatchdog.start()
+    // central server only: moves new shops' site addresses along (DNS -> certificate -> "your site is live" e-mail)
+    if (process.env.PUBLIC_LANDING_PAGE === 'true') startDomainWatcher()
   } catch (err) {
     console.error('Warning: Failed to connect to MongoDB at startup — continuing without DB (some endpoints will fail).', err.message || err)
   }

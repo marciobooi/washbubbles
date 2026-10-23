@@ -78,3 +78,48 @@ describe('Installing a post: the file for the customer, the download and the rep
     expect((await request(app).get('/api/installer/version').set('Authorization', `ApiKey ${key}`)).status).to.equal(200) // old PC still fine
   })
 })
+
+describe('A post is locked to its shop', function () {
+  this.timeout(30000)
+  let app, keyA, keyB
+  before(async () => {
+    await startTestDb(); await clearTestDb()
+    app = await buildTestApp()
+    const { admin } = await seedTenantAndUsers()
+    const tok = signToken(admin)
+    const mk = async (name) => {
+      const r = await request(app).post('/api/admin/stores').set('Authorization', `Bearer ${tok}`).send({ name })
+      const f = await request(app).post(`/api/admin/stores/${r.body.tenant._id}/installation`).set('Authorization', `Bearer ${tok}`).send({})
+      return { id: r.body.tenant._id, key: JSON.parse(Buffer.from(f.text.match(/\$ConfigB64 = '([^']+)'/)[1], 'base64').toString('utf8')).key }
+    }
+    keyA = await mk('Loja A'); keyB = await mk('Loja B')
+  })
+  after(async () => { await stopTestDb() })
+
+  it('whoami says which shop a key belongs to, without activating a staged key', async () => {
+    const r = await request(app).get('/api/installer/whoami').set('Authorization', `ApiKey ${keyB.key}`)
+    expect(r.status).to.equal(200)
+    expect(r.body.tenantId).to.equal(keyB.id)
+    const User = (await import('../src/models/user.js')).default
+    expect((await User.findOne({ tenantId: keyB.id, role: 'KIOSK' }).lean()).apiKey).to.equal(null) // still staged
+    expect((await request(app).get('/api/installer/whoami').set('Authorization', 'ApiKey nope')).status).to.equal(401)
+  })
+
+  it('a locked PC refuses another shop\'s key (and never calls the server\'s settings with it)', async () => {
+    const { applyCentralKey } = await import('../src/services/centralKey.js')
+    process.env.SHOP_TENANT_ID = keyA.id
+    const calls = []
+    const fetchImpl = async (url, opts) => {
+      calls.push(url)
+      const path = url.replace('http://central.test/api', '')
+      const r = await request(app).get('/api' + path).set('Authorization', opts.headers.Authorization)
+      return { ok: r.status < 400, status: r.status, json: async () => r.body }
+    }
+    try {
+      const out = await applyCentralKey(keyB.key, { serverUrl: 'http://central.test/api', fetchImpl, envFile: path.join(os.tmpdir(), 'x.env') })
+      expect(out.ok).to.equal(false)
+      expect(out.message).to.match(/OUTRA loja/)
+      expect(calls.some((c) => c.includes('/sync/pull/settings'))).to.equal(false)
+    } finally { delete process.env.SHOP_TENANT_ID }
+  })
+})

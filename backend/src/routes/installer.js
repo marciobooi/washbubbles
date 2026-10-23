@@ -9,9 +9,27 @@ import fs from 'fs'
 import path from 'path'
 import { requireKiosk } from '../middleware/auth.js'
 import AuditLog from '../models/auditLog.js'
+import User from '../models/user.js'
+import rateLimit from 'express-rate-limit'
+import { limitKey } from '../middleware/limitKey.js'
+import { normalizeKey } from '../services/apiKeys.js'
 
 const router = express.Router()
 const releaseDir = () => process.env.RELEASE_DIR || '/release'
+
+/**
+ * Which shop does this key belong to? Used by a shop PC that is locked to its shop (SHOP_TENANT_ID) before it accepts a new key.
+ * Looks the key up WITHOUT using it (a staged key is not promoted by asking), so a mistyped key cannot cut anybody off.
+ */
+const whoamiLimiter = rateLimit({ windowMs: 60_000, max: 20, standardHeaders: true, legacyHeaders: false, keyGenerator: limitKey, message: { error: 'Too many attempts' } })
+router.get('/whoami', whoamiLimiter, async (req, res) => {
+  const raw = String(req.headers.authorization || '').replace(/^ApiKey\s+/i, '')
+  const key = normalizeKey(raw)
+  if (!key) return res.status(401).json({ error: 'Missing key' })
+  const u = await User.findOne({ role: 'KIOSK', $or: [{ apiKey: raw }, { apiKey: key }, { apiKeyNext: key }] }).select('tenantId').lean()
+  if (!u) return res.status(401).json({ error: 'Invalid key' })
+  res.json({ tenantId: String(u.tenantId) })
+})
 
 router.get('/version', requireKiosk, (req, res) => {
   let version = ''
