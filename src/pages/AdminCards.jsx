@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import api from '../services/api'
 import { toast } from '../components/ui/Toast'
-import { CreditCard, Search, RefreshCw, Mail, Phone, User, FileText, X, Calendar, Clock, Plus, Edit2, Save, Gift } from 'lucide-react'
+import { CreditCard, Search, RefreshCw, Mail, Phone, User, FileText, X, Calendar, Clock, Plus, Edit2, Save, Gift, Pencil } from 'lucide-react'
 import GiftCardForm from '../components/GiftCardForm'
 
 export default function AdminCards() {
@@ -331,9 +331,11 @@ export default function AdminCards() {
                     <td className="px-4 py-2">
                       <button
                         onClick={(e) => openEditForm(card, e)}
-                        className="text-blue-600 hover:text-blue-800 underline text-sm"
+                        className="abtn abtn-icon"
+                        title="Editar"
+                        aria-label={`Editar cartão ${card.code}`}
                       >
-                        Editar
+                        <Pencil />
                       </button>
                     </td>
                   </tr>

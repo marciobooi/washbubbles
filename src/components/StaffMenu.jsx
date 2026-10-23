@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Settings, Lock, Wallet, Gift, WashingMachine } from 'lucide-react'
+import { Settings, Lock, Wallet, Gift, WashingMachine, KeyRound } from 'lucide-react'
 import Modal from '@/components/ui/Modal'
 import api from '@/services/api'
 import { useKioskLock } from '@/context/KioskLockContext'
@@ -33,6 +33,22 @@ export default function StaffMenu() {
   const [showDayClose, setShowDayClose] = useState(false)
   const [showGift, setShowGift] = useState(false)
   const [showMachines, setShowMachines] = useState(false)
+  const [showKey, setShowKey] = useState(false)
+  const [keyText, setKeyText] = useState('')
+  const [keyUrl, setKeyUrl] = useState('')
+  const [keyBusy, setKeyBusy] = useState(false)
+  const [keyResult, setKeyResult] = useState(null) // { ok, text }
+  async function saveKey() {
+    setKeyBusy(true); setKeyResult(null)
+    try {
+      const r = await api.setCentralKey({ pin: verifiedPin, key: keyText, ...(keyUrl.trim() ? { serverUrl: keyUrl.trim() } : {}) }, { apiKey: getKioskApiKey() })
+      setKeyResult({ ok: true, text: r?.message || 'Chave guardada.' })
+      setKeyText('')
+    } catch (e) {
+      const code = e?.body?.code
+      setKeyResult({ ok: false, text: e?.body?.error || e?.message || 'Não foi possível guardar a chave.', needUrl: code === 'no-server' })
+    } finally { setKeyBusy(false) }
+  }
   const [giftBusy, setGiftBusy] = useState(false)
   const [giftResult, setGiftResult] = useState(null) // { ok, text }
 
@@ -66,12 +82,12 @@ export default function StaffMenu() {
 
   // Staff left the kiosk with the staff area open: after a minute with no touch it closes by itself and the PIN is
   // forgotten, so the next person who walks up needs the PIN again.
-  const staffOpen = showPinPrompt || showChooser || showGift || showDayClose || showMachines
+  const staffOpen = showPinPrompt || showChooser || showGift || showDayClose || showMachines || showKey
   useEffect(() => {
     if (!staffOpen) return undefined
     let timer
     const leave = () => {
-      setShowPinPrompt(false); setShowChooser(false); setShowGift(false); setShowDayClose(false); setShowMachines(false)
+      setShowPinPrompt(false); setShowChooser(false); setShowGift(false); setShowDayClose(false); setShowMachines(false); setShowKey(false); setKeyText(''); setKeyResult(null)
       setPin(''); setPinError(null); setVerifiedPin(null); setGiftResult(null)
     }
     const arm = () => { clearTimeout(timer); timer = setTimeout(leave, STAFF_IDLE_MS) }
@@ -172,6 +188,17 @@ export default function StaffMenu() {
               </div>
             </button>
 
+            <button
+              onClick={() => { setShowChooser(false); setKeyResult(null); setKeyText(''); setShowKey(true) }}
+              className="w-full flex items-center gap-3 rounded-xl border border-neutral-200 hover:border-teal-400 hover:bg-teal-50 px-4 py-4 text-left transition"
+            >
+              <KeyRound className="w-6 h-6 text-teal-600 shrink-0" aria-hidden />
+              <div>
+                <div className="font-semibold text-neutral-800">Chave do servidor</div>
+                <div className="text-xs text-neutral-500">Introduzir a chave nova de ligação ao servidor</div>
+              </div>
+            </button>
+
             {lockFeatureEnabled && (
               <button
                 onClick={() => { lock('maintenance'); closeAll() }}
@@ -191,6 +218,42 @@ export default function StaffMenu() {
       )}
 
       <StaffMachinesModal open={showMachines} pin={verifiedPin} onClose={() => { setShowMachines(false); setVerifiedPin(null) }} />
+
+      {showKey && (
+        <Modal open={showKey} onClose={() => { setShowKey(false); setVerifiedPin(null) }} title="Chave do servidor">
+          <div className="space-y-4">
+            {keyResult?.ok ? (
+              <>
+                <div className="text-lg font-semibold text-teal-700">{keyResult.text}</div>
+                <button onClick={() => { setShowKey(false); setVerifiedPin(null) }} className="w-full py-2 rounded-lg bg-teal-600 text-white">OK</button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-neutral-600 m-0">Escreva a chave gerada no admin (24 caracteres; os traços são opcionais). É verificada no servidor antes de ser guardada.</p>
+                <input
+                  type="text" autoComplete="off" autoCapitalize="none" spellCheck={false}
+                  value={keyText} onChange={(e) => setKeyText(e.target.value)}
+                  placeholder="xxxx-xxxx-xxxx-xxxx-xxxx-xxxx"
+                  className="w-full px-4 py-3 rounded-lg border border-neutral-300 text-center text-xl tracking-wider"
+                />
+                {keyResult?.needUrl && (
+                  <input
+                    type="text" autoComplete="off" autoCapitalize="none" spellCheck={false}
+                    value={keyUrl} onChange={(e) => setKeyUrl(e.target.value)}
+                    placeholder="Endereço do servidor (https://…/api)"
+                    className="w-full px-4 py-3 rounded-lg border border-neutral-300 text-center"
+                  />
+                )}
+                {keyResult && !keyResult.ok && <div className="text-sm text-red-600 font-semibold">{keyResult.text}</div>}
+                <div className="flex gap-2">
+                  <button onClick={() => { setShowKey(false); setVerifiedPin(null) }} disabled={keyBusy} className="flex-1 py-2 rounded-lg border">Cancelar</button>
+                  <button onClick={saveKey} disabled={keyBusy || !keyText.trim()} className={`flex-1 py-2 rounded-lg ${keyBusy || !keyText.trim() ? 'bg-neutral-100 text-neutral-500' : 'bg-teal-600 text-white'}`}>{keyBusy ? 'A verificar…' : 'Guardar'}</button>
+                </div>
+              </>
+            )}
+          </div>
+        </Modal>
+      )}
 
       {showGift && (
         <Modal open={showGift} onClose={() => { setShowGift(false); setVerifiedPin(null) }} title="Cartão de oferta">

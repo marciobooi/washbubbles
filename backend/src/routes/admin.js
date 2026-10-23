@@ -116,9 +116,9 @@ router.post('/machines', requireAdmin, async (req, res) => {
 // List users (admin only)
 router.get('/users', requireAdmin, async (req, res) => {
   const UserT = withTenant(User, req)
-  const users = await UserT.find().select('username role apiKey createdAt').lean()
-  // mask apiKey
-  const masked = users.map((u) => ({ _id: u._id, username: u.username, role: u.role, apiKey: u.apiKey ? u.apiKey.slice(0, 8) + '…' : null, createdAt: u.createdAt }))
+  const users = await UserT.find().select('username role apiKey apiKeyNext createdAt').lean()
+  // mask apiKey; a staged (not yet used) new key is only flagged, never shown
+  const masked = users.map((u) => ({ _id: u._id, username: u.username, role: u.role, apiKey: u.apiKey ? u.apiKey.slice(0, 8) + '…' : null, pendingKey: Boolean(u.apiKeyNext), createdAt: u.createdAt }))
   res.json(masked)
 })
 
@@ -181,9 +181,18 @@ async function refuseIfKiosk(req, res) {
   return false
 }
 
-// Rotate API key for user
+// Rotate API key for user. For the kiosk user the new key is STAGED (the old one keeps working until the new one is first used,
+// see services/apiKeys.js) and returned once, in groups of four, to be typed at the kiosk (staff menu, with the PIN).
 router.post('/users/:id/rotate', requireAdmin, async (req, res) => {
-  if (await refuseIfKiosk(req, res)) return
+  if (mongoose.isValidObjectId(req.params.id)) {
+    const target = await withTenant(User, req).findById(req.params.id).select('role username').lean()
+    if (target?.role === 'KIOSK') {
+      const { stageNewKey, groupKey } = await import('../services/apiKeys.js')
+      const key = await stageNewKey(req.tenantId, req.params.id)
+      logAction(req, 'user.rotate_kiosk_key', 'User', req.params.id, { username: target.username, note: 'staged: the old key keeps working until the new one is used' })
+      return res.json({ _id: req.params.id, staged: true, apiKey: groupKey(key) })
+    }
+  }
   const id = req.params.id
   const newKey = crypto.randomBytes(24).toString('hex')
   const UserT = withTenant(User, req)

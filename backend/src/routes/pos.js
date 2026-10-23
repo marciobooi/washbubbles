@@ -407,6 +407,16 @@ async function requireStaffPin(req, res) {
   return true
 }
 
+// POST /pos/central-key — change the shop's key to the central server (staff PIN). The key is checked against the server first.
+router.post('/central-key', requireKiosk, async (req, res) => {
+  if (!(await requireStaffPin(req, res))) return
+  const { applyCentralKey } = await import('../services/centralKey.js')
+  const r = await applyCentralKey(req.body?.key, { serverUrl: req.body?.serverUrl, coin: coinMachine })
+  if (!r.ok) return res.status(r.code === 'offline' || r.code === 'server-error' ? 502 : 400).json({ error: r.message, code: r.code })
+  try { const { logAction } = await import('../services/auditLog.js'); logAction(req, 'kiosk.central_key_changed', 'System', null, { by: 'staff PIN (kiosk)' }) } catch { /* the trail must not undo a saved key */ }
+  res.json({ ok: true, message: r.warning || 'Chave guardada e ligação ao servidor confirmada.', warning: r.warning })
+})
+
 // POST /pos/card/gift — hand a card to a customer for free (staff PIN on every call). Default credit is zero.
 router.post('/card/gift', requireKiosk, async (req, res) => {
   if (!(await requireStaffPin(req, res))) return

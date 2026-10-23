@@ -2,6 +2,7 @@ import { WebSocketServer } from 'ws'
 import jwt from 'jsonwebtoken'
 import Machine from './models/machine.js'
 import User from './models/user.js'
+import { findUserByApiKey } from './services/apiKeys.js'
 
 /**
  * WashBubbles Secure WebSocket Server
@@ -29,7 +30,7 @@ const AUTH_TIMEOUT_MS = 5000
 async function resolveUser({ token, apiKey }) {
   const JWT_SECRET = process.env.JWT_SECRET
   if (apiKey) {
-    return User.findOne({ apiKey })
+    return findUserByApiKey(apiKey)
   }
   if (token && JWT_SECRET) {
     try {

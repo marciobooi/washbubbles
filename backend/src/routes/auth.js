@@ -5,6 +5,7 @@ import crypto from 'crypto'
 import rateLimit from 'express-rate-limit'
 import User from '../models/user.js'
 import { requireAuth } from '../middleware/auth.js'
+import { findUserByApiKey } from '../services/apiKeys.js'
 
 const router = express.Router()
 const JWT_SECRET = process.env.JWT_SECRET // enforced at startup
@@ -40,7 +41,7 @@ router.post('/login', loginLimiter, async (req, res) => {
 
   let user
   if (apiKey) {
-    user = await User.findOne({ apiKey })
+    user = await findUserByApiKey(apiKey)
     if (!user) return res.status(401).json({ error: 'Invalid API key' })
   } else {
     user = await User.findOne({ username })

@@ -4,7 +4,7 @@ import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
 import Modal from '@/components/ui/Modal'
 import PasswordInput from '@/components/ui/PasswordInput'
-import { Pencil, Trash2, Plus, Check, X, Lock } from 'lucide-react'
+import { Pencil, Trash2, Plus, Check, X, Lock, KeyRound, Copy } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '../context/AuthContext' 
 
@@ -13,6 +13,21 @@ export default function AdminUsers(){
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
+  // Kiosk key: ask first, then show the new key ONCE.
+  const [keyTarget, setKeyTarget] = useState(null) // the kiosk user being re-keyed (confirmation)
+  const [newKey, setNewKey] = useState(null) // { username, key } shown once
+  const [rotating, setRotating] = useState(false)
+  async function rotateKiosk() {
+    setRotating(true)
+    try {
+      const r = await api.rotateUserKey(keyTarget._id)
+      setNewKey({ username: keyTarget.username, key: r.apiKey })
+      setKeyTarget(null)
+      load()
+    } catch (e) {
+      toast({ title: 'Não foi possível gerar a chave', description: e?.body?.error || e?.message, variant: 'destructive' })
+    } finally { setRotating(false) }
+  }
   const [editing, setEditing] = useState(null)
   const [username, setUsername] = useState('')
   const [role, setRole] = useState('USER')
@@ -164,6 +179,14 @@ export default function AdminUsers(){
                       <span className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.12] px-3 py-1 text-xs font-semibold text-neutral-500" title="Utilizador de sistema do quiosque: tem chave de acesso e não tem palavra-passe. Não pode ser alterado nem removido aqui.">
                         <Lock className="h-3.5 w-3.5" aria-hidden /> Sistema
                       </span>
+                    ) : null}
+                    {u.role === 'KIOSK' ? (
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <button className="abtn abtn-sm" onClick={() => setKeyTarget(u)} title="Gerar uma chave nova para este quiosque">
+                          <KeyRound /> Gerar nova chave
+                        </button>
+                        {u.pendingKey && <span className="text-xs font-semibold text-amber-700">Nova chave ainda por usar</span>}
+                      </div>
                     ) : (
                     <div className="flex gap-2">
                       <button className="abtn abtn-icon" title="Editar" aria-label="Editar" onClick={() => openEdit(u)}>
@@ -181,6 +204,35 @@ export default function AdminUsers(){
           </tbody>
         </table>
       </div>
+
+      <Modal open={!!keyTarget} onClose={() => setKeyTarget(null)} title="Gerar nova chave do quiosque">
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold m-0">Gerar nova chave do quiosque?</h3>
+          <p className="text-sm text-neutral-600 m-0">
+            É a chave com que a loja fala com este servidor. A chave atual <strong>continua a funcionar</strong> até a nova ser usada pela primeira vez, por isso a loja não fica sem ligação.
+            Depois de gerada, introduza-a no quiosque (engrenagem → PIN → <em>Chave do servidor</em>). Quando a loja a usar pela primeira vez, a antiga deixa de funcionar.
+          </p>
+          <div className="flex justify-end gap-2">
+            <button className="abtn" onClick={() => setKeyTarget(null)} disabled={rotating}>Cancelar</button>
+            <button className="abtn abtn-primary" onClick={rotateKiosk} disabled={rotating}>{rotating ? 'A gerar…' : 'Gerar chave'}</button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal open={!!newKey} onClose={() => setNewKey(null)} title="Nova chave do quiosque">
+        {newKey && (
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold m-0">Nova chave de «{newKey.username}»</h3>
+            <p className="text-sm text-neutral-600 m-0">Copie-a agora: <strong>só aparece desta vez</strong>. No quiosque: engrenagem → PIN → <em>Chave do servidor</em> → escreva-a (os traços são opcionais).</p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 rounded-xl border bg-neutral-50 px-4 py-3 text-lg font-bold tracking-wider text-center select-all">{newKey.key}</code>
+              <button className="abtn abtn-icon" aria-label="Copiar" title="Copiar" onClick={() => { try { navigator.clipboard.writeText(newKey.key); toast({ title: 'Chave copiada', variant: 'success' }) } catch { /* the key is selectable */ } }}><Copy /></button>
+            </div>
+            <p className="text-xs text-neutral-500 m-0">Se a perder, gere outra: a que ainda não foi usada é substituída.</p>
+            <div className="flex justify-end"><button className="abtn abtn-primary" onClick={() => setNewKey(null)}>Já a copiei</button></div>
+          </div>
+        )}
+      </Modal>
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editing ? 'Editar Utilizador' : 'Novo Utilizador'}>
         <form onSubmit={save} className="grid grid-cols-1 md:grid-cols-2 gap-4 items-stretch">

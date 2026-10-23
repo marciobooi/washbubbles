@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken'
 import User from '../models/user.js'
 import mongoose from 'mongoose'
+import { findUserByApiKey } from '../services/apiKeys.js'
 
 // index.js exits at startup if JWT_SECRET is unset — no hardcoded fallback here on purpose
 const JWT_SECRET = process.env.JWT_SECRET
@@ -24,7 +25,7 @@ async function resolveUserFromRequest(req) {
   // 2. ApiKey via Authorization: ApiKey <key>
   if (auth && auth.startsWith('ApiKey ')) {
     const apiKey = auth.split(' ')[1]
-    userModel = await User.findOne({ apiKey })
+    userModel = await findUserByApiKey(apiKey)
     if (userModel) return { userModel }
     return { error: 'Invalid apiKey' }
   }

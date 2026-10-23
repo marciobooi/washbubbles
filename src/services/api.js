@@ -398,6 +398,12 @@ export function createApi(config) {
     const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
     return request(`/pos/staff/machines/${id}/end`, { method: 'POST', json: payload, headers, skipAuth: true, expect: 'json' })
   }
+  // Kiosk key: rotate it from the admin (staged, shown once) and enter it at the kiosk (staff PIN).
+  function rotateUserKey(id) { return request(`/admin/users/${id}/rotate`, { method: 'POST', expect: 'json' }) }
+  function setCentralKey(payload, opts) {
+    const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
+    return request('/pos/central-key', { method: 'POST', json: payload, headers, skipAuth: true, expect: 'json' })
+  }
   function adminGiftCard(payload) { return request('/admin/cards/gift', { method: 'POST', json: payload, expect: 'json' }) }
 
   function blankCardAtReader() { return request('/admin/cards/blank-reader', { method: 'POST', json: { confirm: true }, expect: 'json' }) }
@@ -722,6 +728,8 @@ export function createApi(config) {
     updateCardProfile,
     blankCardAtReader,
     giftKioskCard,
+    rotateUserKey,
+    setCentralKey,
     staffStartMachine,
     staffEndMachine,
     adminGiftCard,

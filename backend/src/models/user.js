@@ -12,6 +12,9 @@ const userSchema = new Schema({
   // body — the last line of defence behind the route-level role checks.
   role: { type: String, default: 'USER', enum: ['USER', 'KIOSK', 'ADMIN', 'SUPERADMIN', 'STAFF', 'TECHNICIAN', 'OPERATOR'] },
   apiKey: { type: String, default: null },
+  // A rotation stages the new key here; the first request that uses it makes it the apiKey (see services/apiKeys.js).
+  apiKeyNext: { type: String, default: null },
+  apiKeyNextAt: { type: Date, default: null },
   resetPasswordToken: { type: String, default: null },
   resetPasswordExpires: { type: Date, default: null },
   lastSeen: { type: Date, default: null },
