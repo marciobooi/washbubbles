@@ -21,11 +21,12 @@ export default function TenantSwitch() {
       <select
         aria-label="Loja"
         value={current}
-        onChange={(e) => { selectTenant(e.target.value === (home?.id || '') ? null : e.target.value || null); window.location.reload() }}
+        onChange={(e) => { if (e.target.value === '__all') { window.location.assign('/admin/tenants'); return } selectTenant(e.target.value === (home?.id || '') ? null : e.target.value || null); window.location.reload() }}
         className="rounded-full border border-black/[0.12] bg-transparent px-3 h-9 text-sm font-semibold"
       >
         {home?.id && !tenants.some((t) => t._id === home.id) && <option value={home.id}>{home.name}</option>}
         {tenants.map((t) => <option key={t._id} value={t._id}>{t.name}</option>)}
+        <option value="__all">Todas as lojas…</option>
       </select>
     </label>
   )
