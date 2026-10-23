@@ -12,8 +12,9 @@ import { renderEmailHtml, escapeHtmlMultiline } from './emailTemplate.js'
 export async function sendAlertForTenant(tenantId, subject, message) {
   try {
     if (!tenantId) return
-    const row = await Setting.findOne({ tenantId, key: 'alerts.email' })
-    const to = row?.value
+    const rows = await Setting.find({ tenantId, key: { $in: ['alerts.email', 'support.email'] } }).lean()
+    const val = (k) => rows.find((r) => r.key === k)?.value
+    const to = val('alerts.email') || val('support.email') // the support address is where alerts go unless a separate alerts address is set
     if (!to) return
     const bodyHtml = `<p>${escapeHtmlMultiline(message)}</p>`
     await sendMail({

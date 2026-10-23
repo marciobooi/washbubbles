@@ -57,13 +57,18 @@ function initTransporter(cfg = null) {
 export async function sendMail({ to, bcc, subject, text, html, tenantId = null }) {
   let cfg = null
   try { cfg = (await (await import('./platformSettings.js')).getPlatform()).mail } catch { /* environment only */ }
+  let shopName = ''; let replyTo = ''; let own = false
+  if (tenantId) {
+    try {
+      const { getEmailBrand } = await import('./emailBrand.js'); const b = await getEmailBrand(tenantId); shopName = b.name || ''; replyTo = b.email || ''
+      // the shop's own mailbox, when it has set one up: the e-mail then comes from the shop's own address
+      const { getShopMail } = await import('./shopMail.js'); const sm = await getShopMail(tenantId)
+      if (sm.account) { cfg = sm.account; own = true }
+    } catch { /* the default sender is fine */ }
+  }
   const t = initTransporter(cfg)
   const address = (cfg && cfg.from) || process.env.MAIL_FROM || 'no-reply@example.com'
-  let shopName = ''; let replyTo = ''
-  if (tenantId) {
-    try { const { getEmailBrand } = await import('./emailBrand.js'); const b = await getEmailBrand(tenantId); shopName = b.name || ''; replyTo = b.email || '' } catch { /* the default sender is fine */ }
-  }
-  const fromName = shopName || (cfg && cfg.fromName) || process.env.MAIL_FROM_NAME
+  const fromName = shopName || (!own && cfg && cfg.fromName) || process.env.MAIL_FROM_NAME
   const from = fromName ? `"${fromName.replace(/"/g, "'")}" <${address}>` : address
   if (t) {
     const info = await t.sendMail({ from, to, ...(bcc ? { bcc } : {}), ...(replyTo ? { replyTo } : {}), subject, text, html })

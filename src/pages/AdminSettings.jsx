@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import api from '@/services/api'
+import ShopMailForm from '@/components/ShopMailForm'
 import { toast } from '@/components/ui/Toast'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -1566,6 +1567,8 @@ export default function AdminSettings(){
 
       {/* Operator Alerts */}
       {activeTab === 'alerts' && (
+      <>
+      <ShopMailForm />
       <Card>
         <CardHeader>
           <CardTitle>Alertas por email</CardTitle>
@@ -1594,6 +1597,7 @@ export default function AdminSettings(){
           </form>
         </CardContent>
       </Card>
+      </>
       )}
 
       {/* WhatsApp cycle-complete notifications */}

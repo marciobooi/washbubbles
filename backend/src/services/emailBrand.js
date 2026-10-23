@@ -16,7 +16,7 @@ export async function getEmailBrand(tenantId) {
   if (hit && Date.now() - hit.at < TTL_MS) return hit.brand
   let brand = {}
   try {
-    const rows = await Setting.find({ ...(tenantId ? { tenantId } : {}), key: { $in: ['branding.logo', 'branding.companyName', 'legal.info', 'landingPage.content'] } }).lean()
+    const rows = await Setting.find({ ...(tenantId ? { tenantId } : {}), key: { $in: ['branding.logo', 'branding.companyName', 'legal.info', 'landingPage.content', 'support.email'] } }).lean()
     const m = Object.fromEntries(rows.map((r) => [r.key, r.value]))
     const [shop, siteUrl] = await Promise.all([landingBaseFor(tenantId), publicSiteFor(tenantId)])
     const page = mergeContent(m['landingPage.content'], shop.base).brand
@@ -29,7 +29,7 @@ export async function getEmailBrand(tenantId) {
       name: String(m['branding.companyName'] || '').trim() || String(info.company || '').trim() || String(page.name || '').trim() || shop.name,
       address: String(info.address || '').trim() || pageAddress,
       phone: String(info.phone || '').trim() || String(page.phone || '').trim(),
-      email: String(info.email || '').trim() || String(page.email || '').trim(),
+      email: String(m['support.email'] || '').trim() || String(info.email || '').trim() || String(page.email || '').trim(),
       tagline: shop.neutral ? '' : String(page.tagline || ''),
     }
   } catch { /* the template's defaults are fine */ }

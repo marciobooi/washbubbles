@@ -470,7 +470,9 @@ async function handlePull(req, res, Model, label) {
     // drop every row of a model with no updatedAt field (machines, settings), so a
     // new kiosk pulled zero machines.
     const query = req.query.since ? { updatedAt: { $gte: new Date(req.query.since) } } : {}
-    const items = await ModelT.find(query).lean()
+    let items = await ModelT.find(query).lean()
+    // the shop's mailbox password never travels to a shop PC (it is only meaningful on the central server)
+    if (Model === Setting) items = items.filter((s) => s.key !== 'shopmail.account')
     res.json(items)
   } catch (err) {
     console.error(`[Sync] Pull ${label} error:`, err)

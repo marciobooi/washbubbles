@@ -673,7 +673,7 @@ router.get('/settings', requireAdmin, async (req, res) => {
   const SettingT = withTenant(Setting, req)
   // sync.* are this shop's private settings (a key waiting for the connection): never listed. Secrets are listed as set / not set,
   // never with their value (the screen that edits one reads it on its own, see GET /settings/:key).
-  const SECRET_SETTINGS = new Set(['adminPin', 'payments.mbway.apiKey'])
+  const SECRET_SETTINGS = new Set(['adminPin', 'payments.mbway.apiKey', 'shopmail.account'])
   const list = (await SettingT.find().lean())
     .filter((s) => !String(s.key).startsWith('sync.'))
     .map((s) => (SECRET_SETTINGS.has(s.key) ? { ...s, value: s.value ? '••••••' : s.value } : s))
@@ -695,6 +695,7 @@ router.post('/ws/clients/disconnect', requireAdmin, async (req, res) => {
 })
 
 router.get('/settings/:key', requireAdmin, async (req, res) => {
+  if (req.params.key === 'shopmail.account') return res.json({ key: req.params.key, value: null }) // see /shop-mail
   if (String(req.params.key).startsWith('sync.')) return res.json({ key: req.params.key, value: null })
   if (req.params.key === 'adminPin') {
     // Never the PIN or its hash: only whether one is set (the screen shows 'PIN definido').
@@ -709,9 +710,34 @@ router.get('/settings/:key', requireAdmin, async (req, res) => {
   res.json(s || { key: req.params.key, value: null })
 })
 
+// The shop's own e-mail identity (support address, optional own mailbox): services/shopMail.js
+router.get('/shop-mail', requireAdmin, async (req, res) => {
+  const { getShopMailPublic } = await import('../services/shopMail.js')
+  res.json(await getShopMailPublic(req.tenantId))
+})
+router.put('/shop-mail', requireAdmin, async (req, res) => {
+  const { saveShopMail, getShopMailPublic } = await import('../services/shopMail.js')
+  try { await saveShopMail(req.tenantId, req.body || {}) } catch (err) { if (err.status) return res.status(err.status).json({ error: err.message }); throw err }
+  const a = req.body?.account
+  logAction(req, 'shopmail.update', 'Setting', 'shopmail', { supportEmail: req.body?.supportEmail, account: a ? { ...a, pass: a.pass ? '••••••' : undefined } : undefined })
+  res.json(await getShopMailPublic(req.tenantId))
+})
+// Sends a test message to the support address through the shop's current setup, and says what happened.
+router.post('/shop-mail/test', requireAdmin, async (req, res) => {
+  const { getShopMail } = await import('../services/shopMail.js')
+  const sm = await getShopMail(req.tenantId)
+  const to = String(req.body?.to || sm.supportEmail || '').trim()
+  if (!to) return res.status(400).json({ error: 'Defina primeiro o email de suporte' })
+  try {
+    await sendMail({ tenantId: req.tenantId, to, subject: 'Teste de email', text: 'Este é um email de teste: a configuração de email da loja está a funcionar.', html: renderEmailHtml({ title: 'Teste de email', bodyHtml: '<p>Este é um email de teste: a configuração de email da loja está a funcionar.</p>', brand: await getEmailBrand(req.tenantId) }) })
+    res.json({ ok: true, to, viaOwnMailbox: !!sm.account })
+  } catch (err) { res.status(502).json({ error: 'Não foi possível enviar: ' + (err.message || 'erro do servidor de email') }) }
+})
+
 router.post('/settings', requireAdmin, async (req, res) => {
   const { key, value } = req.body
   if (!key) return res.status(400).json({ error: 'Missing key' })
+  if (key === 'shopmail.account') return res.status(400).json({ error: 'Use /shop-mail' }) // the password must be encrypted on its way in
   // Seconds before unspent cash is paid back from the hopper; 0 = never. A bad value here
   // would either keep a customer's money forever or pay it out at once, so refuse it.
   if (key === 'creditRefundSeconds') {
