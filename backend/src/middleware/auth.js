@@ -4,6 +4,7 @@ import mongoose from 'mongoose'
 import { findUserByApiKey } from '../services/apiKeys.js'
 import Tenant from '../models/tenant.js'
 import AuditLog from '../models/auditLog.js'
+import { isSuspended } from '../services/tenantStatus.js'
 
 // "Acting as shop X" is written to the audit trail once per superadmin and shop per half hour (not on every request).
 const actingSeen = new Map()
@@ -56,6 +57,11 @@ export async function requireAuth(req, res, next) {
   
   // Security: Crucial for withTenant() to work!
   req.tenantId = resolved.userModel.tenantId
+
+  // A suspended shop is closed to everybody but the superadmin (its posts stop syncing, its admins cannot sign in).
+  if (resolved.userModel.role !== 'SUPERADMIN' && await isSuspended(resolved.userModel.tenantId)) {
+    return res.status(403).json({ error: 'Loja suspensa. Contacte o apoio.' })
+  }
 
   // A SUPERADMIN (and only a SUPERADMIN) may act as another shop by naming it in X-Tenant-Id; everybody else's header is ignored.
   const actAs = req.headers['x-tenant-id']

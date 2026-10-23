@@ -9,6 +9,7 @@ import cors from 'cors'
 import { connectMongo } from './db.js'
 import authRoutes from './routes/auth.js'
 import adminRoutes, { uploadDir } from './routes/admin.js'
+import storesRoutes from './routes/stores.js'
 import { uploadsFetchThrough } from './services/uploadsCache.js'
 import posRoutes from './routes/pos.js'
 import { initWebSocket, broadcastHardwareEvent } from './wsServer.js'
@@ -57,6 +58,7 @@ app.use(resolveTenant)
 
 // Mount under /api prefix for reverse proxying (nginx) or direct access
 app.use('/api/auth', authRoutes)
+app.use('/api/admin/stores', storesRoutes) // before the admin router: superadmin-only, its own guard
 app.use('/api/admin', adminRoutes)
 app.use('/api/pos', posRoutes)
 // Backwards compatibility: also expose pos endpoints under `/api` (eg. `/api/machine`)

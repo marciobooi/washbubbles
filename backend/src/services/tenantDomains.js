@@ -55,3 +55,16 @@ export async function ensurePrimaryDomain(domain = process.env.PRIMARY_DOMAIN) {
   resetDomainCache()
   return true
 }
+
+/** "a, b" or ["a", "b"] -> clean host names; anything that is not a plausible address is refused (never silently dropped). */
+export function parseDomains(input) {
+  if (input === undefined || input === null || input === '') return { list: [] }
+  const raw = Array.isArray(input) ? input : String(input).split(/[\s,;]+/)
+  const list = []
+  for (const r of raw.map((x) => String(x).trim()).filter(Boolean)) {
+    const h = normalizeHost(r)
+    if (!h) return { error: `Endereço inválido: «${r}»` }
+    if (!list.includes(h)) list.push(h)
+  }
+  return { list }
+}

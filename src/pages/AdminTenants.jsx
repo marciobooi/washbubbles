@@ -1,172 +1,218 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useTenant } from '../context/TenantContext'
 import RequireSuperAdmin from '../components/RequireSuperAdmin'
-import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/Toast'
 import Modal from '@/components/ui/Modal'
 import api from '@/services/api'
-import { Pencil, UserPlus, Plus, Check, X } from 'lucide-react'
+import { Plus, Store, Mail, Globe, LogIn, Power, Wifi, WifiOff, CheckCircle2, Circle, RefreshCw, Pencil, X } from 'lucide-react'
+
+const eur = (n) => `${Number(n || 0).toFixed(2).replace('.', ',')} €`
+const ago = (d) => {
+  if (!d) return 'nunca'
+  const m = Math.round((Date.now() - new Date(d).getTime()) / 60000)
+  if (m < 1) return 'agora'
+  if (m < 60) return `há ${m} min`
+  if (m < 1440) return `há ${Math.round(m / 60)} h`
+  return `há ${Math.round(m / 1440)} d`
+}
+const DOMAIN_LABEL = {
+  none: ['Sem endereço', 'bg-neutral-100 text-neutral-600'],
+  pending_dns: ['A aguardar DNS', 'bg-amber-100 text-amber-800'],
+  pending_cert: ['A pedir certificado', 'bg-sky-100 text-sky-800'],
+  active: ['Site ativo', 'bg-emerald-100 text-emerald-800'],
+  failed: ['Falhou', 'bg-rose-100 text-rose-800'],
+}
+const errText = (err, fallback) => err?.body?.error || err?.message || fallback
 
 export default function AdminTenants() {
-  const { tenants = [], loading, loadError, refreshTenants, createTenant, updateTenant, assignUser } = useTenant()
-  const [name, setName] = useState('')
-  const [slug, setSlug] = useState('')
-  const [domains, setDomains] = useState('') // site addresses, comma separated
-  const [renameDomains, setRenameDomains] = useState('')
-  const [creating, setCreating] = useState(false)
+  const { selectTenant, refreshTenants } = useTenant()
+  const navigate = useNavigate()
+  const [data, setData] = useState(null)
+  const [loadError, setLoadError] = useState(false)
+  const [busy, setBusy] = useState('')
 
-  const [users, setUsers] = useState([])
-  const [renameTarget, setRenameTarget] = useState(null)
-  const [renameValue, setRenameValue] = useState('')
-  const [assignTarget, setAssignTarget] = useState(null)
-  const [assignUserId, setAssignUserId] = useState('')
-  const [assignRole, setAssignRole] = useState('MEMBER')
-  const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    api.getUsers().then(setUsers).catch(() => {})
-    refreshTenants()
+  const load = useCallback(async (retry = true) => {
+    try {
+      setData(await api.request('/admin/stores/overview', { method: 'GET', expect: 'json' }))
+      setLoadError(false)
+    } catch {
+      if (retry) setTimeout(() => load(false), 1500)
+      else setLoadError(true)
+    }
   }, [])
+  useEffect(() => { load(); const i = setInterval(() => load(false), 30000); return () => clearInterval(i) }, [load])
 
-  async function handleCreate(e) {
+  // ---- create ----
+  const [createOpen, setCreateOpen] = useState(false)
+  const [form, setForm] = useState({ name: '', domains: '', customerEmail: '', adminUsername: '' })
+  const [created, setCreated] = useState(null)
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+
+  async function create(e) {
     e.preventDefault()
-    if (!name || !slug) return
-    setCreating(true)
+    setBusy('create')
     try {
-      await createTenant({ name, slug, domains })
-      toast({ title: 'Loja criada — começa vazia: crie os preços, interfaces e máquinas dela', variant: 'success' })
-      setName(''); setSlug(''); setDomains('')
+      const r = await api.request('/admin/stores', { method: 'POST', json: form, expect: 'json' })
+      setCreated(r)
+      setForm({ name: '', domains: '', customerEmail: '', adminUsername: '' })
+      load(); refreshTenants()
     } catch (err) {
-      toast({ title: err?.body?.error || err?.message || 'Erro ao criar tenant', variant: 'destructive' })
-    } finally {
-      setCreating(false)
-    }
+      toast({ title: errText(err, 'Não foi possível criar a loja'), variant: 'destructive' })
+    } finally { setBusy('') }
   }
 
-  function openRename(t) {
-    setRenameTarget(t)
-    setRenameValue(t.name)
-    setRenameDomains((t.domains || []).join(', '))
+  // ---- per-shop actions ----
+  async function act(id, key, fn, okTitle) {
+    setBusy(id + key)
+    try { await fn(); if (okTitle) toast({ title: okTitle, variant: 'success' }); load(); refreshTenants() }
+    catch (err) { toast({ title: errText(err, 'Não foi possível concluir'), variant: 'destructive' }) }
+    finally { setBusy('') }
+  }
+  const manage = (s) => { selectTenant(s._id); navigate('/admin') }
+  const resend = (s) => act(s._id, 'mail', () => api.request(`/admin/stores/${s._id}/resend-welcome`, { method: 'POST', json: {}, expect: 'json' }), 'Email enviado ao cliente')
+  const setStatus = (s, status) => {
+    if (status === 'suspended' && !window.confirm(`Suspender «${s.name}»? O posto deixa de sincronizar, os administradores deixam de entrar e o site fica indisponível. Os dados mantêm-se.`)) return
+    return act(s._id, 'status', () => api.request(`/admin/stores/${s._id}/status`, { method: 'PUT', json: { status }, expect: 'json' }), status === 'active' ? 'Loja reativada' : 'Loja suspensa')
   }
 
-  async function saveRename(e) {
+  // ---- DNS ----
+  const [dns, setDns] = useState(null) // { store, loading, data }
+  async function checkDns(s) {
+    setDns({ store: s, loading: true, data: null })
+    try { setDns({ store: s, loading: false, data: await api.request(`/admin/stores/${s._id}/dns`, { method: 'GET', expect: 'json' }) }); load() }
+    catch (err) { setDns(null); toast({ title: errText(err, 'Não foi possível verificar'), variant: 'destructive' }) }
+  }
+
+  // ---- addresses ----
+  const [addr, setAddr] = useState(null) // { store, value }
+  async function saveAddr(e) {
     e.preventDefault()
-    if (!renameValue) return
-    setSaving(true)
-    try {
-      await updateTenant(renameTarget._id, { name: renameValue, domains: renameDomains })
-      toast({ title: 'Tenant atualizado', variant: 'success' })
-      setRenameTarget(null)
-    } catch (err) {
-      toast({ title: err?.body?.error || err?.message || 'Erro ao atualizar tenant', variant: 'destructive' })
-    } finally {
-      setSaving(false)
-    }
+    await act(addr.store._id, 'addr', () => api.request(`/admin/stores/${addr.store._id}/domains`, { method: 'PUT', json: { domains: addr.value }, expect: 'json' }), 'Endereços guardados')
+    setAddr(null)
   }
 
-  function openAssign(t) {
-    setAssignTarget(t)
-    setAssignUserId('')
-    setAssignRole('MEMBER')
-  }
-
-  async function saveAssign(e) {
-    e.preventDefault()
-    if (!assignUserId) return
-    setSaving(true)
-    try {
-      await assignUser(assignTarget._id, assignUserId, assignRole)
-      toast({ title: 'Utilizador associado ao tenant', variant: 'success' })
-      setAssignTarget(null)
-    } catch (err) {
-      toast({ title: err?.body?.error || err?.message || 'Erro ao associar utilizador', variant: 'destructive' })
-    } finally {
-      setSaving(false)
-    }
-  }
-
+  const stores = data?.stores || []
   return (
     <RequireSuperAdmin>
-      <div className="p-4">
-        <h2 className="text-lg font-semibold mb-4">Tenants</h2>
-
-        <form onSubmit={handleCreate} className="flex flex-wrap gap-2 mb-4">
-          <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} className="border rounded px-3 py-2 text-sm" />
-          <input placeholder="Slug" value={slug} onChange={(e) => setSlug(e.target.value)} className="border rounded px-3 py-2 text-sm" />
-          <input placeholder="Endereços do site (ex: marcioslvinc.ro, www.marcioslvinc.ro)" value={domains} onChange={(e) => setDomains(e.target.value)} className="border rounded px-3 py-2 text-sm min-w-[320px]" />
-          <Button type="submit" disabled={creating}>
-            <Plus className="h-4 w-4 mr-2" /> {creating ? 'A criar...' : 'Create'}
-          </Button>
-        </form>
-
-        <div className="bg-white rounded shadow divide-y">
-          {tenants.length === 0 ? (
-            <div className="p-4 text-sm text-muted-foreground">
-              {loading ? 'A carregar…' : loadError ? (<>Não foi possível carregar as lojas. <button type="button" className="underline" onClick={() => refreshTenants()}>Tentar de novo</button></>) : 'Nenhuma loja'}
-            </div>
-          ) : (
-            tenants.map((t) => (
-              <div key={t._id} className="p-3 flex items-center justify-between">
-                <div>
-                  <div className="font-semibold">{t.name}</div>
-                  <div className="text-xs text-muted-foreground">{t.slug} · {t._id}</div>
-                  <div className="text-xs text-neutral-600">{(t.domains || []).length ? `Site: ${t.domains.join(', ')}` : 'Sem endereço de site'}</div>
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => openRename(t)}>
-                    <Pencil className="h-4 w-4 mr-2" /> Rename
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => openAssign(t)}>
-                    <UserPlus className="h-4 w-4 mr-2" /> Assign user
-                  </Button>
-                </div>
-              </div>
-            ))
-          )}
+      <div className="p-4 max-w-5xl">
+        <div className="flex items-center justify-between mb-4 gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">Lojas</h2>
+            <p className="text-sm text-neutral-500">Todas as lojas do sistema. «Gerir» abre o painel dessa loja.</p>
+          </div>
+          <button className="abtn abtn-primary" onClick={() => { setCreated(null); setCreateOpen(true) }}><Plus /> Criar loja</button>
         </div>
 
-        <Modal open={!!renameTarget} onClose={() => setRenameTarget(null)} title="Rename Tenant">
-          <form onSubmit={saveRename} className="space-y-4">
-            <div>
-              <label className="text-sm font-medium">Name</label>
-              <input className="border p-2 rounded mt-1 w-full" value={renameValue} onChange={(e) => setRenameValue(e.target.value)} autoFocus />
+        {!data && <div className="p-4 text-sm text-neutral-500">{loadError ? (<>Não foi possível carregar as lojas. <button className="underline" onClick={() => load()}>Tentar de novo</button></>) : 'A carregar…'}</div>}
+
+        <div className="space-y-3">
+          {stores.map((s) => {
+            const [dLabel, dCls] = DOMAIN_LABEL[s.domainState?.state || 'none']
+            const pending = s.checklist.filter((c) => !c.done)
+            return (
+              <div key={s._id} className="bg-white rounded-xl shadow-sm border p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Store className="h-4 w-4 text-neutral-500" />
+                      <span className="font-semibold text-base">{s.name}</span>
+                      {s.status === 'suspended' && <span className="text-xs px-2 py-0.5 rounded-full bg-rose-100 text-rose-800">Suspensa</span>}
+                      <span className={`text-xs px-2 py-0.5 rounded-full inline-flex items-center gap-1 ${s.kioskOnline ? 'bg-emerald-100 text-emerald-800' : 'bg-neutral-100 text-neutral-600'}`}>
+                        {s.kioskOnline ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+                        {s.hasKiosk ? (s.kioskOnline ? 'Posto online' : `Posto offline · visto ${ago(s.kioskLastSeen)}`) : 'Sem posto'}
+                      </span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${dCls}`}>{dLabel}</span>
+                    </div>
+                    <div className="text-xs text-neutral-500 mt-1">{s.slug}{s.domains.length ? ` · ${s.domains.join(', ')}` : ''}{s.customerEmail ? ` · ${s.customerEmail}` : ''}</div>
+                    {s.domainState?.message && <div className="text-xs text-amber-700 mt-1">{s.domainState.message}</div>}
+                  </div>
+                  <div className="flex gap-6 text-sm">
+                    <div><div className="text-xs text-neutral-500">Hoje</div><div className="font-semibold">{eur(s.todayRevenue)}</div><div className="text-xs text-neutral-500">{s.todaySales} vendas</div></div>
+                    <div><div className="text-xs text-neutral-500">Máquinas</div><div className="font-semibold">{s.machines}</div></div>
+                    <div><div className="text-xs text-neutral-500">Utilizadores</div><div className="font-semibold">{s.users}</div></div>
+                  </div>
+                </div>
+
+                {pending.length > 0 && (
+                  <div className="mt-3 text-xs bg-amber-50 border border-amber-200 rounded-lg p-2.5">
+                    <div className="font-medium text-amber-900 mb-1">Falta preparar esta loja</div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1">
+                      {s.checklist.map((c) => (
+                        <span key={c.key} className={`inline-flex items-center gap-1 ${c.done ? 'text-neutral-400 line-through' : 'text-amber-900'}`}>{c.done ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Circle className="h-3.5 w-3.5" />}{c.label}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <button className="abtn abtn-sm abtn-primary" onClick={() => manage(s)}><LogIn /> Gerir</button>
+                  <button className="abtn abtn-sm" onClick={() => setAddr({ store: s, value: (s.domains || []).join(', ') })}><Pencil /> Endereços</button>
+                  {s.domains.length > 0 && <button className="abtn abtn-sm" onClick={() => checkDns(s)}><Globe /> Verificar DNS</button>}
+                  {s.customerEmail && <button className="abtn abtn-sm" disabled={busy === s._id + 'mail'} onClick={() => resend(s)}><Mail /> {busy === s._id + 'mail' ? 'A enviar…' : 'Reenviar email'}</button>}
+                  {s.status === 'suspended'
+                    ? <button className="abtn abtn-sm" onClick={() => setStatus(s, 'active')}><Power /> Reativar</button>
+                    : <button className="abtn abtn-sm abtn-danger" onClick={() => setStatus(s, 'suspended')}><Power /> Suspender</button>}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* create */}
+        <Modal open={createOpen} onClose={() => setCreateOpen(false)} title={created ? 'Loja criada' : 'Criar loja'}>
+          {!created ? (
+            <form onSubmit={create} className="space-y-3">
+              <p className="text-sm text-neutral-600">A loja começa <b>vazia</b> (nada é copiado de outra). O cliente recebe um email com a ligação para definir a palavra-passe e as instruções para ligar o endereço do site.</p>
+              <div><label className="text-sm font-medium">Nome da loja *</label><input className="border p-2 rounded mt-1 w-full" value={form.name} onChange={set('name')} autoFocus required /></div>
+              <div><label className="text-sm font-medium">Endereço do site</label><input className="border p-2 rounded mt-1 w-full" placeholder="www.marcioslvinc.ro" value={form.domains} onChange={set('domains')} /><p className="text-xs text-neutral-500 mt-1">Criamos também a versão sem «www». Pode ficar vazio e pôr depois.</p></div>
+              <div><label className="text-sm font-medium">Email do cliente *</label><input type="email" className="border p-2 rounded mt-1 w-full" value={form.customerEmail} onChange={set('customerEmail')} required /></div>
+              <div><label className="text-sm font-medium">Nome de utilizador do administrador</label><input className="border p-2 rounded mt-1 w-full" placeholder="(opcional — usamos o nome da loja)" value={form.adminUsername} onChange={set('adminUsername')} /></div>
+              <div className="flex justify-end gap-2 pt-1">
+                <button type="button" className="abtn" onClick={() => setCreateOpen(false)}><X /> Cancelar</button>
+                <button type="submit" className="abtn abtn-primary" disabled={busy === 'create'}>{busy === 'create' ? 'A criar…' : 'Criar loja'}</button>
+              </div>
+            </form>
+          ) : (
+            <div className="space-y-3 text-sm">
+              <ul className="space-y-1.5">
+                <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" /> Loja «{created.tenant.name}» criada (vazia)</li>
+                <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-600" /> Administrador «{created.admin.username}» criado</li>
+                <li className="flex items-center gap-2">{created.emailSent ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <Circle className="h-4 w-4 text-rose-600" />}{created.emailSent ? 'Email enviado ao cliente' : `Email NÃO enviado${created.emailError ? `: ${created.emailError}` : ''} — use «Reenviar email»`}</li>
+                {created.dns?.length > 0 && <li className="flex items-center gap-2"><RefreshCw className="h-4 w-4 text-amber-600" /> A aguardar que o cliente ligue o endereço (DNS)</li>}
+              </ul>
+              {created.dns?.length > 0 && (
+                <div className="rounded-lg border p-3"><div className="font-medium mb-1">Registos DNS que o cliente tem de criar</div>
+                  {created.dns.map((d) => <div key={d.name} className="font-mono text-xs">{d.type} · {d.name} → {d.value}</div>)}</div>
+              )}
+              <div className="flex justify-end"><button className="abtn abtn-primary" onClick={() => setCreateOpen(false)}>Fechar</button></div>
             </div>
-            <div>
-              <label className="text-sm font-medium">Endereços do site</label>
-              <input className="border p-2 rounded mt-1 w-full" placeholder="marcioslvinc.ro, www.marcioslvinc.ro" value={renameDomains} onChange={(e) => setRenameDomains(e.target.value)} />
-              <p className="text-xs text-neutral-500 mt-1">Um endereço só pode pertencer a uma loja. Separe por vírgulas.</p>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" type="button" onClick={() => setRenameTarget(null)}><X className="h-4 w-4 mr-2" />Cancelar</Button>
-              <Button type="submit" disabled={saving}>{saving ? 'A guardar...' : (<><Check className="h-4 w-4 mr-2" />Salvar</>)}</Button>
-            </div>
-          </form>
+          )}
         </Modal>
 
-        <Modal open={!!assignTarget} onClose={() => setAssignTarget(null)} title="Assign user to tenant">
-          <form onSubmit={saveAssign} className="space-y-4">
-            <div>
-              <label className="text-sm font-medium">User</label>
-              <select className="border p-2 rounded mt-1 w-full" value={assignUserId} onChange={(e) => setAssignUserId(e.target.value)}>
-                <option value="">Select a user…</option>
-                {users.map((u) => (
-                  <option key={u._id} value={u._id}>{u.username} ({u.role})</option>
-                ))}
-              </select>
+        {/* DNS check */}
+        <Modal open={!!dns} onClose={() => setDns(null)} title={`DNS — ${dns?.store?.name || ''}`}>
+          {dns?.loading && <p className="text-sm">A verificar…</p>}
+          {dns?.data && (
+            <div className="space-y-2 text-sm">
+              {dns.data.result.map((r) => (
+                <div key={r.host} className="flex items-start gap-2">{r.ok ? <CheckCircle2 className="h-4 w-4 text-emerald-600 mt-0.5" /> : <Circle className="h-4 w-4 text-rose-600 mt-0.5" />}<div><div className="font-mono text-xs">{r.host}</div><div className="text-xs text-neutral-600">{r.ok ? 'Aponta para o nosso servidor' : r.problem}</div></div></div>
+              ))}
+              {!dns.data.allOk && <p className="text-xs text-neutral-500">Esperado: A → {dns.data.serverIp} (sem AAAA nem CNAME). Pode demorar a propagar.</p>}
+              <div className="flex justify-end gap-2"><button className="abtn" onClick={() => checkDns(dns.store)}><RefreshCw /> Verificar de novo</button><button className="abtn abtn-primary" onClick={() => setDns(null)}>Fechar</button></div>
             </div>
-            <div>
-              <label className="text-sm font-medium">Role</label>
-              <select className="border p-2 rounded mt-1 w-full" value={assignRole} onChange={(e) => setAssignRole(e.target.value)}>
-                <option value="MEMBER">member</option>
-                <option value="ADMIN">admin</option>
-                <option value="OWNER">owner</option>
-              </select>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" type="button" onClick={() => setAssignTarget(null)}><X className="h-4 w-4 mr-2" />Cancelar</Button>
-              <Button type="submit" disabled={saving || !assignUserId}>{saving ? 'A guardar...' : (<><Check className="h-4 w-4 mr-2" />Salvar</>)}</Button>
-            </div>
-          </form>
+          )}
+        </Modal>
+
+        {/* addresses */}
+        <Modal open={!!addr} onClose={() => setAddr(null)} title={`Endereços — ${addr?.store?.name || ''}`}>
+          {addr && (
+            <form onSubmit={saveAddr} className="space-y-3">
+              <input className="border p-2 rounded w-full" placeholder="www.marcioslvinc.ro" value={addr.value} onChange={(e) => setAddr({ ...addr, value: e.target.value })} autoFocus />
+              <p className="text-xs text-neutral-500">Um endereço só pode pertencer a uma loja. Criamos também a versão com/sem «www». Ao mudar, o estado volta a «A aguardar DNS».</p>
+              <div className="flex justify-end gap-2"><button type="button" className="abtn" onClick={() => setAddr(null)}><X /> Cancelar</button><button type="submit" className="abtn abtn-primary">Guardar</button></div>
+            </form>
+          )}
         </Modal>
       </div>
     </RequireSuperAdmin>

@@ -46,13 +46,13 @@ function initTransporter() {
   return transporter
 }
 
-export async function sendMail({ to, subject, text, html }) {
+export async function sendMail({ to, bcc, subject, text, html }) {
   const t = initTransporter()
   const address = process.env.MAIL_FROM || 'no-reply@example.com'
   const fromName = process.env.MAIL_FROM_NAME
   const from = fromName ? `"${fromName.replace(/"/g, "'")}" <${address}>` : address
   if (t) {
-    const info = await t.sendMail({ from, to, subject, text, html })
+    const info = await t.sendMail({ from, to, ...(bcc ? { bcc } : {}), subject, text, html })
     // Say what the mail server answered (the recipient is shown only in part: it is a customer's address).
     const hide = (addr) => String(addr).replace(/^(.).*(@.*)$/, '$1***$2')
     const acc = (info?.accepted || []).map(hide).join(',') || '-'

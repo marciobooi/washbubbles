@@ -10,6 +10,7 @@
 import express from 'express'
 import { renderLandingPage, renderRobotsTxt, renderSitemapXml, mergeContent, CONTENT_SETTING_KEY, DEFAULT_CONTENT, DEFAULT_SITE_URL } from '../views/landing.js'
 import { landingBaseFor } from '../services/landingBase.js'
+import { isSuspended } from '../services/tenantStatus.js'
 import { normalizeHost } from '../services/tenantDomains.js'
 import Setting from '../models/setting.js'
 import Price from '../models/price.js'
@@ -22,6 +23,12 @@ import { renderLegalPage, renderNotFoundPage } from '../views/legalPage.js'
 import { mergeLegal } from '../services/legalDefaults.js'
 
 const router = express.Router()
+
+// A suspended shop's site says so (the data stays; the superadmin reactivates it).
+router.use(async (req, res, next) => {
+  if (!(await isSuspended(req.tenantId))) return next()
+  res.status(503).set('Retry-After', '86400').set('Cache-Control', 'no-store').type('html').send('<!doctype html><html lang="pt-PT"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>Indisponível</title></head><body style="font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;color:#0f2a27"><main style="text-align:center;padding:24px"><h1>Site temporariamente indisponível</h1><p>Voltaremos em breve.</p></main></body></html>')
+})
 
 // The page's editable copy (see landing.js's DEFAULT_CONTENT) lives in Mongo,
 // but this route must keep rendering real content even if Mongo is briefly

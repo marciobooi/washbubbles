@@ -8,6 +8,7 @@ import Tenant from '../models/tenant.js'
 import { requireAuth } from '../middleware/auth.js'
 import { findUserByApiKey } from '../services/apiKeys.js'
 import { limitKey, accountKey } from '../middleware/limitKey.js'
+import { isSuspended } from '../services/tenantStatus.js'
 
 const router = express.Router()
 const JWT_SECRET = process.env.JWT_SECRET // enforced at startup
@@ -65,6 +66,8 @@ router.post('/login', loginLimiter, accountLimiter, async (req, res) => {
     const ok = await bcrypt.compare(password, user.password)
     if (!ok) return res.status(401).json({ error: 'Invalid credentials' })
   }
+
+  if (user.role !== 'SUPERADMIN' && await isSuspended(user.tenantId)) return res.status(403).json({ error: 'Loja suspensa. Contacte o apoio.' })
 
   // Ensure a secret is available at runtime (in case dotenv wasn't loaded early)
   const secret = process.env.JWT_SECRET
@@ -124,7 +127,9 @@ router.post('/forgot-password', passwordResetLimiter, async (req, res) => {
     await user.save()
 
     // build link using front-end url env var
-    const frontend = process.env.FRONTEND_URL || 'http://localhost:3000'
+    // the link opens on the shop's OWN site address (FRONTEND_URL is only a fallback for local development)
+    const { publicSiteFor } = await import('../services/landingBase.js')
+    const frontend = (await publicSiteFor(user.tenantId)) || process.env.FRONTEND_URL || 'http://localhost:3000'
     const link = `${frontend}/reset-password?token=${token}`
 
     try {

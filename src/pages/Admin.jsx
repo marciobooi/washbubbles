@@ -12,9 +12,9 @@ export default function Admin() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    if (role === 'ADMIN' || role === 'SUPERADMIN' || role === 'OPERATOR') {
-      navigate('/admin/operations')
-    }
+    // the superadmin lands on the list of shops (and enters one from there); everybody else on their own shop's operations
+    if (role === 'SUPERADMIN') navigate('/admin/tenants')
+    else if (role === 'ADMIN' || role === 'OPERATOR') navigate('/admin/operations')
   }, [role, navigate])
 
   return (

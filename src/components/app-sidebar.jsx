@@ -38,7 +38,7 @@ const navItems = [
   { title: 'Fecho de Dia', url: '/admin/day-close', Icon: Banknote, roles: ['ADMIN', 'SUPERADMIN', 'STAFF'] },
   { title: 'Definições', url: '/admin/settings', Icon: Settings },
   { title: 'Auditoria', url: '/admin/audit-log', Icon: ScrollText },
-  { title: 'Tenants', url: '/admin/tenants', Icon: Users, roles: ['SUPERADMIN'] },
+  { title: 'Lojas', url: '/admin/tenants', Icon: Users, roles: ['SUPERADMIN'] },
 ]
 
 export function AppSidebar(props) {
