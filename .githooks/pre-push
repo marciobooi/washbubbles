@@ -1,0 +1,13 @@
+#!/bin/sh
+# Blocks a push when the screen's source uses a name that is not defined/imported (what blanked the kiosk on 2026-10-23).
+# Only runs when the push changes src/. Skip once with: git push --no-verify
+root="$(git rev-parse --show-toplevel)"
+changed=0
+while read -r _ local_sha _ remote_sha; do
+  [ "$local_sha" = "0000000000000000000000000000000000000000" ] && continue
+  if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then range="$local_sha"; else range="$remote_sha..$local_sha"; fi
+  git diff --name-only $range 2>/dev/null | grep -q '^src/' && changed=1
+done
+[ "$changed" = 0 ] && exit 0
+echo "pre-push: checking the screen for undefined names..."
+sh "$root/tools/check/run.sh" || { echo "pre-push: push blocked. Fix the names above (or git push --no-verify)."; exit 1; }
