@@ -169,8 +169,21 @@ router.post('/users', requireAdmin, async (req, res) => {
   res.json(resp)
 })
 
+// The kiosk user is a system account: it has an API key and no password, and the shop's software holds that key. It is listed
+// in the admin but cannot be changed, re-keyed or deleted from here (any of those would cut the shop off from the server).
+async function refuseIfKiosk(req, res) {
+  if (!mongoose.isValidObjectId(req.params.id)) return false
+  const u = await withTenant(User, req).findById(req.params.id).select('role').lean()
+  if (u?.role === 'KIOSK') {
+    res.status(403).json({ error: 'O utilizador do quiosque é um utilizador de sistema e não pode ser alterado aqui', code: 'kiosk-protected' })
+    return true
+  }
+  return false
+}
+
 // Rotate API key for user
 router.post('/users/:id/rotate', requireAdmin, async (req, res) => {
+  if (await refuseIfKiosk(req, res)) return
   const id = req.params.id
   const newKey = crypto.randomBytes(24).toString('hex')
   const UserT = withTenant(User, req)
@@ -374,6 +387,7 @@ router.get('/users/:id', requireAdmin, async (req, res) => {
 })
 
 router.put('/users/:id', requireAdmin, async (req, res) => {
+  if (await refuseIfKiosk(req, res)) return
   const { username, role, password } = req.body
   const update = {}
   if (username) update.username = username
@@ -398,6 +412,7 @@ router.put('/users/:id', requireAdmin, async (req, res) => {
 })
 
 router.delete('/users/:id', requireAdmin, async (req, res) => {
+  if (await refuseIfKiosk(req, res)) return
   const UserT = withTenant(User, req)
   // Refuse to delete yourself — an admin locking themselves out of their own
   // tenant needs a superadmin to recover it.

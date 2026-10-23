@@ -44,6 +44,22 @@ describe('Creating users from the admin', function () {
     expect((await create(adminToken, { username: 'bad1', role: 'NOT_A_ROLE', password: 'password-1234' })).status).to.equal(400)
   })
 
+  it('the kiosk user is listed but cannot be edited, re-keyed or deleted from the admin', async () => {
+    const kiosk = await User.create({ tenantId: tenant._id, username: 'kiosk-x', password: 'x', role: 'KIOSK', apiKey: 'k'.repeat(48) })
+    const listed = await request(app).get('/api/admin/users').set('Authorization', `Bearer ${adminToken}`)
+    expect(listed.body.map((u) => u.username)).to.include('kiosk-x')
+    const put = await request(app).put(`/api/admin/users/${kiosk._id}`).set('Authorization', `Bearer ${adminToken}`).send({ role: 'ADMIN', password: 'password-1234' })
+    expect(put.status).to.equal(403)
+    expect(put.body.code).to.equal('kiosk-protected')
+    expect((await request(app).post(`/api/admin/users/${kiosk._id}/rotate`).set('Authorization', `Bearer ${adminToken}`)).status).to.equal(403)
+    expect((await request(app).delete(`/api/admin/users/${kiosk._id}`).set('Authorization', `Bearer ${adminToken}`)).status).to.equal(403)
+    const after = await User.findById(kiosk._id)
+    expect(after).to.include({ role: 'KIOSK', password: 'x', apiKey: 'k'.repeat(48) })
+    // an ordinary user is still editable
+    const op = await User.create({ tenantId: tenant._id, username: 'op-edit', password: 'x', role: 'OPERATOR' })
+    expect((await request(app).put(`/api/admin/users/${op._id}`).set('Authorization', `Bearer ${adminToken}`).send({ role: 'STAFF' })).status).to.equal(200)
+  })
+
   it('any async route that fails answers 500 instead of hanging (Express 4 would never answer)', async () => {
     const a = express()
     a.get('/boom', async () => { throw new Error('database said no') })

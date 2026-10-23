@@ -4,7 +4,7 @@ import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
 import Modal from '@/components/ui/Modal'
 import PasswordInput from '@/components/ui/PasswordInput'
-import { Pencil, Trash2, Plus, Check, X } from 'lucide-react'
+import { Pencil, Trash2, Plus, Check, X, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '../context/AuthContext' 
 
@@ -159,6 +159,12 @@ export default function AdminUsers(){
                   <td className="px-4 py-3 text-xs text-muted-foreground">{u.apiKey || '—'}</td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{u.createdAt ? new Date(u.createdAt).toLocaleString() : '—'}</td>
                   <td className="px-4 py-3">
+                    {u.role === 'KIOSK' ? (
+                      // System account (API key, no password): listed, never editable from here.
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.12] px-3 py-1 text-xs font-semibold text-neutral-500" title="Utilizador de sistema do quiosque: tem chave de acesso e não tem palavra-passe. Não pode ser alterado nem removido aqui.">
+                        <Lock className="h-3.5 w-3.5" aria-hidden /> Sistema
+                      </span>
+                    ) : (
                     <div className="flex gap-2">
                       <button className="abtn abtn-icon" title="Editar" aria-label="Editar" onClick={() => openEdit(u)}>
                         <Pencil />
@@ -167,6 +173,7 @@ export default function AdminUsers(){
                         <Trash2 />
                       </button>
                     </div>
+                    )}
                   </td>
                 </tr>
               ))
