@@ -53,9 +53,12 @@ describe("A shop's own e-mail identity: support address and its own mailbox", fu
     expect((await getShopMail(tenant._id)).account).to.equal(null)
     // alerts: no alerts.email -> the support address
     const sent = []
+    const saved = { h: process.env.MAIL_HOST, p: process.env.MAIL_PORT, s: process.env.SYNC_SERVER_URL }
+    delete process.env.MAIL_HOST; delete process.env.MAIL_PORT; delete process.env.SYNC_SERVER_URL
+    const { resetPlatformCache } = await import('../src/services/platformSettings.js'); resetPlatformCache()
     const { sendAlertForTenant } = await import('../src/services/alerts.js')
     const orig = console.log; console.log = (...x) => { sent.push(x.join(' ')) }
-    try { await sendAlertForTenant(tenant._id, 'Teste', 'msg') } finally { console.log = orig }
+    try { await sendAlertForTenant(tenant._id, 'Teste', 'msg') } finally { console.log = orig; for (const [k, v] of [['MAIL_HOST', saved.h], ['MAIL_PORT', saved.p], ['SYNC_SERVER_URL', saved.s]]) if (v !== undefined) process.env[k] = v }
     expect(sent.join('\n')).to.include('geral@marcioinc.pt') // the (unconfigured-transport) mailer prints the recipient
   })
 })
