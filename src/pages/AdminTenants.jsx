@@ -147,7 +147,7 @@ export default function AdminTenants() {
 
         <div className="space-y-3">
           {stores.map((s) => {
-            const [dLabel, dCls] = DOMAIN_LABEL[s.domainState?.state || 'none']
+            const [dLabel, dCls] = (s.domainState?.state || 'none') === 'none' && s.domains.length ? ['Endereço configurado', 'bg-emerald-100 text-emerald-800'] : DOMAIN_LABEL[s.domainState?.state || 'none']
             const pending = s.checklist.filter((c) => !c.done)
             return (
               <div key={s._id} className="bg-white rounded-xl shadow-sm border p-4">

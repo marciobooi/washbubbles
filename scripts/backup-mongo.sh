@@ -26,4 +26,9 @@ dc exec -T mongo mongosh --quiet "${DB}_restorecheck" --eval 'db.dropDatabase()'
 [ "$live" = "$copy" ] || fail "restore check differs (live=$live copy=$copy)"
 
 find "$OUT_DIR" -name "$DB-*.archive.gz" -mtime +"$KEEP_DAYS" -delete
-echo "$(date -Is) ok $file ($size bytes, rows=$copy)" >> "$LOG"
+# Off-site copy (optional): set OFFSITE_DEST in /etc/default/washbubbles-backup to an rclone destination, e.g. "hetzner-box:washbubbles".
+if [ -r /etc/default/washbubbles-backup ]; then . /etc/default/washbubbles-backup; fi
+if [ -n "${OFFSITE_DEST:-}" ]; then
+  if command -v rclone >/dev/null 2>&1 && rclone copy "$file" "$OFFSITE_DEST" --quiet; then offsite="offsite ok"; else offsite="OFFSITE FAILED"; fi
+else offsite="offsite not configured"; fi
+echo "$(date -Is) ok $file ($size bytes, rows=$copy, $offsite)" >> "$LOG"

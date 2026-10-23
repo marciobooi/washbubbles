@@ -25,6 +25,7 @@ import wifiRoutes from './routes/wifi.js'
 import publicRoutes from './routes/public.js'
 import kioskWatchdog from './services/kioskWatchdog.js'
 import { startDomainWatcher } from './services/domainWatcher.js'
+import { hasRole } from './services/roles.js'
 
 // Enforce presence of JWT secret in production-like environments
 if (!process.env.JWT_SECRET) {
@@ -60,7 +61,13 @@ app.use(resolveTenant)
 
 // Mount under /api prefix for reverse proxying (nginx) or direct access
 app.use('/api/auth', authRoutes)
-app.use('/api/installer', installerRoutes)
+// Which parts this process serves (APP_ROLES, see services/roles.js; the default is everything, as on every shop PC).
+if (hasRole('sync')) {
+  app.use('/api/installer', installerRoutes)
+  // Sync routes (offline-first POS ↔ server)
+  app.use('/api/sync', syncRoutes)
+}
+if (hasRole('web')) {
 app.use('/api/admin/stores', storesRoutes) // before the admin router: superadmin-only, its own guard
 app.use('/api/admin', adminRoutes)
 app.use('/api/pos', posRoutes)
@@ -72,9 +79,7 @@ app.use('/api/gateways', gatewaysRoutes)
 
 // Middleware (coin machine)
 app.use('/api/middleware', middlewareRoutes)
-
-// Sync routes (offline-first POS ↔ server)
-app.use('/api/sync', syncRoutes)
+}
 
 // MB WAY by QR: the shop creates / picks up (kiosk key); the customer's phone opens /pagar/<token> and types their number
 app.use('/api/mbway-link', mbwayLinkRoutes.shopRouter)
@@ -290,9 +295,9 @@ async function start() {
         console.warn('Failed to initialize CoinMachine (peripherals may not be connected):', err.message)
       }
     }
-    kioskWatchdog.start()
+    if (hasRole('worker')) kioskWatchdog.start()
     // central server only: moves new shops' site addresses along (DNS -> certificate -> "your site is live" e-mail)
-    if (process.env.PUBLIC_LANDING_PAGE === 'true') startDomainWatcher()
+    if (process.env.PUBLIC_LANDING_PAGE === 'true' && hasRole('worker')) startDomainWatcher()
   } catch (err) {
     console.error('Warning: Failed to connect to MongoDB at startup — continuing without DB (some endpoints will fail).', err.message || err)
   }

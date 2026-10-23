@@ -9,6 +9,7 @@
  */
 import User from '../models/user.js'
 import { sendAlertForTenant } from './alerts.js'
+import { runAsLeader } from './leader.js'
 
 // The shop asks the central server for work every few seconds, so two quiet minutes already means no internet
 // (this is what makes the admin's Start/Stop fail). One e-mail per outage, one when it is back.
@@ -39,7 +40,7 @@ async function checkOnce() {
 export function start() {
   if (timer) return
   timer = setInterval(() => {
-    checkOnce().catch((err) => console.error('[KioskWatchdog] check failed:', err.message))
+    runAsLeader('kiosk-watchdog', CHECK_INTERVAL_MS * 3, checkOnce).catch((err) => console.error('[KioskWatchdog] check failed:', err.message))
   }, CHECK_INTERVAL_MS)
   if (timer.unref) timer.unref()
   console.log('[KioskWatchdog] started')

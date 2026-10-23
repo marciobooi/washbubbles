@@ -9,6 +9,7 @@ import Tenant from '../models/tenant.js'
 import { checkDns } from './storeProvisioning.js'
 import { sendMail } from './mailer.js'
 import { getSupportEmail } from './platformSettings.js'
+import { runAsLeader } from './leader.js'
 import { renderEmailHtml, emailButton, escapeHtml } from './emailTemplate.js'
 
 const EVERY_MS = 2 * 60_000
@@ -60,7 +61,7 @@ export async function tick() {
 let timer = null
 export function startDomainWatcher() {
   if (timer) return
-  const run = () => tick().catch((err) => console.warn('[domains]', err.message))
+  const run = () => runAsLeader('domain-watcher', EVERY_MS * 2, tick).catch((err) => console.warn('[domains]', err.message))
   timer = setInterval(run, EVERY_MS)
   timer.unref?.()
   setTimeout(run, 20_000).unref?.()
