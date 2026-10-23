@@ -11,6 +11,12 @@ import Setting from '../models/setting.js'
 import Price from '../models/price.js'
 import { requireSuperAdmin } from '../middleware/auth.js'
 import { logAction } from '../services/auditLog.js'
+import { stageNewKey, groupKey, newKioskKey } from '../services/apiKeys.js'
+import { buildInstaller, installerFileName } from '../services/installerFile.js'
+import { DEFAULT_SITE_URL } from '../views/landing.js'
+import bcrypt from 'bcryptjs'
+import crypto from 'crypto'
+import { usernameTaken } from '../services/ensureIndexes.js'
 import { createStore, sendWelcomeEmail, checkDns, dnsRecords, serverIp } from '../services/storeProvisioning.js'
 import { resetSoleTenantCache } from '../middleware/tenant.js'
 import { resetDomainCache, parseDomains, withWww } from '../services/tenantDomains.js'
@@ -90,6 +96,38 @@ router.post('/:id/resend-welcome', async (req, res) => {
   }
   logAction(req, 'tenant.resend_welcome', 'Tenant', t._id, {})
   res.json({ ok: true })
+})
+
+/**
+ * "Gerar instalação do posto": the file for the customer. Makes the shop's kiosk user if it has none and STAGES a new key
+ * (an existing PC keeps working until the new one connects for the first time). The key is only inside the file, shown once.
+ */
+router.post('/:id/installation', async (req, res) => {
+  const t = await Tenant.findById(req.params.id)
+  if (!t) return res.status(404).json({ error: 'Loja não encontrada' })
+  const hw = req.body?.hardware || {}
+  const ip = (v, d) => (/^\d{1,3}(\.\d{1,3}){3}$/.test(String(v || '').trim()) ? String(v).trim() : d)
+  const port = Number(hw.controllerPort)
+  let kiosk = await User.findOne({ tenantId: t._id, role: 'KIOSK' }).sort({ createdAt: 1 })
+  let key
+  if (!kiosk) {
+    let name = `posto-${t.slug}`.slice(0, 40)
+    for (let i = 2; await usernameTaken(User, name); i++) name = `posto-${t.slug}-${i}`.slice(0, 40)
+    key = newKioskKey()
+    kiosk = await User.create({ tenantId: t._id, username: name, role: 'KIOSK', password: await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10), apiKey: null, apiKeyNext: key, apiKeyNextAt: new Date() })
+  } else {
+    key = await stageNewKey(t._id, kiosk._id)
+  }
+  const file = buildInstaller({
+    shopName: t.name, slug: t.slug, tenantId: String(t._id),
+    serverUrl: `${DEFAULT_SITE_URL}/api`, key, supportEmail: process.env.SUPPORT_EMAIL || '',
+    hardware: { pcIp: ip(hw.pcIp, '192.168.2.190'), controllerHost: ip(hw.controllerHost, '192.168.2.201'), controllerPort: port > 0 && port < 65536 ? port : 16852 },
+  })
+  logAction(req, 'tenant.installation_generated', 'Tenant', t._id, { kiosk: kiosk.username, note: 'new kiosk key staged; shown only inside the file' })
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+  res.setHeader('Content-Disposition', `attachment; filename="${installerFileName(t.slug)}"`)
+  res.setHeader('Cache-Control', 'no-store')
+  res.send(file)
 })
 
 router.get('/:id/dns', async (req, res) => {

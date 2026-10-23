@@ -43,6 +43,8 @@ services:
       # live only in the container's own writable layer and are gone on the
       # next `docker compose up --build`, same as every unlisted file there.
       - washbubbles_uploads:/public/uploads
+      # The program as a zip + its version, written by scripts/hetzner-autodeploy.sh: shop PCs install and update from it (routes/installer.js).
+      - ./release:/release:ro
     environment:
       MONGODB_URL: mongodb://mongo:27017/washstore
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.docker}

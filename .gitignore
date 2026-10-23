@@ -34,3 +34,5 @@ backend/.baileys-auth/
 /backend/data/
 dist-new/
 dist-old/
+
+release/

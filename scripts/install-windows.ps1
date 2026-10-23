@@ -47,6 +47,7 @@ param(
   [switch]$SkipAutostart,
   [switch]$SkipSeed,
   [switch]$CheckController,
+  [string]$ConfigFile = '',     # written by the admin's "Gerar instalacao do posto" (shop, server, key, network)
   [switch]$NonInteractive,
   [switch]$DryRun,
   [switch]$Force
@@ -57,6 +58,17 @@ $Root = Split-Path -Parent $PSScriptRoot
 $Marker = Join-Path $Root '.installed'
 $LogDir = Join-Path $Root 'logs'
 $EnvFile = Join-Path $Root 'backend\.env'
+
+# Settings from the shop's installer file: the network of the post, and the link to the central server.
+$SyncUrl = ''; $SyncKey = ''; $ShopName = ''; $ShopTenant = ''
+if ($ConfigFile -and (Test-Path $ConfigFile)) {
+  $cfg = Get-Content $ConfigFile -Raw | ConvertFrom-Json
+  $ShopName = [string]$cfg.shopName; $ShopTenant = [string]$cfg.tenantId
+  $SyncUrl = [string]$cfg.serverUrl; $SyncKey = [string]$cfg.key
+  if ($cfg.hardware.pcIp) { $HardwareIp = [string]$cfg.hardware.pcIp }
+  if ($cfg.hardware.controllerHost) { $ControllerHost = [string]$cfg.hardware.controllerHost }
+  if ($cfg.hardware.controllerPort) { $ControllerPort = [int]$cfg.hardware.controllerPort }
+}
 
 # ---------------------------------------------------------------- helpers ----
 function Say($msg, $color = 'Gray') { Write-Host $msg -ForegroundColor $color }
@@ -102,6 +114,27 @@ function Read-DotEnv($path) {
     }
   }
   return $map
+}
+
+# Plain download of an installer from the vendor, accepted only when its digital signature is valid (used when winget is missing).
+function Install-Msi($label, $url, $msiArgs) {
+  Say "    > downloading $label from $url" 'DarkGray'
+  if ($DryRun) { return }
+  $f = Join-Path $env:TEMP (Split-Path $url -Leaf)
+  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+  Invoke-WebRequest -Uri $url -OutFile $f -UseBasicParsing
+  $sig = Get-AuthenticodeSignature $f
+  if ($sig.Status -ne 'Valid') { throw "$label installer has no valid digital signature - refusing to run it." }
+  $p = Start-Process msiexec.exe -ArgumentList (@('/i', "`"$f`"") + $msiArgs) -Wait -PassThru
+  if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { throw "$label installer exited with code $($p.ExitCode)" }
+}
+
+function Set-EnvValue($path, $key, $value) {
+  $lines = @(); if (Test-Path $path) { $lines = @(Get-Content $path) }
+  $found = $false
+  $lines = $lines | ForEach-Object { if ($_ -match "^\s*#?\s*$key=") { if (-not $found) { $found = $true; "$key=$value" } } else { $_ } }
+  if (-not $found) { $lines += "$key=$value" }
+  Set-Content -Path $path -Value $lines -Encoding ASCII
 }
 
 function Confirm($question) {
@@ -150,15 +183,21 @@ try {
     else { Warn "Node.js $v is too old (need 20+)" }
   }
   if (-not $nodeOk) {
-    if (-not $haveWinget) { throw 'Node.js 20+ is missing and winget is not available. Install Node.js LTS from https://nodejs.org and re-run.' }
-    Run 'winget' @('install', '-e', '--id', 'OpenJS.NodeJS.LTS', '--silent', '--accept-package-agreements', '--accept-source-agreements')
-    if (-not $DryRun) { Update-SessionPath; Ok ("Node.js " + (& node -v)) }
+    if ($haveWinget) {
+      Run 'winget' @('install', '-e', '--id', 'OpenJS.NodeJS.LTS', '--silent', '--accept-package-agreements', '--accept-source-agreements')
+    } else {
+      Install-Msi 'Node.js' 'https://nodejs.org/dist/v22.11.0/node-v22.11.0-x64.msi' @('/qn', '/norestart')
+    }
+    if (-not $DryRun) { Update-SessionPath; if (-not (Get-Command node -ErrorAction SilentlyContinue)) { throw 'Node.js could not be installed.' }; Ok ("Node.js " + (& node -v)) }
   }
 
   $mongo = Get-Service -Name 'MongoDB' -ErrorAction SilentlyContinue
   if (-not $mongo) {
-    if (-not $haveWinget) { throw 'MongoDB is missing and winget is not available. Install MongoDB Community Server (as a Windows service) and re-run.' }
-    Run 'winget' @('install', '-e', '--id', 'MongoDB.Server', '--silent', '--accept-package-agreements', '--accept-source-agreements')
+    if ($haveWinget) {
+      Run 'winget' @('install', '-e', '--id', 'MongoDB.Server', '--silent', '--accept-package-agreements', '--accept-source-agreements')
+    } else {
+      Install-Msi 'MongoDB' 'https://fastdl.mongodb.org/windows/mongodb-windows-x86_64-7.0.14-signed.msi' @('/qn', '/norestart', 'ADDLOCAL=ServerService,Client')
+    }
     if (-not $DryRun) { $mongo = Get-Service -Name 'MongoDB' -ErrorAction SilentlyContinue }
   }
   if ($mongo -or $DryRun) {
@@ -218,6 +257,14 @@ try {
     else { Add-Content -Path $EnvFile -Value $add -Encoding ASCII; Ok ("added: " + ($add -join ', ')) }
   }
 
+  # Link to the central server (from the shop's installer file).
+  if ($SyncUrl -and $SyncKey -and -not $DryRun) {
+    Set-EnvValue $EnvFile 'SYNC_SERVER_URL' $SyncUrl
+    Set-EnvValue $EnvFile 'SYNC_API_KEY' $SyncKey
+    if ($ShopTenant) { Set-EnvValue $EnvFile 'SHOP_TENANT_ID' $ShopTenant }
+    Ok "linked to the central server for '$ShopName'"
+  }
+
   # ----------------------------------------------------------------- web build
   Step 3 'Build the web UI'
   $dist = Join-Path $Root 'dist\index.html'
@@ -262,7 +309,13 @@ try {
     else {
       $nic = $null
       if ($HardwareNic) { $nic = $adapters | Where-Object { $_.Name -eq $HardwareNic } | Select-Object -First 1 }
-      elseif (-not $NonInteractive -and $adapters.Count -gt 0) {
+      elseif ($NonInteractive) {
+        # No questions for a non-technical customer: the controller's adapter is the only cabled adapter WITHOUT internet (no gateway).
+        $noGw = @($adapters | Where-Object { -not (Get-NetIPConfiguration -InterfaceIndex $_.ifIndex -ErrorAction SilentlyContinue).IPv4DefaultGateway })
+        if ($noGw.Count -eq 1 -and $adapters.Count -ge 2) { $nic = $noGw[0]; Say "    adapter chosen automatically: '$($nic.Name)'" 'DarkGray' }
+        elseif ($adapters.Count -eq 1 -and -not (Get-NetIPConfiguration -InterfaceIndex $adapters[0].ifIndex -ErrorAction SilentlyContinue).IPv4DefaultGateway) { $nic = $adapters[0] }
+      }
+      elseif ($adapters.Count -gt 0) {
         Say '    Which adapter is cabled to the hardware controller?'
         for ($i = 0; $i -lt $adapters.Count; $i++) { Say ("      [{0}] {1}  ({2})" -f ($i + 1), $adapters[$i].Name, $adapters[$i].InterfaceDescription) }
         $pick = Read-Host '    Number (Enter to skip)'
@@ -334,6 +387,15 @@ try {
       $brTrigger = New-ScheduledTaskTrigger -AtStartup
       Register-ScheduledTask -TaskName 'WashBubbles Bridge' -Action $brAction -Trigger $brTrigger -Settings $settings -Principal $bPrincipal -Force | Out-Null
       Ok "task 'WashBubbles Bridge' keeps the controller connection at boot"
+
+      # Automatic updates every minute: a PC installed from the central server (no git folder) updates from it.
+      if ($SyncUrl) {
+        $upd = Join-Path $Root 'scripts\kiosk-update-bundle.ps1'
+        $uAction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$upd`"" -WorkingDirectory $Root
+        $uTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(2) -RepetitionInterval (New-TimeSpan -Minutes 5)
+        Register-ScheduledTask -TaskName 'WashBubbles Update' -Action $uAction -Trigger $uTrigger -Settings $settings -Principal $bPrincipal -Force | Out-Null
+        Ok "task 'WashBubbles Update' checks the central server for a new version every 5 minutes"
+      }
     }
   }
 
@@ -341,6 +403,11 @@ try {
   if (-not $DryRun) {
     $info = [ordered]@{ installedAt = (Get-Date).ToString('s'); machine = $env:COMPUTERNAME; node = (& node -v); controller = "$ControllerHost`:$ControllerPort" }
     $info | ConvertTo-Json | Set-Content -Path $Marker -Encoding ASCII
+  }
+  if ($ConfigFile -and -not $DryRun) {
+    # Start everything now (no need to wait for a reboot). The bridge first: it owns the one connection to the controller.
+    foreach ($t in 'WashBubbles Bridge', 'WashBubbles Backend') { try { Start-ScheduledTask -TaskName $t; Start-Sleep -Seconds 4 } catch { Warn "could not start $t" } }
+    try { Start-ScheduledTask -TaskName 'WashBubbles Kiosk' } catch { Warn 'could not start the kiosk screen' }
   }
   Say "`n=== Done ===" 'Green'
   Say "  Web UI / admin : http://localhost:$Port   (admin password is in backend\.env)"

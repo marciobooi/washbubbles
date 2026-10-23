@@ -5,7 +5,7 @@ import RequireSuperAdmin from '../components/RequireSuperAdmin'
 import { toast } from '@/components/ui/Toast'
 import Modal from '@/components/ui/Modal'
 import api from '@/services/api'
-import { Plus, Store, Mail, Globe, LogIn, Power, Wifi, WifiOff, CheckCircle2, Circle, RefreshCw, Pencil, X } from 'lucide-react'
+import { Plus, Store, Mail, Globe, LogIn, Power, Wifi, WifiOff, CheckCircle2, Circle, RefreshCw, Pencil, X, Download } from 'lucide-react'
 
 const eur = (n) => `${Number(n || 0).toFixed(2).replace('.', ',')} €`
 const ago = (d) => {
@@ -92,6 +92,25 @@ export default function AdminTenants() {
     setAddr(null)
   }
 
+  // ---- installation file for a post ----
+  const [inst, setInst] = useState(null) // { store, pcIp, controllerHost, controllerPort }
+  async function generate(e) {
+    e.preventDefault()
+    setBusy('install')
+    try {
+      const blob = await api.request(`/admin/stores/${inst.store._id}/installation`, { method: 'POST', json: { hardware: { pcIp: inst.pcIp, controllerHost: inst.controllerHost, controllerPort: Number(inst.controllerPort) } }, expect: 'blob', timeoutMs: 60000 })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = `Instalar-${inst.store.slug}.bat`
+      document.body.appendChild(a); a.click(); a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 10000)
+      toast({ title: 'Ficheiro de instalação gerado. Envie-o ao cliente (contém a chave do posto: não o publique).', variant: 'success' })
+      setInst(null); load()
+    } catch (err) {
+      toast({ title: errText(err, 'Não foi possível gerar o ficheiro'), variant: 'destructive' })
+    } finally { setBusy('') }
+  }
+
   const stores = data?.stores || []
   return (
     <RequireSuperAdmin>
@@ -149,6 +168,7 @@ export default function AdminTenants() {
                   <button className="abtn abtn-sm abtn-primary" onClick={() => manage(s)}><LogIn /> Gerir</button>
                   <button className="abtn abtn-sm" onClick={() => setAddr({ store: s, value: (s.domains || []).join(', ') })}><Pencil /> Endereços</button>
                   {s.domains.length > 0 && <button className="abtn abtn-sm" onClick={() => checkDns(s)}><Globe /> Verificar DNS</button>}
+                  <button className="abtn abtn-sm" onClick={() => setInst({ store: s, pcIp: '192.168.2.190', controllerHost: '192.168.2.201', controllerPort: 16852 })}><Download /> Gerar instalação do posto</button>
                   {s.customerEmail && <button className="abtn abtn-sm" disabled={busy === s._id + 'mail'} onClick={() => resend(s)}><Mail /> {busy === s._id + 'mail' ? 'A enviar…' : 'Reenviar email'}</button>}
                   {s.status === 'suspended'
                     ? <button className="abtn abtn-sm" onClick={() => setStatus(s, 'active')}><Power /> Reativar</button>
@@ -187,6 +207,21 @@ export default function AdminTenants() {
               )}
               <div className="flex justify-end"><button className="abtn abtn-primary" onClick={() => setCreateOpen(false)}>Fechar</button></div>
             </div>
+          )}
+        </Modal>
+
+        {/* installation file */}
+        <Modal open={!!inst} onClose={() => setInst(null)} title={`Instalação do posto — ${inst?.store?.name || ''}`}>
+          {inst && (
+            <form onSubmit={generate} className="space-y-3">
+              <p className="text-sm text-neutral-600">Gera <b>um único ficheiro</b> para o cliente: ele faz duplo clique e o computador fica pronto sozinho. O ficheiro contém a <b>chave do posto</b>: envie-o só ao cliente. Se a loja já tinha um posto, o antigo continua a funcionar até o novo ligar pela primeira vez.</p>
+              <div className="grid grid-cols-3 gap-2">
+                <div><label className="text-xs font-medium">IP do computador</label><input className="border p-2 rounded mt-1 w-full" value={inst.pcIp} onChange={(e) => setInst({ ...inst, pcIp: e.target.value })} /></div>
+                <div><label className="text-xs font-medium">IP do controlador</label><input className="border p-2 rounded mt-1 w-full" value={inst.controllerHost} onChange={(e) => setInst({ ...inst, controllerHost: e.target.value })} /></div>
+                <div><label className="text-xs font-medium">Porta</label><input className="border p-2 rounded mt-1 w-full" value={inst.controllerPort} onChange={(e) => setInst({ ...inst, controllerPort: e.target.value })} /></div>
+              </div>
+              <div className="flex justify-end gap-2"><button type="button" className="abtn" onClick={() => setInst(null)}><X /> Cancelar</button><button type="submit" className="abtn abtn-primary" disabled={busy === 'install'}><Download /> {busy === 'install' ? 'A gerar…' : 'Gerar e descarregar'}</button></div>
+            </form>
           )}
         </Modal>
 

@@ -71,6 +71,7 @@ export async function buildTestApp() {
   app.use(express.json())
   app.use(resolveTenant)
   app.use('/api/auth', authRoutes)
+  app.use('/api/installer', (await import('../src/routes/installer.js')).default)
   app.use('/api/admin/stores', (await import('../src/routes/stores.js')).default)
   app.use('/api/admin', adminRoutes)
   app.use('/api/pos', posRoutes)
