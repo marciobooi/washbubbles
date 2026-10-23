@@ -38,6 +38,11 @@ export default function StaffMenu() {
   const [keyUrl, setKeyUrl] = useState('')
   const [keyBusy, setKeyBusy] = useState(false)
   const [keyResult, setKeyResult] = useState(null) // { ok, text }
+  const [keyStatus, setKeyStatus] = useState(null) // { pending, lastResult } — a key typed while offline waits in the shop's database
+  useEffect(() => {
+    if (!showKey) return
+    api.centralKeyStatus({ apiKey: getKioskApiKey() }).then(setKeyStatus).catch(() => setKeyStatus(null))
+  }, [showKey, keyResult])
   async function saveKey() {
     setKeyBusy(true); setKeyResult(null)
     try {
@@ -229,6 +234,8 @@ export default function StaffMenu() {
               </>
             ) : (
               <>
+                {keyStatus?.pending && <div className="rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm px-3 py-2">Há uma chave nova à espera de ligação à internet: é ativada sozinha quando houver. Pode escrever outra para a substituir.</div>}
+                {!keyStatus?.pending && keyStatus?.lastResult && <div className={`rounded-lg border text-sm px-3 py-2 ${keyStatus.lastResult.ok ? 'bg-teal-50 border-teal-200 text-teal-800' : 'bg-red-50 border-red-200 text-red-700'}`}>{keyStatus.lastResult.message}</div>}
                 <p className="text-sm text-neutral-600 m-0">Escreva a chave gerada no admin (24 caracteres; os traços são opcionais). É verificada no servidor antes de ser guardada.</p>
                 <input
                   type="text" autoComplete="off" autoCapitalize="none" spellCheck={false}

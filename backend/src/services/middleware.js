@@ -5,6 +5,7 @@ import Interface from '../models/interface.js'
 import { CcTalkLink, CC_ADDR, CC_HEADER, ROUTE } from './ccTalk.js'
 import { readKitsecFrame, parseStatusByte, kitsecFrame, KITSEC_CMD } from './kitsec.js'
 import { roundMoney } from '../utils/money.js'
+import { redactPkg } from './logRedact.js'
 import {
   LowLevelLink, LOWLEVEL_DEFAULT_HOST, LOWLEVEL_DEFAULT_PORT,
   decodeInterfaceStatus, euroToCents, centsToEuro,
@@ -518,7 +519,7 @@ class Middleware extends EventEmitter {
     this.lowLevel.on('package', (pkg) => {
       // LOWLEVEL_TRACE=true logs every inbound message — the way to learn what a
       // real controller actually sends (coin codes, standby/keep-alive replies).
-      if (process.env.LOWLEVEL_TRACE === 'true') console.log('[HW] <- controller:', JSON.stringify(pkg))
+      if (process.env.LOWLEVEL_TRACE === 'true') console.log('[HW] <- controller:', JSON.stringify(redactPkg(pkg)))
       this.handlePackage(pkg)
     })
     this.lowLevel.on('link-error', (err) => {
@@ -2407,7 +2408,7 @@ class Middleware extends EventEmitter {
     // value is the truth: `false` means nothing left this process.
     const sent = this.lowLevel ? this.lowLevel.send(pkg) : false
 
-    console.log(sent ? 'Package sent:' : 'Package NOT sent (no controller link):', JSON.stringify(newPkg))
+    console.log(sent ? 'Package sent:' : 'Package NOT sent (no controller link):', JSON.stringify(redactPkg(newPkg)))
     return sent
   }
 

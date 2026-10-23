@@ -69,3 +69,46 @@ export async function applyCentralKey(rawKey, { serverUrl, coin, fetchImpl = glo
   if (coin?.uplink) { coin.uplink.authFailed = false; coin.uplink.nextTryAt = 0; coin.uplink.flush?.().catch(() => {}) }
   return warning ? { ok: true, warning } : { ok: true }
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// A key typed at the kiosk while the shop has no internet is KEPT here (in the shop's own database) and tried again whenever
+// the connection returns, so nobody has to come back and type it twice. Until then the old key stays in use.
+// The setting is local to the shop: the downlink never prunes settings and the uplink never sends them.
+// ---------------------------------------------------------------------------------------------------------------------
+export const PENDING_KEY = 'sync.pendingKey'
+export const PENDING_RESULT_KEY = 'sync.pendingKeyResult'
+
+export async function savePendingKey(SettingModel, tenantId, rawKey) {
+  const key = normalizeKey(rawKey)
+  await SettingModel.updateOne({ tenantId, key: PENDING_KEY }, { $set: { value: { key, at: new Date().toISOString() } } }, { upsert: true })
+  await SettingModel.deleteOne({ tenantId, key: PENDING_RESULT_KEY })
+}
+
+export async function pendingKeyStatus(SettingModel, tenantId) {
+  const [p, r] = await Promise.all([
+    SettingModel.findOne({ tenantId, key: PENDING_KEY }).lean(),
+    SettingModel.findOne({ tenantId, key: PENDING_RESULT_KEY }).lean(),
+  ])
+  return { pending: Boolean(p?.value?.key), since: p?.value?.at || null, lastResult: r?.value || null }
+}
+
+/**
+ * Try the saved key now. Connection still down: it stays saved. Accepted: it becomes the active key and the saved copy goes away.
+ * Rejected by the server (mistyped, or already replaced): the saved copy is dropped and the reason is kept for the staff menu.
+ * @returns 'none' | 'waiting' | 'applied' | 'rejected'
+ */
+export async function tryPendingKey(SettingModel, tenantId, opts = {}) {
+  const p = await SettingModel.findOne({ tenantId, key: PENDING_KEY }).lean()
+  const key = p?.value?.key
+  if (!key) return 'none'
+  const r = await applyCentralKey(key, opts)
+  if (r.ok) {
+    await SettingModel.deleteOne({ tenantId, key: PENDING_KEY })
+    await SettingModel.updateOne({ tenantId, key: PENDING_RESULT_KEY }, { $set: { value: { ok: true, at: new Date().toISOString(), message: 'A chave nova foi ativada.' } } }, { upsert: true })
+    return 'applied'
+  }
+  if (r.code === 'offline' || r.code === 'server-error') return 'waiting'
+  await SettingModel.deleteOne({ tenantId, key: PENDING_KEY })
+  await SettingModel.updateOne({ tenantId, key: PENDING_RESULT_KEY }, { $set: { value: { ok: false, at: new Date().toISOString(), message: r.message } } }, { upsert: true })
+  return 'rejected'
+}

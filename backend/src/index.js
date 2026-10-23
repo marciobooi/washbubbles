@@ -45,7 +45,11 @@ const server = http.createServer(app)
 const trustProxy = parseInt(process.env.TRUST_PROXY, 10)
 if (trustProxy > 0) app.set('trust proxy', trustProxy)
 
-app.use(cors())
+// Browsers may only call the API from these origins when CORS_ORIGINS is set (comma separated); the site and the kiosk are
+// same-origin and need no CORS at all. Unset = open (development).
+const corsOrigins = (process.env.CORS_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean)
+app.disable('x-powered-by')
+app.use(corsOrigins.length && !corsOrigins.includes('*') ? cors({ origin: corsOrigins }) : cors())
 app.use(express.json())
 // Resolve tenant early so routes can use `req.tenantFilter` and `req.tenantId`
 app.use(resolveTenant)
@@ -116,6 +120,9 @@ if (process.env.SERVE_FRONTEND === 'true') {
     console.warn(`SERVE_FRONTEND=true but no build found at ${webDist} — run "npm run build"`)
   }
 }
+
+// An unknown API address answers JSON, not Express's default HTML page ("Cannot GET ...").
+app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }))
 
 // Catch-all error handler. Without this an unhandled rejection in any async
 // route handler takes the whole process down on Node 18+ — on a POS backend

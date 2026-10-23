@@ -64,6 +64,7 @@ export async function buildTestApp() {
   const mbwayLinkRoutes = await import('../src/routes/mbwayLink.js')
 
   const app = express()
+  app.disable('x-powered-by') // as in src/index.js
   app.use(cors())
   app.use(express.json())
   app.use(resolveTenant)
@@ -77,6 +78,7 @@ export async function buildTestApp() {
   app.use('/api/mbway-link', mbwayLinkRoutes.shopRouter)
   app.use(mbwayLinkRoutes.publicRouter)
   app.get('/api/health', (req, res) => res.json({ ok: true }))
+  app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' })) // as in src/index.js
   // Mirrors index.js: without this an async throw would kill the test process
   // instead of surfacing as a 500.
   app.use((err, req, res, next) => {

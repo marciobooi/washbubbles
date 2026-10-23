@@ -64,6 +64,8 @@ services:
       # This process sits behind two nginx hops (host nginx, then the
       # frontend container's own nginx) — see index.js's own comment on this.
       TRUST_PROXY: 2
+      # The site and the admin are same-origin: only our own addresses may call the API from a browser.
+      CORS_ORIGINS: https://freshbubbles.pt,https://www.freshbubbles.pt
       # This is the central/reporting server, not a shop kiosk PC: it has no
       # local coin/bill hardware to drive, so don't try (and don't log
       # "cannot open 40" for a peripheral address that means something only

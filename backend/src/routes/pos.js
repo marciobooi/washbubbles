@@ -407,11 +407,31 @@ async function requireStaffPin(req, res) {
   return true
 }
 
+// GET /pos/central-key/status — is a key waiting for the connection? (no secret in the answer)
+router.get('/central-key/status', requireKiosk, async (req, res) => {
+  if (!coinMachine.tenantId) return res.json({ pending: false, lastResult: null })
+  const { pendingKeyStatus } = await import('../services/centralKey.js')
+  const SettingModel = (await import('../models/setting.js')).default
+  res.json(await pendingKeyStatus(SettingModel, coinMachine.tenantId))
+})
+
 // POST /pos/central-key — change the shop's key to the central server (staff PIN). The key is checked against the server first.
 router.post('/central-key', requireKiosk, async (req, res) => {
   if (!(await requireStaffPin(req, res))) return
   const { applyCentralKey } = await import('../services/centralKey.js')
   const r = await applyCentralKey(req.body?.key, { serverUrl: req.body?.serverUrl, coin: coinMachine })
+  // No connection: keep the key in this shop's database and activate it when the connection returns (the old key keeps working meanwhile).
+  if (!r.ok && r.code === 'offline' && coinMachine.tenantId) {
+    const { savePendingKey } = await import('../services/centralKey.js')
+    const SettingModel = (await import('../models/setting.js')).default
+    await savePendingKey(SettingModel, coinMachine.tenantId, req.body?.key)
+    return res.json({ ok: true, pending: true, message: 'Sem ligação ao servidor: a chave ficou guardada neste posto e é ativada sozinha quando a ligação voltar.' })
+  }
+  if (r.ok && coinMachine.tenantId) {
+    // a key typed now replaces whatever was waiting
+    const SettingModel = (await import('../models/setting.js')).default
+    await SettingModel.deleteMany({ tenantId: coinMachine.tenantId, key: { $in: ['sync.pendingKey'] } })
+  }
   if (!r.ok) return res.status(r.code === 'offline' || r.code === 'server-error' ? 502 : 400).json({ error: r.message, code: r.code })
   try { const { logAction } = await import('../services/auditLog.js'); logAction(req, 'kiosk.central_key_changed', 'System', null, { by: 'staff PIN (kiosk)' }) } catch { /* the trail must not undo a saved key */ }
   res.json({ ok: true, message: r.warning || 'Chave guardada e ligação ao servidor confirmada.', warning: r.warning })
@@ -895,7 +915,8 @@ router.get('/settings/:key', async (req, res) => {
   // successful "not configured" answer — not a 404. Every caller already
   // reads `.value` off the response, so `{key, value: null}` is a drop-in
   // replacement; it just stops looking like a failed request in devtools.
-  res.json(s || { key, value: null })
+  // Only the key and the value: no database ids (tenantId, _id) go to the public.
+  res.json(s ? { key: s.key, value: s.value } : { key, value: null })
 })
 
 // Spending using card: deduct amount from card balance and create Sale

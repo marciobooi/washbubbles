@@ -34,7 +34,7 @@ const HIDDEN_ADVANCED_KEYS = new Set([
   'wifi.enabled',
   'whatsapp.enabled',
   'loyaltyCard.cost', 'loyaltyCard.credit', 'loyaltyCard.minRecharge',
-  'payments.mbway.enabled', 'payments.mbway.env', 'payments.mbway.apiKey',
+  'payments.mbway.enabled', 'payments.mbway.env', 'payments.mbway.apiKey', 'sync.pendingKey', 'sync.pendingKeyResult',
 ])
 
 const TABS = [

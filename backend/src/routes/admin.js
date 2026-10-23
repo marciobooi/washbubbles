@@ -644,7 +644,12 @@ router.delete('/landing/glossary', requireAdmin, async (req, res) => {
 // Settings (simple key/value store)
 router.get('/settings', requireAdmin, async (req, res) => {
   const SettingT = withTenant(Setting, req)
-  const list = await SettingT.find().lean()
+  // sync.* are this shop's private settings (a key waiting for the connection): never listed. Secrets are listed as set / not set,
+  // never with their value (the screen that edits one reads it on its own, see GET /settings/:key).
+  const SECRET_SETTINGS = new Set(['adminPin', 'payments.mbway.apiKey'])
+  const list = (await SettingT.find().lean())
+    .filter((s) => !String(s.key).startsWith('sync.'))
+    .map((s) => (SECRET_SETTINGS.has(s.key) ? { ...s, value: s.value ? '••••••' : s.value } : s))
   res.json(list)
 })
 
@@ -663,6 +668,7 @@ router.post('/ws/clients/disconnect', requireAdmin, async (req, res) => {
 })
 
 router.get('/settings/:key', requireAdmin, async (req, res) => {
+  if (String(req.params.key).startsWith('sync.')) return res.json({ key: req.params.key, value: null })
   const SettingT = withTenant(Setting, req)
   const s = await SettingT.findOne({ key: req.params.key }).lean()
   // Unconfigured is a normal answer, not a 404 — see the matching note on

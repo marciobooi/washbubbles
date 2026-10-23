@@ -170,7 +170,17 @@ class CoinMachine extends EventEmitter {
       })
       this.remoteCommands.start()
       // Back online after an outage: send what piled up now (the uplink's own back-off can be minutes) and refresh prices/settings.
+      // A key typed at the kiosk while offline is tried whenever the connection is back, and again every minute while it waits.
+      const tryKey = () => import('./centralKey.js').then(async (m) => {
+        const SettingModel = (await import('../models/setting.js')).default
+        const out = await m.tryPendingKey(SettingModel, this.tenantId, { coin: this })
+        if (out === 'applied') console.log('[Sync] the new central key typed while offline is now active')
+        if (out === 'rejected') console.error('[Sync] the central server rejected the key typed while offline: dropped (see the staff menu)')
+      }).catch(() => {})
+      this.pendingKeyTimer = setInterval(tryKey, 60_000)
+      this.pendingKeyTimer.unref?.()
       this.remoteCommands.on('online', () => {
+        tryKey()
         console.log('[Sync] central server reachable again — sending what was recorded offline')
         if (this.uplink) this.uplink.nextTryAt = 0
         this.uplink?.flush?.().catch(() => {})
