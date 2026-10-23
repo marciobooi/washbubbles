@@ -7,7 +7,7 @@
 import { UI, LANGS, langPath } from './landingI18n.js'
 import { parseLegal, legalText } from '../services/legalDefaults.js'
 
-const SITE_URL = process.env.PUBLIC_SITE_URL || 'https://freshbubbles.pt'
+const DEFAULT_SITE_URL = process.env.PUBLIC_SITE_URL || 'https://freshbubbles.pt'
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
 const COOKIES = {
@@ -117,7 +117,8 @@ function blocksHtml(text, lang) {
  * @param {'privacy'|'terms'|'cookies'} doc
  * @param {{ lang, brand:{name,logo}, legal:object (mergeLegal result), available:string[] }} opts
  */
-export function renderLegalPage(doc, { lang = 'pt', brand, legal, available = ['pt'] } = {}) {
+export function renderLegalPage(doc, { lang = 'pt', brand, legal, available = ['pt'], siteUrl = DEFAULT_SITE_URL } = {}) {
+  const SITE_URL = siteUrl
   if (!UI[lang]) lang = 'pt'
   const L = UI[lang]
   const titleOf = { privacy: L.privacyLink, terms: L.termsLink, cookies: L.cookiesLink }
@@ -218,4 +219,4 @@ export function renderNotFoundPage({ brand }) {
 <body><main><img src="${esc(brand.logo)}" alt="" width="56" height="56"><h1>Página não encontrada</h1><p>O endereço que abriu não existe ou foi alterado.</p><a href="/">Voltar à página inicial</a></main></body></html>`
 }
 
-export { SITE_URL }
+export const SITE_URL = DEFAULT_SITE_URL

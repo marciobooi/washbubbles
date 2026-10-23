@@ -611,6 +611,13 @@ router.post('/transactions', requireAdmin, async (req, res) => {
   res.json(s)
 })
 
+// What the page shows before this shop has saved anything: the editor starts from it (a new shop gets a neutral page, never FreshBubbles' facts)
+router.get('/landing/defaults', requireAdmin, async (req, res) => {
+  const { landingBaseFor } = await import('../services/landingBase.js')
+  const { base, neutral } = await landingBaseFor(req.tenantId)
+  res.json({ neutral, content: base })
+})
+
 // Translations of the public page (freshbubbles.pt/en, /fr, /de, /es) — see services/landingTranslate.js
 router.get('/landing/translations', requireAdmin, async (req, res) => {
   const [translations, status] = await Promise.all([getTranslations(req.tenantId), getStatus(req.tenantId)])

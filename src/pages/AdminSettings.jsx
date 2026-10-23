@@ -74,6 +74,7 @@ export default function AdminSettings(){
 
   // Public landing page (freshbubbles.pt) content helper state
   const [landingContent, setLandingContent] = useState(DEFAULT_LANDING_CONTENT)
+  const [landingDefaults, setLandingDefaults] = useState(DEFAULT_LANDING_CONTENT)
   const [savingLanding, setSavingLanding] = useState(false)
 
   // Legal / GDPR texts shown in the kiosk footer (setting legal.info, public)
@@ -184,29 +185,33 @@ export default function AdminSettings(){
   // section instead of falling back to real default copy.
   async function loadLandingContent() {
     try {
+      // The starting page is the shop's own (a new shop gets a neutral one, never another shop's address or reviews)
+      const dr = await api.request('/admin/landing/defaults', { method: 'GET', expect: 'json' }).catch(() => null)
+      const D = (dr && dr.content) || DEFAULT_LANDING_CONTENT
+      setLandingDefaults(D)
       const saved = await api.getSetting('landingPage.content').catch(() => null)
       const c = (saved && saved.value && typeof saved.value === 'object') ? saved.value : {}
       const items = (list, fallback) => (Array.isArray(list) && list.length ? list : fallback)
       const b = (c.brand && typeof c.brand === 'object') ? c.brand : {}
       setLandingContent({
         brand: {
-          ...DEFAULT_LANDING_CONTENT.brand,
+          ...D.brand,
           ...b,
-          address: { ...DEFAULT_LANDING_CONTENT.brand.address, ...(b.address || {}) },
-          hours: { ...DEFAULT_LANDING_CONTENT.brand.hours, ...(b.hours || {}) },
-          rating: { ...DEFAULT_LANDING_CONTENT.brand.rating, ...(b.rating || {}) },
-          social: Array.isArray(b.social) ? b.social : DEFAULT_LANDING_CONTENT.brand.social,
+          address: { ...D.brand.address, ...(b.address || {}) },
+          hours: { ...D.brand.hours, ...(b.hours || {}) },
+          rating: { ...D.brand.rating, ...(b.rating || {}) },
+          social: Array.isArray(b.social) ? b.social : D.brand.social,
         },
-        hero: { ...DEFAULT_LANDING_CONTENT.hero, ...(c.hero || {}) },
-        steps: { ...DEFAULT_LANDING_CONTENT.steps, ...(c.steps || {}), items: items(c.steps && c.steps.items, DEFAULT_LANDING_CONTENT.steps.items) },
-        features: { ...DEFAULT_LANDING_CONTENT.features, ...(c.features || {}), items: items(c.features && c.features.items, DEFAULT_LANDING_CONTENT.features.items) },
-        prices: { ...DEFAULT_LANDING_CONTENT.prices, ...(c.prices || {}) },
-        cta: { ...DEFAULT_LANDING_CONTENT.cta, ...(c.cta || {}) },
-        visit: { ...DEFAULT_LANDING_CONTENT.visit, ...(c.visit || {}) },
+        hero: { ...D.hero, ...(c.hero || {}) },
+        steps: { ...D.steps, ...(c.steps || {}), items: items(c.steps && c.steps.items, D.steps.items) },
+        features: { ...D.features, ...(c.features || {}), items: items(c.features && c.features.items, D.features.items) },
+        prices: { ...D.prices, ...(c.prices || {}) },
+        cta: { ...D.cta, ...(c.cta || {}) },
+        visit: { ...D.visit, ...(c.visit || {}) },
         reviews: {
-          ...DEFAULT_LANDING_CONTENT.reviews,
+          ...D.reviews,
           ...(c.reviews || {}),
-          items: items(c.reviews && c.reviews.items, DEFAULT_LANDING_CONTENT.reviews.items),
+          items: items(c.reviews && c.reviews.items, D.reviews.items),
         },
         customSections: Array.isArray(c.customSections) ? c.customSections : [],
       })
@@ -950,7 +955,7 @@ export default function AdminSettings(){
           <CardContent className="space-y-3">
             <div>
               <Label htmlFor="hero-eyebrow">Etiqueta</Label>
-              <Input id="hero-eyebrow" value={landingContent.hero.eyebrow} onChange={(e) => updateHero('eyebrow', e.target.value)} placeholder="Ex: Lavandaria em Loures" />
+              <Input id="hero-eyebrow" value={landingContent.hero.eyebrow} onChange={(e) => updateHero('eyebrow', e.target.value)} placeholder="Ex: Lavandaria self-service" />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
@@ -1319,7 +1324,7 @@ export default function AdminSettings(){
           <Button type="button" onClick={saveLandingContent} disabled={savingLanding}>
             {savingLanding ? 'A guardar…' : 'Guardar Página Inicial'}
           </Button>
-          <Button type="button" variant="outline" onClick={() => setLandingContent(DEFAULT_LANDING_CONTENT)}>
+          <Button type="button" variant="outline" onClick={() => setLandingContent(landingDefaults)}>
             Repor predefinições
           </Button>
         </div>

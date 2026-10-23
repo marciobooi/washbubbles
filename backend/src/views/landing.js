@@ -28,7 +28,7 @@
 
 import { UI, LANGS, fmt, langPath } from './landingI18n.js'
 
-const SITE_URL = process.env.PUBLIC_SITE_URL || 'https://freshbubbles.pt'
+export const DEFAULT_SITE_URL = process.env.PUBLIC_SITE_URL || 'https://freshbubbles.pt'
 const LOGIN_URL = '/admin/login'
 // Default until an admin uploads a different one — via the existing Branding
 // tab's logo upload (Setting key branding.logo), not a separate control
@@ -41,6 +41,9 @@ const DEFAULT_LOGO_PATH = '/geral/freshbubbleslogo.png'
 // Setting key (single-tenant deployment: no tenant qualifier needed beyond
 // what withTenant already resolves — see routes/public.js).
 export const CONTENT_SETTING_KEY = 'landingPage.content'
+
+// A bubble mark for shops that have not uploaded a logo yet (no file to ship, nothing of another shop's brand).
+export const NEUTRAL_LOGO = 'data:image/svg+xml,' + encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='#0ea5e9'/><circle cx='26' cy='36' r='14' fill='none' stroke='#fff' stroke-width='3'/><circle cx='43' cy='20' r='6' fill='none' stroke='#fff' stroke-width='3'/><circle cx='46' cy='42' r='3' fill='#fff'/></svg>")
 
 export const DEFAULT_CONTENT = {
   // Real, current facts only — originally from the business's own Google
@@ -142,7 +145,28 @@ export const DEFAULT_CONTENT = {
  * malformed field always falls back to a real default instead of `undefined`
  * reaching the template.
  */
-export function mergeContent(raw) {
+/**
+ * The page a NEW shop starts with: the same layout and wording, but none of FreshBubbles' facts (address, phone, e-mail,
+ * social links, rating, reviews, services it may not offer). The shop fills the rest in from the admin's "Página Inicial" tab.
+ */
+export function neutralContent(name) {
+  const shop = String(name || '').trim() || 'A sua lavandaria'
+  const swap = (v) => (typeof v === 'string' ? v.replace(/Fresh ?Bubbles/gi, shop) : Array.isArray(v) ? v.map(swap) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, swap(x)])) : v)
+  const c = swap(JSON.parse(JSON.stringify(DEFAULT_CONTENT)))
+  c.brand = { name: shop, tagline: '', email: '', logo: NEUTRAL_LOGO, phone: '', address: { street: '', postal: '', city: '', country: '' }, hours: { open: '08:00', close: '22:00' }, rating: { value: 0, count: 0 }, social: [] }
+  c.hero.eyebrow = 'Lavandaria self-service'
+  c.hero.subheading = 'Máquinas modernas. Pague em moedas, notas, cartão bancário ou o seu cartão ' + shop + '. Sem marcações, sem filas — chegue, lave, siga a sua vida.'
+  c.steps.items[0].d = 'Escolha a máquina do tamanho certo e coloque a roupa suja.'
+  c.features.items = c.features.items.slice(0, 1)
+  c.visit.description = 'Aberta todos os dias.'
+  c.reviews = { visible: false, eyebrow: 'O que dizem', heading: 'Avaliações', items: [] }
+  return c
+}
+
+/** Drop "in <city>" from the fixed titles/descriptions when the shop has no city yet (Portuguese, English, French, German, Spanish wording). */
+const withCity = (s, city) => (city ? String(s).replace(/Loures/g, city) : String(s).replace(/ (?:em|in|à|en) Loures(?:, (?:Portugal|au Portugal))?/g, '').replace(/ Loures/g, ''))
+
+export function mergeContent(raw, base = DEFAULT_CONTENT) {
   const c = (raw && typeof raw === 'object') ? raw : {}
   const items = (list, fallback) => (Array.isArray(list) && list.length ? list : fallback)
   const b = (c.brand && typeof c.brand === 'object') ? c.brand : {}
@@ -153,39 +177,39 @@ export function mergeContent(raw) {
   const numberOr = (val, fallback) => (val != null && Number.isFinite(Number(val)) ? Number(val) : fallback)
   return {
     brand: {
-      ...DEFAULT_CONTENT.brand,
+      ...base.brand,
       ...b,
-      address: { ...DEFAULT_CONTENT.brand.address, ...(b.address || {}) },
-      hours: { ...DEFAULT_CONTENT.brand.hours, ...(b.hours || {}) },
+      address: { ...base.brand.address, ...(b.address || {}) },
+      hours: { ...base.brand.hours, ...(b.hours || {}) },
       rating: {
-        value: numberOr(b.rating && b.rating.value, DEFAULT_CONTENT.brand.rating.value),
-        count: numberOr(b.rating && b.rating.count, DEFAULT_CONTENT.brand.rating.count),
+        value: numberOr(b.rating && b.rating.value, base.brand.rating.value),
+        count: numberOr(b.rating && b.rating.count, base.brand.rating.count),
       },
       // Array.isArray (not "has length") so an intentional "remove all social
       // links" save is honoured — only a field that was never saved at all
       // falls back to the default Instagram entry.
       social: Array.isArray(b.social)
         ? b.social.filter((s) => s && s.name && s.url)
-        : DEFAULT_CONTENT.brand.social,
+        : base.brand.social,
     },
-    hero: { ...DEFAULT_CONTENT.hero, ...(c.hero || {}) },
+    hero: { ...base.hero, ...(c.hero || {}) },
     steps: {
-      ...DEFAULT_CONTENT.steps,
+      ...base.steps,
       ...(c.steps || {}),
-      items: items(c.steps && c.steps.items, DEFAULT_CONTENT.steps.items),
+      items: items(c.steps && c.steps.items, base.steps.items),
     },
     features: {
-      ...DEFAULT_CONTENT.features,
+      ...base.features,
       ...(c.features || {}),
-      items: items(c.features && c.features.items, DEFAULT_CONTENT.features.items),
+      items: items(c.features && c.features.items, base.features.items),
     },
-    prices: { ...DEFAULT_CONTENT.prices, ...(c.prices || {}) },
-    cta: { ...DEFAULT_CONTENT.cta, ...(c.cta || {}) },
-    visit: { ...DEFAULT_CONTENT.visit, ...(c.visit || {}) },
+    prices: { ...base.prices, ...(c.prices || {}) },
+    cta: { ...base.cta, ...(c.cta || {}) },
+    visit: { ...base.visit, ...(c.visit || {}) },
     reviews: {
-      ...DEFAULT_CONTENT.reviews,
+      ...base.reviews,
       ...(c.reviews || {}),
-      items: items(c.reviews && c.reviews.items, DEFAULT_CONTENT.reviews.items),
+      items: items(c.reviews && c.reviews.items, base.reviews.items),
     },
     // Admin-created sections only — needs at least a heading to be worth a
     // section element, so a half-filled draft never ships blank markup.
@@ -319,26 +343,27 @@ function bgBubble({ size = 80, pos, opacity = 0.5, speed = 0.08 }) {
   return `<span class="bg-bubble" style="width:${size}px; height:${size}px; ${pos}; opacity:${opacity}" data-parallax="${speed}" aria-hidden="true"></span>`
 }
 
-function jsonLd(content, L = UI.pt, pageUrl = SITE_URL) {
+function jsonLd(content, L = UI.pt, pageUrl = DEFAULT_SITE_URL, SITE_URL = DEFAULT_SITE_URL) {
   const brand = content.brand
+  const hasAddress = !!(brand.address.street || brand.address.city)
   const data = {
     '@context': 'https://schema.org',
     '@type': 'LocalBusiness',
     name: brand.name,
     url: pageUrl,
-    image: `${SITE_URL}${brand.logo}`,
-    email: brand.email,
-    telephone: brand.phone,
+    image: /^(https?:|data:)/.test(brand.logo) ? brand.logo : `${SITE_URL}${brand.logo}`,
+    ...(brand.email ? { email: brand.email } : {}),
+    ...(brand.phone ? { telephone: brand.phone } : {}),
     description: L.schemaDescription,
     priceRange: '€€',
-    areaServed: 'Loures',
-    address: {
+    ...(brand.address.city ? { areaServed: brand.address.city } : {}),
+    ...(hasAddress ? { address: {
       '@type': 'PostalAddress',
       streetAddress: brand.address.street,
       postalCode: brand.address.postal,
       addressLocality: brand.address.city,
-      addressCountry: 'PT',
-    },
+      addressCountry: brand.address.country === 'Portugal' ? 'PT' : brand.address.country,
+    } } : {}),
     openingHoursSpecification: {
       '@type': 'OpeningHoursSpecification',
       dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
@@ -382,13 +407,20 @@ function renderCustomSection(cs) {
  * @param opts.available  the languages that currently have a page, for the switcher and hreflang links
  * @param opts.prices     rows for the price table, read from the database: { type, weight, duration, tImp, cash, card, machines }
  */
-export function renderLandingPage(rawContent, { lang = 'pt', available = ['pt'], prices = [], legal = null } = {}) {
+export function renderLandingPage(rawContent, { lang = 'pt', available = ['pt'], prices = [], legal = null, siteUrl = DEFAULT_SITE_URL, base = DEFAULT_CONTENT } = {}) {
+  const SITE_URL = siteUrl
   if (!UI[lang]) lang = 'pt'
-  const L = UI[lang]
+  const L0 = UI[lang]
   const hours = (tpl, b) => fmt(tpl, { open: b.hours.open, close: b.hours.close })
-  const content = mergeContent(rawContent)
+  const content = mergeContent(rawContent, base)
   const brand = content.brand
-  const fullAddress = `${brand.address.street}, ${brand.address.postal} ${brand.address.city}, ${brand.address.country}`
+  const city = brand.address.city
+  const L = { ...L0, title: withCity(L0.title, city), description: withCity(L0.description, city), schemaDescription: withCity(L0.schemaDescription, city) }
+  const hasRating = brand.rating.count > 0 && brand.rating.value > 0
+  if (!hasRating) L.description = L.description.replace(/\s+[^.]*\{rating\}[^.]*\.?$/, '')
+  const hasAddress = !!(brand.address.street || brand.address.city)
+  const ogImage = base === DEFAULT_CONTENT ? `${SITE_URL}/og/freshbubbles.png` : (/^(https?:)/.test(brand.logo) ? brand.logo : /^data:/.test(brand.logo) ? '' : `${SITE_URL}${brand.logo}`)
+  const fullAddress = [brand.address.street, [brand.address.postal, brand.address.city].filter(Boolean).join(' '), brand.address.country].filter(Boolean).join(', ')
   const mapsQuery = encodeURIComponent(fullAddress)
   const title = fmt(L.title, { brand: brand.name })
   const description = fmt(L.description, { rating: brand.rating.value })
@@ -473,20 +505,20 @@ ${alternates}
 <meta property="og:title" content="${escapeHtml(title)}">
 <meta property="og:description" content="${escapeHtml(description)}">
 <meta property="og:url" content="${pageUrl}">
-<meta property="og:image" content="${SITE_URL}/og/freshbubbles.png">
+<meta property="og:image" content="${ogImage}">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="${escapeHtml(brand.name)}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${escapeHtml(title)}">
 <meta name="twitter:description" content="${escapeHtml(description)}">
-<meta name="twitter:image" content="${SITE_URL}/og/freshbubbles.png">
+<meta name="twitter:image" content="${ogImage}">
 
 <link rel="icon" href="${escapeHtml(brand.logo)}" type="image/png">
 <link rel="preload" href="/fonts/inter_v20_UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/fonts/fonts.css">
 
-<script type="application/ld+json">${jsonLd(content, L, pageUrl)}</script>
+<script type="application/ld+json">${jsonLd(content, L, pageUrl, SITE_URL)}</script>
 
 <style>
 :root{
@@ -1080,7 +1112,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
         <div class="hero-note">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
           ${escapeHtml(hours(L.openNote, brand))}
-          <span class="rating-chip">${starIcon()} ${brand.rating.value} <span class="rating-count">${escapeHtml(fmt(L.ratingCount, { n: brand.rating.count }))}</span></span>
+          ${hasRating ? `<span class="rating-chip">${starIcon()} ${brand.rating.value} <span class="rating-count">${escapeHtml(fmt(L.ratingCount, { n: brand.rating.count }))}</span></span>` : ''}
         </div>
       </div>
       <div class="hero-art" aria-hidden="true">
@@ -1187,7 +1219,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
         <p>${escapeHtml(content.cta.description)}</p>
         <div class="hero-cta">
           <a class="btn-primary" href="#visite-nos">${escapeHtml(L.ctaVisit)}</a>
-          <a class="btn-ghost" href="mailto:${escapeHtml(brand.email)}">${escapeHtml(L.ctaContact)}</a>
+          ${brand.email ? `<a class="btn-ghost" href="mailto:${escapeHtml(brand.email)}">${escapeHtml(L.ctaContact)}</a>` : ''}
         </div>
       </div>
     </div>
@@ -1231,7 +1263,7 @@ footer .foot-links a:hover{ color:var(--primary-800) }
       </div>
 
       <div class="visit reveal">
-        <div class="visit-card">
+        ${hasAddress ? `        <div class="visit-card">
           <h3>${escapeHtml(L.address)}</h3>
           <div class="visit-row">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
@@ -1244,20 +1276,21 @@ footer .foot-links a:hover{ color:var(--primary-800) }
             </div>
           </div>
         </div>
+` : ''}
         <div class="visit-card">
           <h3>${escapeHtml(L.contactHours)}</h3>
           <div class="visit-row">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
             <span>${escapeHtml(hours(L.everyDay, brand))}</span>
           </div>
-          <div class="visit-row">
+          ${brand.phone ? `          <div class="visit-row">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.362 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
             <a href="tel:${toTelHref(brand.phone)}">${escapeHtml(brand.phone)}</a>
-          </div>
-          <div class="visit-row">
+          </div>` : ''}
+          ${brand.email ? `          <div class="visit-row">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16v16H4z" opacity="0"/><path d="M22 6l-10 7L2 6"/><path d="M2 6h20v12H2z"/></svg>
             <a href="mailto:${escapeHtml(brand.email)}">${escapeHtml(brand.email)}</a>
-          </div>
+          </div>` : ''}
           ${brand.social.map((s) => `
           <div class="visit-row">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${socialIconPath(s.name)}"/></svg>
@@ -1479,11 +1512,11 @@ function featureIcon(i) {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[i % icons.length]}</svg>`
 }
 
-export function renderRobotsTxt() {
+export function renderRobotsTxt(SITE_URL = DEFAULT_SITE_URL) {
   return `User-agent: *\nAllow: /\nDisallow: /api\nSitemap: ${SITE_URL}/sitemap.xml\n`
 }
 
-export function renderSitemapXml(available = ['pt'], { lastmod = null, legalLastmod = null } = {}) {
+export function renderSitemapXml(available = ['pt'], { lastmod = null, legalLastmod = null, siteUrl: SITE_URL = DEFAULT_SITE_URL } = {}) {
   // The real date of the last change (content / legal texts), not today's: a crawler uses it to decide what to re-read.
   const day = (d) => (d ? new Date(d).toISOString().slice(0, 10) : '')
   const tag = (d) => (day(d) ? `<lastmod>${day(d)}</lastmod>` : '')

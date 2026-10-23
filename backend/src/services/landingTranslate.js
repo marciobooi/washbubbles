@@ -13,6 +13,7 @@
 import crypto from 'crypto'
 import Setting from '../models/setting.js'
 import { mergeContent, CONTENT_SETTING_KEY } from '../views/landing.js'
+import { landingBaseFor } from './landingBase.js'
 import { TRANSLATED_LANGS } from '../views/landingI18n.js'
 import { translateBatch, translatorEnabled } from './translator.js'
 import { bumpLandingVersion } from './landingCache.js'
@@ -74,7 +75,7 @@ const hashOf = (strings) => crypto.createHash('sha1').update(JSON.stringify(stri
 
 async function loadSource(tenantId) {
   const doc = await Setting.findOne({ tenantId, key: CONTENT_SETTING_KEY }).lean()
-  return mergeContent(doc && doc.value)
+  return mergeContent(doc && doc.value, (await landingBaseFor(tenantId)).base)
 }
 
 export async function getTranslations(tenantId) {

@@ -44,7 +44,9 @@ Estado verificado a 2026-10-23 com testes reais (`backend/test/tenantIsolation.t
 ### Fase 4 — Vários postos na mesma loja (só se fizer falta)
 Hoje as máquinas, interfaces e preços pertencem à **loja**, não ao posto: dois PCs na mesma loja iam puxar as máquinas um do outro. Solução: conceito de **posto** (`siteId`) em Máquina/Interface/Periférico, e cada quiosque só vê o seu; cartões e preços partilhados na loja. Até lá: **uma loja por espaço físico**.
 
-### Fase 1b — Site público por loja
+### Fase 1b — Site público por loja (o cliente novo compra o pacote completo: quiosque + admin + site)
+**Feito (backend + editor):** cada endereço mostra o site da SUA loja, editado no admin da loja ("Página Inicial"); cache por loja; loja nova começa com uma página NEUTRA (nome da loja, sem morada/telefone/avaliações/serviços da FreshBubbles; blocos vazios não aparecem); canonical, sitemap, robots e páginas legais usam o endereço da loja; o editor do admin começa dos valores da própria loja. **Falta:** rótulo do cartão e textos do `buycard`, emails e página MB WAY ainda com a marca fixa; ficheiros de imagem de partilha (og) por loja; idioma/país por loja (um `.ro` precisa de textos e moeda próprios).
+
 O nome da empresa, morada, textos, mapa, política de privacidade, `sitemap`, `robots.txt` e ligações canónicas deixam de estar no código (hoje: FreshBubbles) e passam a vir da loja do endereço. Cache da página inicial e das traduções por loja e idioma. O admin de cada loja vive no mesmo endereço (`/admin`) com a marca da loja; um utilizador só entra no admin da sua loja (o superadmin entra em qualquer uma).
 
 ### Fase 3b — "Criar loja" automático (o botão único)
