@@ -9,19 +9,23 @@ export function TenantProvider({ children }) {
   const [tenantId, setTenantId] = useState(() => localStorage.getItem('ws_tenant') || null)
   const [tenants, setTenants] = useState([])
   const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState(false)
 
   useEffect(() => {
     if (tenantId) localStorage.setItem('ws_tenant', tenantId)
     else localStorage.removeItem('ws_tenant')
   }, [tenantId])
 
-  async function refreshTenants() {
+  // One quiet retry: a request that lands while the server restarts (or just before the session is ready) must not leave the list empty for good.
+  async function refreshTenants(retry = true) {
     setLoading(true)
     try {
       const list = await api.getTenants()
       setTenants(Array.isArray(list) ? list : [])
+      setLoadError(false)
     } catch (e) {
       console.debug('Failed to load tenants', e)
+      if (retry) { setTimeout(() => refreshTenants(false), 1500) } else setLoadError(true)
     } finally { setLoading(false) }
   }
 
@@ -65,7 +69,7 @@ export function TenantProvider({ children }) {
   }
 
   return (
-    <TenantContext.Provider value={{ tenantId, tenants, loading, selectTenant, refreshTenants, createTenant, updateTenant, assignUser }}>
+    <TenantContext.Provider value={{ tenantId, tenants, loading, loadError, selectTenant, refreshTenants, createTenant, updateTenant, assignUser }}>
       {children}
     </TenantContext.Provider>
   )

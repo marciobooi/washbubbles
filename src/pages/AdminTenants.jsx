@@ -8,7 +8,7 @@ import api from '@/services/api'
 import { Pencil, UserPlus, Plus, Check, X } from 'lucide-react'
 
 export default function AdminTenants() {
-  const { tenants = [], createTenant, updateTenant, assignUser } = useTenant()
+  const { tenants = [], loading, loadError, refreshTenants, createTenant, updateTenant, assignUser } = useTenant()
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
   const [domains, setDomains] = useState('') // site addresses, comma separated
@@ -25,6 +25,7 @@ export default function AdminTenants() {
 
   useEffect(() => {
     api.getUsers().then(setUsers).catch(() => {})
+    refreshTenants()
   }, [])
 
   async function handleCreate(e) {
@@ -100,7 +101,9 @@ export default function AdminTenants() {
 
         <div className="bg-white rounded shadow divide-y">
           {tenants.length === 0 ? (
-            <div className="p-4 text-sm text-muted-foreground">Nenhum tenant</div>
+            <div className="p-4 text-sm text-muted-foreground">
+              {loading ? 'A carregar…' : loadError ? (<>Não foi possível carregar as lojas. <button type="button" className="underline" onClick={() => refreshTenants()}>Tentar de novo</button></>) : 'Nenhuma loja'}
+            </div>
           ) : (
             tenants.map((t) => (
               <div key={t._id} className="p-3 flex items-center justify-between">
