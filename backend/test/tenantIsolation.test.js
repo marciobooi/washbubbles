@@ -127,3 +127,29 @@ describe('Tenant isolation: shop A cannot see or touch shop B', function () {
     expect(r.body.tenant).to.include({ slug: 'test-tenant' })
   })
 })
+
+describe('A shop admin never sees or touches the platform superadmins', function () {
+  this.timeout(30000)
+  let app, adminTok, superTok, superUser
+  before(async () => {
+    await startTestDb(); await clearTestDb()
+    app = await buildTestApp()
+    const { tenant, admin } = await seedTenantAndUsers() // admin = SUPERADMIN of this shop's tenant
+    const User = (await import('../src/models/user.js')).default
+    superUser = admin
+    superTok = signToken(admin)
+    const plain = await User.create({ tenantId: tenant._id, username: 'shopadmin', password: 'x', role: 'ADMIN' })
+    adminTok = signToken(plain)
+  })
+  after(async () => { await stopTestDb() })
+  it('the list, search, edit, delete and key rotation all treat a superadmin as not found', async () => {
+    const h = (t) => ({ Authorization: `Bearer ${t}` })
+    const list = await request(app).get('/api/admin/users').set(h(adminTok))
+    expect(list.body.map((u) => u.role)).to.not.include('SUPERADMIN')
+    expect((await request(app).get('/api/admin/users').set(h(superTok))).body.map((u) => u.role)).to.include('SUPERADMIN')
+    expect((await request(app).get('/api/admin/search?q=admin').set(h(adminTok))).body.users.map((u) => u.role)).to.not.include('SUPERADMIN')
+    expect((await request(app).put(`/api/admin/users/${superUser._id}`).set(h(adminTok)).send({ username: 'hacked' })).status).to.equal(404)
+    expect((await request(app).delete(`/api/admin/users/${superUser._id}`).set(h(adminTok))).status).to.equal(404)
+    expect((await request(app).post(`/api/admin/users/${superUser._id}/rotate`).set(h(adminTok))).status).to.equal(404)
+  })
+})

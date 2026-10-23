@@ -118,7 +118,8 @@ router.post('/machines', requireAdmin, async (req, res) => {
 // List users (admin only)
 router.get('/users', requireAdmin, async (req, res) => {
   const UserT = withTenant(User, req)
-  const users = await UserT.find().select('username role apiKey apiKeyNext createdAt').lean()
+  // A shop's own administrators never see (or touch) the platform's superadmins.
+  const users = await UserT.find(req.userModel?.role === 'SUPERADMIN' ? {} : { role: { $ne: 'SUPERADMIN' } }).select('username role apiKey apiKeyNext createdAt').lean()
   // mask apiKey; a staged (not yet used) new key is only flagged, never shown
   const masked = users.map((u) => ({ _id: u._id, username: u.username, role: u.role, apiKey: u.apiKey ? u.apiKey.slice(0, 8) + '…' : null, pendingKey: Boolean(u.apiKeyNext), createdAt: u.createdAt }))
   res.json(masked)
@@ -187,9 +188,12 @@ async function refuseIfKiosk(req, res) {
 
 // Rotate API key for user. For the kiosk user the new key is STAGED (the old one keeps working until the new one is first used,
 // see services/apiKeys.js) and returned once, in groups of four, to be typed at the kiosk (staff menu, with the PIN).
+// What a non-superadmin may not even see: the platform's superadmins (answered as "not found").
+const hideSuperadmins = (req) => (req.userModel?.role === 'SUPERADMIN' ? {} : { role: { $ne: 'SUPERADMIN' } })
+
 router.post('/users/:id/rotate', requireAdmin, async (req, res) => {
   if (mongoose.isValidObjectId(req.params.id)) {
-    const target = await withTenant(User, req).findById(req.params.id).select('role username').lean()
+    const target = await withTenant(User, req).findOne({ _id: req.params.id, ...hideSuperadmins(req) }).select('role username').lean()
     if (target?.role === 'KIOSK') {
       const { stageNewKey, groupKey } = await import('../services/apiKeys.js')
       const key = await stageNewKey(req.tenantId, req.params.id)
@@ -200,7 +204,7 @@ router.post('/users/:id/rotate', requireAdmin, async (req, res) => {
   const id = req.params.id
   const newKey = crypto.randomBytes(24).toString('hex')
   const UserT = withTenant(User, req)
-  const user = await UserT.findByIdAndUpdate(id, { apiKey: newKey }, { new: true })
+  const user = await UserT.findOneAndUpdate({ _id: id, ...hideSuperadmins(req) }, { apiKey: newKey }, { new: true })
   if (!user) return res.status(404).json({ error: 'User not found' })
   logAction(req, 'user.rotate_key', 'User', user._id, { username: user.username })
   res.json({ _id: user._id, apiKey: newKey })
@@ -213,7 +217,7 @@ router.get('/search', async (req, res) => {
   const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
   const UserT = withTenant(User, req)
   const MachineT = withTenant(Machine, req)
-  const users = await UserT.find({ username: regex }).limit(10).select('username role createdAt').lean()
+  const users = await UserT.find({ username: regex, ...hideSuperadmins(req) }).limit(10).select('username role createdAt').lean()
   const machines = await MachineT.find({ name: regex }).limit(10).lean()
   res.json({ users, machines })
 })
@@ -421,7 +425,7 @@ router.put('/users/:id', requireAdmin, async (req, res) => {
     update.password = await bcrypt.hash(password, 10)
   }
   const UserT = withTenant(User, req)
-  const u = await UserT.findByIdAndUpdate(req.params.id, update, { new: true }).select('username role apiKey createdAt')
+  const u = await UserT.findOneAndUpdate({ _id: req.params.id, ...hideSuperadmins(req) }, update, { new: true }).select('username role apiKey createdAt')
   if (!u) return res.status(404).json({ error: 'User not found' })
   u.apiKey = u.apiKey ? u.apiKey.slice(0, 8) + '…' : null
   logAction(req, role !== undefined ? 'user.role_change' : 'user.update', 'User', u._id, { username: u.username, role: u.role })
@@ -436,7 +440,7 @@ router.delete('/users/:id', requireAdmin, async (req, res) => {
   if (String(req.userModel?._id) === String(req.params.id)) {
     return res.status(400).json({ error: 'You cannot delete your own account' })
   }
-  const u = await UserT.findByIdAndDelete(req.params.id)
+  const u = await UserT.findOneAndDelete({ _id: req.params.id, ...hideSuperadmins(req) })
   if (!u) return res.status(404).json({ error: 'User not found' })
   logAction(req, 'user.delete', 'User', req.params.id, { username: u.username })
   res.json({ success: true })

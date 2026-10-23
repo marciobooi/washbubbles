@@ -10,6 +10,13 @@ function tokenExpiry(token) {
     return Number.isFinite(json.exp) ? json.exp * 1000 : null
   } catch { return null }
 }
+/** The user name carried in the token (display only; the server decides who the user is). */
+function tokenUsername(token) {
+  try {
+    const part = String(token).split('.')[1]
+    return String(JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/'))).username || '')
+  } catch { return '' }
+}
 const isExpired = (token) => { const e = token ? tokenExpiry(token) : null; return e != null && e <= Date.now() }
 const inAdmin = () => typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')
 
@@ -94,7 +101,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ token, role, tenant, login, logout }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ token, role, tenant, username: token ? tokenUsername(token) : '', login, logout }}>{children}</AuthContext.Provider>
   )
 }
 

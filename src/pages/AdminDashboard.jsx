@@ -36,7 +36,7 @@ function TopbarIconButton({ className = '', children, ...props }) {
 }
 
 export default function AdminDashboard() {
-  const { logout, role } = useAuth()
+  const { logout, role, username } = useAuth()
   const navigate = useNavigate()
   const [dark, setDark] = useTheme()
   // The role chip opens a small menu: change my password / sign out (every dashboard role, the operator included).
@@ -101,7 +101,7 @@ export default function AdminDashboard() {
                     className="flex items-center gap-2 h-10 pl-[10px] pr-3.5 rounded-full border border-black/[0.09] cursor-pointer transition-colors duration-150 hover:bg-[#eeebe4]"
                   >
                     <User className="h-[15px] w-[15px]" strokeWidth={1.8} />
-                    <span className="text-[13.5px] font-bold text-[#1c2530]">{roleLabel}</span>
+                    <span className="text-[13.5px] font-bold text-[#1c2530]">{username || roleLabel}</span>{username && <span className="text-[11px] text-neutral-500 hidden sm:inline">{roleLabel}</span>}
                     <ChevronDown className={`h-[13px] w-[13px] transition-transform ${menuOpen ? 'rotate-180' : ''}`} strokeWidth={2} />
                   </button>
                   {menuOpen && (
