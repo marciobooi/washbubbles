@@ -669,6 +669,11 @@ router.post('/ws/clients/disconnect', requireAdmin, async (req, res) => {
 
 router.get('/settings/:key', requireAdmin, async (req, res) => {
   if (String(req.params.key).startsWith('sync.')) return res.json({ key: req.params.key, value: null })
+  if (req.params.key === 'adminPin') {
+    // Never the PIN or its hash: only whether one is set (the screen shows 'PIN definido').
+    const row = await withTenant(Setting, req).findOne({ key: 'adminPin' }).lean()
+    return res.json({ key: 'adminPin', value: null, isSet: Boolean(row?.value) })
+  }
   const SettingT = withTenant(Setting, req)
   const s = await SettingT.findOne({ key: req.params.key }).lean()
   // Unconfigured is a normal answer, not a 404 — see the matching note on
@@ -688,9 +693,18 @@ router.post('/settings', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'creditRefundSeconds must be a whole number of seconds from 0 to 3600' })
     }
   }
+  // The staff PIN is stored as a hash (never the digits); an empty value removes it.
+  let toStore = value
+  if (key === 'adminPin') {
+    const { PIN_FORMAT, hashPin } = await import('../services/staffPin.js')
+    if (value === null || value === '' || value === undefined) toStore = null
+    else if (!PIN_FORMAT.test(String(value))) return res.status(400).json({ error: 'O PIN deve ter entre 4 e 8 dígitos' })
+    else toStore = await hashPin(String(value))
+  }
   const SettingT = withTenant(Setting, req)
-  const s = await SettingT.findOneAndUpdate({ key }, { value }, { upsert: true, new: true })
-  logAction(req, 'setting.update', 'Setting', key, { value })
+  const s = await SettingT.findOneAndUpdate({ key }, { value: toStore }, { upsert: true, new: true })
+  // Secrets never go into the audit trail: it records that they changed, not what they are.
+  logAction(req, 'setting.update', 'Setting', key, { value: (key === 'adminPin' || key === 'payments.mbway.apiKey') ? (value ? '••••••' : null) : value })
   if (key === 'landingPage.content') {
     // The public page also exists in other languages: refresh them from what was just saved.
     // Runs in the background — the save does not wait for, or depend on, the translation service.

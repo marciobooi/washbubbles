@@ -92,3 +92,65 @@ describe('Nothing sensitive in what the server says or logs', function () {
     })
   })
 })
+
+describe('The staff PIN is stored as a hash', function () {
+  this.timeout(30000)
+  let app, tenant, kiosk, adminToken, Setting
+  before(async () => {
+    await startTestDb(); await clearTestDb()
+    app = await buildTestApp()
+    let admin
+    ;({ tenant, kiosk, admin } = await seedTenantAndUsers())
+    const { signToken } = await import('./setup.test-helper.js')
+    adminToken = signToken(admin)
+    Setting = (await import('../src/models/setting.js')).default
+  })
+  after(async () => { await stopTestDb() })
+  beforeEach(async () => { (await import('../src/routes/pos.js'))._resetPinGuards() })
+  const save = (value) => request(app).post('/api/admin/settings').set('Authorization', `Bearer ${adminToken}`).send({ key: 'adminPin', value })
+  // A staff action that checks the PIN first and then (in the test there are no machines connected) stops with a 409 of its own:
+  // 'unlocked' = the PIN was right. (/verify-pin has a limit of a few tries per quarter hour shared by the whole test run.)
+  const verify = async (pin) => {
+    const r = await request(app).post(`/api/pos/staff/machines/${'0'.repeat(24)}/end`).set('Authorization', `ApiKey ${kiosk.apiKey}`).send({ pin })
+    return { status: r.status, unlocked: r.status === 409 && /máquinas/.test(r.body.error || ''), locked: r.status === 409 && /No admin PIN/.test(r.body.error || '') }
+  }
+
+  it('saving a PIN stores a hash (not the digits), the kiosk still unlocks with the digits, and neither the PIN nor the hash is ever returned or audited', async () => {
+    expect((await save('4821')).status).to.equal(200)
+    const row = await Setting.findOne({ tenantId: tenant._id, key: 'adminPin' }).lean()
+    expect(row.value).to.match(/^\$2[aby]\$/)
+    expect(row.value).to.not.include('4821')
+    expect((await verify('4821')).unlocked).to.equal(true)
+    expect((await verify('1234')).status).to.equal(401)
+    const one = await request(app).get('/api/admin/settings/adminPin').set('Authorization', `Bearer ${adminToken}`)
+    expect(one.body).to.deep.equal({ key: 'adminPin', value: null, isSet: true })
+    const list = await request(app).get('/api/admin/settings').set('Authorization', `Bearer ${adminToken}`)
+    expect(JSON.stringify(list.body)).to.not.include(row.value)
+    const AuditLog = (await import('../src/models/auditLog.js')).default
+    const entries = await AuditLog.find({ tenantId: tenant._id, action: 'setting.update', targetId: 'adminPin' }).lean()
+    expect(entries.length).to.be.at.least(1)
+    expect(JSON.stringify(entries)).to.not.include('4821').and.not.include(row.value)
+  })
+
+  it('a bad PIN is refused; an empty one removes it (staff actions stay locked)', async () => {
+    expect((await save('12')).status).to.equal(400)
+    expect((await save('abcd')).status).to.equal(400)
+    expect((await save(null)).status).to.equal(200)
+    const one = await request(app).get('/api/admin/settings/adminPin').set('Authorization', `Bearer ${adminToken}`)
+    expect(one.body.isSet).to.equal(false)
+    expect((await verify('4821')).locked).to.equal(true) // no PIN configured: locked, never open
+  })
+
+  it('a PIN saved before hashing (plain digits) still works, and the start-up migration turns it into a hash', async () => {
+    await Setting.updateOne({ tenantId: tenant._id, key: 'adminPin' }, { $set: { value: '7777' } }, { upsert: true })
+    expect((await verify('7777')).unlocked).to.equal(true)
+    const { migrateAdminPins } = await import('../src/services/staffPin.js')
+    expect(await migrateAdminPins(Setting)).to.equal(1)
+    expect((await Setting.findOne({ tenantId: tenant._id, key: 'adminPin' }).lean()).value).to.match(/^\$2[aby]\$/)
+    expect((await verify('7777')).unlocked).to.equal(true)
+    const { verifyPin } = await import('../src/services/staffPin.js')
+    const stored = (await Setting.findOne({ tenantId: tenant._id, key: 'adminPin' }).lean()).value
+    expect(await verifyPin(stored, '7778')).to.equal(false) // (the route allows only a few tries per quarter hour, so the wrong PIN is checked here)
+    expect(await migrateAdminPins(Setting)).to.equal(0) // already hashed: nothing to do
+  })
+})

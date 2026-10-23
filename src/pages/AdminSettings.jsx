@@ -84,6 +84,7 @@ export default function AdminSettings(){
 
   // Staff & maintenance helper state
   const [adminPin, setAdminPin] = useState('')
+  const [pinIsSet, setPinIsSet] = useState(false) // the PIN itself is never sent back: only whether one exists
   const [savingPin, setSavingPin] = useState(false)
   const [kioskLockEnabled, setKioskLockEnabled] = useState(false)
   const [savingLockToggle, setSavingLockToggle] = useState(false)
@@ -327,7 +328,8 @@ export default function AdminSettings(){
     try {
       const pin = await api.getSetting('adminPin').catch(() => null)
       const lockEnabled = await api.getSetting('kioskLockEnabled').catch(() => null)
-      setAdminPin(pin && pin.value != null ? String(pin.value) : '')
+      setAdminPin('')
+      setPinIsSet(Boolean(pin && pin.isSet))
       setKioskLockEnabled(Boolean(lockEnabled && lockEnabled.value))
     } catch (e) { console.warn('loadStaffSettings failed', e) }
   }
@@ -558,15 +560,31 @@ export default function AdminSettings(){
     }
   }
 
+  async function removeAdminPin() {
+    if (!window.confirm('Remover o PIN de staff? As ações de staff no quiosque ficam bloqueadas até definir outro.')) return
+    setSavingPin(true)
+    try {
+      await api.setSetting({ key: 'adminPin', value: null })
+      setAdminPin(''); setPinIsSet(false)
+      toast({ title: 'PIN de staff removido — ações de staff ficam bloqueadas', variant: 'success' })
+    } catch (e) {
+      toast({ title: 'Erro ao remover o PIN', variant: 'destructive' })
+    } finally { setSavingPin(false) }
+  }
+
   async function saveAdminPin(e) {
     e.preventDefault()
-    if (adminPin && !/^\d{4,8}$/.test(adminPin)) {
+    if (!adminPin) {
+      return toast({ title: pinIsSet ? 'Escreva o PIN novo (4 a 8 dígitos) para o alterar' : 'Escreva um PIN (4 a 8 dígitos)', variant: 'destructive' })
+    }
+    if (!/^\d{4,8}$/.test(adminPin)) {
       return toast({ title: 'O PIN deve ter entre 4 e 8 dígitos', variant: 'destructive' })
     }
     setSavingPin(true)
     try {
-      await api.setSetting({ key: 'adminPin', value: adminPin || null })
-      toast({ title: adminPin ? 'PIN de staff atualizado' : 'PIN de staff removido — ações de staff ficam bloqueadas', variant: 'success' })
+      await api.setSetting({ key: 'adminPin', value: adminPin })
+      setAdminPin(''); setPinIsSet(true)
+      toast({ title: 'PIN de staff atualizado', variant: 'success' })
     } catch (e) {
       console.error(e)
       toast({ title: 'Erro ao guardar PIN', variant: 'destructive' })
@@ -1322,7 +1340,8 @@ export default function AdminSettings(){
               id="adminPin"
               type="text"
               inputMode="numeric"
-              placeholder="Ex: 4821"
+              placeholder={pinIsSet ? 'PIN definido — escreva um novo para o alterar' : 'Ex: 4821'}
+              autoComplete="off"
               value={adminPin}
               onChange={(e) => setAdminPin(e.target.value.replace(/\D/g, '').slice(0, 8))}
             />
@@ -1330,9 +1349,12 @@ export default function AdminSettings(){
               Necessário no quiosque para pagamento manual, fecho de caixa e bloqueio de ecrã.
               Sem um PIN definido, essas ações ficam bloqueadas — nunca desativadas por omissão.
             </p>
-            <Button type="submit" size="sm" disabled={savingPin}>
-              {savingPin ? 'A guardar…' : 'Guardar PIN'}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button type="submit" size="sm" disabled={savingPin}>
+                {savingPin ? 'A guardar…' : (pinIsSet ? 'Alterar PIN' : 'Guardar PIN')}
+              </Button>
+              {pinIsSet && <Button type="button" size="sm" variant="outline" disabled={savingPin} onClick={removeAdminPin}>Remover PIN</Button>}
+            </div>
           </form>
 
           <div className="border-t pt-4 flex items-start justify-between gap-4 max-w-xl">

@@ -188,10 +188,8 @@ async function checkAdminPin(req, pin) {
   // Fail closed: with no PIN configured, staff actions stay locked.
   if (!expected) return { ok: false, status: 409, error: 'No admin PIN is configured for this site', configured: false }
 
-  const a = Buffer.from(expected)
-  const b = Buffer.from(pin)
-  const match = a.length === b.length && crypto.timingSafeEqual(a, b)
-  if (!match) return { ok: false, status: 401, error: 'Invalid PIN' }
+  const { verifyPin } = await import('../services/staffPin.js')
+  if (!(await verifyPin(expected, pin))) return { ok: false, status: 401, error: 'Invalid PIN' }
 
   return { ok: true }
 }
@@ -392,6 +390,11 @@ router.post('/recharge', requireKiosk, async (req, res) => {
 // Staff PIN for the actions below (gift card, machine start/stop). Only WRONG PINs count against the limit
 // (5 per 15 min): a legitimate PIN, however many actions, never locks staff out. Answers the request itself when refused.
 const staffPinFails = new Map() // ip -> { n, since }
+/** Tests only: forget the wrong-PIN counters (they are per process, and other tests also use wrong PINs). */
+export function _resetPinGuards() {
+  staffPinFails.clear()
+  for (const k of ['::ffff:127.0.0.1', '::1', '127.0.0.1']) { try { adminPinLimiter.resetKey(k) } catch { /* older limiter: nothing to reset */ } }
+}
 async function requireStaffPin(req, res) {
   const ip = req.ip || 'unknown'
   const rec = staffPinFails.get(ip)

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=Poppins:wght@400;600;700&display=swap');
+/* Inter and Poppins are bundled with the app (src/fonts.css): nothing is loaded from Google, which also lets the kiosk show them offline. */
 
 @plugin 'tailwindcss-animate';
 @import "tailwindcss";

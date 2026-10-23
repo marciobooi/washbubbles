@@ -29,11 +29,40 @@ function Healthy($secs) {
   }
   $false
 }
+# backend.log is never rotated by run-backend.bat and grew past 90 MB with card holders' names and tax ids in it. Each time the
+# backend is restarted (it is stopped for ~5 s then) a log over 20 MB is moved aside, and once the backend is up again the moved
+# file is masked (name / tax id / e-mail / phone), compressed into logs\archive and deleted. The 5 newest archives are kept.
+function Rotate-BackendLog {
+  $log = Join-Path $root 'logs\backend.log'
+  if (-not (Test-Path $log) -or (Get-Item $log).Length -lt 20MB) { return $null }
+  $arch = Join-Path $root 'logs\archive'; New-Item -ItemType Directory -Force $arch | Out-Null
+  $dest = Join-Path $arch ('backend-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.raw.log')
+  for ($i = 0; $i -lt 10; $i++) { try { Move-Item $log $dest -ErrorAction Stop; return $dest } catch { Start-Sleep -Milliseconds 500 } }
+  $null
+}
+function Archive-RawLog($raw) {
+  try {
+    $san = $raw -replace '\.raw\.log$', '.log'
+    $sr = New-Object IO.StreamReader($raw, [Text.Encoding]::UTF8); $sw = New-Object IO.StreamWriter($san, $false, [Text.Encoding]::UTF8)
+    while ($null -ne ($line = $sr.ReadLine())) {
+      $sw.WriteLine([regex]::Replace($line, '"(name|nif|email|phone|contribuinte|customerName|customerEmail|customerPhone)":"([^"]*[^"\s][^"]*)"', '"$1":"***"'))
+    }
+    $sw.Close(); $sr.Close()
+    Compress-Archive -Path $san -DestinationPath ($san -replace '\.log$', '.zip') -Force
+    Remove-Item $san, $raw -Force
+    Get-ChildItem (Split-Path $raw) -Filter '*.zip' | Sort-Object LastWriteTime -Descending | Select-Object -Skip 5 | Remove-Item -Force
+    Log 'backend.log rotated: masked copy archived, original removed'
+  } catch { Log ('log archive failed (the raw file is kept): ' + $_.Exception.Message) }
+}
 function RestartBackend {
   Get-CimInstance Win32_Process -Filter "name='node.exe'" | Where-Object { $_.CommandLine -match 'src\\index\.js' } |
     ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
-  Start-Sleep 8   # run-backend.bat waits 5 s and starts it again
-  Healthy 120
+  Start-Sleep 1
+  $raw = Rotate-BackendLog
+  Start-Sleep 7   # run-backend.bat waits 5 s and starts it again
+  $ok = Healthy 120
+  if ($ok -and $raw) { Archive-RawLog $raw }
+  $ok
 }
 function BuildScreen {
   $e = Join-Path $root 'backend\.env'

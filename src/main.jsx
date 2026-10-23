@@ -6,6 +6,7 @@ import { AuthProvider } from './context/AuthContext'
 import App from './App'
 import OnScreenKeyboard from './components/OnScreenKeyboard'
 import './lib/i18n'
+import './fonts.css'
 import './index.css'
 import { startAutoReload } from './lib/autoReload'
 
