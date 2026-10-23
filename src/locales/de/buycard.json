@@ -47,7 +47,7 @@
   "writeFailDesc": "Die Karte ist noch nicht aktiv. Erneut versuchen oder am Schalter melden.",
   "writeFallback": "Die Karte konnte nicht beschrieben werden. Prüfen Sie, ob sie richtig eingelegt ist, und versuchen Sie es erneut.",
   "closeWindow": "Fenster schließen",
-  "cardLabel": "FreshBubbles-Karte",
+  "cardLabel": "{{shop}}-Karte",
   "fillHint": "Ermöglicht die Wiederherstellung des Guthabens bei Verlust und die automatische Zuordnung von Rechnungen.",
   "privacyLink": "Datenschutzerklärung ansehen (DSGVO)",
   "consent": "Ich erlaube die Verarbeitung meiner personenbezogenen Daten gemäß der <a>Datenschutzerklärung</a>.",

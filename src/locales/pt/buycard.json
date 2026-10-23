@@ -47,7 +47,7 @@
   "writeFailDesc": "O cartão ainda não está activo. Tente novamente ou contacte o balcão.",
   "writeFallback": "Não foi possível gravar o cartão. Verifique que está bem inserido e tente novamente.",
   "closeWindow": "Fechar janela",
-  "cardLabel": "Cartão FreshBubbles",
+  "cardLabel": "Cartão {{shop}}",
   "fillHint": "Permite recuperar o saldo em caso de extravio e associar faturas automáticas.",
   "privacyLink": "Ver Política de Privacidade (RGPD)",
   "consent": "Autorizo o tratamento dos meus dados pessoais, nos termos da <a>Política de Privacidade</a>.",

@@ -48,11 +48,10 @@ export function AppSidebar(props) {
 
   const { role } = useAuth()
   const { branding } = useBranding() || {}
-  const DEFAULT_LOGO = '/geral/freshbubbleslogo.png'
   // Logo files that failed to load. The saved logo is tried first, then the shop's default one; when both
   // have failed (or nothing is configured) the plain gradient mark is shown. Each source is tried once.
   const [failedLogos, setFailedLogos] = React.useState([])
-  const logoSrc = [branding?.logo, DEFAULT_LOGO].find((u) => u && !failedLogos.includes(u))
+  const logoSrc = [branding?.logo].find((u) => u && !failedLogos.includes(u))
   let itemsToRender = navItems
     .filter(i => (i.roles || ['ADMIN', 'SUPERADMIN']).includes(role))
     .map((i) => ({ ...i, matchIndices: [] }))

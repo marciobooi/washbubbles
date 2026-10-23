@@ -56,8 +56,13 @@ export function emailButton(label, href) {
 export function renderEmailHtml({ title, preheader, bodyHtml, brand = {} }) {
   // The shop's own name, logo and contact from the admin (services/emailBrand.js) win over the built-in defaults.
   const pick = (v, d) => (v && String(v).trim() ? String(v).trim() : d)
-  const B = { name: pick(brand.name, BRAND.name), address: pick(brand.address, BRAND.address), phone: pick(brand.phone, BRAND.phone), email: pick(brand.email, BRAND.email) }
-  const logo = pick(brand.logo, LOGO_URL)
+  // A shop that has its own brand never borrows FreshBubbles' address, phone, e-mail or logo: what it lacks is simply left out.
+  const own = !!(brand && brand.name)
+  const B = { name: pick(brand.name, BRAND.name), address: pick(brand.address, own ? '' : BRAND.address), phone: pick(brand.phone, own ? '' : BRAND.phone), email: pick(brand.email, own ? '' : BRAND.email) }
+  const logo = pick(brand.logo, own ? '' : LOGO_URL)
+  const tagline = brand.tagline != null ? String(brand.tagline) : (own ? '' : 'Laundry & Ironing')
+  const footLine1 = [B.name, B.address].filter(Boolean).map(escapeHtml).join(' &middot; ')
+  const footLine2 = [B.phone ? escapeHtml(B.phone) : '', B.email ? `<a href="mailto:${escapeHtml(B.email)}" style="color:${PRIMARY_DARK};">${escapeHtml(B.email)}</a>` : ''].filter(Boolean).join(' &middot; ')
   return `<!DOCTYPE html>
 <html lang="pt-PT">
 <head>
@@ -74,9 +79,9 @@ export function renderEmailHtml({ title, preheader, bodyHtml, brand = {} }) {
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;">
           <tr>
             <td align="center" style="padding-bottom:24px;">
-              <img src="${escapeHtml(logo)}" width="56" height="56" alt="${escapeHtml(B.name)}" style="display:block;">
+              ${logo ? `<img src="${escapeHtml(logo)}" width="56" height="56" alt="${escapeHtml(B.name)}" style="display:block;">` : ''}
               <div style="margin-top:10px; font-family:Arial,Helvetica,sans-serif; font-size:18px; font-weight:bold; color:${INK};">${escapeHtml(B.name)}</div>
-              <div style="font-family:Arial,Helvetica,sans-serif; font-size:11px; letter-spacing:1px; text-transform:uppercase; color:${INK_SOFT};">Laundry &amp; Ironing</div>
+              <div style="font-family:Arial,Helvetica,sans-serif; font-size:11px; letter-spacing:1px; text-transform:uppercase; color:${INK_SOFT};">${escapeHtml(tagline)}</div>
             </td>
           </tr>
           <tr>
@@ -89,8 +94,8 @@ export function renderEmailHtml({ title, preheader, bodyHtml, brand = {} }) {
           </tr>
           <tr>
             <td align="center" style="padding:24px 12px 0; font-family:Arial,Helvetica,sans-serif; font-size:12px; color:${INK_SOFT}; line-height:1.6;">
-              ${escapeHtml(B.name)} &middot; ${escapeHtml(B.address)}<br>
-              ${escapeHtml(B.phone)} &middot; <a href="mailto:${escapeHtml(B.email)}" style="color:${PRIMARY_DARK};">${escapeHtml(B.email)}</a>
+              ${footLine1}${footLine2 ? '<br>' : ''}
+              ${footLine2}
             </td>
           </tr>
         </table>

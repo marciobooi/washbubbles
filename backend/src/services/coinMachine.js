@@ -36,7 +36,7 @@ class CoinMachine extends EventEmitter {
     super()
     
     this.middleware = options.middleware || middleware
-    this.client = new Client()
+    this.client = new Client(() => this.tenantId)
     this.settings = null
     this.running = false
     this.subscriptions = []

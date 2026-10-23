@@ -8,7 +8,7 @@ import { normalizePhone } from '../services/eupago.js'
 import { escapeHtml } from '../services/emailTemplate.js'
 
 const TTL_MS = 5 * 60 * 1000   // the QR lives as long as the customer has to approve: one session
-const site = () => String(process.env.PUBLIC_SITE_URL || 'https://freshbubbles.pt').replace(/\/+$/, '')
+import { publicSiteFor } from '../services/landingBase.js'
 
 // ---- shop side (kiosk key): create the link, pick the number up once ------------------------------------------------------------
 export const shopRouter = express.Router()
@@ -19,7 +19,7 @@ shopRouter.post('/create', requireKiosk, async (req, res) => {
   const machines = (Array.isArray(req.body?.machines) ? req.body.machines : []).map((m) => String(m).slice(0, 40)).slice(0, 12)
   const token = crypto.randomBytes(18).toString('base64url')
   const doc = await MbwayLink.create({ token, tenantId: req.tenantId, amount: Math.round(amount * 100) / 100, machines, expiresAt: new Date(Date.now() + TTL_MS) })
-  res.status(201).json({ token, url: `${site()}/pagar/${token}`, expiresAt: doc.expiresAt })
+  res.status(201).json({ token, url: `${await publicSiteFor(req.tenantId)}/pagar/${token}`, expiresAt: doc.expiresAt })
 })
 
 // The kiosk gives the code up (back, cancel, error, retry, screen closed): it can never be used again and the number, if any, is wiped.

@@ -47,7 +47,7 @@
   "writeFailDesc": "The card is not active yet. Try again or ask at the counter.",
   "writeFallback": "The card could not be written. Check that it is inserted properly and try again.",
   "closeWindow": "Close window",
-  "cardLabel": "FreshBubbles card",
+  "cardLabel": "{{shop}} card",
   "fillHint": "Lets you recover your balance if the card is lost and link invoices automatically.",
   "privacyLink": "View Privacy Policy (GDPR)",
   "consent": "I authorise the processing of my personal data, as set out in the <a>Privacy Policy</a>.",

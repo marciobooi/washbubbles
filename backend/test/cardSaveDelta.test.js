@@ -16,7 +16,7 @@ describe('Card balance save: only what the session changed', function () {
 
   it('a recharge made through the API while the card is loaded is not erased when the card is removed', async () => {
     await Card.collection.insertOne({ tenantId: tenant._id, code: 'C-DELTA', balance: 4.7, bonus: 0, status: 'active', createdAt: new Date() })
-    const c = new Client()
+    const c = new Client(() => tenant._id)
     expect(await c.setClientInfoByCard('C-DELTA')).to.equal(true)
 
     // The kiosk recharges EUR 10 through the HTTP route: the database moves, the session does not.
@@ -29,7 +29,7 @@ describe('Card balance save: only what the session changed', function () {
 
   it('still saves what the session spent from the card', async () => {
     await Card.collection.insertOne({ tenantId: tenant._id, code: 'C-SPEND', balance: 10, bonus: 0, status: 'active', createdAt: new Date() })
-    const c = new Client()
+    const c = new Client(() => tenant._id)
     await c.setClientInfoByCard('C-SPEND')
     c.deductCredits(4)
     await c.saveCardBalance()
@@ -38,7 +38,7 @@ describe('Card balance save: only what the session changed', function () {
 
   it('an external recharge AND a spend in the same session both survive', async () => {
     await Card.collection.insertOne({ tenantId: tenant._id, code: 'C-BOTH', balance: 5, bonus: 0, status: 'active', createdAt: new Date() })
-    const c = new Client()
+    const c = new Client(() => tenant._id)
     await c.setClientInfoByCard('C-BOTH')
     await Card.collection.updateOne({ code: 'C-BOTH' }, { $inc: { balance: 10 } })
     c.deductCredits(2)

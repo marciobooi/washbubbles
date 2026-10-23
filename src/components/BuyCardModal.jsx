@@ -19,6 +19,7 @@ const STEPS = {
 
 export default function BuyCardModal({ open, onClose }) {
   const { t, i18n } = useTranslation('buycard')
+  const { branding } = useBranding() || {}
   const { credit } = useCart() // the cash really inserted (the shop's session), not a button
   const eur = (n) => `${Number(n).toFixed(2).replace('.', i18n.language === 'en' ? '.' : ',')}€`
   const [step, setStep] = useState(STEPS.FORM)
@@ -371,7 +372,7 @@ export default function BuyCardModal({ open, onClose }) {
             <div className="w-6 h-[18px] bg-amber-300/90 rounded-sm border border-amber-500/60" />
             <Wifi className="w-4 h-4 text-white/80 rotate-90" />
           </div>
-          <div className="text-[9px] uppercase tracking-wider font-extrabold text-white/95 text-left">{t('cardLabel')}</div>
+          <div className="text-[9px] uppercase tracking-wider font-extrabold text-white/95 text-left">{t('cardLabel', { shop: branding?.companyName || '', interpolation: { escapeValue: false } }).trim()}</div>
           {tick && (
             <span className="absolute -top-3 -right-3 bg-emerald-600 text-white rounded-full p-1.5 shadow-md ring-4 ring-white">
               <CheckCircle2 className="w-6 h-6" />

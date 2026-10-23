@@ -47,7 +47,7 @@
   "writeFailDesc": "La tarjeta aún no está activa. Inténtelo de nuevo o contacte con el mostrador.",
   "writeFallback": "No se pudo grabar la tarjeta. Compruebe que está bien introducida e inténtelo de nuevo.",
   "closeWindow": "Cerrar ventana",
-  "cardLabel": "Tarjeta FreshBubbles",
+  "cardLabel": "Tarjeta {{shop}}",
   "fillHint": "Permite recuperar el saldo en caso de pérdida y asociar facturas automáticamente.",
   "privacyLink": "Ver Política de Privacidad (RGPD)",
   "consent": "Autorizo el tratamiento de mis datos personales, conforme a la <a>Política de Privacidad</a>.",

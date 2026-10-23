@@ -115,7 +115,8 @@ router.post('/change-password', requireAuth, async (req, res) => {
 router.post('/forgot-password', passwordResetLimiter, async (req, res) => {
   const { email } = req.body
   if (!email) return res.status(400).json({ error: 'Missing email' })
-  const user = await User.findOne({ email })
+  // the same address may exist in several shops: only the shop of the site the request came from
+  const user = await User.findOne({ email, ...(req.tenantId ? { tenantId: req.tenantId } : {}) })
   if (user) {
     const token = crypto.randomBytes(32).toString('hex')
     user.resetPasswordToken = token

@@ -7,8 +7,10 @@ import { roundMoney } from '../utils/money.js'
  * Based on the coin-machine Client class
  */
 class Client extends EventEmitter {
-  constructor() {
+  /** @param getTenantId  the shop whose cards this client reads and writes (the coin machine's tenant); with none, no card is touched */
+  constructor(getTenantId = () => null) {
     super()
+    this.getTenantId = getTenantId
     
     this.client = {
       name: null,
@@ -111,8 +113,10 @@ class Client extends EventEmitter {
 
     try {
       // Atomic: a concurrent operation on this card must not be overwritten.
+      const tenantId = this.getTenantId()
+      if (!tenantId) return
       const card = await Card.findOneAndUpdate(
-        { code: cardNumber },
+        { tenantId, code: cardNumber },
         { $inc: { balance: unspent }, $set: { updatedAt: new Date() } },
         { new: true }
       )
@@ -150,7 +154,9 @@ class Client extends EventEmitter {
    */
   async setClientInfoByCard(cardNumber) {
     try {
-      const card = await Card.findOne({ code: cardNumber })
+      const tenantId = this.getTenantId()
+      if (!tenantId) return false
+      const card = await Card.findOne({ tenantId, code: cardNumber })
       
       if (!card) {
         console.warn(`Card ${cardNumber} not found`)
@@ -254,8 +260,10 @@ class Client extends EventEmitter {
     const mem = roundMoney(this.client.balanceCard)
     const base = roundMoney(this.client.initBalance ?? mem)
     const delta = roundMoney(mem - base)
+    const tenantId = this.getTenantId()
+    if (!tenantId) throw new Error('No shop resolved — card balance not saved')
     const card = await Card.findOneAndUpdate(
-      { code: this.client.cardNumber },
+      { tenantId, code: this.client.cardNumber },
       { $inc: { balance: delta }, $set: { bonus: roundMoney(this.client.bonus), updatedAt: new Date() } },
       { new: true }
     )

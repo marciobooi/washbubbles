@@ -47,7 +47,7 @@
   "writeFailDesc": "La carte n'est pas encore active. Réessayez ou adressez-vous au comptoir.",
   "writeFallback": "Impossible d'écrire la carte. Vérifiez qu'elle est bien insérée et réessayez.",
   "closeWindow": "Fermer la fenêtre",
-  "cardLabel": "Carte FreshBubbles",
+  "cardLabel": "Carte {{shop}}",
   "fillHint": "Permet de récupérer le solde en cas de perte et d’associer les factures automatiquement.",
   "privacyLink": "Voir la politique de confidentialité (RGPD)",
   "consent": "J’autorise le traitement de mes données personnelles conformément à la <a>Politique de confidentialité</a>.",
