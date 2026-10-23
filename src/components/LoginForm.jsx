@@ -37,7 +37,7 @@ export default function LoginForm({ mode = 'admin', embedded = false }) {
     const payload = apiKey ? { apiKey } : { username: fd.get('username') || username, password: fd.get('password') || password }
     try {
       const data = await api.login(payload)
-      login({ token: data.token, role: data.role })
+      login({ token: data.token, role: data.role, tenant: data.tenant })
       // Navigation is handled by the parent (e.g., Admin page) after successful login
       // This keeps routing decisions out of the form component and centralizes role-based redirects
       // (no client-side navigation here)

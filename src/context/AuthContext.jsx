@@ -19,6 +19,8 @@ export function AuthProvider({ children }) {
   const startExpired = isExpired(stored)
   const [token, setToken] = useState(() => (startExpired ? null : stored || null))
   const [role, setRole] = useState(() => (startExpired ? null : localStorage.getItem('ws_role') || null))
+  // The shop the logged-in user belongs to ({ id, name, slug }), from the login answer.
+  const [tenant, setTenant] = useState(() => { try { return startExpired ? null : JSON.parse(localStorage.getItem('ws_home_tenant') || 'null') } catch { return null } })
 
   useEffect(() => {
     if (token) localStorage.setItem('ws_token', token)
@@ -75,17 +77,24 @@ export function AuthProvider({ children }) {
     return () => { window.removeEventListener('auth:expired', onUnauthorized); if (timer) clearTimeout(timer) }
   }, [token])
 
-  const login = ({ token, role }) => {
+  const login = ({ token, role, tenant: shop }) => {
+    // Every login starts in the user's OWN shop (a superadmin's "act as" choice is not carried over).
+    try { localStorage.removeItem('ws_tenant'); if (shop) localStorage.setItem('ws_home_tenant', JSON.stringify(shop)); else localStorage.removeItem('ws_home_tenant') } catch { /* optional */ }
+    window.dispatchEvent(new CustomEvent('ws:tenant-reset'))
+    setTenant(shop || null)
     setToken(token)
     setRole(role)
   }
   const logout = () => {
+    try { localStorage.removeItem('ws_tenant'); localStorage.removeItem('ws_home_tenant') } catch { /* optional */ }
+    window.dispatchEvent(new CustomEvent('ws:tenant-reset'))
+    setTenant(null)
     setToken(null)
     setRole(null)
   }
 
   return (
-    <AuthContext.Provider value={{ token, role, login, logout }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ token, role, tenant, login, logout }}>{children}</AuthContext.Provider>
   )
 }
 

@@ -34,10 +34,17 @@ export function TenantProvider({ children }) {
   const { pathname } = useLocation()
   const isAdminRoute = pathname.startsWith('/admin')
   // ...and only once someone is logged in: on the login page there is no token, and the call only answered 401 (red in the console).
-  const { token } = useAuth()
+  // The list of shops is a superadmin thing (GET /admin/tenants answers 403 to everybody else).
+  const { token, role } = useAuth()
   useEffect(() => {
-    if (isAdminRoute && token) refreshTenants()
-  }, [isAdminRoute, token])
+    if (isAdminRoute && token && role === 'SUPERADMIN') refreshTenants()
+  }, [isAdminRoute, token, role])
+  // login / logout start again from the user's own shop
+  useEffect(() => {
+    const reset = () => setTenantId(null)
+    window.addEventListener('ws:tenant-reset', reset)
+    return () => window.removeEventListener('ws:tenant-reset', reset)
+  }, [])
 
   const selectTenant = (id) => setTenantId(id || null)
 

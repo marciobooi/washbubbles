@@ -11,6 +11,8 @@ export default function AdminTenants() {
   const { tenants = [], createTenant, updateTenant, assignUser } = useTenant()
   const [name, setName] = useState('')
   const [slug, setSlug] = useState('')
+  const [domains, setDomains] = useState('') // site addresses, comma separated
+  const [renameDomains, setRenameDomains] = useState('')
   const [creating, setCreating] = useState(false)
 
   const [users, setUsers] = useState([])
@@ -30,9 +32,9 @@ export default function AdminTenants() {
     if (!name || !slug) return
     setCreating(true)
     try {
-      await createTenant({ name, slug })
-      toast({ title: 'Tenant criado', variant: 'success' })
-      setName(''); setSlug('')
+      await createTenant({ name, slug, domains })
+      toast({ title: 'Loja criada — começa vazia: crie os preços, interfaces e máquinas dela', variant: 'success' })
+      setName(''); setSlug(''); setDomains('')
     } catch (err) {
       toast({ title: err?.body?.error || err?.message || 'Erro ao criar tenant', variant: 'destructive' })
     } finally {
@@ -43,6 +45,7 @@ export default function AdminTenants() {
   function openRename(t) {
     setRenameTarget(t)
     setRenameValue(t.name)
+    setRenameDomains((t.domains || []).join(', '))
   }
 
   async function saveRename(e) {
@@ -50,7 +53,7 @@ export default function AdminTenants() {
     if (!renameValue) return
     setSaving(true)
     try {
-      await updateTenant(renameTarget._id, { name: renameValue })
+      await updateTenant(renameTarget._id, { name: renameValue, domains: renameDomains })
       toast({ title: 'Tenant atualizado', variant: 'success' })
       setRenameTarget(null)
     } catch (err) {
@@ -89,6 +92,7 @@ export default function AdminTenants() {
         <form onSubmit={handleCreate} className="flex flex-wrap gap-2 mb-4">
           <input placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} className="border rounded px-3 py-2 text-sm" />
           <input placeholder="Slug" value={slug} onChange={(e) => setSlug(e.target.value)} className="border rounded px-3 py-2 text-sm" />
+          <input placeholder="Endereços do site (ex: marcioslvinc.ro, www.marcioslvinc.ro)" value={domains} onChange={(e) => setDomains(e.target.value)} className="border rounded px-3 py-2 text-sm min-w-[320px]" />
           <Button type="submit" disabled={creating}>
             <Plus className="h-4 w-4 mr-2" /> {creating ? 'A criar...' : 'Create'}
           </Button>
@@ -103,6 +107,7 @@ export default function AdminTenants() {
                 <div>
                   <div className="font-semibold">{t.name}</div>
                   <div className="text-xs text-muted-foreground">{t.slug} · {t._id}</div>
+                  <div className="text-xs text-neutral-600">{(t.domains || []).length ? `Site: ${t.domains.join(', ')}` : 'Sem endereço de site'}</div>
                 </div>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={() => openRename(t)}>
@@ -122,6 +127,11 @@ export default function AdminTenants() {
             <div>
               <label className="text-sm font-medium">Name</label>
               <input className="border p-2 rounded mt-1 w-full" value={renameValue} onChange={(e) => setRenameValue(e.target.value)} autoFocus />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Endereços do site</label>
+              <input className="border p-2 rounded mt-1 w-full" placeholder="marcioslvinc.ro, www.marcioslvinc.ro" value={renameDomains} onChange={(e) => setRenameDomains(e.target.value)} />
+              <p className="text-xs text-neutral-500 mt-1">Um endereço só pode pertencer a uma loja. Separe por vírgulas.</p>
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" type="button" onClick={() => setRenameTarget(null)}><X className="h-4 w-4 mr-2" />Cancelar</Button>

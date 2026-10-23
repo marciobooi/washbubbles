@@ -5,6 +5,7 @@ import NavSearch from '@/components/NavSearch'
 import { LogOut, Bell, Sun, Moon, ChevronDown, User, KeyRound } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import { useAuth } from '../context/AuthContext'
+import TenantSwitch, { ActingAsStrip } from '../components/TenantSwitch'
 import { useNavigate, useLocation, Navigate, Outlet } from 'react-router-dom'
 
 // Light "alabaster" is the design; dark is a re-mapping of its hard-coded colours (see `.admin-dark` in index.css),
@@ -64,10 +65,12 @@ export default function AdminDashboard() {
         <AppSidebar />
         <SidebarInset>
           <div className="flex flex-1 flex-col gap-4 min-w-0 px-4 sm:px-6 py-5">
+            <ActingAsStrip />
             <header className="sticky top-0 z-20 h-[60px] shrink-0 flex items-center gap-3.5 px-3 sm:px-[18px] rounded-2xl bg-white shadow-[0_1px_2px_rgba(20,25,30,0.04),0_8px_20px_-12px_rgba(20,25,30,0.10)]">
               <SidebarTrigger className="h-10 w-10 shrink-0 rounded-full border border-black/[0.09] bg-[#f7f5f1] flex items-center justify-center transition-[background,transform] duration-150 hover:bg-[#eeebe4] hover:scale-[1.06]" />
 
               <NavSearch className="flex-1 max-w-[380px]" />
+              <TenantSwitch />
 
               <div className="ml-auto flex items-center gap-2">
               

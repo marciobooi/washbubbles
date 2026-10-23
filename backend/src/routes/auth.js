@@ -18,6 +18,8 @@ const loginLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many login attempts, please try again later.' },
+  // Off only for the automated tests, which log in many more than 6 times from one address.
+  skip: () => process.env.LOGIN_LIMIT_OFF === 'true',
 })
 
 /**

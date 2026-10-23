@@ -7,6 +7,8 @@ import jwt from 'jsonwebtoken'
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret'
 // Machine activations are spaced out on real hardware; tests do not wait for that pause.
 process.env.ACTIVATION_GAP_MS = process.env.ACTIVATION_GAP_MS || '0'
+// The login is limited to 6 tries per quarter hour per address; the whole test run shares one address.
+process.env.LOGIN_LIMIT_OFF = 'true'
 
 /**
  * Mint a token directly, the same way POST /api/auth/login does — for tests
