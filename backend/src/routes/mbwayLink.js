@@ -1,6 +1,7 @@
 import express from 'express'
 import crypto from 'crypto'
 import rateLimit from 'express-rate-limit'
+import { limitKey } from '../middleware/limitKey.js'
 import MbwayLink from '../models/mbwayLink.js'
 import { requireKiosk } from '../middleware/auth.js'
 import { normalizePhone } from '../services/eupago.js'
@@ -40,7 +41,7 @@ shopRouter.get('/:token/phone', requireKiosk, async (req, res) => {
 
 // ---- the customer's phone (public) ----------------------------------------------------------------------------------------------
 export const publicRouter = express.Router()
-const limiter = rateLimit({ windowMs: 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false, message: { error: 'Too many attempts' } })
+const limiter = rateLimit({ windowMs: 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false, message: { error: 'Too many attempts' }, keyGenerator: limitKey })
 
 const T = {
   pt: { title: 'Pagar com MB WAY', pay: 'A pagar', phone: 'Número de telemóvel do MB WAY', send: 'Pagar', sending: 'A enviar…', done: 'Pedido enviado. Aprove o pagamento na app MB WAY (tem 5 minutos). A máquina arranca sozinha. Pode fechar esta página.', bad: 'Número inválido: escreva os 9 dígitos do telemóvel.', gone: 'Este código já foi usado ou expirou. Volte ao quiosque e peça um novo.', err: 'Não foi possível enviar. Tente de novo.' },

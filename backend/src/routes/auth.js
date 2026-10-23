@@ -7,6 +7,7 @@ import User from '../models/user.js'
 import Tenant from '../models/tenant.js'
 import { requireAuth } from '../middleware/auth.js'
 import { findUserByApiKey } from '../services/apiKeys.js'
+import { limitKey, accountKey } from '../middleware/limitKey.js'
 
 const router = express.Router()
 const JWT_SECRET = process.env.JWT_SECRET // enforced at startup
@@ -20,6 +21,17 @@ const loginLimiter = rateLimit({
   message: { error: 'Too many login attempts, please try again later.' },
   // Off only for the automated tests, which log in many more than 6 times from one address.
   skip: () => process.env.LOGIN_LIMIT_OFF === 'true',
+  keyGenerator: limitKey, // per shop + address: one shop's failed logins never lock another shop
+})
+// ...and per account (shop + user name) whatever the address, against a guess spread over many addresses
+const accountLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 12,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts for this account, please try again later.' },
+  skip: () => process.env.LOGIN_LIMIT_OFF === 'true',
+  keyGenerator: accountKey,
 })
 
 /**
@@ -35,9 +47,10 @@ const passwordResetLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many password reset attempts, please try again later.' },
+  keyGenerator: limitKey,
 })
 
-router.post('/login', loginLimiter, async (req, res) => {
+router.post('/login', loginLimiter, accountLimiter, async (req, res) => {
   // Using Mongoose User model. Accepts username/password OR apiKey.
   const { username, password, apiKey } = req.body
   if (!apiKey && (!username || !password)) return res.status(400).json({ error: 'Missing credentials' })

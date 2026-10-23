@@ -10,6 +10,7 @@ import { withTenant } from '../services/tenant.js'
 import { roundMoney, parseAmount } from '../utils/money.js'
 import { creditCard, debitCard, SPENDABLE } from '../services/cardBalance.js'
 import { cardLookupLimiter, adminPinLimiter } from '../middleware/rateLimits.js'
+import { limitKey, _resetLimitKeys } from '../middleware/limitKey.js'
 import crypto from 'crypto'
 import coinMachine from '../services/coinMachine.js'
 import { promoIsActive } from './gateways.js'
@@ -389,14 +390,14 @@ router.post('/recharge', requireKiosk, async (req, res) => {
  */
 // Staff PIN for the actions below (gift card, machine start/stop). Only WRONG PINs count against the limit
 // (5 per 15 min): a legitimate PIN, however many actions, never locks staff out. Answers the request itself when refused.
-const staffPinFails = new Map() // ip -> { n, since }
+const staffPinFails = new Map() // kiosk key / shop+address -> { n, since }
 /** Tests only: forget the wrong-PIN counters (they are per process, and other tests also use wrong PINs). */
 export function _resetPinGuards() {
   staffPinFails.clear()
-  for (const k of ['::ffff:127.0.0.1', '::1', '127.0.0.1']) { try { adminPinLimiter.resetKey(k) } catch { /* older limiter: nothing to reset */ } }
+  _resetLimitKeys()
 }
 async function requireStaffPin(req, res) {
-  const ip = req.ip || 'unknown'
+  const ip = limitKey(req) // per kiosk key (never shared with another shop)
   const rec = staffPinFails.get(ip)
   if (rec && Date.now() - rec.since > 15 * 60_000) staffPinFails.delete(ip)
   if ((staffPinFails.get(ip)?.n || 0) >= 5) { res.status(429).json({ error: 'Too many PIN attempts, please try again later.' }); return false }

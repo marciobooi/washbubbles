@@ -1,4 +1,5 @@
 import rateLimit from 'express-rate-limit'
+import { limitKey } from './limitKey.js'
 
 /**
  * Card-code lookup limiter.
@@ -17,6 +18,7 @@ export const cardLookupLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many card lookups, please slow down.' },
+  keyGenerator: limitKey, // per kiosk key / per shop, never shared between shops
 })
 
 /**
@@ -32,6 +34,7 @@ export const adminPinLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many PIN attempts, please try again later.' },
+  keyGenerator: limitKey,
 })
 
 export default { cardLookupLimiter, adminPinLimiter }
