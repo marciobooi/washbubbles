@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Input } from '@/components/ui/input'
+import PasswordInput from '@/components/ui/PasswordInput'
 import { Button } from '@/components/ui/button'
 import api from '@/services/api'
 import { toast } from '@/components/ui/Toast'
@@ -51,9 +52,9 @@ export default function ResetPassword() {
           <label className="block text-sm font-medium" htmlFor="password">
             New password
           </label>
-          <Input
+          <PasswordInput
             id="password"
-            type="password"
+            autoComplete="new-password"
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -64,9 +65,9 @@ export default function ResetPassword() {
           <label className="block text-sm font-medium" htmlFor="confirm">
             Confirm password
           </label>
-          <Input
+          <PasswordInput
             id="confirm"
-            type="password"
+            autoComplete="new-password"
             required
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}

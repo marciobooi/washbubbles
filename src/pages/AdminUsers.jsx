@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
 import Modal from '@/components/ui/Modal'
+import PasswordInput from '@/components/ui/PasswordInput'
 import { Pencil, Trash2, Plus, Check, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '../context/AuthContext' 
@@ -197,12 +198,12 @@ export default function AdminUsers(){
 
             <div>
               <label className="text-sm font-medium">Password</label>
-              <input type="password" className="w-full mt-2 p-2 border rounded" placeholder="Definir password (opcional ao editar)" value={password} onChange={(e)=>setPassword(e.target.value)} />
+              <PasswordInput className="mt-2" autoComplete="new-password" placeholder="Definir password (opcional ao editar)" value={password} onChange={(e)=>setPassword(e.target.value)} />
             </div>
 
             <div>
               <label className="text-sm font-medium">Confirmar password</label>
-              <input type="password" className="w-full mt-2 p-2 border rounded" placeholder="Confirmar password" value={confirmPassword} onChange={(e)=>setConfirmPassword(e.target.value)} />
+              <PasswordInput className="mt-2" autoComplete="new-password" placeholder="Confirmar password" value={confirmPassword} onChange={(e)=>setConfirmPassword(e.target.value)} />
             </div>
 
             <div className="md:col-span-2 text-xs text-muted-foreground">Password mínima: 8 caracteres. Deixe em branco para não alterar.</div>

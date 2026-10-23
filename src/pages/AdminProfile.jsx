@@ -1,9 +1,9 @@
 import React from 'react'
-import { Eye, EyeOff, KeyRound } from 'lucide-react'
+import { KeyRound } from 'lucide-react'
 import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import PasswordInput from '@/components/ui/PasswordInput'
 import { Label } from '@/components/ui/label'
 import { useAuth } from '../context/AuthContext'
 
@@ -23,9 +23,7 @@ export default function AdminProfile() {
   const [currentPassword, setCurrentPassword] = React.useState('')
   const [newPassword, setNewPassword] = React.useState('')
   const [confirm, setConfirm] = React.useState('')
-  const [show, setShow] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
-  const type = show ? 'text' : 'password'
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -59,19 +57,16 @@ export default function AdminProfile() {
       <form onSubmit={handleSubmit} className="space-y-4 bg-white rounded-2xl border border-black/[0.07] shadow-sm p-6">
         <div className="space-y-1.5">
           <Label htmlFor="cur">Palavra-passe atual</Label>
-          <Input id="cur" type={type} autoComplete="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
+          <PasswordInput id="cur" autoComplete="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="new">Nova palavra-passe <span className="text-[#8a8478] font-normal">(mínimo {MIN_LENGTH} caracteres)</span></Label>
-          <Input id="new" type={type} autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+          <PasswordInput id="new" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="conf">Confirmar nova palavra-passe</Label>
-          <Input id="conf" type={type} autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+          <PasswordInput id="conf" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
         </div>
-        <button type="button" onClick={() => setShow((s) => !s)} className="inline-flex items-center gap-2 text-sm font-semibold text-[#3a352c]">
-          {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />} {show ? 'Esconder' : 'Mostrar'} palavras-passe
-        </button>
         <div className="flex justify-end pt-1">
           <Button type="submit" disabled={loading || !currentPassword || !newPassword || !confirm}>{loading ? 'A guardar…' : 'Alterar palavra-passe'}</Button>
         </div>
