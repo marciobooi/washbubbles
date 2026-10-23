@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useState } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
@@ -6,25 +6,15 @@ import { cn } from '@/lib/utils'
 /**
  * Password field with an eye button to show what was typed.
  *
- * It is deliberately UNCONTROLLED: a React-controlled <input> copies its current text into the element's `value`
- * attribute, so the password showed up as value="..." in the browser's Elements panel. Here the text lives only in the
- * input itself (the `value` attribute stays empty) and reaches the parent through `onChange`. `value` is only watched for
- * one thing: when the parent sets it back to '' (after a successful save) the field is cleared.
- *
- * (Whoever can open the browser's developer tools on this page can still read what is in the field; that cannot be
- * prevented in a web page. The server never sends a password back.)
+ * A normal controlled field (value + onChange), exactly like the plain inputs it replaces. (An uncontrolled variant that
+ * kept the text out of the element's `value` attribute was tried and reverted: the login stopped accepting passwords for
+ * some browsers / password managers. The attribute is only visible in the developer tools of the person's own browser.)
  *
  * `rawClassName` renders a plain <input> with exactly that class instead of the shared <Input> look.
  */
-export default function PasswordInput({ value, onChange, className, rawClassName, id, ...props }) {
+export default function PasswordInput({ className, rawClassName, ...props }) {
   const [show, setShow] = useState(false)
-  const ref = useRef(null)
-
-  useEffect(() => {
-    if (value === '' && ref.current && ref.current.value !== '') ref.current.value = ''
-  }, [value])
-
-  const common = { id, ref, type: show ? 'text' : 'password', defaultValue: '', onChange, autoCapitalize: 'none', spellCheck: false, ...props }
+  const common = { type: show ? 'text' : 'password', autoCapitalize: 'none', spellCheck: false, ...props }
   return (
     <div className="relative">
       {rawClassName

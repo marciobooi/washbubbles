@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react'
 import { subscribe } from '@/services/websocket'
 import api from '@/services/api'
 import i18n from '@/lib/i18n'
+import { isKioskScreen } from '@/lib/kioskContext'
 
 // The kiosk authenticates with its own API key, same as the other kiosk pages.
 function kioskHeaders() {
@@ -41,6 +42,7 @@ export const CartProvider = ({ children }) => {
 
   // Make the badge match what the shop really holds (used after a reconnect and while credit is showing).
   const syncFromShop = React.useCallback(() => {
+    if (!isKioskScreen()) return Promise.resolve()
     return api.request('/middleware/client/balance', { method: 'GET', expect: 'json', headers: kioskHeaders(), skipAuth: true })
       .then((s) => {
         const cash = Math.round((Number(s?.cash) || 0) * 100) / 100
@@ -78,6 +80,7 @@ export const CartProvider = ({ children }) => {
   // Cash already in the machine when this page loads (page reloaded, or coins put in before
   // it opened) — the backend is the one that actually holds it.
   useEffect(() => {
+    if (!isKioskScreen()) return undefined
     let alive = true
     api.request('/middleware/client/balance', { method: 'GET', expect: 'json', headers: kioskHeaders(), skipAuth: true })
       .then((s) => {

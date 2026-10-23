@@ -31,7 +31,10 @@ export default function LoginForm({ mode = 'admin', embedded = false }) {
     e.preventDefault()
     setError(null)
     setLoading(true)
-    const payload = apiKey ? { apiKey } : { username, password }
+    // Read what is in the fields at the moment of the click, not only what the change events reported: a browser or password
+    // manager can fill a field without any event, and the typed password is not kept in the page's state otherwise.
+    const fd = new FormData(e.currentTarget)
+    const payload = apiKey ? { apiKey } : { username: fd.get('username') || username, password: fd.get('password') || password }
     try {
       const data = await api.login(payload)
       login({ token: data.token, role: data.role })
@@ -56,8 +59,8 @@ export default function LoginForm({ mode = 'admin', embedded = false }) {
       <form onSubmit={handleSubmit} className="w-full">
         {mode === 'admin' ? (
           <div className="space-y-3">
-            <Input placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} />
-            <PasswordInput placeholder="Password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <Input name="username" autoComplete="username" placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} />
+            <PasswordInput name="password" placeholder="Password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
             {error && <div className="text-destructive text-sm">{error}</div>}
             <Button type="submit" className="w-full" disabled={loading}>{loading ? 'Entrando...' : 'Entrar'}</Button>
           </div>

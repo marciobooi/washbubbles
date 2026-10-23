@@ -18,6 +18,7 @@ import { ToastProvider, toast } from './components/ui/Toast'
 import HelpTutorial from './components/HelpTutorial'
 import LanguageSwitcher from './components/LanguageSwitcher'
 import ConnectionBadge from './components/ConnectionBadge'
+import { isKioskScreen } from './lib/kioskContext'
 import DevCardPreview from './pages/DevCardPreview'
 import Loading from './components/ui/loading'
 import DevCartPreview from './pages/DevCartPreview'
@@ -143,6 +144,7 @@ function AppInner() {
   // Is a card in the reader? Shown in the header, so the customer always knows (the reader 'bounces' removed/inserted: 3 s of calm).
   const [cardIn, setCardIn] = React.useState(null)
   React.useEffect(() => {
+    if (!isKioskScreen()) return undefined // admin / public site: no kiosk calls (they only answer 401)
     let timer
     let alive = true
     const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null

@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import api from '../services/api'
+import { useAuth } from './AuthContext'
 
 const TenantContext = createContext()
 
@@ -32,9 +33,11 @@ export function TenantProvider({ children }) {
   // app navigates from /pos to /admin without a full page reload.
   const { pathname } = useLocation()
   const isAdminRoute = pathname.startsWith('/admin')
+  // ...and only once someone is logged in: on the login page there is no token, and the call only answered 401 (red in the console).
+  const { token } = useAuth()
   useEffect(() => {
-    if (isAdminRoute) refreshTenants()
-  }, [isAdminRoute])
+    if (isAdminRoute && token) refreshTenants()
+  }, [isAdminRoute, token])
 
   const selectTenant = (id) => setTenantId(id || null)
 
