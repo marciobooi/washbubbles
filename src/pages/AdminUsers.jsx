@@ -124,7 +124,7 @@ export default function AdminUsers(){
         <div>
           <button
             onClick={openNew}
-            className="inline-flex items-center gap-2 h-[42px] px-5 rounded-full border border-black/[0.12] text-[#1c2530] font-semibold text-sm cursor-pointer transition-colors duration-150 hover:bg-[#f7f5f1] disabled:opacity-60"
+            className="abtn"
           >
             <Plus className="w-[15px] h-[15px]" aria-hidden /> Novo Utilizador
           </button>
@@ -160,11 +160,11 @@ export default function AdminUsers(){
                   <td className="px-4 py-3 text-xs text-muted-foreground">{u.createdAt ? new Date(u.createdAt).toLocaleString() : '—'}</td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2">
-                      <button className="btn p-2" title="Editar" aria-label="Editar" onClick={() => openEdit(u)}>
-                        <Pencil className="h-6 w-6" />
+                      <button className="abtn abtn-icon" title="Editar" aria-label="Editar" onClick={() => openEdit(u)}>
+                        <Pencil />
                       </button>
-                      <button className="btn btn-destructive p-2" title="Remover" aria-label="Remover" onClick={() => remove(u._id)}>
-                        <Trash2 className="h-6 w-6" />
+                      <button className="abtn abtn-icon abtn-danger" title="Remover" aria-label="Remover" onClick={() => remove(u._id)}>
+                        <Trash2 />
                       </button>
                     </div>
                   </td>

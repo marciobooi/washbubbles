@@ -689,7 +689,7 @@ export default function AdminSettings(){
               key={t.id}
               type="button"
               onClick={() => setActiveTab(t.id)}
-              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-xl border whitespace-nowrap transition-colors
+              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-semibold rounded-full border whitespace-nowrap transition-colors
                 ${active ? 'bg-emerald-50 border-emerald-300 text-emerald-800 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800 hover:border-emerald-200'}`}
             >
               <t.Icon className="h-4 w-4" />

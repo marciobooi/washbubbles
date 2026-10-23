@@ -232,34 +232,34 @@ export default function AdminCards() {
   return (
     <div className="p-4">
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold">Cartões de Cliente</h2>
-        <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <h2 className="text-lg font-semibold whitespace-nowrap">Cartões de Cliente</h2>
+        <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={blankCard}
             disabled={blanking}
-            className="flex items-center gap-2 px-4 py-2 border border-rose-300 text-rose-700 bg-white rounded hover:bg-rose-50 transition-colors disabled:opacity-60"
+            className="abtn abtn-danger"
           >
             <X className="h-4 w-4" />
             {blanking ? 'A apagar…' : 'Limpar cartão no leitor'}
           </button>
           <button
             onClick={() => setGiftOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 border border-teal-300 text-teal-700 bg-white rounded hover:bg-teal-50 transition-colors"
+            className="abtn"
           >
             <Gift className="h-4 w-4" />
             Cartão de oferta
           </button>
           <button
             onClick={openCreateForm}
-            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+            className="abtn abtn-primary"
           >
             <Plus className="h-4 w-4" />
             Criar Cartão
           </button>
           <button
             onClick={loadCards}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors"
+            className="abtn"
           >
             <RefreshCw className="h-4 w-4" />
             Atualizar
@@ -395,9 +395,9 @@ export default function AdminCards() {
               </div>
               <button
                 onClick={closeModal}
-                className="p-2 hover:bg-neutral-100 rounded-lg transition-colors"
+                className="abtn abtn-icon" aria-label="Fechar"
               >
-                <X className="h-6 w-6" />
+                <X />
               </button>
             </div>
 
@@ -544,9 +544,9 @@ export default function AdminCards() {
               </div>
               <button
                 onClick={closeForm}
-                className="p-2 hover:bg-neutral-100 rounded-lg transition-colors"
+                className="abtn abtn-icon" aria-label="Fechar"
               >
-                <X className="h-6 w-6" />
+                <X />
               </button>
             </div>
 
@@ -651,14 +651,14 @@ export default function AdminCards() {
             <div className="flex items-center justify-end gap-3 p-6 border-t bg-neutral-50">
               <button
                 onClick={closeForm}
-                className="px-6 py-2 border rounded-lg hover:bg-neutral-100 transition-colors"
+                className="abtn"
                 disabled={saving}
               >
                 Cancelar
               </button>
               <button
                 onClick={handleSave}
-                className="flex items-center gap-2 px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50"
+                className="abtn abtn-primary"
                 disabled={saving}
               >
                 {saving ? (

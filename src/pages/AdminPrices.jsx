@@ -184,7 +184,7 @@ export default function AdminPrices() {
         <h2 className="text-lg font-semibold">Preços / Programas</h2>
         <button
           onClick={openCreate}
-          className="inline-flex items-center gap-2 h-[42px] px-5 rounded-full border border-black/[0.12] text-[#1c2530] font-semibold text-sm cursor-pointer transition-colors duration-150 hover:bg-[#f7f5f1] disabled:opacity-60"
+          className="abtn"
         >
           <Plus className="w-[15px] h-[15px]" aria-hidden /> Novo Preço
         </button>
@@ -246,11 +246,11 @@ export default function AdminPrices() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex gap-2">
-                            <button className="btn p-2" title="Editar" onClick={() => openEdit(p)}>
-                              <Pencil className="h-4 w-4" />
+                            <button className="abtn abtn-icon" title="Editar" onClick={() => openEdit(p)}>
+                              <Pencil />
                             </button>
-                            <button className="btn btn-destructive p-2" title="Eliminar" onClick={() => handleDelete(p._id)}>
-                              <Trash2 className="h-4 w-4" />
+                            <button className="abtn abtn-icon abtn-danger" title="Eliminar" onClick={() => handleDelete(p._id)}>
+                              <Trash2 />
                             </button>
                           </div>
                         </td>
@@ -305,11 +305,11 @@ export default function AdminPrices() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex gap-2">
-                            <button className="btn p-2" title="Editar" onClick={() => openEdit(p)}>
-                              <Pencil className="h-4 w-4" />
+                            <button className="abtn abtn-icon" title="Editar" onClick={() => openEdit(p)}>
+                              <Pencil />
                             </button>
-                            <button className="btn btn-destructive p-2" title="Eliminar" onClick={() => handleDelete(p._id)}>
-                              <Trash2 className="h-4 w-4" />
+                            <button className="abtn abtn-icon abtn-danger" title="Eliminar" onClick={() => handleDelete(p._id)}>
+                              <Trash2 />
                             </button>
                           </div>
                         </td>

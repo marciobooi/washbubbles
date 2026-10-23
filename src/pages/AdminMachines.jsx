@@ -287,7 +287,7 @@ export default function AdminMachines(){
           <div>
             <button
               onClick={openNew}
-              className="inline-flex items-center gap-2 h-[42px] px-5 rounded-full border border-black/[0.12] text-[#1c2530] font-semibold text-sm cursor-pointer transition-colors duration-150 hover:bg-[#f7f5f1] disabled:opacity-60"
+              className="abtn"
             >
               <Plus className="w-[15px] h-[15px]" aria-hidden /> Nova Máquina
             </button>
@@ -348,17 +348,17 @@ export default function AdminMachines(){
                   <td className="px-4 py-3">
                     <div className="flex gap-2">
                       {canService && (
-                        <button className="btn p-2" title="Registar manutenção" aria-label="Registar manutenção" onClick={() => logService(m._id)} disabled={servicingId === m._id}>
-                          <Wrench className="h-6 w-6" />
+                        <button className="abtn abtn-icon" title="Registar manutenção" aria-label="Registar manutenção" onClick={() => logService(m._id)} disabled={servicingId === m._id}>
+                          <Wrench />
                         </button>
                       )}
                       {canEdit && (
                         <>
-                          <button className="btn p-2" title="Editar" aria-label="Editar" onClick={() => openEdit(m)}>
-                            <Pencil className="h-6 w-6" />
+                          <button className="abtn abtn-icon" title="Editar" aria-label="Editar" onClick={() => openEdit(m)}>
+                            <Pencil />
                           </button>
-                          <button className="btn btn-destructive p-2" title="Remover" aria-label="Remover" onClick={() => remove(m._id)}>
-                            <Trash2 className="h-6 w-6" />
+                          <button className="abtn abtn-icon abtn-danger" title="Remover" aria-label="Remover" onClick={() => remove(m._id)}>
+                            <Trash2 />
                           </button>
                         </>
                       )}

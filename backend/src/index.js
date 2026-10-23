@@ -1,4 +1,5 @@
 import 'dotenv/config'
+import './services/asyncRoutes.js' // a rejected async route handler answers with an error instead of hanging
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -236,6 +237,13 @@ async function start() {
   const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017/washstore'
   try {
     await connectMongo(MONGODB_URL)
+    // Indexes Mongoose will not replace by itself (a unique email index that broke creating a second user without an email).
+    try {
+      const { ensureUserIndexes } = await import('./services/ensureIndexes.js')
+      const User = (await import('./models/user.js')).default
+      const fixed = await ensureUserIndexes(User)
+      if (fixed.length) console.log(`[Users] index(es) rebuilt: ${fixed.join(', ')}`)
+    } catch (err) { console.warn('[Users] could not check indexes:', err.message) }
     // Card balances are whole cents: round away any float dust left by older updates (a no-op when all are exact).
     try {
       const { normalizeBalances } = await import('./services/cardBalance.js')

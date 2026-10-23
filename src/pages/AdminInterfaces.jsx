@@ -137,7 +137,7 @@ export default function AdminInterfaces() {
         <h2 className="text-lg font-semibold">Interfaces</h2>
         <button
           onClick={openCreate}
-          className="inline-flex items-center gap-2 h-[42px] px-5 rounded-full border border-black/[0.12] text-[#1c2530] font-semibold text-sm cursor-pointer transition-colors duration-150 hover:bg-[#f7f5f1] disabled:opacity-60"
+          className="abtn"
         >
           <Plus className="w-[15px] h-[15px]" aria-hidden /> Nova Interface
         </button>
@@ -211,7 +211,7 @@ export default function AdminInterfaces() {
                   <div className="flex items-center gap-2">
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <button className="h-10 w-10 rounded-full bg-[#f7f5f1] hover:bg-[#eeebe4] flex items-center justify-center transition-colors" onClick={() => openEdit(iface)}>
+                        <button className="abtn abtn-icon" onClick={() => openEdit(iface)}>
                           <Pencil className="h-4 w-4 text-[#1c2530]" strokeWidth={1.7} />
                         </button>
                       </TooltipTrigger>
@@ -219,8 +219,8 @@ export default function AdminInterfaces() {
                     </Tooltip>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <button className="h-10 w-10 rounded-full bg-[#f7f5f1] hover:bg-red-50 hover:text-red-600 flex items-center justify-center transition-colors" onClick={() => handleDelete(iface._id)}>
-                          <Trash2 className="h-4 w-4" strokeWidth={1.7} />
+                        <button className="abtn abtn-icon abtn-danger" onClick={() => handleDelete(iface._id)}>
+                          <Trash2 />
                         </button>
                       </TooltipTrigger>
                       <TooltipContent sideOffset={6}>Eliminar</TooltipContent>

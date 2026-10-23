@@ -398,3 +398,43 @@
 }
 .admin-shell :is(select, textarea, input):focus { border-color: var(--primary) !important; outline: none; box-shadow: 0 0 0 1px var(--ring); }
 .admin-dark :is(select, textarea, input:not([type="checkbox"], [type="radio"])) { border-color: rgba(255, 255, 255, 0.14) !important; }
+
+/* ---------------------------------------------------------------------------------------------------------------
+   Admin buttons: ONE look (the pill used by "Novo Utilizador", "Atualizar", "Iniciar"...). Pages that wrote their own
+   button classes (square corners, filled green...) use these instead; the shared <Button> component is made a pill in the
+   admin below. Variants: (none) outline, -primary filled, -danger red outline, -sm smaller, -icon round icon button.
+   --------------------------------------------------------------------------------------------------------------- */
+@layer components {
+  .abtn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+    height: 42px; padding: 0 1.25rem; border-radius: 9999px;
+    border: 1px solid rgba(0, 0, 0, 0.12); background: transparent; color: #1c2530;
+    font-size: 0.875rem; font-weight: 600; white-space: nowrap; cursor: pointer;
+    transition: background-color 150ms, color 150ms, border-color 150ms, transform 100ms;
+  }
+  .abtn:hover { background: #f7f5f1; }
+  .abtn:active { transform: scale(0.98); }
+  .abtn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .abtn svg { width: 15px; height: 15px; flex-shrink: 0; }
+  .abtn-primary { background: var(--primary); border-color: transparent; color: var(--primary-foreground, #fff); }
+  .abtn-primary:hover { background: color-mix(in srgb, var(--primary) 88%, black); }
+  .abtn-danger { border-color: #fda4af; color: #be123c; background: #fff; }
+  .abtn-danger:hover { background: #fff1f2; }
+  .abtn-sm { height: 36px; padding: 0 1rem; font-size: 0.8125rem; }
+  .abtn-icon { width: 40px; height: 40px; padding: 0; border: 0; background: #f7f5f1; }
+  .abtn-icon:hover { background: #eeebe4; }
+  .abtn-icon svg { width: 16px; height: 16px; }
+  .abtn-icon.abtn-danger { background: #f7f5f1; color: #1c2530; }
+  .abtn-icon.abtn-danger:hover { background: #fef2f2; color: #dc2626; }
+}
+/* the shared <Button> component is a pill too, inside the admin */
+.admin-shell [data-slot="button"] { border-radius: 9999px; }
+.admin-dark .abtn { color: #e6eaed; border-color: rgba(255, 255, 255, 0.16); }
+.admin-dark .abtn:hover { background: #2d353c; }
+.admin-dark .abtn-primary { color: var(--primary-foreground, #06281f); border-color: transparent; }
+.admin-dark .abtn-primary:hover { background: color-mix(in srgb, var(--primary) 88%, white); }
+.admin-dark .abtn-danger { background: transparent; border-color: rgba(253, 164, 175, 0.5); color: #fda4af; }
+.admin-dark .abtn-danger:hover { background: rgba(253, 164, 175, 0.12); }
+.admin-dark .abtn-icon { background: #242b31; color: #e6eaed; }
+.admin-dark .abtn-icon:hover { background: #2d353c; }
+.admin-dark .abtn-icon.abtn-danger:hover { background: #3a1d1d; color: #fca5a5; }

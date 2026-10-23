@@ -101,7 +101,7 @@ export default function AdminDayClose() {
       <div className="flex gap-2 overflow-x-auto pb-1">
         {[['fecho', 'Fecho'], ['hopper', 'Hopper e reforço'], ['historico', 'Histórico de fechos']].map(([id, label]) => (
           <button key={id} type="button" onClick={() => setTab(id)}
-            className={`px-4 py-2.5 text-sm font-semibold rounded-xl border whitespace-nowrap transition-colors ${tab === id ? 'bg-emerald-50 border-emerald-300 text-emerald-800 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800 hover:border-emerald-200'}`}>
+            className={`px-4 py-2.5 text-sm font-semibold rounded-full border whitespace-nowrap transition-colors ${tab === id ? 'bg-emerald-50 border-emerald-300 text-emerald-800 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800 hover:border-emerald-200'}`}>
             {label}
           </button>
         ))}
@@ -110,11 +110,11 @@ export default function AdminDayClose() {
       {tab === 'hopper' && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 px-4 py-3">
           <p className="text-sm text-emerald-900">Reforço: moedas que traz de fora para o hopper (por exemplo, acabaram as de 1€). Sobe o stock do hopper e entra como fundo, nunca como venda.</p>
-          <button type="button" onClick={() => setRefillOpen(true)} className="inline-flex items-center gap-1.5 rounded-xl bg-primary-600 text-white text-sm font-semibold px-4 py-2 shadow-sm">
-            <PiggyBank className="w-4 h-4" strokeWidth={1.8} /> Fazer reforço
+          <button type="button" onClick={() => setRefillOpen(true)} className="abtn abtn-primary">
+            <PiggyBank /> Fazer reforço
           </button>
-          <button type="button" disabled={emptying} onClick={emptyHopper} className="inline-flex items-center gap-1.5 rounded-xl border border-rose-300 bg-white text-rose-700 text-sm font-semibold px-4 py-2 shadow-sm disabled:opacity-60">
-            <Trash2 className="w-4 h-4" strokeWidth={1.8} /> {emptying ? 'A esvaziar…' : 'Esvaziar hopper'}
+          <button type="button" disabled={emptying} onClick={emptyHopper} className="abtn abtn-danger">
+            <Trash2 /> {emptying ? 'A esvaziar…' : 'Esvaziar hopper'}
           </button>
         </div>
       )}

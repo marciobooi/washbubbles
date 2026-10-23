@@ -139,9 +139,21 @@ router.post('/users', requireAdmin, async (req, res) => {
     hash = await bcrypt.hash(temp, 10)
   }
 
-  const apiKey = role === 'KIOSK' ? crypto.randomBytes(24).toString('hex') : undefined
+  // Same rule as when changing a role: only a superadmin can create a superadmin.
+  const newRole = role || 'USER'
+  const allowedRoles = req.userModel?.role === 'SUPERADMIN' ? [...ASSIGNABLE_ROLES, 'SUPERADMIN'] : ASSIGNABLE_ROLES
+  if (!allowedRoles.includes(newRole)) return res.status(400).json({ error: 'Invalid role' })
+  const apiKey = newRole === 'KIOSK' ? crypto.randomBytes(24).toString('hex') : undefined
   const UserT = withTenant(User, req)
-  const user = await UserT.create({ username, role: role || 'user', password: hash, apiKey })
+  let user
+  try {
+    user = await UserT.create({ username, role: newRole, password: hash, apiKey })
+  } catch (err) {
+    // A name that is already taken (or an invalid role) is an answer for the admin, not a call that never returns.
+    if (err?.code === 11000) return res.status(409).json({ error: 'Já existe um utilizador com esse nome' })
+    if (err?.name === 'ValidationError') return res.status(400).json({ error: err.message })
+    throw err
+  }
 
   // Create tenant membership (owner/admin) for created user within this tenant
   try {
