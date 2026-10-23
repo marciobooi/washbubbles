@@ -31,6 +31,31 @@ const MAX_APPLIED_DELTAS = 200
 // All sync routes require kiosk authentication
 router.use(requireKiosk)
 
+// ─── Mail relay: a shop PC sends its e-mails THROUGH the central server ───
+// The shop's mailbox password lives (encrypted) only here. The PC hands over one message; the server sends it with the SHOP's own
+// mailbox (or the platform's, under the shop's name). Limited per shop so a stolen kiosk key cannot be used to spam.
+const mailWindow = new Map() // tenantId -> number[] (send times)
+const MAIL_PER_MIN = 20
+const MAIL_PER_DAY = 500
+router.post('/mail', async (req, res) => {
+  const { to, subject, text, html } = req.body || {}
+  const addr = String(to || '').trim()
+  if (!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]{2,}$/.test(addr)) return res.status(400).json({ error: 'Invalid recipient' })
+  if (!subject || String(subject).length > 200 || !(text || html) || String(text || '').length > 100_000 || String(html || '').length > 200_000) return res.status(400).json({ error: 'Invalid message' })
+  const key = String(req.tenantId)
+  const now = Date.now()
+  const times = (mailWindow.get(key) || []).filter((t) => now - t < 24 * 3600_000)
+  if (times.filter((t) => now - t < 60_000).length >= MAIL_PER_MIN || times.length >= MAIL_PER_DAY) return res.status(429).json({ error: 'Too many e-mails from this shop' })
+  times.push(now); mailWindow.set(key, times)
+  const { sendMail } = await import('../services/mailer.js')
+  try {
+    await sendMail({ tenantId: req.tenantId, to: addr, subject: String(subject), text: String(text || ''), html: html ? String(html) : undefined, relayed: true })
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(502).json({ error: err.message || 'send failed' })
+  }
+})
+
 // ─── Push: POS → Server ───
 
 /**

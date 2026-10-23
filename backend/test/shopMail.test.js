@@ -59,3 +59,40 @@ describe("A shop's own e-mail identity: support address and its own mailbox", fu
     expect(sent.join('\n')).to.include('geral@marcioinc.pt') // the (unconfigured-transport) mailer prints the recipient
   })
 })
+
+describe('A shop PC sends its e-mails through the central server', function () {
+  this.timeout(30000)
+  let app, tenant
+  before(async () => { await startTestDb(); await clearTestDb(); app = await buildTestApp(); ;({ tenant } = await seedTenantAndUsers()); resetShopMailCache() })
+  after(async () => { delete process.env.SYNC_SERVER_URL; delete process.env.SYNC_API_KEY; await stopTestDb() })
+  const post = (body, key = 'test-kiosk-api-key') => request(app).post('/api/sync/mail').set('Authorization', `ApiKey ${key}`).send(body)
+
+  it('the server sends one valid message for the key\'s shop; bad recipients/messages and a missing key are refused', async () => {
+    const out = []; const orig = console.log; console.log = (...x) => out.push(x.join(' '))
+    try { expect((await post({ to: 'cliente@x.pt', subject: 'O seu recibo', html: '<p>ola</p>', text: 'ola' })).status).to.equal(200) } finally { console.log = orig }
+    expect(out.join('\n')).to.include('cliente@x.pt')
+    expect((await post({ to: 'a@x.pt, b@x.pt', subject: 's', text: 't' })).status).to.equal(400)
+    expect((await post({ to: 'a@x.pt', subject: '', text: 't' })).status).to.equal(400)
+    expect((await post({ to: 'a@x.pt', subject: 's', text: 't' }, 'nope')).status).to.equal(401)
+  })
+
+  it('a PC linked to the central server relays instead of sending itself', async () => {
+    const { sendMail } = await import('../src/services/mailer.js')
+    const calls = []
+    const realFetch = globalThis.fetch
+    globalThis.fetch = async (url, opts) => { calls.push({ url, auth: opts.headers.Authorization, body: JSON.parse(opts.body) }); return { ok: true, status: 200 } }
+    process.env.SYNC_SERVER_URL = 'http://central.test/api'; process.env.SYNC_API_KEY = 'abc'
+    try { await sendMail({ tenantId: tenant._id, to: 'c@x.pt', subject: 'Recibo', text: 'x' }) } finally { globalThis.fetch = realFetch; delete process.env.SYNC_SERVER_URL; delete process.env.SYNC_API_KEY }
+    expect(calls).to.have.length(1)
+    expect(calls[0].url).to.equal('http://central.test/api/sync/mail')
+    expect(calls[0].auth).to.equal('ApiKey abc')
+    expect(calls[0].body.to).to.equal('c@x.pt')
+  })
+
+  it('a shop cannot send more than 20 e-mails a minute', async () => {
+    let last
+    const orig = console.log; console.log = () => {}
+    try { for (let i = 0; i < 25; i++) last = await post({ to: 'c@x.pt', subject: 's' + i, text: 't' }) } finally { console.log = orig }
+    expect(last.status).to.equal(429)
+  })
+})

@@ -54,7 +54,22 @@ function initTransporter(cfg = null) {
  * @param tenantId  the shop this mail is on behalf of: the sender's display name is the SHOP's name and replies go to the SHOP's
  *                  e-mail (the sending mailbox itself is shared for now; per-shop domains with SPF/DKIM are a later step)
  */
-export async function sendMail({ to, bcc, subject, text, html, tenantId = null }) {
+export async function sendMail({ to, bcc, subject, text, html, tenantId = null, relayed = false }) {
+  // A shop PC has no mailbox password of its own: when it is linked to the central server it hands the message over (the server
+  // sends it with the shop's mailbox). If the server cannot be reached, the PC's own MAIL_* settings (if any) are the fallback.
+  const central = process.env.SYNC_SERVER_URL && process.env.SYNC_API_KEY
+  if (central && !relayed && process.env.MAIL_RELAY !== 'off') {
+    try {
+      const r = await fetch(`${String(process.env.SYNC_SERVER_URL).replace(/\/+$/, '')}/sync/mail`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `ApiKey ${process.env.SYNC_API_KEY}` },
+        body: JSON.stringify({ to, subject, text, html }), signal: AbortSignal.timeout(20_000),
+      })
+      if (r.ok) { console.log(`mailer: "${subject}" handed to the central server`); return }
+      if (r.status < 500 && r.status !== 429) throw new Error(`o servidor recusou o email (${r.status})`)
+    } catch (err) {
+      if (!process.env.MAIL_HOST) throw err // nothing local to fall back to
+    }
+  }
   let cfg = null
   try { cfg = (await (await import('./platformSettings.js')).getPlatform()).mail } catch { /* environment only */ }
   let shopName = ''; let replyTo = ''; let own = false
