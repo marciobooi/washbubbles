@@ -19,10 +19,14 @@ let transporter = null
 // vars between runs) rather than caching the first, possibly wrong, config.
 let transporterKey = null
 
-function initTransporter() {
-  const { MAIL_HOST, MAIL_PORT, MAIL_USER, MAIL_PASS } = process.env
+// `cfg` = the platform's mail account (database, then environment: services/platformSettings.js); with none, the environment alone.
+function initTransporter(cfg = null) {
+  const MAIL_HOST = cfg ? cfg.host : process.env.MAIL_HOST
+  const MAIL_PORT = cfg ? cfg.port : process.env.MAIL_PORT
+  const MAIL_USER = cfg ? cfg.user : process.env.MAIL_USER
+  const MAIL_PASS = cfg ? cfg.pass : process.env.MAIL_PASS
   if (!MAIL_HOST || !MAIL_PORT) { transporter = null; transporterKey = null; return null }
-  const key = `${MAIL_HOST}:${MAIL_PORT}`
+  const key = `${MAIL_HOST}:${MAIL_PORT}:${MAIL_USER}:${MAIL_PASS}`
   if (transporter && transporterKey === key) return transporter
 
   const port = parseInt(MAIL_PORT, 10)
@@ -51,13 +55,15 @@ function initTransporter() {
  *                  e-mail (the sending mailbox itself is shared for now; per-shop domains with SPF/DKIM are a later step)
  */
 export async function sendMail({ to, bcc, subject, text, html, tenantId = null }) {
-  const t = initTransporter()
-  const address = process.env.MAIL_FROM || 'no-reply@example.com'
+  let cfg = null
+  try { cfg = (await (await import('./platformSettings.js')).getPlatform()).mail } catch { /* environment only */ }
+  const t = initTransporter(cfg)
+  const address = (cfg && cfg.from) || process.env.MAIL_FROM || 'no-reply@example.com'
   let shopName = ''; let replyTo = ''
   if (tenantId) {
     try { const { getEmailBrand } = await import('./emailBrand.js'); const b = await getEmailBrand(tenantId); shopName = b.name || ''; replyTo = b.email || '' } catch { /* the default sender is fine */ }
   }
-  const fromName = shopName || process.env.MAIL_FROM_NAME
+  const fromName = shopName || (cfg && cfg.fromName) || process.env.MAIL_FROM_NAME
   const from = fromName ? `"${fromName.replace(/"/g, "'")}" <${address}>` : address
   if (t) {
     const info = await t.sendMail({ from, to, ...(bcc ? { bcc } : {}), ...(replyTo ? { replyTo } : {}), subject, text, html })

@@ -14,6 +14,7 @@ import { usernameTaken } from './ensureIndexes.js'
 import { parseDomains, withWww, resetDomainCache } from './tenantDomains.js'
 import { resetSoleTenantCache } from '../middleware/tenant.js'
 import { DEFAULT_SITE_URL } from '../views/landing.js'
+import { getSupportEmail } from './platformSettings.js'
 
 export const serverIp = () => process.env.SERVER_PUBLIC_IP || '128.140.118.209'
 const RESET_DAYS = 7
@@ -97,7 +98,7 @@ export async function sendWelcomeEmail(tenant, adminUser) {
     <p>Obrigado!</p>`
   const text = `A sua loja ${tenant.name} está criada.\n\nUtilizador: ${adminUser.username}\nDefina a palavra-passe (válido ${RESET_DAYS} dias): ${link}\n` +
     (domains.length ? `\nLigar o endereço ${host}: apague os registos A/AAAA/CNAME existentes para @ e www e crie A @ -> ${serverIp()} e A www -> ${serverIp()} (TTL 3600). Detetamos sozinhos quando estiver certo e avisamos.\n` : '')
-  const cc = process.env.SUPPORT_EMAIL || ''
+  const cc = await getSupportEmail()
   await sendMail({ to: tenant.customerEmail, ...(cc ? { bcc: cc } : {}), subject: `A sua loja ${tenant.name} está pronta — falta definir a palavra-passe${domains.length ? ' e ligar o endereço' : ''}`, text, html: renderEmailHtml({ title: `A sua loja ${tenant.name}`, preheader: 'Defina a palavra-passe e ligue o seu endereço.', bodyHtml, brand: { name: process.env.PLATFORM_NAME || 'FreshBubbles' } }) })
   tenant.welcomeEmail = { sentAt: new Date(), error: '' }
   await tenant.save()

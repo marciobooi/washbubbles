@@ -5,7 +5,7 @@ import RequireSuperAdmin from '../components/RequireSuperAdmin'
 import { toast } from '@/components/ui/Toast'
 import Modal from '@/components/ui/Modal'
 import api from '@/services/api'
-import { Plus, Store, Mail, Globe, LogIn, Power, Wifi, WifiOff, CheckCircle2, Circle, RefreshCw, Pencil, X, Download } from 'lucide-react'
+import { Settings, Plus, Store, Mail, Globe, LogIn, Power, Wifi, WifiOff, CheckCircle2, Circle, RefreshCw, Pencil, X, Download } from 'lucide-react'
 
 const eur = (n) => `${Number(n || 0).toFixed(2).replace('.', ',')} €`
 const ago = (d) => {
@@ -111,6 +111,23 @@ export default function AdminTenants() {
     } finally { setBusy('') }
   }
 
+  // ---- platform settings (support e-mail, outgoing mail account) ----
+  const [plat, setPlat] = useState(null) // { supportEmail, mail:{host,port,user,from,fromName,hasPassword}, pass }
+  async function openPlatform() {
+    try { const p = await api.request('/admin/stores/platform', { method: 'GET', expect: 'json' }); setPlat({ ...p, pass: '' }) }
+    catch (err) { toast({ title: errText(err, 'Não foi possível abrir'), variant: 'destructive' }) }
+  }
+  async function savePlatform(e) {
+    e.preventDefault()
+    setBusy('plat')
+    try {
+      await api.request('/admin/stores/platform', { method: 'PUT', json: { supportEmail: plat.supportEmail, mail: { ...plat.mail, pass: plat.pass } }, expect: 'json' })
+      toast({ title: 'Definições da plataforma guardadas', variant: 'success' }); setPlat(null)
+    } catch (err) { toast({ title: errText(err, 'Não foi possível guardar'), variant: 'destructive' }) }
+    finally { setBusy('') }
+  }
+  const setMail = (k) => (e) => setPlat((p) => ({ ...p, mail: { ...p.mail, [k]: e.target.value } }))
+
   const stores = data?.stores || []
   return (
     <RequireSuperAdmin>
@@ -120,7 +137,10 @@ export default function AdminTenants() {
             <h2 className="text-lg font-semibold">Lojas</h2>
             <p className="text-sm text-neutral-500">Todas as lojas do sistema. «Gerir» abre o painel dessa loja.</p>
           </div>
-          <button className="abtn abtn-primary" onClick={() => { setCreated(null); setCreateOpen(true) }}><Plus /> Criar loja</button>
+          <div className="flex gap-2">
+            <button className="abtn" onClick={openPlatform}><Settings /> Plataforma</button>
+            <button className="abtn abtn-primary" onClick={() => { setCreated(null); setCreateOpen(true) }}><Plus /> Criar loja</button>
+          </div>
         </div>
 
         {!data && <div className="p-4 text-sm text-neutral-500">{loadError ? (<>Não foi possível carregar as lojas. <button className="underline" onClick={() => load()}>Tentar de novo</button></>) : 'A carregar…'}</div>}
@@ -207,6 +227,28 @@ export default function AdminTenants() {
               )}
               <div className="flex justify-end"><button className="abtn abtn-primary" onClick={() => setCreateOpen(false)}>Fechar</button></div>
             </div>
+          )}
+        </Modal>
+
+        {/* platform */}
+        <Modal open={!!plat} onClose={() => setPlat(null)} title="Plataforma">
+          {plat && (
+            <form onSubmit={savePlatform} className="space-y-3">
+              <div><label className="text-sm font-medium">Email de suporte</label><input type="email" className="border p-2 rounded mt-1 w-full" value={plat.supportEmail} onChange={(e) => setPlat({ ...plat, supportEmail: e.target.value })} /><p className="text-xs text-neutral-500 mt-1">Recebe cópia dos emails enviados aos clientes e aparece nos instaladores como contacto de apoio.</p></div>
+              <div className="font-medium text-sm pt-1">Conta de envio de email (para todas as lojas)</div>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="col-span-2"><label className="text-xs">Servidor (SMTP)</label><input className="border p-2 rounded mt-1 w-full" value={plat.mail.host || ''} onChange={setMail('host')} /></div>
+                <div><label className="text-xs">Porta</label><input className="border p-2 rounded mt-1 w-full" value={plat.mail.port || ''} onChange={setMail('port')} /></div>
+                <div className="col-span-3 grid grid-cols-2 gap-2">
+                  <div><label className="text-xs">Utilizador</label><input className="border p-2 rounded mt-1 w-full" value={plat.mail.user || ''} onChange={setMail('user')} autoComplete="off" /></div>
+                  <div><label className="text-xs">Palavra-passe</label><input type="password" className="border p-2 rounded mt-1 w-full" placeholder={plat.mail.hasPassword ? '•••••• (guardada; deixe vazio para manter)' : ''} value={plat.pass} onChange={(e) => setPlat({ ...plat, pass: e.target.value })} autoComplete="new-password" /></div>
+                  <div><label className="text-xs">Endereço de envio</label><input className="border p-2 rounded mt-1 w-full" value={plat.mail.from || ''} onChange={setMail('from')} /></div>
+                  <div><label className="text-xs">Nome de envio (opcional)</label><input className="border p-2 rounded mt-1 w-full" value={plat.mail.fromName || ''} onChange={setMail('fromName')} /></div>
+                </div>
+              </div>
+              <p className="text-xs text-neutral-500">A palavra-passe fica guardada cifrada e nunca é mostrada. Com estes campos vazios usa-se o que está no servidor (ficheiro de ambiente). Nos emails de cada loja, o nome que aparece é o da loja.</p>
+              <div className="flex justify-end gap-2"><button type="button" className="abtn" onClick={() => setPlat(null)}><X /> Cancelar</button><button type="submit" className="abtn abtn-primary" disabled={busy === 'plat'}>Guardar</button></div>
+            </form>
           )}
         </Modal>
 

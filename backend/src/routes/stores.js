@@ -17,6 +17,7 @@ import { DEFAULT_SITE_URL } from '../views/landing.js'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { usernameTaken } from '../services/ensureIndexes.js'
+import { getSupportEmail, getPlatformPublic, savePlatform } from '../services/platformSettings.js'
 import { createStore, sendWelcomeEmail, checkDns, dnsRecords, serverIp } from '../services/storeProvisioning.js'
 import { resetSoleTenantCache } from '../middleware/tenant.js'
 import { resetDomainCache, parseDomains, withWww } from '../services/tenantDomains.js'
@@ -47,6 +48,13 @@ export async function startChecklist(tenantId) {
     { key: 'alerts', label: 'Definir o email de alertas', done: !!email },
   ]
 }
+
+router.get('/platform', async (req, res) => res.json(await getPlatformPublic()))
+router.put('/platform', async (req, res) => {
+  try { await savePlatform(req.body || {}) } catch (err) { if (err.status) return res.status(err.status).json({ error: err.message }); throw err }
+  logAction(req, 'platform.update', 'Platform', 'platform', { supportEmail: req.body?.supportEmail, mail: req.body?.mail ? { ...req.body.mail, pass: req.body.mail.pass ? '••••••' : undefined } : undefined })
+  res.json(await getPlatformPublic())
+})
 
 router.get('/overview', async (req, res) => {
   const since = lisbonMidnight()
@@ -120,7 +128,7 @@ router.post('/:id/installation', async (req, res) => {
   }
   const file = buildInstaller({
     shopName: t.name, slug: t.slug, tenantId: String(t._id),
-    serverUrl: `${DEFAULT_SITE_URL}/api`, key, supportEmail: process.env.SUPPORT_EMAIL || '',
+    serverUrl: `${DEFAULT_SITE_URL}/api`, key, supportEmail: await getSupportEmail(),
     hardware: { pcIp: ip(hw.pcIp, '192.168.2.190'), controllerHost: ip(hw.controllerHost, '192.168.2.201'), controllerPort: port > 0 && port < 65536 ? port : 16852 },
   })
   logAction(req, 'tenant.installation_generated', 'Tenant', t._id, { kiosk: kiosk.username, note: 'new kiosk key staged; shown only inside the file' })
