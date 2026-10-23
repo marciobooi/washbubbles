@@ -567,7 +567,15 @@ router.put('/cards/:id', requireAdmin, async (req, res) => {
   const { balance, metadata } = req.body
   const CardT = withTenant(Card, req)
   const before = await CardT.findById(req.params.id).lean()
-  const c = await CardT.findByIdAndUpdate(req.params.id, { balance: balance == null ? undefined : Number(balance), metadata }, { new: true })
+  if (!before) return res.status(404).json({ error: 'Card not found' })
+  // The holder's details (the edit form sends them together with the balance): cleaned, length-limited, e-mail checked.
+  const cut = (v, n) => String(v ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, n)
+  const update = { balance: balance == null ? undefined : Number(balance), metadata }
+  for (const [field, max] of [['name', 80], ['email', 120], ['phone', 30], ['contribuinte', 20]]) {
+    if (req.body[field] !== undefined) update[field] = cut(req.body[field], max)
+  }
+  if (update.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(update.email)) return res.status(400).json({ error: 'Email inválido' })
+  const c = await CardT.findByIdAndUpdate(req.params.id, update, { new: true })
   if (!c) return res.status(404).json({ error: 'Card not found' })
   // This path bypasses cardBalance.js's atomic $inc entirely — a direct
   // overwrite, not a delta — so it's the one most worth flagging clearly.
