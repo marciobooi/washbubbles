@@ -46,13 +46,21 @@ function initTransporter() {
   return transporter
 }
 
-export async function sendMail({ to, bcc, subject, text, html }) {
+/**
+ * @param tenantId  the shop this mail is on behalf of: the sender's display name is the SHOP's name and replies go to the SHOP's
+ *                  e-mail (the sending mailbox itself is shared for now; per-shop domains with SPF/DKIM are a later step)
+ */
+export async function sendMail({ to, bcc, subject, text, html, tenantId = null }) {
   const t = initTransporter()
   const address = process.env.MAIL_FROM || 'no-reply@example.com'
-  const fromName = process.env.MAIL_FROM_NAME
+  let shopName = ''; let replyTo = ''
+  if (tenantId) {
+    try { const { getEmailBrand } = await import('./emailBrand.js'); const b = await getEmailBrand(tenantId); shopName = b.name || ''; replyTo = b.email || '' } catch { /* the default sender is fine */ }
+  }
+  const fromName = shopName || process.env.MAIL_FROM_NAME
   const from = fromName ? `"${fromName.replace(/"/g, "'")}" <${address}>` : address
   if (t) {
-    const info = await t.sendMail({ from, to, ...(bcc ? { bcc } : {}), subject, text, html })
+    const info = await t.sendMail({ from, to, ...(bcc ? { bcc } : {}), ...(replyTo ? { replyTo } : {}), subject, text, html })
     // Say what the mail server answered (the recipient is shown only in part: it is a customer's address).
     const hide = (addr) => String(addr).replace(/^(.).*(@.*)$/, '$1***$2')
     const acc = (info?.accepted || []).map(hide).join(',') || '-'

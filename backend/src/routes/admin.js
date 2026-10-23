@@ -1293,7 +1293,7 @@ router.post('/marketing/broadcast', requireAdmin, async (req, res) => {
   let failed = 0
   for (const r of recipients) {
     try {
-      await sendMail({ to: r.email, subject, text: message, html })
+      await sendMail({ to: r.email, subject, text: message, html, tenantId: req.tenantId })
       sent++
     } catch (e) {
       failed++

@@ -143,6 +143,7 @@ router.post('/forgot-password', passwordResetLimiter, async (req, res) => {
         <p style="font-size:13px; color:#3d6a63;">If you didn't request this, you can safely ignore this email.</p>
       `
       await sendMail({
+        tenantId: user.tenantId,
         to: user.email,
         subject: 'Password reset',
         text: `You requested a password reset. Click the link to change your password: ${link}`,

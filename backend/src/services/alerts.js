@@ -17,6 +17,7 @@ export async function sendAlertForTenant(tenantId, subject, message) {
     if (!to) return
     const bodyHtml = `<p>${escapeHtmlMultiline(message)}</p>`
     await sendMail({
+      tenantId,
       to,
       subject: `[WashBubbles] ${subject}`,
       text: message,

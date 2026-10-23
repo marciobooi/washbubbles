@@ -839,6 +839,7 @@ router.post('/receipt', requireKiosk, async (req, res) => {
   `
 
   await sendMail({
+    tenantId: req.tenantId,
     to: email,
     subject: 'O seu recibo',
     text,

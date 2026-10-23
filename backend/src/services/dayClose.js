@@ -414,6 +414,7 @@ export async function emailDayCloseReceipt(req, id, email) {
   if (!dc) return { status: 404, body: { error: 'Cash session record not found' } }
 
   await sendMail({
+    tenantId: req.tenantId,
     to: email,
     subject: 'Fecho de Caixa',
     text: formatDayCloseReceiptText(dc),
