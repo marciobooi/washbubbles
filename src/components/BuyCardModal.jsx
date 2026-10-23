@@ -8,6 +8,7 @@ import api from '@/services/api'
 import * as localApi from '@/services/local-api'
 import { useTranslation, Trans } from 'react-i18next'
 import { useCart } from '@/context/CartContext'
+import { useBranding } from '@/context/BrandingContext'
 
 const STEPS = {
   FORM: 'form',
