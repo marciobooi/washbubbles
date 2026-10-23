@@ -19,6 +19,7 @@ const tenantSchema = new mongoose.Schema({
     attempts: { type: Number, default: 0 },
     activatedAt: { type: Date, default: null },
     activationEmailSentAt: { type: Date, default: null },
+    failureAlertSentAt: { type: Date, default: null },
   },
   welcomeEmail: { sentAt: { type: Date, default: null }, error: { type: String, default: '' } },
   createdAt: { type: Date, default: Date.now }

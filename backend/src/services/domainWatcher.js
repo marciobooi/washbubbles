@@ -8,6 +8,7 @@
 import Tenant from '../models/tenant.js'
 import { checkDns } from './storeProvisioning.js'
 import { sendMail } from './mailer.js'
+import { getSupportEmail } from './platformSettings.js'
 import { renderEmailHtml, emailButton, escapeHtml } from './emailTemplate.js'
 
 const EVERY_MS = 2 * 60_000
@@ -28,6 +29,15 @@ export async function tick() {
   for (const t of await Tenant.find({ 'domainState.state': 'failed', 'domainState.attempts': { $lt: MAX_ATTEMPTS }, 'domainState.checkedAt': { $lt: new Date(Date.now() - RETRY_AFTER_MS) } })) {
     t.domainState.state = 'pending_dns'
     await t.save()
+  }
+  // 2b. out of attempts: the support mailbox is told once (the site cannot be made online without a person looking at it)
+  for (const t of await Tenant.find({ 'domainState.state': 'failed', 'domainState.attempts': { $gte: MAX_ATTEMPTS }, 'domainState.failureAlertSentAt': null })) {
+    try {
+      const to = await getSupportEmail()
+      await sendMail({ to, subject: `[Plataforma] O site de ${t.name} não ficou online`, text: `Loja: ${t.name}\nEndereços: ${t.domains.join(', ')}\nÚltimo motivo: ${t.domainState.message}\nAs ${MAX_ATTEMPTS} tentativas automáticas esgotaram-se.` })
+      t.domainState.failureAlertSentAt = new Date()
+      await t.save()
+    } catch (err) { console.warn('[domains] could not send the failure alert:', err.message) }
   }
   // 3. the customer hears when the site is live
   for (const t of await Tenant.find({ 'domainState.state': 'active', 'domainState.activationEmailSentAt': null })) {
