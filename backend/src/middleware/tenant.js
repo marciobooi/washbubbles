@@ -1,5 +1,6 @@
 import Tenant from '../models/tenant.js'
 import TenantUser from '../models/tenantUser.js'
+import { tenantForHost, isIpOrLocal, resetDomainCache } from '../services/tenantDomains.js'
 
 /**
  * Cache of the single-tenant fallback.
@@ -17,6 +18,7 @@ let soleTenant = null
 /** Invalidate the cache — call after creating or deleting a tenant. */
 export function resetSoleTenantCache() {
   soleTenant = null
+  resetDomainCache()
 }
 
 async function getSoleTenant() {
@@ -29,6 +31,15 @@ async function getSoleTenant() {
 // Resolve tenant from header (X-Tenant-Id) or from authenticated user's membership
 export async function resolveTenant(req, res, next) {
   try {
+    // 1) The site address the visitor opened decides the shop of a public request (freshbubbles.pt, marcioslvinc.ro...).
+    const siteTenant = await tenantForHost(req.hostname)
+    if (siteTenant) {
+      req.tenant = siteTenant
+      req.tenantId = siteTenant._id
+      req.tenantFilter = { tenantId: siteTenant._id }
+      return next()
+    }
+
     const headerId = req.headers['x-tenant-id'] || req.headers['x-tenant']
     if (headerId) {
       const t = await Tenant.findById(headerId).catch(() => null)
@@ -65,6 +76,18 @@ export async function resolveTenant(req, res, next) {
       req.tenantId = sole._id
       req.tenantFilter = { tenantId: sole._id }
       return next()
+    }
+
+    // Several shops: an address nobody owns gets no shop (public pages stay empty rather than showing someone else's). Only a
+    // direct visit by IP / localhost (development, a shop PC) may use the configured default shop.
+    if (isIpOrLocal(req.hostname) && process.env.PUBLIC_TENANT_SLUG) {
+      const def = await Tenant.findOne({ slug: process.env.PUBLIC_TENANT_SLUG }).lean().catch(() => null)
+      if (def) {
+        req.tenant = def
+        req.tenantId = def._id
+        req.tenantFilter = { tenantId: def._id }
+        return next()
+      }
     }
 
     // No tenant resolved — leave null. `withTenant` fails closed on this.

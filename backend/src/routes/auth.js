@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
 import rateLimit from 'express-rate-limit'
 import User from '../models/user.js'
+import Tenant from '../models/tenant.js'
 import { requireAuth } from '../middleware/auth.js'
 import { findUserByApiKey } from '../services/apiKeys.js'
 
@@ -44,7 +45,7 @@ router.post('/login', loginLimiter, async (req, res) => {
     user = await findUserByApiKey(apiKey)
     if (!user) return res.status(401).json({ error: 'Invalid API key' })
   } else {
-    user = await User.findOne({ username })
+    user = await User.findOne({ username: String(username) }).collation({ locale: 'en', strength: 2 }) // case-insensitive; names are unique in the whole system
     if (!user) return res.status(401).json({ error: 'Invalid credentials' })
     const ok = await bcrypt.compare(password, user.password)
     if (!ok) return res.status(401).json({ error: 'Invalid credentials' })
@@ -58,7 +59,9 @@ router.post('/login', loginLimiter, async (req, res) => {
     expiresIn: '8h',
   })
 
-  return res.json({ token, role: user.role })
+  // The shop the user belongs to, so the screen can show it and land on the right dashboard.
+  const shop = await Tenant.findById(user.tenantId).select('name slug').lean().catch(() => null)
+  return res.json({ token, role: user.role, tenant: shop ? { id: String(user.tenantId), name: shop.name, slug: shop.slug } : null })
 })
 
 // NOTE: there is deliberately no public /register route.

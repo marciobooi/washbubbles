@@ -37,7 +37,7 @@ Estado verificado a 2026-10-23 com testes reais (`backend/test/tenantIsolation.t
 3.1 Em **Lojas → loja → Gerar instalação do posto**: cria (ou roda) o utilizador KIOSK da loja com uma **chave nova pendente** e descarrega `washbubbles-<loja>.json` (endereço do servidor, chave, nome e identificador da loja) + mostra o comando de uma linha para o PC.
 3.2 `install-windows.ps1` aceita `-ConfigFile` (ou `-ServerUrl -Key`): escreve `SYNC_SERVER_URL` e `SYNC_API_KEY` no `.env`, gera a chave local, e o primeiro arranque puxa a configuração. Alternativa sem ficheiro: o ecrã "Chave do servidor" do quiosque (PIN) também aceita o endereço do servidor.
 3.3 **Segurança do ficheiro:** só SUPERADMIN, mostrado/descarregado uma vez, auditado, a chave expira se nunca for usada (X dias) e há "Revogar posto".
-3.4 **Loja nova com dados iniciais:** "Copiar de…" (preços, definições base, textos legais) a partir de uma loja modelo. As máquinas/interfaces/periféricos configuram-se por loja (cada loja tem o seu hardware).
+3.4 **Loja nova: começa VAZIA, nada é copiado de outra loja (decisão do dono: nada se mistura).** Preços, máquinas, interfaces, periféricos, cartões, cupões, textos e definições criam-se de raiz na loja nova. Para não ficar perdido, o admin mostra uma **lista de arranque** ("Defina os preços · Crie as interfaces · Crie as máquinas · Defina o PIN · Defina o email de alertas") que vai ficando riscada. A rede do posto (IP do PC, IP e porta do controlador, placa de rede) vai no ficheiro de instalação, com os valores por defeito editáveis.
 
 ### Fase 4 — Vários postos na mesma loja (só se fizer falta)
 Hoje as máquinas, interfaces e preços pertencem à **loja**, não ao posto: dois PCs na mesma loja iam puxar as máquinas um do outro. Solução: conceito de **posto** (`siteId`) em Máquina/Interface/Periférico, e cada quiosque só vê o seu; cartões e preços partilhados na loja. Até lá: **uma loja por espaço físico**.
@@ -46,9 +46,9 @@ Hoje as máquinas, interfaces e preços pertencem à **loja**, não ao posto: do
 O nome da empresa, morada, textos, mapa, política de privacidade, `sitemap`, `robots.txt` e ligações canónicas deixam de estar no código (hoje: FreshBubbles) e passam a vir da loja do endereço. Cache da página inicial e das traduções por loja e idioma. O admin de cada loja vive no mesmo endereço (`/admin`) com a marca da loja; um utilizador só entra no admin da sua loja (o superadmin entra em qualquer uma).
 
 ### Fase 3b — "Criar loja" automático (o botão único)
-**Formulário** (Lojas → Criar loja): nome da empresa · identificador (sugerido) · **endereço do site** (`www.marcioslvinc.ro`, normalizado para `marcioslvinc.ro` + `www`) · **email do cliente** · nome do administrador · idioma do email (PT/EN) · "copiar preços e definições da loja modelo" (sim/não) · criar posto kiosk (sim).
+**Formulário** (Lojas → Criar loja): nome da empresa · identificador (sugerido) · **endereço do site** (`www.marcioslvinc.ro`, normalizado para `marcioslvinc.ro` + `www`) · **email do cliente** · nome do administrador · idioma do email (PT/EN) · criar posto kiosk (sim) · rede do posto (IP do PC, IP/porta do controlador). **Sem opção de copiar dados de outra loja.**
 **O que acontece ao carregar em Criar:**
-1. Cria a loja, o administrador (sem palavra-passe em claro: o cliente recebe uma ligação para a **definir**, válida 7 dias), o posto kiosk com chave pendente, e os dados iniciais.
+1. Cria a loja **vazia**, o administrador (sem palavra-passe em claro: o cliente recebe uma ligação para a **definir**, válida 7 dias) e o posto kiosk com chave pendente. Nenhum dado de outra loja é copiado.
 2. **Envia ao cliente um email** (caixa de envio atual) com: o que é e o que vai acontecer; **como ligar o domínio** (criar 2 registos `A`: `@` e `www` → `128.140.118.209`, TTL 3600; apagar `A`/`AAAA`/`CNAME` que existam para esses nomes; explicação passo a passo em linguagem simples e onde se faz isto no painel do registador); a ligação para **definir a palavra-passe do administrador**; e o contacto de apoio. Cópia para o superadmin.
 3. O admin mostra os passos em direto: ✅ loja criada · ✅ utilizadores · ⏳ DNS (mostra os registos a criar e o resultado da verificação) · ⏳ certificado · ✅ site ativo. Botões "Reenviar email" e "Verificar agora".
 4. **Serviço no servidor** (separado da aplicação, como o atualizador automático; a aplicação nunca corre comandos): lê os pedidos de domínio da base de dados, só aceita nomes com formato estrito de pedidos de um superadmin, espera que o DNS aponte para nós, pede o certificado para `@` e `www`, liga o domínio ao site, recarrega o nginx, marca "ativo" e **envia o email "o seu site está ativo"** ao cliente. Se falhar mostra o motivo no admin e volta a tentar.
@@ -65,5 +65,35 @@ Sem o DNS a loja já funciona no admin e no quiosque; o site público mostra "a 
 2. Qual é a **loja do site público** (freshbubbles.pt)? (a atual)
 3. Cada loja com o seu **domínio e marca** públicos, ou só admin/quiosque para as outras?
 4. **Email** (recibos, alertas): a mesma caixa para todas as lojas ou uma por loja?
-5. Existe uma **loja modelo** para copiar preços e definições?
+5. ~~Loja modelo para copiar preços~~ — **decidido: não existe; cada loja começa vazia.**
 6. **Vários postos** por loja: agora ou mais tarde?
+
+## 6. O que mais falta para uma loja nova impecável (revisão de lacunas, 2026-10-23)
+
+Factos verificados: **não há backups do Mongo no Hetzner** (`/root/backups` vazio, sem cron de dump); "FreshBubbles" está escrito no código (frontend: 8 ficheiros, incluindo «Cartão FreshBubbles» nos 5 idiomas da compra de cartão; backend: 11 ficheiros, incluindo emails, página inicial, página do MB WAY); não há fuso horário por loja; há 30 ficheiros ligados a euro/pt-PT e 23 referências a NIF / Livro de Reclamações.
+
+### 🔴 Antes de criar a 2.ª loja
+| # | Lacuna | O que fazer |
+|---|---|---|
+| A | **Sem backups** | Dump diário do Mongo + cópia fora do servidor (Storage Box/S3), retenção, **teste de restauro**, e exportação por loja. Fazer já, independentemente das lojas |
+| B | **País, moeda, idioma, fuso por loja.** O sistema é PT + euro (NIF, Livro de Reclamações, MB WAY/Eupago só PT, telefones PT, tabelas de moedas em euro, idiomas PT/EN/FR/DE/ES). Um `.ro` sugere Roménia (lei, moeda, fiscalidade, idioma diferentes) | Decidir: só lojas em Portugal por agora, ou "perfil de país" por loja (moeda, idiomas, documentos fiscais, métodos de pagamento, fuso) |
+| C | **Marca escrita no código** | Tudo o que diz «FreshBubbles» passa a vir da marca da loja (cartão, emails, página inicial, página MB WAY, textos por defeito) |
+| D | **Trava do posto:** um PC lembra a que loja pertence e **recusa a chave de outra loja** (evita misturar dados num PC já usado). Reinstalar = "repor posto" com PIN e confirmação | Fase 3 |
+| E | **Atualização automática de todos os PCs a partir do `main`:** um erro atinge todas as lojas ao mesmo tempo | Canal/versão por loja, pausa por loja, e testar primeiro numa loja ("canário") |
+| F | **Tailscale:** todos os PCs na mesma rede privada podiam ver-se uns aos outros | ACL por etiquetas: só tu chegas aos PCs; lojas não se vêem |
+
+### 🟠 Antes do primeiro cliente
+| # | Lacuna | O que fazer |
+|---|---|---|
+| G | Email de envio e **recibos**: hoje os recibos saem de `marcacoes@freshbubbles.pt` e não são fiscais; cada negócio tem as suas obrigações de faturação | Remetente por loja (SPF/DKIM do domínio da loja), e dizer claramente que o recibo não é fiscal |
+| H | **RGPD:** cada loja é responsável pelos dados dos seus clientes, e nós somos subcontratantes | Textos legais próprios por loja (sem os da FreshBubbles), contrato de subcontratante, exportar/apagar dados de uma loja, retenção |
+| I | **"Loja pronta?":** o quiosque não deve vender sem preços/máquinas; definições por defeito seguras; tabelas de moedas e notas **por modelo de aceitador** (não as da FreshBubbles) | Lista de arranque + bloqueio de venda + assistente de hardware com modelos genéricos |
+| J | **Suspender / arquivar loja** (falta de pagamento, encerramento) | O posto deixa de sincronizar, o site mostra "indisponível", os dados ficam retidos e exportáveis. Definir o modelo comercial (quem paga o quê, limites) |
+| K | **Pagamentos por loja:** conta Eupago de cada negócio (o dinheiro vai para a conta dele); a ligação do QR do MB WAY deve mostrar o endereço da loja, não o da FreshBubbles | Documentar e ajustar |
+| L | **Monitorização:** loja offline, certificado a expirar, domínio que deixou de apontar, backup falhado | Alertas para ti + painel de estado de todas as lojas |
+| M | **Domínios, casos reais:** domínio sem www, IPv6 (`AAAA`), `CNAME`, registos `CAA`, domínio removido (limpar certificado), renovação falhada, limites da Let's Encrypt, domínio expirado | O serviço de provisionamento trata e avisa |
+| N | **Ambiente de teste** e loja "demo" para ensaiar a criação sem tocar na produção; **verificação automática de loja saudável** (DNS, HTTPS, login, posto online, sincronização, venda de teste) | Antes de cada loja real |
+| O | **Suporte:** o acesso "a atuar como" já fica na auditoria; falta o guia de incidentes e os contactos | Documento curto |
+
+### 🟡 Mais tarde
+Vários postos por loja (fase 4), faturação certificada, API para terceiros.

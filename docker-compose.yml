@@ -64,6 +64,8 @@ services:
       # This process sits behind two nginx hops (host nginx, then the
       # frontend container's own nginx) — see index.js's own comment on this.
       TRUST_PROXY: 2
+      # The first shop owns this address (and www) until addresses are set per shop in the admin (Lojas).
+      PRIMARY_DOMAIN: freshbubbles.pt
       # The site and the admin are same-origin: only our own addresses may call the API from a browser.
       CORS_ORIGINS: https://freshbubbles.pt,https://www.freshbubbles.pt
       # This is the central/reporting server, not a shop kiosk PC: it has no

@@ -15,6 +15,8 @@ import Price from '../models/price.js'
 import Peripheral from '../models/peripheral.js'
 import { withTenant } from '../services/tenant.js'
 import { resetSoleTenantCache } from '../middleware/tenant.js'
+import { normalizeHost } from '../services/tenantDomains.js'
+import { usernameTaken } from '../services/ensureIndexes.js'
 import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import fs from 'fs'
@@ -139,6 +141,8 @@ router.post('/users', requireAdmin, async (req, res) => {
     hash = await bcrypt.hash(temp, 10)
   }
 
+  // A user name identifies ONE person in the whole system (every shop), capitals ignored.
+  if (await usernameTaken(User, username)) return res.status(409).json({ error: 'Já existe um utilizador com esse nome' })
   // Same rule as when changing a role: only a superadmin can create a superadmin.
   const newRole = role || 'USER'
   const allowedRoles = req.userModel?.role === 'SUPERADMIN' ? [...ASSIGNABLE_ROLES, 'SUPERADMIN'] : ASSIGNABLE_ROLES
@@ -279,6 +283,7 @@ router.put('/machines/:id', requireAdmin, async (req, res) => {
 router.delete('/machines/:id', requireAdmin, async (req, res) => {
   const MachineT = withTenant(Machine, req)
   const m = await MachineT.findByIdAndDelete(req.params.id)
+  if (!m) return res.status(404).json({ error: 'Machine not found' })
   // broadcast updated machine list
   try { await broadcastMachines() } catch (e) { console.error('[admin] broadcastMachines error', e) }
   logAction(req, 'machine.delete', 'Machine', req.params.id, { name: m?.name })
@@ -399,7 +404,10 @@ router.put('/users/:id', requireAdmin, async (req, res) => {
   if (await refuseIfKiosk(req, res)) return
   const { username, role, password } = req.body
   const update = {}
-  if (username) update.username = username
+  if (username) {
+    if (await usernameTaken(User, username, req.params.id)) return res.status(409).json({ error: 'Já existe um utilizador com esse nome' })
+    update.username = username
+  }
   if (role !== undefined) {
     // A tenant admin must not be able to mint a SUPERADMIN; only a superadmin can.
     const allowed = req.userModel?.role === 'SUPERADMIN' ? [...ASSIGNABLE_ROLES, 'SUPERADMIN'] : ASSIGNABLE_ROLES
@@ -926,6 +934,19 @@ router.post('/interfaces', requireAdmin, async (req, res) => {
 import Tenant from '../models/tenant.js'
 import TenantUser from '../models/tenantUser.js'
 
+// "a, b" or ["a", "b"] -> clean host names; anything that is not a plausible address is refused (never silently dropped)
+function parseDomains(input) {
+  if (input === undefined || input === null || input === '') return { list: [] }
+  const raw = Array.isArray(input) ? input : String(input).split(/[\s,;]+/)
+  const list = []
+  for (const r of raw.map((x) => String(x).trim()).filter(Boolean)) {
+    const h = normalizeHost(r)
+    if (!h) return { error: `Endereço inválido: «${r}»` }
+    if (!list.includes(h)) list.push(h)
+  }
+  return { list }
+}
+
 // List tenants (superadmins only)
 router.get('/tenants', requireSuperAdmin, async (req, res) => {
   const list = await Tenant.find().sort({ createdAt: -1 }).lean()
@@ -938,17 +959,42 @@ router.post('/tenants', requireSuperAdmin, async (req, res) => {
   if (!name || !slug) return res.status(400).json({ error: 'Missing name or slug' })
   const existing = await Tenant.findOne({ slug })
   if (existing) return res.status(400).json({ error: 'Tenant slug already exists' })
-  const t = await Tenant.create({ name, slug })
-  resetSoleTenantCache()
-  res.json(t)
+  const parsed = parseDomains(req.body.domains)
+  if (parsed.error) return res.status(400).json({ error: parsed.error })
+  try {
+    const t = await Tenant.create({ name, slug, domains: parsed.list })
+    resetSoleTenantCache()
+    res.json(t)
+  } catch (err) {
+    if (err?.code === 11000) return res.status(409).json({ error: 'Um destes endereços já pertence a outra loja' })
+    throw err
+  }
 })
 
 // Update tenant (superadmins only)
 router.put('/tenants/:id', requireSuperAdmin, async (req, res) => {
   const { name } = req.body
-  const t = await Tenant.findByIdAndUpdate(req.params.id, { name }, { new: true })
-  if (!t) return res.status(404).json({ error: 'Tenant not found' })
-  res.json(t)
+  const update = {}
+  if (name) update.name = name
+  if (req.body.domains !== undefined) {
+    const parsed = parseDomains(req.body.domains)
+    if (parsed.error) return res.status(400).json({ error: parsed.error })
+    update.domains = parsed.list
+    // An address belongs to ONE shop (also checked here, not only by the database index, to answer with a clear message)
+    if (parsed.list.length && await Tenant.exists({ _id: { $ne: req.params.id }, domains: { $in: parsed.list } })) {
+      return res.status(409).json({ error: 'Um destes endereços já pertence a outra loja' })
+    }
+  }
+  try {
+    const t = await Tenant.findByIdAndUpdate(req.params.id, update, { new: true })
+    if (!t) return res.status(404).json({ error: 'Tenant not found' })
+    resetSoleTenantCache() // site addresses are cached for a short time
+    logAction(req, 'tenant.update', 'Tenant', t._id, { name: t.name, domains: t.domains })
+    res.json(t)
+  } catch (err) {
+    if (err?.code === 11000) return res.status(409).json({ error: 'Um destes endereços já pertence a outra loja' })
+    throw err
+  }
 })
 
 // Assign user to tenant (by userId) with role
@@ -987,6 +1033,9 @@ router.post('/setup/tenant-complete', requireSuperAdmin, async (req, res) => {
   if (!kiosk?.username) return res.status(400).json({ error: 'Missing kiosk username' })
 
   try {
+    for (const name of [admin.username, kiosk.username]) {
+      if (await usernameTaken(User, name)) return res.status(409).json({ error: `Já existe um utilizador com o nome «${name}»` })
+    }
     // 1. Create Tenant
     const existing = await Tenant.findOne({ slug: tenant.slug })
     if (existing) return res.status(400).json({ error: 'Tenant slug already exists' })
@@ -1053,6 +1102,7 @@ router.put('/interfaces/:id', requireAdmin, async (req, res) => {
 // Delete interface
 router.delete('/interfaces/:id', requireAdmin, async (req, res) => {
   const iface = await withTenant(Interface, req).findByIdAndDelete(req.params.id)
+  if (!iface) return res.status(404).json({ error: 'Interface not found' })
   logAction(req, 'interface.delete', 'Interface', req.params.id, { name: iface?.name })
   res.json({ success: true })
 })
@@ -1152,6 +1202,7 @@ router.put('/prices/:id', requireAdmin, async (req, res) => {
 // Delete price
 router.delete('/prices/:id', requireAdmin, async (req, res) => {
   const price = await withTenant(Price, req).findByIdAndDelete(req.params.id)
+  if (!price) return res.status(404).json({ error: 'Price not found' })
   logAction(req, 'price.delete', 'Price', req.params.id, { type: price?.type, weight: price?.weight })
   res.json({ success: true })
 })
@@ -1204,6 +1255,7 @@ router.put('/coupons/:id', requireAdmin, async (req, res) => {
 
 router.delete('/coupons/:id', requireAdmin, async (req, res) => {
   const coupon = await withTenant(Coupon, req).findByIdAndDelete(req.params.id)
+  if (!coupon) return res.status(404).json({ error: 'Coupon not found' })
   logAction(req, 'coupon.delete', 'Coupon', req.params.id, { code: coupon?.code })
   res.json({ success: true })
 })
@@ -1291,6 +1343,7 @@ router.put('/peripherals/:id', requireAdmin, async (req, res) => {
 // Delete peripheral
 router.delete('/peripherals/:id', requireAdmin, async (req, res) => {
   const peripheral = await withTenant(Peripheral, req).findByIdAndDelete(req.params.id)
+  if (!peripheral) return res.status(404).json({ error: 'Peripheral not found' })
   logAction(req, 'peripheral.delete', 'Peripheral', req.params.id, { name: peripheral?.name })
   res.json({ success: true })
 })

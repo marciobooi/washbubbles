@@ -20,3 +20,30 @@ export async function ensureUserIndexes(UserModel) {
   }
   return fixed
 }
+
+/**
+ * A user name must identify ONE person in the whole system (not only inside a shop), otherwise the login cannot know which of two
+ * "dono" is meant. Case-insensitive. The index is only created when there are no duplicates yet (they are reported, never fixed
+ * automatically); the API checks the same rule on every create/rename either way.
+ * @returns {{status:'exists'|'created'|'duplicates', duplicates?:string[]}}
+ */
+export async function ensureGlobalUsernameIndex(UserModel) {
+  const name = 'username_ci_unique'
+  const idx = await UserModel.collection.indexes()
+  if (idx.some((i) => i.name === name)) return { status: 'exists' }
+  const dups = await UserModel.collection.aggregate([
+    { $group: { _id: { $toLower: '$username' }, n: { $sum: 1 } } },
+    { $match: { n: { $gt: 1 } } },
+  ]).toArray()
+  if (dups.length) return { status: 'duplicates', duplicates: dups.map((d) => d._id) }
+  await UserModel.collection.createIndex({ username: 1 }, { name, unique: true, collation: { locale: 'en', strength: 2 } })
+  return { status: 'created' }
+}
+
+export const CI = { locale: 'en', strength: 2 }
+/** Is this user name taken anywhere (any shop), ignoring capitals? `exceptId` lets a user keep their own name. */
+export async function usernameTaken(UserModel, username, exceptId = null) {
+  const q = { username: String(username) }
+  if (exceptId) q._id = { $ne: exceptId }
+  return Boolean(await UserModel.findOne(q).collation(CI).select('_id').lean())
+}

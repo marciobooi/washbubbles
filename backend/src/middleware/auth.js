@@ -2,6 +2,17 @@ import jwt from 'jsonwebtoken'
 import User from '../models/user.js'
 import mongoose from 'mongoose'
 import { findUserByApiKey } from '../services/apiKeys.js'
+import Tenant from '../models/tenant.js'
+import AuditLog from '../models/auditLog.js'
+
+// "Acting as shop X" is written to the audit trail once per superadmin and shop per half hour (not on every request).
+const actingSeen = new Map()
+function noteActingAs(user, tenant) {
+  const k = `${user._id}:${tenant._id}`
+  if (Date.now() - (actingSeen.get(k) || 0) < 30 * 60_000) return
+  actingSeen.set(k, Date.now())
+  AuditLog.create({ tenantId: tenant._id, actorId: user._id, actorUsername: user.username, action: 'tenant.act_as', targetType: 'Tenant', targetId: String(tenant._id), details: { shop: tenant.name } }).catch(() => {})
+}
 
 // index.js exits at startup if JWT_SECRET is unset — no hardcoded fallback here on purpose
 const JWT_SECRET = process.env.JWT_SECRET
@@ -45,6 +56,17 @@ export async function requireAuth(req, res, next) {
   
   // Security: Crucial for withTenant() to work!
   req.tenantId = resolved.userModel.tenantId
+
+  // A SUPERADMIN (and only a SUPERADMIN) may act as another shop by naming it in X-Tenant-Id; everybody else's header is ignored.
+  const actAs = req.headers['x-tenant-id']
+  if (resolved.userModel.role === 'SUPERADMIN' && actAs && String(actAs) !== String(req.tenantId)) {
+    const t = await Tenant.findById(String(actAs)).select('_id name slug').lean().catch(() => null)
+    if (t) {
+      req.tenantId = t._id
+      req.actingAs = t
+      noteActingAs(resolved.userModel, t)
+    }
+  }
   
   // Update lastSeen asynchronously (don't block the request)
   User.findByIdAndUpdate(resolved.userModel._id, { lastSeen: new Date() }).catch(() => {})

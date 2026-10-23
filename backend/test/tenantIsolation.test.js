@@ -67,7 +67,7 @@ describe('Tenant isolation: shop A cannot see or touch shop B', function () {
       const put = await A('put', path, body)
       expect([404, 405], `PUT ${path}`).to.include(put.status)
       const del = await A('delete', path)
-      expect([404, 405, 200], `DELETE ${path}`).to.include(del.status)
+      expect([404, 405], `DELETE ${path}`).to.include(del.status) // not "200 success" for a record that is not ours
     }
     const Machine = (await import('../src/models/machine.js')).default
     expect((await Machine.findById(M.machine._id)).name).to.equal(`${MARK} Lavar`) // untouched
@@ -110,21 +110,20 @@ describe('Tenant isolation: shop A cannot see or touch shop B', function () {
     }
   })
 
-  it('a header cannot make an authenticated user of shop A act as shop B', async () => {
-    const r = await request(app).get('/api/admin/machines').set('Authorization', `Bearer ${adminTokenA}`).set('X-Tenant-Id', String(tB._id))
+  it('a header cannot make an ordinary admin of shop A act as shop B (only a superadmin may act as another shop)', async () => {
+    const User = (await import('../src/models/user.js')).default
+    const plainA = await User.create({ tenantId: tA._id, username: 'plain-a', password: 'x', role: 'ADMIN' })
+    const r = await request(app).get('/api/admin/machines').set('Authorization', `Bearer ${signToken(plainA)}`).set('X-Tenant-Id', String(tB._id))
     expect(leaks(r.body)).to.equal(false)
   })
 
-  // PENDING until docs/PLAN-MULTI-LOJA.md phase 1.3 is built: today the same username in two shops makes /auth/login ambiguous.
-  it.skip('PLAN 1.3: the same username in two shops must not make /auth/login ambiguous', async () => {
+  it('the same user name cannot exist in two shops, so the login is never ambiguous (phase 1.3)', async () => {
     const User = (await import('../src/models/user.js')).default
-    const pw = await bcrypt.hash('same-password-1', 10)
-    // both shops have a user called "dono" with different passwords
-    await User.create({ tenantId: tA._id, username: 'dono', password: await bcrypt.hash('password-of-A', 10), role: 'ADMIN' })
-    await User.create({ tenantId: tB._id, username: 'dono', password: pw, role: 'ADMIN' })
-    const a = await request(app).post('/api/auth/login').send({ username: 'dono', password: 'password-of-A' })
-    const b = await request(app).post('/api/auth/login').send({ username: 'dono', password: 'same-password-1' })
-    // whichever record the database returns first wins: one of the two shops' owners cannot log in
-    expect([a.status, b.status].sort(), 'both owners of the same-named user should be able to log in').to.deep.equal([200, 200])
+    const { usernameTaken } = await import('../src/services/ensureIndexes.js')
+    await User.create({ tenantId: tA._id, username: 'Dono', password: await bcrypt.hash('password-of-A', 10), role: 'ADMIN' })
+    expect(await usernameTaken(User, 'dono')).to.equal(true) // other shop, other capitals: still taken
+    const r = await request(app).post('/api/auth/login').send({ username: 'dono', password: 'password-of-A' }) // typed in lower case
+    expect(r.status).to.equal(200)
+    expect(r.body.tenant).to.include({ slug: 'test-tenant' })
   })
 })

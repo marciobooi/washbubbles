@@ -244,6 +244,16 @@ async function start() {
   const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017/washstore'
   try {
     await connectMongo(MONGODB_URL)
+    // The first shop owns PRIMARY_DOMAIN (freshbubbles.pt) until addresses are set in the admin; user names are unique system-wide.
+    try {
+      const { ensurePrimaryDomain } = await import('./services/tenantDomains.js')
+      if (await ensurePrimaryDomain()) console.log(`[Tenants] ${process.env.PRIMARY_DOMAIN} assigned to the first shop`)
+      const { ensureGlobalUsernameIndex } = await import('./services/ensureIndexes.js')
+      const User = (await import('./models/user.js')).default
+      const r = await ensureGlobalUsernameIndex(User)
+      if (r.status === 'created') console.log('[Users] user names are now unique across all shops')
+      if (r.status === 'duplicates') console.warn(`[Users] the same user name exists in more than one shop (${r.duplicates.join(', ')}): rename them, the system-wide unique index was NOT created`)
+    } catch (err) { console.warn('[Tenants] start-up check failed:', err.message) }
     // Indexes Mongoose will not replace by itself (a unique email index that broke creating a second user without an email).
     try {
       const { ensureUserIndexes } = await import('./services/ensureIndexes.js')
