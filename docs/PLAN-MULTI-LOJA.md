@@ -21,7 +21,7 @@ Estado verificado a 2026-10-23 com testes reais (`backend/test/tenantIsolation.t
 ## 3. Plano por fases
 
 ### Fase 1 — Base segura (antes de criar a 2.ª loja)
-1.1 **Loja pública por defeito**: definição `PUBLIC_TENANT_SLUG` (e, mais tarde, domínio → loja). Usada pelo site público, branding do login, página inicial e máquinas públicas. Resolve P1.
+1.1 **Loja pelo endereço do site**: cada loja tem uma lista de endereços (`marcioslvinc.ro`, `www.marcioslvinc.ro`); o servidor decide a loja pelo endereço que o visitante abriu (`freshbubbles.pt` → FreshBubbles, que mantém tudo o que está configurado). Endereço desconhecido → 404. `PUBLIC_TENANT_SLUG` só para desenvolvimento / acesso por IP. Usado pelo site público, marca do login, página inicial e máquinas públicas. Resolve P1.
 1.2 **Superadmin "a atuar como a loja X"**: o servidor aceita `X-Tenant-Id` **só** de SUPERADMIN (valida que a loja existe; qualquer outro papel ignora o cabeçalho), com registo na auditoria. O seletor passa a funcionar e a barra do admin mostra "A ver: Loja X". Resolve P2.
 1.3 **Login sem ambiguidade**: nome de utilizador **único em todo o sistema** (sem distinguir maiúsculas), com verificação/migração de duplicados antes do índice. O login devolve também a loja (`tenant {id, nome, slug}`). Resolve P3.
 1.4 Apagar/alterar id de outra loja → **404** em todas as rotas. Resolve P6.
@@ -41,6 +41,19 @@ Estado verificado a 2026-10-23 com testes reais (`backend/test/tenantIsolation.t
 
 ### Fase 4 — Vários postos na mesma loja (só se fizer falta)
 Hoje as máquinas, interfaces e preços pertencem à **loja**, não ao posto: dois PCs na mesma loja iam puxar as máquinas um do outro. Solução: conceito de **posto** (`siteId`) em Máquina/Interface/Periférico, e cada quiosque só vê o seu; cartões e preços partilhados na loja. Até lá: **uma loja por espaço físico**.
+
+### Fase 1b — Site público por loja
+O nome da empresa, morada, textos, mapa, política de privacidade, `sitemap`, `robots.txt` e ligações canónicas deixam de estar no código (hoje: FreshBubbles) e passam a vir da loja do endereço. Cache da página inicial e das traduções por loja e idioma. O admin de cada loja vive no mesmo endereço (`/admin`) com a marca da loja; um utilizador só entra no admin da sua loja (o superadmin entra em qualquer uma).
+
+### Fase 3b — "Criar loja" automático (o botão único)
+**Formulário** (Lojas → Criar loja): nome da empresa · identificador (sugerido) · **endereço do site** (`www.marcioslvinc.ro`, normalizado para `marcioslvinc.ro` + `www`) · **email do cliente** · nome do administrador · idioma do email (PT/EN) · "copiar preços e definições da loja modelo" (sim/não) · criar posto kiosk (sim).
+**O que acontece ao carregar em Criar:**
+1. Cria a loja, o administrador (sem palavra-passe em claro: o cliente recebe uma ligação para a **definir**, válida 7 dias), o posto kiosk com chave pendente, e os dados iniciais.
+2. **Envia ao cliente um email** (caixa de envio atual) com: o que é e o que vai acontecer; **como ligar o domínio** (criar 2 registos `A`: `@` e `www` → `128.140.118.209`, TTL 3600; apagar `A`/`AAAA`/`CNAME` que existam para esses nomes; explicação passo a passo em linguagem simples e onde se faz isto no painel do registador); a ligação para **definir a palavra-passe do administrador**; e o contacto de apoio. Cópia para o superadmin.
+3. O admin mostra os passos em direto: ✅ loja criada · ✅ utilizadores · ⏳ DNS (mostra os registos a criar e o resultado da verificação) · ⏳ certificado · ✅ site ativo. Botões "Reenviar email" e "Verificar agora".
+4. **Serviço no servidor** (separado da aplicação, como o atualizador automático; a aplicação nunca corre comandos): lê os pedidos de domínio da base de dados, só aceita nomes com formato estrito de pedidos de um superadmin, espera que o DNS aponte para nós, pede o certificado para `@` e `www`, liga o domínio ao site, recarrega o nginx, marca "ativo" e **envia o email "o seu site está ativo"** ao cliente. Se falhar mostra o motivo no admin e volta a tentar.
+5. Tudo registado na auditoria. Limite de pedidos por hora para evitar abusos (e os limites da Let's Encrypt).
+Sem o DNS a loja já funciona no admin e no quiosque; o site público mostra "a aguardar" até o DNS estar certo.
 
 ## 4. Ordem e riscos
 - **Fase 1 tem de vir antes de criar a 2.ª loja** (P1).
