@@ -762,14 +762,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
                         {t('mbwayButton')}
                       </button>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => { setPinError(null); setShowPinPrompt(true) }}
-                      className="w-full min-h-[48px] py-2.5 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 active:bg-slate-100 text-slate-700 font-semibold text-xs sm:text-sm inline-flex items-center justify-center gap-2 transition-all duration-150 shadow-sm active:scale-[0.99]"
-                    >
-                      <svg className="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                      {t('manual')}
-                    </button>
+                    {/* The staff's manual payment is in the PIN menu, not here: customers no longer see a button for it. */}
                   </div>
                 </div>
               )
