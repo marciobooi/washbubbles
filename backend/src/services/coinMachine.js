@@ -1169,7 +1169,20 @@ class CoinMachine extends EventEmitter {
    */
   async dispenseChange(hopperId, amount, opts = {}) {
     try {
-      const result = await this.middleware.dispenseChange(hopperId, amount, opts)
+      let result = await this.middleware.dispenseChange(hopperId, amount, opts)
+
+      // A momentary hopper fault (a coin that catches and frees itself) must not leave the customer short: when part of the change
+      // was not paid, ask again for just the REST a few seconds later, up to 3 more times. Not after a timeout (then nobody knows
+      // what was paid), and never for the "empty the hopper" request.
+      const delay = Number.isFinite(opts.retryDelayMs) ? opts.retryDelayMs : 3000
+      let paid = Number(result?.dispensed) || 0
+      for (let attempt = 1; attempt <= 3 && amount < 9000 && result && result.success === false && !result.unconfirmed && Number(result.remaining) > 0; attempt++) {
+        console.warn(`[Change] EUR ${Number(result.remaining).toFixed(2)} still owed (${result.error || 'not paid'}): trying again in ${delay / 1000} s (attempt ${attempt}/3)`)
+        await new Promise((r) => setTimeout(r, delay))
+        const next = await this.middleware.dispenseChange(hopperId, roundMoney(result.remaining), opts)
+        paid = roundMoney(paid + (Number(next?.dispensed) || 0))
+        result = { ...(next || {}), dispensed: paid }
+      }
       
       this.emit('change-dispensed', { amount })
       
