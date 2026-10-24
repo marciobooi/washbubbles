@@ -49,6 +49,7 @@ import { BrandingProvider } from './context/BrandingContext'
 import { KioskLockProvider } from './context/KioskLockContext'
 import StaffMenu from './components/StaffMenu'
 import KioskLockOverlay from './components/KioskLockOverlay'
+import ShutdownOverlay from './components/ShutdownOverlay'
 import { TenantProvider } from './context/TenantContext'
 import { useAuth } from './context/AuthContext'
 import AdminTenants from './pages/AdminTenants'
@@ -781,6 +782,7 @@ function AppInner() {
           admin dashboard, which has its own equivalent pages/auth. */}
       {!location.pathname.startsWith('/admin') && <StaffMenu />}
       {!location.pathname.startsWith('/admin') && <KioskLockOverlay />}
+      {!location.pathname.startsWith('/admin') && <ShutdownOverlay />}
     </div>
   )
 }
