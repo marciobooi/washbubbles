@@ -89,6 +89,8 @@
   "refunded": "Crédito devolvido: {{amount}}",
   "takeCoins": "Recolha as moedas na bandeja.",
   "refundFailed": "Não foi possível devolver todo o crédito",
+  "changeShortfall": "Não foi possível dar todo o troco",
+  "changeShortfallHint": "Chame o staff: faltam {{amount}} por devolver.",
   "refundFailedHint": "Faltam {{amount}}. Contacte o balcão.",
   "alreadyInCart": "Máquina já no carrinho",
   "alreadyInCartHint": "Não é possível adicionar a mesma máquina duas vezes",

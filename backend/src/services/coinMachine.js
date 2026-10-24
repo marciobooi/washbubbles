@@ -1145,6 +1145,26 @@ class CoinMachine extends EventEmitter {
   }
 
   /**
+   * Change was asked for and NOT (fully) paid: somebody is owed money. E-mail the shop (its support address), note it in the
+   * audit trail and tell the kiosk screen. Once a minute at most, so a jammed hopper does not flood the inbox.
+   */
+  async reportChangeShortfall(requested, result) {
+    const remaining = roundMoney(Number(result.remaining) > 0 ? Number(result.remaining) : requested)
+    const unconfirmed = !!result.unconfirmed
+    const now = Date.now()
+    if (this.lastShortfallAlert && now - this.lastShortfallAlert < 60_000) return
+    this.lastShortfallAlert = now
+    const msg = unconfirmed
+      ? `O troco de ${requested.toFixed(2)} € não foi confirmado pela máquina. Verifique se o cliente o recebeu; se não, devolva-lhe ${remaining.toFixed(2)} €.`
+      : `Falhou o troco: pedido ${requested.toFixed(2)} €, ficaram por pagar ${remaining.toFixed(2)} €. O cliente ficou a dever ${remaining.toFixed(2)} €: dê-lhos em mão e verifique o hopper (moedas, encravado).`
+    console.warn(`[Change] ${msg}`)
+    await this.auditSystem('change.shortfall', { requested, remaining, unconfirmed, error: result.error })
+    broadcastHardwareEvent(this.tenantId, 'change:shortfall', { requested, remaining, unconfirmed })
+    const { sendAlertForTenant } = await import('./alerts.js')
+    await sendAlertForTenant(this.tenantId, 'Falta de troco: cliente por pagar', msg)
+  }
+
+  /**
    * Dispense change
    */
   async dispenseChange(hopperId, amount, opts = {}) {
@@ -1155,6 +1175,7 @@ class CoinMachine extends EventEmitter {
       
       // Pass the controller's real answer on. This used to return { success: true } whatever
       // happened, so a hopper that came up short looked like a completed payout.
+      if (result && result.success === false && amount < 9000) this.reportChangeShortfall(amount, result).catch(() => {}) // 9999 = emptying the hopper on purpose
       return { ...(result || {}), success: result?.success !== false }
     } catch (err) {
       console.error('Failed to dispense change:', err)

@@ -89,6 +89,8 @@
   "refunded": "Credit returned: {{amount}}",
   "takeCoins": "Please take the coins from the tray.",
   "refundFailed": "Could not return all of the credit",
+  "changeShortfall": "The change could not be paid in full",
+  "changeShortfallHint": "Please call the staff: {{amount}} is still owed to you.",
   "refundFailedHint": "{{amount}} still owed. Please ask at the counter.",
   "alreadyInCart": "Machine already in the cart",
   "alreadyInCartHint": "The same machine cannot be added twice",

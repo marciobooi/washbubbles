@@ -89,6 +89,8 @@
   "refunded": "Guthaben zurückgegeben: {{amount}}",
   "takeCoins": "Bitte die Münzen aus der Schale nehmen.",
   "refundFailed": "Das Guthaben konnte nicht vollständig zurückgegeben werden",
+  "changeShortfall": "Das Wechselgeld konnte nicht vollständig ausgezahlt werden",
+  "changeShortfallHint": "Bitte rufen Sie das Personal: {{amount}} sind noch offen.",
   "refundFailedHint": "Noch {{amount}} offen. Bitte am Schalter melden.",
   "alreadyInCart": "Maschine bereits im Warenkorb",
   "alreadyInCartHint": "Dieselbe Maschine kann nicht zweimal hinzugefügt werden",

@@ -89,6 +89,8 @@
   "refunded": "Crédit rendu : {{amount}}",
   "takeCoins": "Veuillez récupérer les pièces dans le bac.",
   "refundFailed": "Impossible de rendre tout le crédit",
+  "changeShortfall": "La monnaie n'a pas pu être rendue en totalité",
+  "changeShortfallHint": "Appelez le personnel : il reste {{amount}} à vous rendre.",
   "refundFailedHint": "Il reste {{amount}} à rendre. Adressez-vous au comptoir.",
   "alreadyInCart": "Machine déjà dans le panier",
   "alreadyInCartHint": "La même machine ne peut pas être ajoutée deux fois",

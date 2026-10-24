@@ -68,6 +68,10 @@ export const CartProvider = ({ children }) => {
         setCredit(0)
         setRefundAt(null)
         toast({ title: i18n.t('refunded', { ns: 'cart', amount: `${Number(data.payload?.refunded || 0).toFixed(2)}€` }), description: i18n.t('takeCoins', { ns: 'cart' }), variant: 'success' })
+      } else if (data.type === 'change:shortfall') {
+        // The machine could not pay all the change: the customer is owed money; the staff has been e-mailed.
+        const owed = Number(data.payload?.remaining || 0)
+        toast({ title: i18n.t('changeShortfall', { ns: 'cart' }), description: i18n.t('changeShortfallHint', { ns: 'cart', amount: `${owed.toFixed(2)}€` }), variant: 'destructive' })
       } else if (data.type === 'credit:refund-failed') {
         const left = Number(data.payload?.remaining || 0)
         setCredit(Math.round(left * 100) / 100)
