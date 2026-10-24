@@ -11,6 +11,7 @@ describe('Unspent cash is paid back after the kiosk is left alone', function () 
   const hopperRow = () => Peripheral.create({ tenantId: tenant._id, name: 'Hopper', type: 'hopper', enabled: true })
 
   before(async () => {
+    process.env.CHANGE_RETRY_DELAY_MS = '5' // the repeat attempts after a part-paid change wait 5 ms here, not 3 s
     await startTestDb()
     tenant = await Tenant.create({ name: 'Refund Test', slug: `refund-${Date.now()}` })
   })
@@ -45,7 +46,8 @@ describe('Unspent cash is paid back after the kiosk is left alone', function () 
 
   it('keeps what the hopper could not pay as credit, and tells the operator the exact amount', async () => {
     await hopperRow()
-    next = async () => ({ success: false, dispensed: 1, remaining: 2, error: 'Hopper empty' })
+    // 1 EUR comes out, then the hopper cannot pay the other 2 (also not when asked again for just that rest)
+    next = async (h, amt) => (amt === 3 ? { success: false, dispensed: 1, remaining: 2, error: 'Hopper empty' } : { success: false, dispensed: 0, remaining: amt, error: 'Hopper empty' })
     cm.client.addToBalance(3)
     const r = await cm.refundCredit({ reason: 'idle' })
     expect(r.success).to.equal(false)

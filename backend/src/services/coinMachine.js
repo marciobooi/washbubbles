@@ -1174,7 +1174,7 @@ class CoinMachine extends EventEmitter {
       // A momentary hopper fault (a coin that catches and frees itself) must not leave the customer short: when part of the change
       // was not paid, ask again for just the REST a few seconds later, up to 3 more times. Not after a timeout (then nobody knows
       // what was paid), and never for the "empty the hopper" request.
-      const delay = Number.isFinite(opts.retryDelayMs) ? opts.retryDelayMs : 3000
+      const delay = Number.isFinite(opts.retryDelayMs) ? opts.retryDelayMs : (Number(process.env.CHANGE_RETRY_DELAY_MS) >= 0 ? Number(process.env.CHANGE_RETRY_DELAY_MS) : 3000)
       let paid = Number(result?.dispensed) || 0
       for (let attempt = 1; attempt <= 3 && amount < 9000 && result && result.success === false && !result.unconfirmed && Number(result.remaining) > 0; attempt++) {
         console.warn(`[Change] EUR ${Number(result.remaining).toFixed(2)} still owed (${result.error || 'not paid'}): trying again in ${delay / 1000} s (attempt ${attempt}/3)`)
