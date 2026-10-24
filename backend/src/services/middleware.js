@@ -905,14 +905,17 @@ class Middleware extends EventEmitter {
       }
 
       this.off('hopper-status', onHopper)
-      const unavailable = hopperFault !== null ? target : roundMoney(centsToEuro(pkg.data))
+      // A fault followed by `no-change 0` = nothing was paid (2026-10-19, a jam). A fault followed by a real shortfall means the
+      // controller paid part before it stopped (2026-10-24: 8 EUR asked, `no-change 500`: 3 EUR paid, 5 EUR owed), so trust the figure.
+      const reported = Math.min(target, roundMoney(centsToEuro(pkg.data)))
+      const unavailable = hopperFault !== null && reported <= 0 ? target : reported
       const dispensed = roundMoney(Math.max(0, target - unavailable))
       const success = unavailable <= 0
       if (success) this.emit('change-dispensed', { amount: dispensed, breakdown: [] })
       else this.emit('change-shortfall', { requested: target, dispensed, remaining: unavailable, breakdown: [] })
       return {
         success, dispensed, remaining: unavailable, breakdown: [],
-        error: success ? undefined : (hopperFault !== null ? `Hopper fault (status ${hopperFault}): nothing was paid out` : 'Controller could not pay out the full amount'),
+        error: success ? undefined : (hopperFault !== null ? `Hopper fault (status ${hopperFault}): ${dispensed > 0 ? `only ${dispensed.toFixed(2)} paid out` : 'nothing was paid out'}` : 'Controller could not pay out the full amount'),
       }
     })
   }
