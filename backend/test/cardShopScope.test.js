@@ -28,3 +28,23 @@ describe('A kiosk only ever reads and writes its own shop\'s cards, even when tw
     expect(await c.setClientInfoByCard('SAME-1')).to.equal(false)
   })
 })
+
+describe('Cash left over when the card is taken out', function () {
+  this.timeout(20000)
+  let t
+  before(async () => { await startTestDb(); await clearTestDb(); ;({ tenant: t } = await seedTenantAndUsers()) })
+  after(async () => { await stopTestDb() })
+
+  it('stays as credit (not loaded on the card) when autoCharge is off, and is loaded when it is on', async () => {
+    await Card.collection.insertOne({ tenantId: t._id, code: 'AC-1', balance: 5, bonus: 0, status: 'active', createdAt: new Date() })
+    for (const [on, expected, credit] of [[false, 5, 15], [true, 20, 0]]) {
+      await Card.collection.updateOne({ code: 'AC-1' }, { $set: { balance: 5 } })
+      const c = new Client(() => t._id, () => on)
+      await c.setClientInfoByCard('AC-1')
+      c.addToBalance(15) // cash put in while the card is in the reader
+      await c.resetCardInfo() // the card is taken out
+      expect((await Card.collection.findOne({ code: 'AC-1' })).balance, `autoCharge=${on}`).to.equal(expected)
+      expect(c.client.balance, `credit autoCharge=${on}`).to.equal(credit)
+    }
+  })
+})

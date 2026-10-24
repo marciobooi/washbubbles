@@ -8,9 +8,11 @@ import { roundMoney } from '../utils/money.js'
  */
 class Client extends EventEmitter {
   /** @param getTenantId  the shop whose cards this client reads and writes (the coin machine's tenant); with none, no card is touched */
-  constructor(getTenantId = () => null) {
+  constructor(getTenantId = () => null, getAutoCharge = () => true) {
     super()
     this.getTenantId = getTenantId
+    // Does cash left over move onto the card when the card is taken out? Only when the shop's `autoCharge` setting says so.
+    this.getAutoCharge = getAutoCharge
     
     this.client = {
       name: null,
@@ -105,6 +107,17 @@ class Client extends EventEmitter {
     const unspent = roundMoney((this.client.balance || 0) + (this.client.bonus || 0))
 
     if (!cardNumber || unspent <= 0) {
+      this.client.bonusArr = []
+      this.client.chargedArr = []
+      this.client.moneyArr = []
+      return
+    }
+
+    // The shop turned automatic loading OFF (setting `autoCharge`): the cash stays as the customer's credit on the kiosk (it is
+    // paid back as change, or loaded on purpose through the card screen) instead of silently ending up on the card.
+    // This used to ignore the setting and load the card every time (a customer who put in 20 EUR for a 15 EUR top-up got 20).
+    if (!this.getAutoCharge()) {
+      console.log(`Auto-charge is off: EUR ${unspent.toFixed(2)} stays as credit for ${cardNumber}'s owner (not moved onto the card)`)
       this.client.bonusArr = []
       this.client.chargedArr = []
       this.client.moneyArr = []
