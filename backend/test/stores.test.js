@@ -43,7 +43,9 @@ describe('Superadmin creates and oversees shops', function () {
     expect(admin.resetPasswordExpires.getTime()).to.be.greaterThan(Date.now() + 6 * 24 * 3600 * 1000)
     const tid = r.body.tenant._id
     expect(await Machine.countDocuments({ tenantId: tid })).to.equal(0)
-    expect(await Setting.countDocuments({ tenantId: tid })).to.equal(0) // nothing copied from another shop
+    const settings = await Setting.find({ tenantId: tid }).lean()
+    expect(settings.map((s) => s.key)).to.deep.equal(['support.email']) // nothing copied from another shop; only the customer's address as its support e-mail
+    expect(settings[0].value).to.equal('cliente@example.com')
   })
 
   it('refuses an address that already belongs to another shop, and a bad e-mail', async () => {

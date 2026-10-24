@@ -8,6 +8,7 @@ import dns from 'dns'
 import bcrypt from 'bcryptjs'
 import Tenant from '../models/tenant.js'
 import User from '../models/user.js'
+import Setting from '../models/setting.js'
 import { sendMail } from './mailer.js'
 import { renderEmailHtml, emailButton, escapeHtml } from './emailTemplate.js'
 import { usernameTaken } from './ensureIndexes.js'
@@ -125,6 +126,8 @@ export async function createStore({ name, slug, domains, customerEmail, adminUse
   resetSoleTenantCache(); resetDomainCache()
   // A password nobody knows: the administrator sets their own through the e-mailed link.
   const admin = await User.create({ tenantId: tenant._id, username, email: customerEmail || null, role: 'ADMIN', password: await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 10) })
+  // The customer's address is also the shop's support address from day one (alerts and replies reach somebody); the shop can change it.
+  if (customerEmail) await Setting.updateOne({ tenantId: tenant._id, key: 'support.email' }, { $set: { value: customerEmail } }, { upsert: true })
   let emailError = ''
   if (customerEmail) {
     try { await sendWelcomeEmail(tenant, admin) } catch (err) {
