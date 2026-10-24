@@ -3,10 +3,14 @@
   Provides a singleton-based connect, subscribe, send and disconnect
 */
 
+import { isKioskScreen } from '@/lib/kioskContext'
+
 let socket = null
 let wantOpen = false
 let retryMs = 1000
 let retryTimer = null
+let usedToken = false      // did the attempt in progress authenticate with a login token?
+let tokenRejected = false  // the server refused a login token (expired): use the kiosk key from now on
 const listeners = new Set()
 
 // Same-origin ws(s)://<host>/ws — not localhost:3000 — so a missing
@@ -32,13 +36,17 @@ export function connect(url = import.meta.env.VITE_HW_BRIDGE_URL || defaultWsUrl
 
   socket.addEventListener('open', () => {
     console.info('[ws] connected to', url)
-    retryMs = 1000
     // Lets the screen re-read what it may have missed while the link was down (e.g. a backend restart).
     listeners.forEach((cb) => cb({ type: 'ws:open' }))
-    if (token) {
+    // On the kiosk screen the kiosk key never expires, a login token (8 h) does: with a stale token the screen went deaf to cash,
+    // cards and machines while the server logged a refused connection every second. The key goes first there.
+    const preferKey = !!kioskKey && (tokenRejected || isKioskScreen())
+    if (token && !preferKey) {
       console.info('[ws] authenticating with token')
+      usedToken = true
       socket.send(JSON.stringify({ type: 'auth', token }))
     } else if (kioskKey) {
+      usedToken = false
       console.info('[ws] authenticating with kioskApiKey')
       socket.send(JSON.stringify({ type: 'auth', apiKey: kioskKey }))
     } else {
@@ -49,6 +57,7 @@ export function connect(url = import.meta.env.VITE_HW_BRIDGE_URL || defaultWsUrl
   socket.addEventListener('message', (evt) => {
     try {
       const data = JSON.parse(evt.data)
+      if (data && data.type === 'auth-ok') { retryMs = 1000; tokenRejected = false } // only a connection that was accepted resets the back-off
       listeners.forEach((cb) => cb(data))
     } catch (err) {
       // non-json messages
@@ -56,8 +65,9 @@ export function connect(url = import.meta.env.VITE_HW_BRIDGE_URL || defaultWsUrl
     }
   })
 
-  socket.addEventListener('close', () => {
+  socket.addEventListener('close', (ev) => {
     console.info('[ws] closed')
+    if (ev && ev.code === 1008 && usedToken) tokenRejected = true // refused: next time with the kiosk key (if there is one)
     // The shop backend restarts (updates, power cuts): without this the kiosk stays deaf until F5.
     if (wantOpen) {
       clearTimeout(retryTimer)
