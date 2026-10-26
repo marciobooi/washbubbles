@@ -1,4 +1,5 @@
 import 'dotenv/config'
+import './services/logTime.js' // every log line gets its time
 import './services/asyncRoutes.js' // a rejected async route handler answers with an error instead of hanging
 import fs from 'fs'
 import path from 'path'
