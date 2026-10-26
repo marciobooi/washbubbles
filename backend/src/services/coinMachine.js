@@ -974,9 +974,14 @@ class CoinMachine extends EventEmitter {
     //  batch (default, what the old program does): ONE command carrying n impulses; the machine adds
     //    the time itself;
     //  staggered: one impulse now, one more every `tImp` minutes (DRYER_IMPULSE_MODE=staggered).
-    const staggered = String(process.env.DRYER_IMPULSE_MODE || 'batch').toLowerCase() === 'staggered' && n > 1
+    //  spaced (default): one impulse now, the others as SEPARATE commands a few seconds apart, in the background, like a customer
+    //    putting in coins one after the other. 2026-10-25 11:17 a 2-block purchase (one command carrying 2 impulses) may have been
+    //    counted as one by the dryer, so the impulses no longer travel together.
+    const mode = String(process.env.DRYER_IMPULSE_MODE || 'spaced').toLowerCase()
+    const staggered = mode === 'staggered' && n > 1
+    const spaced = mode === 'spaced' && n > 1
     // Throws when the controller is not connected: the caller then charges nothing.
-    await this.middleware.sendMachineActivation(machine, iface, staggered ? 1 : n)
+    await this.middleware.sendMachineActivation(machine, iface, staggered || spaced ? 1 : n)
     const minutes = await this.cycleMinutes(machine, n)
     machine.busyUntil = new Date(Date.now() + minutes * 60_000)
     machine.sawBusy = false
@@ -984,8 +989,39 @@ class CoinMachine extends EventEmitter {
     machine.nextImpulseAt = staggered ? new Date(Date.now() + this.gapMinutes(machine) * 60_000) : null
     machine.startedAt = new Date()
     await machine.save()
-    console.log(`[Cycle] ${machine.name} started: ${staggered ? 'block 1 of ' + n + ', next impulse at ' + machine.nextImpulseAt.toISOString() : n + ' impulse(s) sent at once'}`)
+    if (spaced) this.sendRemainingImpulses(machine._id, n - 1).catch((err) => console.error('[Cycle] remaining impulses:', err.message))
+    console.log(`[Cycle] ${machine.name} started: ${spaced ? 'impulse 1 of ' + n + ', the rest follow as separate commands' : staggered ? 'block 1 of ' + n + ', next impulse at ' + machine.nextImpulseAt.toISOString() : n + ' impulse(s) sent at once'}`)
     return { success: true, blocks: n }
+  }
+
+  /**
+   * The other impulses of a multi-block purchase, one command each. Two machines on one interface are never sent back to back
+   * (middleware.activateViaGateway waits for the previous machine-started), which also spaces these. One that cannot be sent after
+   * 3 tries is handed to the staggered scheduler (pendingImpulses) and the operator is told: the customer has paid for it.
+   */
+  async sendRemainingImpulses(machineId, count) {
+    const gap = Number(process.env.DRYER_IMPULSE_GAP_MS) >= 0 ? Number(process.env.DRYER_IMPULSE_GAP_MS) : 2500
+    let left = count
+    while (left > 0) {
+      await new Promise((r) => setTimeout(r, gap))
+      const machine = await Machine.findOne(this.scoped({ _id: machineId })).populate('interfaceId')
+      if (!machine || !machine.interfaceId) return
+      let ok = false
+      let lastErr
+      for (let attempt = 1; attempt <= 3 && !ok; attempt++) {
+        try { await this.middleware.sendMachineActivation(machine, machine.interfaceId, 1); ok = true } catch (err) { lastErr = err; await new Promise((r) => setTimeout(r, 1500)) }
+      }
+      if (!ok) {
+        machine.pendingImpulses = left
+        machine.nextImpulseAt = new Date(Date.now() + 30_000)
+        await machine.save()
+        await this.auditSystem('machine.block.late', { machine: machine.name, pending: left, error: lastErr?.message })
+        broadcastHardwareEvent(this.tenantId, 'machine:block-late', { machine: machine.name, pending: left })
+        return
+      }
+      left--
+      console.log(`[Cycle] ${machine.name}: impulse sent as its own command, ${left} to go`)
+    }
   }
 
   /** How long a paid cycle lasts: dryers n x tImp; washers the price row's duration, else a default. */

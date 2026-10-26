@@ -122,7 +122,8 @@ export default function StaffMenu() {
         type="button"
         onClick={() => { setPinError(null); setShowPinPrompt(true) }}
         aria-label="Staff"
-        className="fixed bottom-2 left-2 z-30 w-8 h-8 rounded-full bg-black/5 hover:bg-black/15 text-neutral-400 hover:text-neutral-700 flex items-center justify-center transition-colors"
+        // A watermark: it is there for the staff, who know where it is, and nobody else notices it (no background, barely visible).
+        className="fixed bottom-2 left-2 z-30 w-8 h-8 rounded-full bg-transparent text-neutral-500 opacity-[0.09] hover:opacity-60 active:opacity-70 flex items-center justify-center transition-opacity"
       >
         <Settings className="w-4 h-4" aria-hidden />
       </button>

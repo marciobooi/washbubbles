@@ -729,6 +729,9 @@ describe('WashBubbles backend', function () {
 
 describe('Admin start/end without payment', function () {
   let app, tenant, kiosk, adminToken, kioskToken, machine
+  // these tests are about WHICH blocks go to the machine (one command, n impulses); the separate-commands default has its own tests
+  beforeEach(() => { process.env.DRYER_IMPULSE_MODE = 'batch' })
+  afterEach(() => { delete process.env.DRYER_IMPULSE_MODE })
   before(async () => {
     await startTestDb()
     await clearTestDb()

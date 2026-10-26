@@ -28,6 +28,7 @@ describe('Dryer blocks: one impulse now, one more every block', function () {
     sent = []
     impulses = []
     delete process.env.DRYER_IMPULSE_MODE
+    process.env.DRYER_IMPULSE_GAP_MS = '5'
     saved.tenantId = coinMachine.tenantId
     saved.running = coinMachine.running
     saved.middleware = coinMachine.middleware
@@ -52,6 +53,20 @@ describe('Dryer blocks: one impulse now, one more every block', function () {
     return Machine.create({ tenantId: tenant._id, name: 'Secar 7', type: 'dry', weight: 18, tImp: 15, interfaceId: iface._id, port: 1 })
   }
 
+  it('default (spaced): 3 blocks = 3 SEPARATE one-impulse commands, the first at once, the others right after', async () => {
+    const m = await dryer()
+    const res = await request(app).post('/api/gateways/cash/pay').set('Authorization', `Bearer ${kioskToken}`)
+      .send({ items: [{ _id: m._id, quantity: 3 }], inserted: 10, batchId: 'b-spaced' })
+    expect(res.status).to.equal(200)
+    expect(impulses[0]).to.equal(1) // the first impulse is in before the answer; the rest follow in the background
+    await new Promise((r) => setTimeout(r, 250))
+    expect(impulses).to.deep.equal([1, 1, 1])
+    expect(sent).to.deep.equal(['Secar 7', 'Secar 7', 'Secar 7'])
+    const after = await Machine.findById(m._id)
+    expect(after.pendingImpulses).to.equal(0)
+    expect(after.busyUntil).to.be.instanceOf(Date)
+  })
+
   it('blocksFor: dryers only, whole numbers, capped', () => {
     expect(coinMachine.blocksFor({ type: 'dry' }, { quantity: 3 })).to.equal(3)
     expect(coinMachine.blocksFor({ type: 'dry' }, { quantity: 99 })).to.equal(coinMachine.maxBlocks)
@@ -60,7 +75,8 @@ describe('Dryer blocks: one impulse now, one more every block', function () {
     expect(coinMachine.blocksFor({ type: 'wash' }, { quantity: 5 })).to.equal(1)
   })
 
-  it('cash: 3 blocks cost 3 x the price and go to the machine as ONE command with 3 impulses', async () => {
+  it('cash (batch mode): 3 blocks cost 3 x the price and go to the machine as ONE command with 3 impulses', async () => {
+    process.env.DRYER_IMPULSE_MODE = 'batch'
     const m = await dryer()
     const res = await request(app).post('/api/gateways/cash/pay').set('Authorization', `Bearer ${kioskToken}`)
       .send({ items: [{ _id: m._id, quantity: 3 }], inserted: 10, batchId: 'b-dry' })
