@@ -261,6 +261,23 @@ router.post('/day-close/:id/email', requireKioskOrAdmin, async (req, res) => {
   res.status(status).json(body)
 })
 
+// The kiosk screen crashed (a render error the customer would have seen as a white screen): keep it and tell the shop. Once every
+// 10 minutes per shop at most for the e-mail, every report in the audit trail (bounded).
+const crashMail = new Map()
+router.post('/client-error', requireKiosk, async (req, res) => {
+  const b = req.body || {}
+  const detail = { message: String(b.message || '').slice(0, 400), stack: String(b.stack || '').slice(0, 1500), component: String(b.component || '').slice(0, 800), page: String(b.page || '').slice(0, 120) }
+  const AuditLogModel = (await import('../models/auditLog.js')).default
+  await AuditLogModel.create({ tenantId: req.tenantId, actorUsername: req.userModel.username, action: 'kiosk.client_error', targetType: 'User', targetId: String(req.userModel._id), details: detail })
+  const key = String(req.tenantId)
+  if (Date.now() - (crashMail.get(key) || 0) > 10 * 60_000) {
+    crashMail.set(key, Date.now())
+    const { sendAlertForTenant } = await import('../services/alerts.js')
+    sendAlertForTenant(req.tenantId, 'Erro no ecrã do quiosque', `O ecrã do quiosque teve um erro e reiniciou sozinho.\nPágina: ${detail.page}\nErro: ${detail.message}`).catch(() => {})
+  }
+  res.json({ ok: true })
+})
+
 // Card recharge / top-up (kiosk) — stored as a transaction without a machine reference
 // Card recharge / top-up (kiosk) — stored as a transaction and optionally attached to a loyalty card
 router.post('/recharge', requireKiosk, async (req, res) => {

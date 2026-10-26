@@ -845,8 +845,43 @@ class Middleware extends EventEmitter {
     return Number.isFinite(env) && env >= 0 ? env : 1200
   }
 
+  /**
+   * Two machines on the SAME interface (Secar 8 + Secar 9 on interface 14) are not started back to back: the interface needs
+   * about ten seconds to finish the first one. On 2026-10-25 Secar 9 was sent six log lines after Secar 8, answered 200 and
+   * only started about a minute later, so the customer saw one dryer. The second command now waits for the controller's
+   * `machine-started` of the first (at most ACTIVATION_CONFIRM_MS, 20 s); machines on other interfaces only wait the short gap.
+   */
+  activationConfirmMs() {
+    if (Number.isFinite(this.activationConfirm)) return this.activationConfirm
+    const env = Number(process.env.ACTIVATION_CONFIRM_MS)
+    return Number.isFinite(env) && env >= 0 ? env : 20000
+  }
+
+  /** Resolves (never rejects) when the controller reports this channel started, or after `ms`. Call BEFORE sending. */
+  waitMachineStarted(addr, chn, ms) {
+    return new Promise((resolve) => {
+      let done = false
+      const finish = (v) => { if (done) return; done = true; clearTimeout(timer); this.off('machine-started', on); resolve(v) }
+      const on = (d) => { if (d && String(d.id) === String(addr) && String(d.chn) === String(chn)) finish(true) }
+      const timer = setTimeout(() => finish(false), ms)
+      timer.unref?.()
+      this.on('machine-started', on)
+      this._cancelStartWait = finish
+    })
+  }
+
   activateViaGateway(machine, iface, impulses = null) {
-    const run = () => this.sendActivation(machine, iface, impulses)
+    const run = async () => {
+      const addr = String(iface.address)
+      const prev = this.lastActivation
+      if (prev && prev.addr === addr) await prev.started // same interface: let it finish the previous machine first
+      const started = this.waitMachineStarted(addr, machine.port, this.activationConfirmMs())
+      try {
+        const item = await this.sendActivation(machine, iface, impulses)
+        this.lastActivation = { addr, started }
+        return item
+      } catch (err) { this._cancelStartWait?.(false); throw err }
+    }
     const result = (this.activationChain || Promise.resolve()).then(run, run)
     // The next one waits for this one to be sent AND for the pause, whether it worked or not.
     this.activationChain = result.then(() => sleepMs(this.activationGapMs()), () => sleepMs(this.activationGapMs()))

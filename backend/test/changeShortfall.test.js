@@ -68,3 +68,28 @@ describe('A momentary hopper fault: the rest of the change is asked for again', 
     expect(asked).to.deep.equal([4])
   })
 })
+
+describe('The kiosk screen reports a crash', function () {
+  this.timeout(20000)
+  let app
+  before(async () => {
+    await startTestDb(); await clearTestDb()
+    const { buildTestApp } = await import('./setup.test-helper.js')
+    app = await buildTestApp(); await seedTenantAndUsers()
+  })
+  after(async () => { await stopTestDb() })
+  it('keeps every report in the audit trail (bounded) and e-mails the shop at most once in 10 minutes', async () => {
+    const request = (await import('supertest')).default
+    const post = (b) => request(app).post('/api/pos/client-error').set('Authorization', 'ApiKey test-kiosk-api-key').send(b)
+    const lines = []; const orig = console.log; console.log = (...x) => lines.push(x.join(' '))
+    try {
+      expect((await post({ message: 'boom', stack: 'x'.repeat(5000), page: '/pos' })).status).to.equal(200)
+      expect((await post({ message: 'boom again', page: '/pos' })).status).to.equal(200)
+      await new Promise((r) => setTimeout(r, 300))
+    } finally { console.log = orig }
+    const rows = await AuditLog.find({ action: 'kiosk.client_error' }).lean()
+    expect(rows).to.have.length(2)
+    expect(rows[0].details.stack.length).to.equal(1500)
+    expect((await request(app).post('/api/pos/client-error').send({ message: 'x' })).status).to.equal(401) // only a kiosk key
+  })
+})

@@ -282,6 +282,7 @@ describe('Middleware over the low-level gateway', () => {
   it('several activations at once are sent one at a time with a pause (3 dryers paid together: one never started)', async () => {
     const mw = gatewayMiddleware()
     mw.activationGap = 60
+    mw.activationConfirm = 30 // same interface (Secar 8 + 9): the confirmation wait is its own test below
     const at = []
     const origSend = mw.sendPackage.bind(mw)
     mw.sendPackage = (pkg) => { at.push(Date.now()); return origSend(pkg) }
@@ -294,6 +295,38 @@ describe('Middleware over the low-level gateway', () => {
     expect(mw.sent.map((p) => p.data[0].id + '/' + p.data[0].chn)).to.deep.equal(['14/2', '14/1', '15/1']) // in order
     expect(at[1] - at[0]).to.be.at.least(50)
     expect(at[2] - at[1]).to.be.at.least(50)
+  })
+
+  it('two machines on the SAME interface: the second waits for the first one\'s machine-started (Secar 8+9 on 2026-10-25: the second started a minute late)', async () => {
+    const mw = gatewayMiddleware()
+    mw.activationGap = 0
+    mw.activationConfirm = 2000
+    const iface = { _id: 'i4', name: 'Int 4', address: 14 }
+    const other = { _id: 'i5', name: 'Int 5', address: 15 }
+    const p = Promise.all([
+      mw.sendMachineActivation({ _id: 'a', name: 'Secar 8', port: 2 }, iface),
+      mw.sendMachineActivation({ _id: 'b', name: 'Secar 9', port: 1 }, iface),
+      mw.sendMachineActivation({ _id: 'c', name: 'Secar 11', port: 1 }, other),
+    ])
+    await tick(60)
+    expect(mw.sent.filter((x) => x.op === 'activate-machine').map((x) => x.data[0].id + '/' + x.data[0].chn)).to.deep.equal(['14/2']) // the rest waits
+    mw.handlePackage({ op: 'machine-started', data: { id: '14', chn: '2' } }) // the interface finished the first one
+    await p
+    expect(mw.sent.filter((x) => x.op === 'activate-machine').map((x) => x.data[0].id + '/' + x.data[0].chn)).to.deep.equal(['14/2', '14/1', '15/1'])
+  })
+
+  it('the wait for machine-started is bounded: a controller that never confirms does not freeze the next machine', async () => {
+    const mw = gatewayMiddleware()
+    mw.activationGap = 0
+    mw.activationConfirm = 80
+    const iface = { _id: 'i4', name: 'Int 4', address: 14 }
+    const t0 = Date.now()
+    await Promise.all([
+      mw.sendMachineActivation({ _id: 'a', name: 'Secar 8', port: 2 }, iface),
+      mw.sendMachineActivation({ _id: 'b', name: 'Secar 9', port: 1 }, iface),
+    ])
+    expect(mw.sent.filter((x) => x.op === 'activate-machine')).to.have.length(2)
+    expect(Date.now() - t0).to.be.within(70, 1500)
   })
 
   it('a failed activation does not block the next one, and still reports its own error', async () => {

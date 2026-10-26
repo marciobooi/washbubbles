@@ -9,18 +9,21 @@ import './lib/i18n'
 import './fonts.css'
 import './index.css'
 import { startAutoReload } from './lib/autoReload'
+import CrashGuard from './components/CrashGuard'
 
 const queryClient = new QueryClient()
 
 createRoot(document.getElementById('root')).render(
 
     <QueryClientProvider client={queryClient}>
+      <CrashGuard>
       <AuthProvider>
       <BrowserRouter>
         <App />
         <OnScreenKeyboard />
       </BrowserRouter>
       </AuthProvider>
+      </CrashGuard>
     </QueryClientProvider>
 
 )
