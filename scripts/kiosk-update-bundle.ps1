@@ -114,6 +114,9 @@ if ($back) {
 } elseif (-not (Healthy 30)) { Rollback 'backend not healthy' }
 
 Set-Content -Path $verFile -Value $remote -Encoding ASCII
+if ($front -or $back) {
+  try { Invoke-RestMethod -Uri "http://127.0.0.1:$(Port)/api/pos/screen-reload" -Method Post -Headers @{ Authorization = ('ApiKey ' + (EnvVal 'KIOSK_API_KEY')) } -ContentType 'application/json' -Body '{}' -TimeoutSec 10 | Out-Null; Log 'kiosk screens told to refresh' } catch { Log 'could not tell the kiosk screens to refresh (they refresh by themselves)' }
+}
 Remove-Item $zip, $stage, $save -Recurse -Force -ErrorAction SilentlyContinue
 Log "done: now at $($remote.Substring(0, [math]::Min(7, $remote.Length)))"
 } finally { Remove-Item $lock -Force -ErrorAction SilentlyContinue }

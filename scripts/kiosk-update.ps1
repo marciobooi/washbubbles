@@ -117,6 +117,15 @@ if ($back) {
   Log 'backend restarted and healthy'
 } elseif (-not (Healthy 30)) { Rollback 'backend not healthy' }
 
-# The kiosk browser is NEVER closed from here: the screen sees the new build by itself (src/lib/autoReload.js) and reloads when nobody is touching it.
+# The kiosk browser is NEVER closed from here: the screen reloads itself when nobody is touching it (src/lib/autoReload.js). It is
+# also TOLD to: a `screen:reload` message to every kiosk screen of this shop, so nobody has to press F5.
+if ($front -or $back) {
+  try {
+    $k = Select-String -Path (Join-Path $root 'backend\.env') -Pattern '^KIOSK_API_KEY=' | Select-Object -First 1
+    $key = ($k.Line -replace '^KIOSK_API_KEY=', '').Trim().Trim('"')
+    Invoke-RestMethod -Uri "http://127.0.0.1:$(Port)/api/pos/screen-reload" -Method Post -Headers @{ Authorization = "ApiKey $key" } -ContentType 'application/json' -Body '{}' -TimeoutSec 10 | Out-Null
+    Log 'kiosk screens told to refresh'
+  } catch { Log ('could not tell the kiosk screens to refresh (they refresh by themselves): ' + $_.Exception.Message) }
+}
 Log "done: now at $((Invoke-Git rev-parse --short HEAD).Trim())"
 } finally { Remove-Item $lock -Force -ErrorAction SilentlyContinue }

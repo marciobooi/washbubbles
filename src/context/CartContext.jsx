@@ -3,6 +3,7 @@ import { subscribe } from '@/services/websocket'
 import api from '@/services/api'
 import i18n from '@/lib/i18n'
 import { isKioskScreen } from '@/lib/kioskContext'
+import { checkForUpdateNow, reloadWhenIdle } from '@/lib/autoReload'
 
 // The kiosk authenticates with its own API key, same as the other kiosk pages.
 function kioskHeaders() {
@@ -55,7 +56,8 @@ export const CartProvider = ({ children }) => {
   useEffect(() => {
     return subscribe((data) => {
       if (!data || typeof data !== 'object') return
-      if (data.type === 'ws:open') { syncFromShop(); return }
+      if (data.type === 'ws:open') { syncFromShop(); checkForUpdateNow(); return } // the backend restarts when the PC updates
+      if (data.type === 'screen:reload') { reloadWhenIdle(); return } // the admin asked for a refresh
       const toast = (opts) => import('@/components/ui/Toast').then((m) => m.toast(opts)).catch(() => {})
       if (data.type === 'peripheral:credit') {
         const amount = Number(data.payload?.amount)

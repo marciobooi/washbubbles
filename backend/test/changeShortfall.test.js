@@ -93,3 +93,15 @@ describe('The kiosk screen reports a crash', function () {
     expect((await request(app).post('/api/pos/client-error').send({ message: 'x' })).status).to.equal(401) // only a kiosk key
   })
 })
+
+describe('The updater tells the kiosk screens to refresh', function () {
+  this.timeout(20000)
+  let app
+  before(async () => { await startTestDb(); await clearTestDb(); const { buildTestApp } = await import('./setup.test-helper.js'); app = await buildTestApp(); await seedTenantAndUsers() })
+  after(async () => { await stopTestDb() })
+  it('needs the kiosk key, and answers ok', async () => {
+    const request = (await import('supertest')).default
+    expect((await request(app).post('/api/pos/screen-reload').send({})).status).to.equal(401)
+    expect((await request(app).post('/api/pos/screen-reload').set('Authorization', 'ApiKey test-kiosk-api-key').send({})).body).to.deep.equal({ ok: true })
+  })
+})

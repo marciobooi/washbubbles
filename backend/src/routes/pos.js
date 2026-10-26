@@ -5,7 +5,7 @@ import Sale from '../models/sale.js'
 import Setting from '../models/setting.js'
 import Price from '../models/price.js'
 import { requireKiosk, requireKioskOrAdmin } from '../middleware/auth.js'
-import { broadcastMachines, broadcastMachine } from '../wsServer.js'
+import { broadcastMachines, broadcastMachine, broadcastHardwareEvent } from '../wsServer.js'
 import { withTenant } from '../services/tenant.js'
 import { roundMoney, parseAmount } from '../utils/money.js'
 import { creditCard, debitCard, SPENDABLE } from '../services/cardBalance.js'
@@ -259,6 +259,13 @@ router.post('/day-close/:id/email', requireKioskOrAdmin, async (req, res) => {
   const { emailDayCloseReceipt } = await import('../services/dayClose.js')
   const { status, body } = await emailDayCloseReceipt(req, req.params.id, req.body?.email)
   res.status(status).json(body)
+})
+
+// "Refresh the kiosk screens": called by the shop PC's updater when an update is done (kiosk key). Every screen of the shop reloads as
+// soon as nobody is touching it (src/lib/autoReload.js).
+router.post('/screen-reload', requireKiosk, (req, res) => {
+  broadcastHardwareEvent(req.tenantId, 'screen:reload', {})
+  res.json({ ok: true })
 })
 
 // The kiosk screen crashed (a render error the customer would have seen as a white screen): keep it and tell the shop. Once every
