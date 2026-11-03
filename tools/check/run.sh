@@ -6,7 +6,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 SRC="$(cd "$HERE/../../src" && pwd)"
 DIR="${TMPDIR:-/tmp}/wb-check"
 mkdir -p "$DIR"
-( cd "$DIR" && { [ -d node_modules/eslint ] || npm install --silent --no-audit --no-fund eslint@9 eslint-plugin-react globals >/dev/null; } )
+( cd "$DIR" && { [ -x node_modules/.bin/eslint ] || npm install --silent --no-audit --no-fund eslint@9 eslint-plugin-react globals >/dev/null; } )
 cp "$HERE/eslint.config.mjs" "$DIR/eslint.config.mjs"
 rm -rf "$DIR/src" && mkdir -p "$DIR/src" && cp -R "$SRC/." "$DIR/src/"
 ( cd "$DIR" && ./node_modules/.bin/eslint -c eslint.config.mjs --no-warn-ignored src )

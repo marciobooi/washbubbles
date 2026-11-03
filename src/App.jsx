@@ -173,16 +173,16 @@ function AppInner() {
   // The email of the customer's card (if one is in the reader): it comes pre-filled on the receipt popup.
   const [receiptEmail, setReceiptEmail] = React.useState('')
   React.useEffect(() => {
-    if (!(receiptBatchId || receiptItems)) { setReceiptEmail(''); return undefined }
-    if (!cardIn) return undefined
+    setReceiptEmail('') // never carry an e-mail from one sale to the next
+    if (!receiptBatchId) return undefined // only a sale the server knows can say which card paid it
     let alive = true
     const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
     const key = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
-    api.request(`/pos/cards/${encodeURIComponent(cardIn)}/history`, { method: 'GET', headers: key ? { Authorization: `ApiKey ${key}` } : undefined, skipAuth: true, expect: 'json' })
-      .then((r) => { const e = String(r?.card?.email || '').trim(); if (alive && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) setReceiptEmail(e) })
+    api.request(`/pos/receipt-hint/${encodeURIComponent(receiptBatchId)}`, { method: 'GET', headers: key ? { Authorization: `ApiKey ${key}` } : undefined, skipAuth: true, expect: 'json' })
+      .then((r) => { const e = String(r?.email || '').trim(); if (alive && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) setReceiptEmail(e) })
       .catch(() => {})
     return () => { alive = false }
-  }, [receiptBatchId, receiptItems, cardIn])
+  }, [receiptBatchId, receiptItems])
   // Auto-dismiss so a previous customer's "want a receipt?" card doesn't sit
   // in the corner through the next customer's whole visit.
   React.useEffect(() => {
@@ -749,7 +749,9 @@ function AppInner() {
 
       <CartModal open={cartOpen} onClose={() => setCartOpen(false)} onPay={handlePay} onMbwayPaid={handleMbwayPaid} />
       <WifiQrModal open={Boolean(wifiVoucher)} onClose={() => setWifiVoucher(null)} voucher={wifiVoucher} />
+      {/* keyed per sale: the popup is always mounted, and its typed/pre-filled e-mail used to survive into the NEXT customer's sale */}
       <ReceiptPrompt
+        key={receiptBatchId || (receiptItems ? 'local-sale' : 'none')}
         items={receiptItems}
         batchId={receiptBatchId}
         kioskKey={(typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null) || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY}

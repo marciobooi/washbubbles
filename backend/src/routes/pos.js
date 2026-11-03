@@ -261,6 +261,18 @@ router.post('/day-close/:id/email', requireKioskOrAdmin, async (req, res) => {
   res.status(status).json(body)
 })
 
+// The e-mail to pre-fill on a receipt popup: ONLY the e-mail of the card this very sale was paid with. The screen used to guess it from
+// "the card in the reader", which goes stale when a card-removed message is missed, and then showed the PREVIOUS customer's e-mail to
+// the next one (2026-11-03). A cash sale, or a sale of another shop, has no hint.
+router.get('/receipt-hint/:batchId', requireKiosk, async (req, res) => {
+  const sale = await withTenant(Sale, req).findOne({ batchId: String(req.params.batchId), cardCode: { $exists: true, $ne: '' }, method: 'card' }).select('cardCode').lean()
+  if (!sale) return res.json({ email: '' })
+  const Card = (await import('../models/card.js')).default
+  const card = await withTenant(Card, req).findOne({ code: sale.cardCode }).select('email').lean()
+  const email = String(card?.email || '').trim()
+  res.json({ email: /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : '' })
+})
+
 // "Refresh the kiosk screens": called by the shop PC's updater when an update is done (kiosk key). Every screen of the shop reloads as
 // soon as nobody is touching it (src/lib/autoReload.js).
 router.post('/screen-reload', requireKiosk, (req, res) => {
