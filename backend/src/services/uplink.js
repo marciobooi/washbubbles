@@ -21,6 +21,7 @@ import EventEmitter from 'events'
 import SyncOutbox from '../models/syncOutbox.js'
 import Card, { onCardChanged } from '../models/card.js'
 import Peripheral from '../models/peripheral.js'
+import Flow from '../models/flow.js'
 import Machine from '../models/machine.js'
 import modelEvents from './modelEvents.js'
 
@@ -133,11 +134,22 @@ export class Uplink extends EventEmitter {
       if (!sameTenant(dc.tenantId) || dc.source === 'adjustment' || dc.metadata?.syncedAt) return
       this.enqueue('day_close', String(dc._id), dayClosePayload(dc)).catch(this.logQueueError)
     }
+    // A customer action (flow) that is over goes up with all its steps, so the central admin can show the whole story.
+    const onFlow = async ({ tenantId, flowId }) => {
+      if (!sameTenant(tenantId)) return
+      const f = await Flow.findOne({ tenantId, flowId }).lean()
+      if (!f) return
+      const { _id, __v, createdAt, ...payload } = f
+      await this.enqueue('flow', flowId, payload)
+    }
+    const onFlowSafe = (x) => onFlow(x).catch(this.logQueueError)
     modelEvents.on('sale:created', onSale)
     modelEvents.on('dayclose:created', onDayClose)
+    modelEvents.on('flow:closed', onFlowSafe)
     this.unsubscribers.push(
       () => modelEvents.off('sale:created', onSale),
       () => modelEvents.off('dayclose:created', onDayClose),
+      () => modelEvents.off('flow:closed', onFlowSafe),
       onCardChanged((tenantId, code) => {
         if (sameTenant(tenantId)) this.enqueueCard(code).catch(this.logQueueError)
       }),
@@ -345,6 +357,9 @@ export class Uplink extends EventEmitter {
         return
       case 'day_close':
         await this.post('/sync/push/day-close', p)
+        return
+      case 'flow':
+        await this.post('/sync/push/flow', p)
         return
       case 'card': {
         // 1) make sure the card exists there (no-op if it does)

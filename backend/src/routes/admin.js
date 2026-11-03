@@ -710,6 +710,41 @@ router.get('/settings/:key', requireAdmin, async (req, res) => {
   res.json(s || { key: req.params.key, value: null })
 })
 
+// ---- Fluxos: every customer action as one log with its steps (models/flow.js) ---------------------------------------------------------
+router.get('/flows', requireStaffRead, async (req, res) => {
+  const FlowModel = (await import('../models/flow.js')).default
+  const q = req.query || {}
+  const filter = {}
+  const from = q.from ? new Date(String(q.from)) : null
+  const to = q.to ? new Date(String(q.to)) : null
+  if (from && !Number.isNaN(from.getTime())) filter.startedAt = { ...(filter.startedAt || {}), $gte: from }
+  if (to && !Number.isNaN(to.getTime())) filter.startedAt = { ...(filter.startedAt || {}), $lte: to }
+  if (q.kind) filter.kind = { $in: String(q.kind).split(',').slice(0, 8) }
+  if (q.status) filter.status = { $in: String(q.status).split(',').slice(0, 4) }
+  if (q.method) filter.method = String(q.method).slice(0, 12)
+  if (q.problems === '1' || q.problems === 'true') filter.problems = { $gt: 0 }
+  if (q.machine) filter.machines = String(q.machine).slice(0, 60)
+  if (q.q) {
+    const rx = new RegExp(String(q.q).trim().slice(0, 60).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
+    filter.$or = [{ title: rx }, { machines: rx }, { cardCode: rx }, { 'steps.text': rx }]
+  }
+  const limit = Math.min(Math.max(parseInt(q.limit, 10) || 50, 1), 200)
+  const page = Math.max(parseInt(q.page, 10) || 0, 0)
+  const FlowT = withTenant(FlowModel, req)
+  const [rows, total] = await Promise.all([
+    FlowT.find(filter).sort({ startedAt: -1 }).skip(page * limit).limit(limit).select('-steps').lean(),
+    FlowT.count(filter),
+  ])
+  res.json({ total, page, limit, flows: rows })
+})
+
+router.get('/flows/:id', requireStaffRead, async (req, res) => {
+  const FlowModel = (await import('../models/flow.js')).default
+  const f = await withTenant(FlowModel, req).findOne(mongoose.isValidObjectId(req.params.id) ? { _id: req.params.id } : { flowId: String(req.params.id) }).lean()
+  if (!f) return res.status(404).json({ error: 'Flow not found' })
+  res.json(f)
+})
+
 // The shop's own e-mail identity (support address, optional own mailbox): services/shopMail.js
 router.get('/shop-mail', requireAdmin, async (req, res) => {
   const { getShopMailPublic } = await import('../services/shopMail.js')
@@ -1537,7 +1572,7 @@ router.get('/analytics/revenue', requireStaffRead, async (req, res) => {
         createdAt: { $gte: thirtyDaysAgo } 
     } },
     { $group: {
-        _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+        _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: 'Europe/Lisbon' } }, // the shop's day, not UTC's
         total: { $sum: "$amount" },
         count: { $sum: 1 },
         cash: { $sum: { $cond: [{ $eq: ["$method", "cash"] }, "$amount", 0] } },
@@ -1555,7 +1590,7 @@ router.get('/analytics/revenue.csv', requireStaffRead, async (req, res) => {
   const stats = await withTenant(Sale, req).aggregate([
     { $match: { tenantId: new mongoose.Types.ObjectId(req.tenantId), createdAt: { $gte: thirtyDaysAgo } } },
     { $group: {
-        _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+        _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: 'Europe/Lisbon' } }, // the shop's day, not UTC's
         total: { $sum: "$amount" },
         cash: { $sum: { $cond: [{ $eq: ["$method", "cash"] }, "$amount", 0] } },
         card: { $sum: { $cond: [{ $eq: ["$method", "card"] }, "$amount", 0] } }

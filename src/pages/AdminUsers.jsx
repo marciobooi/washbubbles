@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { shopDateTime } from '@/lib/shopTime'
 import { useNavigate } from 'react-router-dom'
 import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
@@ -172,7 +173,7 @@ export default function AdminUsers(){
                   <td className="px-4 py-3">{u.username}</td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{u.role}</td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{u.apiKey || '—'}</td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">{u.createdAt ? new Date(u.createdAt).toLocaleString() : '—'}</td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">{u.createdAt ? shopDateTime(u.createdAt) : '—'}</td>
                   <td className="px-4 py-3">
                     {u.role === 'KIOSK' ? (
                       // System account (API key, no password): listed, never editable from here.

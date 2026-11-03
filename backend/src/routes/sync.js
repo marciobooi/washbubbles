@@ -264,6 +264,36 @@ router.post('/push/card', async (req, res) => {
 })
 
 /**
+ * POST /api/sync/push/flow
+ * A customer action of the shop (selected, paid, change, impulse...) with its steps, sent when it is over. Idempotent: the same flow
+ * sent again replaces itself. The shop is the key's shop; nothing in the body can name another one.
+ */
+router.post('/push/flow', async (req, res) => {
+  try {
+    const b = req.body || {}
+    const flowId = String(b.flowId || '')
+    if (!flowId || flowId.length > 80) return res.status(400).json({ success: false, error: 'Missing flowId' })
+    const FlowModel = (await import('../models/flow.js')).default
+    const steps = (Array.isArray(b.steps) ? b.steps : []).slice(-300).map((s) => ({
+      at: new Date(s.at), type: String(s.type || '').slice(0, 40), text: String(s.text || '').slice(0, 400), ok: s.ok !== false, data: s.data && typeof s.data === 'object' ? s.data : null,
+    })).filter((s) => !Number.isNaN(s.at.getTime()))
+    const num = (v) => (Number.isFinite(Number(v)) ? Math.round(Number(v) * 100) / 100 : 0)
+    const doc = {
+      kind: String(b.kind || 'other').slice(0, 30), status: ['open', 'done', 'problem', 'interrupted'].includes(b.status) ? b.status : 'done',
+      endedAt: b.endedAt ? new Date(b.endedAt) : null, lastAt: new Date(b.lastAt || Date.now()), title: String(b.title || '').slice(0, 300),
+      machines: (Array.isArray(b.machines) ? b.machines : []).map((m) => String(m).slice(0, 60)).slice(0, 12), cardCode: String(b.cardCode || '').slice(-4),
+      method: String(b.method || '').slice(0, 12), amount: num(b.amount), inserted: num(b.inserted), change: num(b.change), problems: Math.max(0, parseInt(b.problems, 10) || 0), steps,
+    }
+    // the shop is req.tenantId (set from the key): it is in the filter, so an upsert can only ever create/replace THIS shop's flow
+    await FlowModel.updateOne({ tenantId: req.tenantId, flowId }, { $set: doc, $setOnInsert: { startedAt: new Date(b.startedAt || Date.now()) } }, { upsert: true })
+    res.json({ success: true })
+  } catch (err) {
+    console.error('[Sync] Push flow error:', err)
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+/**
  * POST /api/sync/push/day-close
  * Receives a Z-report (day close) produced locally on the POS.
  *

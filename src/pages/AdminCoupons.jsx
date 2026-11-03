@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { shopDate } from '@/lib/shopTime'
 import api from '@/services/api'
 import { toast } from '@/components/ui/Toast'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -188,7 +189,7 @@ export default function AdminCoupons() {
                     <td className="py-2 pr-4">{c.discountType === 'percent' ? `${c.discountValue}%` : `${Number(c.discountValue).toFixed(2)}€`}</td>
                     <td className="py-2 pr-4">{c.appliesTo === 'both' ? 'Ambos' : c.appliesTo === 'wash' ? 'Lavagem' : 'Secagem'}</td>
                     <td className="py-2 pr-4">{c.redemptionCount}{c.maxRedemptions != null ? ` / ${c.maxRedemptions}` : ''}</td>
-                    <td className="py-2 pr-4">{c.expiresAt ? new Date(c.expiresAt).toLocaleDateString('pt-PT') : '—'}</td>
+                    <td className="py-2 pr-4">{c.expiresAt ? shopDate(c.expiresAt) : '—'}</td>
                     <td className="py-2 pr-4">
                       <button
                         role="switch"

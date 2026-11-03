@@ -17,6 +17,7 @@ import Price from '../models/price.js'
 import { withTenant } from './tenant.js'
 import { createMbway, referenceState, normalizePhone, maskPhone, isKnownState } from './eupago.js'
 import { roundMoney } from '../utils/money.js'
+import * as flows from './flows.js'
 import { findUsableCoupon, redeemCoupon } from './coupons.js'
 
 export const WINDOW_MS = 5 * 60 * 1000       // what the customer has to approve
@@ -102,6 +103,7 @@ export async function startPayment({ tenantId, items, phone, batchId, couponCode
     throw Object.assign(err(r.uncertain ? 504 : 502, r.uncertain ? 'eupago-no-answer' : 'eupago-refused', r.text), { eupagoCode: r.code })
   }
   const saved = await MbwayPayment.findByIdAndUpdate(payment._id, { $set: { reference: r.reference, transactionId: r.transactionId } }, { new: true })
+  flows.step(tenantId, 'mbway_requested', `MB WAY: pedido de ${resolved.total.toFixed(2).replace('.', ',')} € enviado ao telemóvel ${maskPhone(p9)} (referência ${r.reference})`, { reference: r.reference, kind }, { method: 'mbway', ...(kind === 'machines' ? {} : {}) })
   return view(saved)
 }
 
@@ -154,10 +156,12 @@ async function finalizeCardPayment(p) {
     // the customer's personal details were only kept to write the card: they are gone now
     const payload = { ...(p.payload || {}), ...r.result }
     if (payload.customer) payload.customer = {}
+    flows.step(p.tenantId, p.kind === 'card_purchase' ? 'card_sold' : 'recharge_done', p.kind === 'card_purchase' ? `Cartão vendido •••${String(payload.card?.code || '').slice(-4)} (MB WAY)` : `Carregamento de ${p.amount.toFixed(2).replace('.', ',')} € (MB WAY) · saldo ${Number(payload.card?.balance ?? 0).toFixed(2).replace('.', ',')} €`, { saleIds: r.saleIds.map(String) }, { method: 'mbway', cardCode: payload.card?.code || (p.payload || {}).cardCode })
     return await MbwayPayment.findByIdAndUpdate(p._id, { $set: { status: 'started', startedAt: new Date(), saleIds: r.saleIds, payload } }, { new: true })
   } catch (e) {
     const what = p.kind === 'card_purchase' ? 'o cartão não saiu' : 'o carregamento não foi feito'
     const done = await MbwayPayment.findByIdAndUpdate(p._id, { $set: { status: 'start_failed', error: `Pago, mas ${what} (${e.message}). Devolver o valor no backoffice do Eupago.`, 'payload.customer': {} } }, { new: true })
+    flows.step(p.tenantId, 'mbway_start_failed', `Pago com MB WAY, mas ${what}: ${e.message}`, { reference: p.reference }, { ok: false })
     await alertOperator(p.tenantId, 'MB WAY pago mas o cartão não foi tratado', `Referência ${p.reference}, ${p.amount.toFixed(2)} EUR. ${done.error}`)
     return done
   }
@@ -168,6 +172,7 @@ async function finalizePaid(p) {
   const flipped = await MbwayPayment.findOneAndUpdate({ _id: p._id, status: 'pending' }, { $set: { status: 'paid', paidAt: new Date() } }, { new: true })
   if (!flipped) return MbwayPayment.findById(p._id)
   if (flipped.kind === 'card_purchase' || flipped.kind === 'recharge') return finalizeCardPayment(flipped)
+  flows.step(p.tenantId, 'mbway_paid', `MB WAY: pagamento confirmado (${flipped.amount.toFixed(2).replace('.', ',')} €)`, { reference: flipped.reference }, { amount: flipped.amount, method: 'mbway' })
   const { saleIds, failed } = await startMachines(flipped)
   const owed = roundMoney(failed.reduce((s, f) => s + f.l.price, 0))
   const done = await MbwayPayment.findByIdAndUpdate(flipped._id, {
@@ -175,6 +180,8 @@ async function finalizePaid(p) {
       ? { status: 'start_failed', startedAt: saleIds.length ? new Date() : undefined, saleIds, error: `Pago, mas não arrancou: ${failed.map((f) => `${f.l.name} (${f.message})`).join('; ')}. A devolver ao cliente: ${owed.toFixed(2)} EUR` }
       : { status: 'started', startedAt: new Date(), saleIds },
   }, { new: true })
+  if (saleIds.length) flows.step(p.tenantId, 'sale_recorded', `Venda registada · ${roundMoney(flipped.amount - owed).toFixed(2).replace('.', ',')} € · MB WAY`, { saleIds: saleIds.map(String) }, { amount: roundMoney(flipped.amount - owed), method: 'mbway' })
+  if (failed.length) flows.step(p.tenantId, 'mbway_start_failed', `Pago com MB WAY mas a máquina não arrancou: ${failed.map((f) => f.l.name).join(', ')}`, { reference: p.reference }, { ok: false })
   if (failed.length) await alertOperator(p.tenantId, 'MB WAY pago mas a máquina não arrancou', `Referência ${p.reference}. ${done.error}. Devolver o valor no backoffice do Eupago.`)
   return done
 }
@@ -192,6 +199,7 @@ async function check(p) {
   } else if (String(r.raw ?? '') !== (p.lastRawState || '')) {
     await MbwayPayment.updateOne({ _id: p._id }, { $set: { lastRawState: String(r.raw ?? ''), lastCheckError: '' }, $push: { stateHistory: { $each: [{ at: new Date(), raw: String(r.raw ?? '') }], $slice: -20 } } })
     console.log(`[MBWAY] ref ${p.reference}: Eupago state "${r.raw}" (${p.status})`)
+    flows.step(p.tenantId, 'mbway_state', `MB WAY: o Eupago respondeu «${r.raw}»`, { reference: p.reference, raw: r.raw })
   }
   // A word for the state that we do not know: never treated as paid, but never ignored either.
   if (r.state && !isKnownState(r.raw) && !String(p.error || '').startsWith('Estado desconhecido')) {
@@ -222,7 +230,7 @@ export async function pollPayment({ tenantId, id }) {
 
 export async function cancelPayment({ tenantId, id }) {
   const p = await MbwayPayment.findOneAndUpdate({ _id: id, tenantId, status: 'pending' }, { $set: { status: 'cancelled' } }, { new: true })
-  if (p) return view(p)
+  if (p) { flows.step(tenantId, 'mbway_cancelled', 'MB WAY: o cliente cancelou no quiosque', { reference: p.reference }, { ok: false }); return view(p) }
   const cur = await MbwayPayment.findOne({ _id: id, tenantId })
   if (!cur) throw err(404, 'not-found', 'Payment not found')
   return view(cur) // already paid / expired / ...: nothing to cancel

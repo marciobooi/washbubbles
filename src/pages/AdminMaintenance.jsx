@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { shopDateTime } from '@/lib/shopTime'
 import api from '@/services/api'
 import { toast } from '@/components/ui/Toast'
 import { Button } from '@/components/ui/button'
@@ -69,7 +70,7 @@ export default function AdminMaintenance() {
                     <div className="font-medium text-sm">{t.machineId?.name || 'Máquina removida'}</div>
                     <div className="text-xs text-muted-foreground">{t.description}</div>
                     <div className="text-xs text-muted-foreground mt-1">
-                      {t.source === 'manual' ? 'Manual' : 'Automático'} · {new Date(t.createdAt).toLocaleString('pt-PT')}
+                      {t.source === 'manual' ? 'Manual' : 'Automático'} · {shopDateTime(t.createdAt)}
                     </div>
                   </div>
                   {t.status === 'open' && (

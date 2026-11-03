@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react'
+import { shopDateTime } from '@/lib/shopTime'
 import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
 import Modal from '@/components/ui/Modal'
@@ -67,7 +68,7 @@ export default function AdminDayClose() {
           <h1 className="text-xl font-heading font-bold text-neutral-800">Fecho de Caixa</h1>
           {summary && !summaryLoading && (
             <p className="text-xs text-neutral-400 mt-0.5">
-              Sessao desde {new Date(summary.periodFrom).toLocaleString('pt-PT')}
+              Sessao desde {shopDateTime(summary.periodFrom)}
             </p>
           )}
         </div>
@@ -152,7 +153,7 @@ export default function AdminDayClose() {
                     onClick={() => setExpandedId(prev => prev === dc._id ? null : dc._id)}
                   >
                     <div className="text-xs text-neutral-400 w-32 shrink-0">
-                      {new Date(dc.createdAt).toLocaleString('pt-PT', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}
+                      {shopDateTime(dc.createdAt, { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
                     </div>
                     <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
                       <span className="text-xs text-neutral-500">Esperado <strong className="text-neutral-700">{fmt(dc.expectedCash ?? (Number(dc.openingFloat||0)+Number(dc.totalCash||0)))}&euro;</strong></span>
@@ -177,8 +178,8 @@ export default function AdminDayClose() {
                     <div className="bg-neutral-50 border-t border-neutral-100 px-5 py-4">
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 text-xs">
                         <DetailBlock title="Periodo">
-                          <InfoRow label="Inicio" value={dc.periodFrom ? new Date(dc.periodFrom).toLocaleString('pt-PT') : '-'} />
-                          <InfoRow label="Fim" value={new Date(dc.periodTo || dc.createdAt).toLocaleString('pt-PT')} />
+                          <InfoRow label="Inicio" value={dc.periodFrom ? shopDateTime(dc.periodFrom) : '-'} />
+                          <InfoRow label="Fim" value={shopDateTime(dc.periodTo || dc.createdAt)} />
                           <InfoRow label="Vendas" value={`${fmt(dc.totalSales)}€ (${fmt(dc.totalCash)} din${Number(dc.totalMbway) > 0 ? ` + ${fmt(dc.totalMbway)} MB WAY` : ''} + ${fmt(dc.totalCard)} cart)`} />
                           <InfoRow label="Fundo inicial" value={`${fmt(dc.openingFloat)}€`} />
                           {dc.totalChangeDispensed > 0 && <InfoRow label="Troco dispensado" value={`${fmt(dc.totalChangeDispensed)}€`} />}

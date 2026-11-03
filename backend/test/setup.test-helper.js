@@ -1,4 +1,5 @@
 import mongoose from 'mongoose'
+import '../src/services/asyncRoutes.js' // as in src/index.js: a rejected async handler answers 500 instead of hanging
 import bcrypt from 'bcryptjs'
 import express from 'express'
 import cors from 'cors'

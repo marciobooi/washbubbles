@@ -11,6 +11,7 @@ import { roundMoney, parseAmount } from '../utils/money.js'
 import { creditCard, debitCard, SPENDABLE } from '../services/cardBalance.js'
 import { cardLookupLimiter, adminPinLimiter } from '../middleware/rateLimits.js'
 import { limitKey, _resetLimitKeys } from '../middleware/limitKey.js'
+import { flowRoute } from '../services/flows.js'
 import crypto from 'crypto'
 import coinMachine from '../services/coinMachine.js'
 import { promoIsActive } from './gateways.js'
@@ -299,7 +300,7 @@ router.post('/client-error', requireKiosk, async (req, res) => {
 
 // Card recharge / top-up (kiosk) — stored as a transaction without a machine reference
 // Card recharge / top-up (kiosk) — stored as a transaction and optionally attached to a loyalty card
-router.post('/recharge', requireKiosk, async (req, res) => {
+router.post('/recharge', requireKiosk, flowRoute('Pedido de carregamento de cartão', { type: 'recharge_requested', method: 'cash' }), async (req, res) => {
   const { amount, items, method, inserted, cardCode, cardId, batchId, localId } = req.body
 
   // Recharges are always card-based in this system
@@ -512,7 +513,7 @@ for (const kind of ['start', 'end']) {
   })
 }
 
-router.post('/card/purchase', requireKiosk, async (req, res) => {
+router.post('/card/purchase', requireKiosk, flowRoute('Pedido de compra de cartão', { type: 'card_purchase_requested', method: 'cash' }), async (req, res) => {
   const { inserted, customerName, customerEmail, customerPhone, customerContribuinte, customerMarketingOptIn, customerPrivacyConsent, batchId, localId } = req.body
 
   const parsedInserted = parseAmount(inserted)

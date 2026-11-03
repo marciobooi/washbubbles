@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { shopDate, shopTime, shopDayKey, shopHHMM, shopInstant } from '@/lib/shopTime'
 import { useNavigate } from 'react-router-dom'
 import { toast } from '@/components/ui/Toast'
 import Modal from '@/components/ui/Modal'
@@ -8,7 +9,7 @@ import api from '@/services/api'
 import { useAuth } from '@/context/AuthContext'
 
 // Today's calendar day (local time) as YYYY-MM-DD: the day the list opens on.
-const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+const today = () => shopDayKey()
 const EMPTY_COLS = { machine: '', card: '', method: '', amountMin: '', change: '', timeFrom: '', timeTo: '' }
 const methodLabel = (m) => (m === 'card' ? 'Cartão' : m === 'cash' ? 'Dinheiro' : m === 'gift' ? 'Oferta' : m === 'mbway' ? 'MB WAY' : m || '-')
 // What a movement was for: sales store `items` as a list (machines) or as a single object (a card recharge).
@@ -16,8 +17,8 @@ const itemList = (t) => (Array.isArray(t.items) ? t.items : t.items && typeof t.
 const itemName = (t) => itemList(t).map((it) => it.name || it.type).filter(Boolean).join(', ')
 // The card a movement belongs to: its code, plus the holder's name when we have one (cardId is populated by the server).
 const cardLabel = (t) => [t.cardCode || t.cardId?.code || '', t.cardId?.name || ''].filter((x) => String(x).trim()).join(' ')
-const fmtDate = (iso) => new Date(iso).toLocaleDateString('pt-PT')
-const fmtTime = (iso) => new Date(iso).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+const fmtDate = (iso) => shopDate(iso)
+const fmtTime = (iso) => shopTime(iso)
 
 export default function AdminTransactions() {
   const [tx, setTx] = useState([])
@@ -38,10 +39,10 @@ export default function AdminTransactions() {
   async function load() {
     setLoading(true)
     try {
-      // Ask for the chosen days only (local midnight to 23:59:59), so an older day is not cut off by the server's row cap.
+      // Ask for the chosen days only (the SHOP's midnight to 23:59:59), so an older day is not cut off by the server's row cap.
       const query = {}
-      if (filters.from) query.from = new Date(filters.from + 'T00:00:00').toISOString()
-      if (filters.to) query.to = new Date(filters.to + 'T23:59:59.999').toISOString()
+      if (filters.from) query.from = shopInstant(filters.from, '00:00:00').toISOString()
+      if (filters.to) query.to = shopInstant(filters.to, '23:59:59', 999).toISOString()
       const data = await api.getTransactions(query)
       setTx(data)
     } catch (e) {
@@ -183,12 +184,12 @@ export default function AdminTransactions() {
             <tbody>
               {(() => {
                 let filtered = tx
-                // Day filters use the calendar day on this computer's clock (local midnight to 23:59:59).
-                if (filters.from) filtered = filtered.filter((t) => new Date(t.createdAt) >= new Date(filters.from + 'T00:00:00'))
-                if (filters.to) filtered = filtered.filter((t) => new Date(t.createdAt) <= new Date(filters.to + 'T23:59:59.999'))
+                // Day filters use the calendar day of the SHOP (Lisbon), whatever time zone this computer is in.
+                if (filters.from) filtered = filtered.filter((t) => new Date(t.createdAt) >= shopInstant(filters.from, '00:00:00'))
+                if (filters.to) filtered = filtered.filter((t) => new Date(t.createdAt) <= shopInstant(filters.to, '23:59:59', 999))
                 if (filters.type) filtered = filtered.filter((t) => (t.type || 'payment') === filters.type)
                 // Column filters
-                const hhmm = (t) => { const d = new Date(t.createdAt); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') }
+                const hhmm = (t) => shopHHMM(t.createdAt)
                 if (cols.timeFrom) filtered = filtered.filter((t) => hhmm(t) >= cols.timeFrom)
                 if (cols.timeTo) filtered = filtered.filter((t) => hhmm(t) <= cols.timeTo)
                 if (cols.method) filtered = filtered.filter((t) => (t.method || '') === cols.method)

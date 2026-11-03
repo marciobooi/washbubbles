@@ -14,6 +14,7 @@ import { isChannelBusy } from './lowLevel.js'
 import { CardSync } from './cardSync.js'
 import { isBlankCard } from './blankCard.js'
 import { Uplink } from './uplink.js'
+import * as flows from './flows.js'
 import { Downlink } from './downlink.js'
 import { RemoteCommands } from './remoteCommands.js'
 import { prefetchUploads } from './uploadsCache.js'
@@ -480,6 +481,7 @@ class CoinMachine extends EventEmitter {
   handleCoinRejected(data) {
     const { peripheral, reason, code, exact } = data
     this.emit('coin-rejected', { peripheral, reason, code, exact })
+    flows.step(this.tenantId, 'cash_rejected', `Moeda recusada (${reason || 'motivo desconhecido'})`, { reason: reason || null }, { ok: false })
     console.warn(`Coin rejected: ${reason || 'unknown reason'}`)
     // Signature is (tenantId, type, payload). Called with two args the tenant
     // became the event name and the payload the type, so these alerts — fraud
@@ -494,6 +496,7 @@ class CoinMachine extends EventEmitter {
     const { peripheral, reason, fraud, code, exact } = data
     const eventType = fraud ? 'peripheral:fraud' : 'peripheral:rejected'
     this.emit('bill-rejected', { peripheral, reason, fraud, code, exact })
+    flows.step(this.tenantId, 'cash_rejected', `Nota ${fraud ? 'suspeita' : 'recusada'} (${reason || 'motivo desconhecido'})`, { reason: reason || null, fraud: !!fraud }, { ok: false })
     console.warn(`Bill ${fraud ? 'FRAUD' : 'rejected'}: ${reason || 'unknown reason'}`)
     broadcastHardwareEvent(this.tenantId, eventType, { type: 'bill', reason: reason || 'rejected', fraud: !!fraud, code, exact })
   }
@@ -559,6 +562,7 @@ class CoinMachine extends EventEmitter {
     // coin is credited in the backend but nothing shows on screen.
     broadcastHardwareEvent(this.tenantId, 'peripheral:credit', { type: 'coin', amount: mappedValue })
 
+    flows.step(this.tenantId, 'cash_in', `Moeda de ${mappedValue.toFixed(2).replace('.', ',')} € inserida (total ${this.client.getState().balance.toFixed(2).replace('.', ',')} €)`, { value: mappedValue }, { inserted: mappedValue })
     console.log(`Coin inserted: €${mappedValue.toFixed(2)}${bonusValue > 0 ? ` + €${bonusValue.toFixed(2)} bonus` : ''}, Total: €${this.client.getState().credits.toFixed(2)}`)
   }
 
@@ -596,6 +600,7 @@ class CoinMachine extends EventEmitter {
     broadcastHardwareEvent(this.tenantId, 'peripheral:accepted', { type: 'bill', value: mappedValue, code, exact })
     broadcastHardwareEvent(this.tenantId, 'peripheral:credit', { type: 'bill', amount: mappedValue })
 
+    flows.step(this.tenantId, 'cash_in', `Nota de ${mappedValue.toFixed(2).replace('.', ',')} € inserida (total ${this.client.getState().balance.toFixed(2).replace('.', ',')} €)`, { value: mappedValue }, { inserted: mappedValue })
     console.log(`Bill inserted: €${mappedValue.toFixed(2)}${bonusValue > 0 ? ` + €${bonusValue.toFixed(2)} bonus` : ''}, Total: €${this.client.getState().credits.toFixed(2)}`)
   }
 
@@ -624,6 +629,7 @@ class CoinMachine extends EventEmitter {
     await this.client.resetCardInfo()
     this.emit('card-removed')
     broadcastHardwareEvent(this.tenantId, 'rfid:card_removed', {})
+    flows.step(this.tenantId, 'card_out', 'Cartão retirado do leitor', null)
     console.log('Card removed')
   }
 
@@ -663,6 +669,7 @@ class CoinMachine extends EventEmitter {
     
     if (loaded) {
       this.emit('card-loaded', { client: this.client.getState() })
+      flows.step(this.tenantId, 'card_in', `Cartão •••${String(cardNumber).slice(-4)} no leitor (saldo ${this.client.getState().balanceCard.toFixed(2).replace('.', ',')} €)`, null, { cardCode: cardNumber })
       console.log(`Card loaded: ${cardNumber}, Balance: €${this.client.getState().balanceCard.toFixed(2)}`)
       // The kiosk screens load the card (balance, history) and auto-pay from this message. The old hardware
       // agent sent it; the controller path never did, so the screen showed no balance for a card in the reader.
@@ -989,6 +996,7 @@ class CoinMachine extends EventEmitter {
     machine.nextImpulseAt = staggered ? new Date(Date.now() + this.gapMinutes(machine) * 60_000) : null
     machine.startedAt = new Date()
     await machine.save()
+    flows.step(this.tenantId, 'impulse_sent', spaced ? `Impulso 1 de ${n} enviado à ${machine.name}` : `${n > 1 ? `${n} impulsos` : 'Impulso'} enviado${n > 1 ? 's' : ''} à ${machine.name}`, { machine: machine.name, blocks: n, interface: iface.name || null, port: machine.port }, { machine: machine.name })
     if (spaced) this.sendRemainingImpulses(machine._id, n - 1).catch((err) => console.error('[Cycle] remaining impulses:', err.message))
     console.log(`[Cycle] ${machine.name} started: ${spaced ? 'impulse 1 of ' + n + ', the rest follow as separate commands' : staggered ? 'block 1 of ' + n + ', next impulse at ' + machine.nextImpulseAt.toISOString() : n + ' impulse(s) sent at once'}`)
     return { success: true, blocks: n }
@@ -1016,10 +1024,12 @@ class CoinMachine extends EventEmitter {
         machine.nextImpulseAt = new Date(Date.now() + 30_000)
         await machine.save()
         await this.auditSystem('machine.block.late', { machine: machine.name, pending: left, error: lastErr?.message })
+        flows.step(this.tenantId, 'impulse_failed', `Não foi possível enviar o impulso seguinte à ${machine.name} (${lastErr?.message || 'erro'})`, { pending: left }, { ok: false, machine: machine.name })
         broadcastHardwareEvent(this.tenantId, 'machine:block-late', { machine: machine.name, pending: left })
         return
       }
       left--
+      flows.step(this.tenantId, 'impulse_sent', `Impulso ${count - left + 1} enviado à ${machine.name}`, { machine: machine.name }, { machine: machine.name })
       console.log(`[Cycle] ${machine.name}: impulse sent as its own command, ${left} to go`)
     }
   }
@@ -1126,7 +1136,7 @@ class CoinMachine extends EventEmitter {
         if (!hopper) {
           error = 'No hopper configured'
         } else {
-          const result = await this.dispenseChange(hopper._id, amount)
+          const result = await this.dispenseChange(hopper._id, amount, { noFlow: true })
           dispensed = roundMoney(Math.min(amount, Math.max(0, Number(result?.dispensed ?? (result?.success === false ? 0 : amount)))))
           if (result?.success === false) error = result.error || 'The hopper could not pay out the full amount'
         }
@@ -1139,6 +1149,7 @@ class CoinMachine extends EventEmitter {
       this.client.restoreBalances({ balance: remaining, balanceCard: state.balanceCard })
       const details = { amount, refunded: dispensed, remaining, reason, error }
       await this.auditSystem(remaining > 0 ? 'cash.refund.short' : 'cash.refund', details)
+      flows.step(this.tenantId, remaining > 0 ? 'credit_refund_short' : 'credit_refunded', remaining > 0 ? `Devolução do crédito incompleta: devolvidos ${dispensed.toFixed(2).replace('.', ',')} € de ${amount.toFixed(2).replace('.', ',')} € (${error || 'hopper'})` : `Crédito de ${amount.toFixed(2).replace('.', ',')} € devolvido em troco (${reason})`, details, { ok: remaining <= 0, change: dispensed })
       broadcastHardwareEvent(this.tenantId, remaining > 0 ? 'credit:refund-failed' : 'credit:refunded', details)
       this.emit(remaining > 0 ? 'refund-short' : 'refunded', details)
       if (remaining > 0) {
@@ -1214,12 +1225,17 @@ class CoinMachine extends EventEmitter {
       let paid = Number(result?.dispensed) || 0
       for (let attempt = 1; attempt <= 3 && amount < 9000 && result && result.success === false && !result.unconfirmed && Number(result.remaining) > 0; attempt++) {
         console.warn(`[Change] EUR ${Number(result.remaining).toFixed(2)} still owed (${result.error || 'not paid'}): trying again in ${delay / 1000} s (attempt ${attempt}/3)`)
+        if (!opts.noFlow) flows.step(this.tenantId, 'change_retry', `Troco: faltam ${Number(result.remaining).toFixed(2).replace('.', ',')} € (${result.error || 'não pago'}); nova tentativa ${attempt}/3`, { attempt }, { ok: false })
         await new Promise((r) => setTimeout(r, delay))
         const next = await this.middleware.dispenseChange(hopperId, roundMoney(result.remaining), opts)
         paid = roundMoney(paid + (Number(next?.dispensed) || 0))
         result = { ...(next || {}), dispensed: paid }
       }
       
+      if (!opts.noFlow && amount < 9000 && result) {
+        if (result.success === false) flows.step(this.tenantId, 'change_short', `Troco incompleto: pago ${paid.toFixed(2).replace('.', ',')} €, faltam ${Math.max(0, roundMoney(amount - paid)).toFixed(2).replace('.', ',')} €`, { requested: amount, paid, error: result.error || null }, { ok: false, change: paid })
+        else flows.step(this.tenantId, 'change_paid', `Troco de ${amount.toFixed(2).replace('.', ',')} € pago`, { amount }, { change: amount })
+      }
       this.emit('change-dispensed', { amount })
       
       // Pass the controller's real answer on. This used to return { success: true } whatever
@@ -1367,6 +1383,7 @@ class CoinMachine extends EventEmitter {
 
     // A dryer can be started for several cycles (blocks of `tImp` minutes), exactly as a customer picks them.
     const n = this.blocksFor(machine, { quantity: blocks })
+    flows.step(this.tenantId, 'admin_start', `Início manual (staff/admin): ${machine.name}${n > 1 ? ` · ${n} ciclos` : ''}`, { machine: machine.name, blocks: n }, { machine: machine.name })
     // Throws if the controller is not connected — nothing is marked running in that case.
     if ((machine.type || 'wash') === 'dry') {
       // startPaidMachine sends the impulses and keeps the cycle clock, so the dryer frees itself at the end.

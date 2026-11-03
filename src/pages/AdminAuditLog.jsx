@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react'
+import { shopDateTime } from '@/lib/shopTime'
 import api from '@/services/api'
 import { toast } from '@/components/ui/Toast'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import FlowsPanel from '@/components/audit/FlowsPanel'
 
 const ACTION_LABELS = {
   'transaction.refund': 'Reembolso',
@@ -15,7 +17,8 @@ function actionLabel(action) {
   return ACTION_LABELS[action] || action
 }
 
-export default function AdminAuditLog() {
+// Admin actions: who changed what (prices, balances, users, refunds)
+function AdminActionsPanel() {
   const [entries, setEntries] = useState([])
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState({})
@@ -37,8 +40,7 @@ export default function AdminAuditLog() {
   useEffect(() => { load() }, [actionFilter])
 
   return (
-    <div className="p-4 space-y-4">
-      <h2 className="text-2xl font-bold">Auditoria</h2>
+    <div className="space-y-4">
       <Card>
         <CardHeader>
           <CardTitle>Ações recentes</CardTitle>
@@ -74,7 +76,7 @@ export default function AdminAuditLog() {
                       </span>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
-                      <span className="text-xs text-muted-foreground">{new Date(e.createdAt).toLocaleString('pt-PT')}</span>
+                      <span className="text-xs text-muted-foreground">{shopDateTime(e.createdAt)}</span>
                       {e.details != null && (
                         <button
                           className="text-xs underline"
@@ -96,6 +98,22 @@ export default function AdminAuditLog() {
           )}
         </CardContent>
       </Card>
+    </div>
+  )
+}
+
+export default function AdminAuditLog() {
+  const [tab, setTab] = useState(() => { try { return localStorage.getItem('audit.tab') || 'flows' } catch { return 'flows' } })
+  const pick = (t) => { setTab(t); try { localStorage.setItem('audit.tab', t) } catch { /* optional */ } }
+  const tabCls = (t) => `px-4 py-2 text-sm font-semibold rounded-full border ${tab === t ? 'bg-[var(--primary,#0d9488)] text-white border-transparent' : 'bg-white text-neutral-700 hover:bg-neutral-50'}`
+  return (
+    <div className="p-4 space-y-4">
+      <h2 className="text-2xl font-bold">Auditoria</h2>
+      <div className="flex gap-2">
+        <button type="button" className={tabCls('flows')} onClick={() => pick('flows')}>Fluxos do quiosque</button>
+        <button type="button" className={tabCls('actions')} onClick={() => pick('actions')}>Ações de administração</button>
+      </div>
+      {tab === 'flows' ? <FlowsPanel /> : <AdminActionsPanel />}
     </div>
   )
 }

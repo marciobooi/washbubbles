@@ -15,6 +15,7 @@ import { findUsableCoupon, applyCouponDiscount, redeemCoupon } from '../services
 import { startPayment, pollPayment, cancelPayment, priceCart, mbwaySettings, MIN_AMOUNT as MBWAY_MIN } from '../services/mbway.js'
 import * as mbwayLink from '../services/mbwayLinkClient.js'
 import MbwayPayment from '../models/mbwayPayment.js'
+import { flowRoute } from '../services/flows.js'
 
 const router = express.Router()
 
@@ -63,7 +64,7 @@ export async function resolveMachineLines(items, MachineT, PriceT, method, coupo
   for (const it of items) {
     const ref = it._id || it.id
     const machine = (mongoose.Types.ObjectId.isValid(ref) ? await MachineT.findById(ref) : null) ||
-      await MachineT.findOne({ number: Number(ref) })
+      (Number.isFinite(Number(ref)) ? await MachineT.findOne({ number: Number(ref) }) : null) // a non-numeric reference is simply "no such machine" (it used to throw a CastError)
     if (!machine) return { ok: false, status: 404, error: { error: 'Machine not found', machineRef: ref } }
     if (machine.status === 'working') {
       return { ok: false, status: 409, error: { error: 'Machine already in use', machineId: machine._id } }
@@ -145,7 +146,7 @@ router.post('/cards/:code/topup', requireKiosk, async (req, res) => {
 })
 
 // POST /api/gateways/card/pay - charge card for items (machines + optional recharges in same batch)
-router.post('/card/pay', requireKiosk, async (req, res) => {
+router.post('/card/pay', requireKiosk, flowRoute('Pedido de pagamento com cartão', { method: 'card' }), async (req, res) => {
   const { items = [], cardCode, batchId, couponCode } = req.body
   if (!Array.isArray(items) || !cardCode) return res.status(400).json({ error: 'Missing parameters' })
 
@@ -240,7 +241,7 @@ router.post('/card/pay', requireKiosk, async (req, res) => {
 })
 
 // POST /api/gateways/cash/pay - charge by cash (inserted/change) and create sales
-router.post('/cash/pay', requireKiosk, async (req, res) => {
+router.post('/cash/pay', requireKiosk, flowRoute('Pedido de pagamento em dinheiro', { method: 'cash' }), async (req, res) => {
   const { items = [], inserted, batchId, couponCode } = req.body
   if (!Array.isArray(items)) return res.status(400).json({ error: 'Missing parameters' })
   const coupon = couponCode ? await findUsableCoupon(req.tenantId, couponCode) : null

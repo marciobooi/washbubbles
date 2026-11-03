@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { shopDateTime, shopDayKey } from '@/lib/shopTime'
 import api from '@/services/api'
 import { toast } from '@/components/ui/Toast'
 
@@ -57,7 +58,7 @@ export default function AdminOverview() {
   }, [])
 
   const totalRevenue30d = revenue.reduce((s, r) => s + (r.total || 0), 0)
-  const todayKey = new Date().toISOString().slice(0, 10)
+  const todayKey = shopDayKey()
   const todayRevenue = revenue.find((r) => r._id === todayKey)?.total || 0
   const maxDay = Math.max(1, ...revenue.map((r) => r.total || 0))
 
@@ -207,7 +208,7 @@ export default function AdminOverview() {
                     <tr key={k.id} className="border-t border-black/[0.07]">
                       <td className="py-2.5 px-2.5">{k.name}</td>
                       <td className="py-2.5 px-2.5">
-                        {k.lastSeen ? new Date(k.lastSeen).toLocaleString('pt-PT') : 'Nunca'}
+                        {k.lastSeen ? shopDateTime(k.lastSeen) : 'Nunca'}
                       </td>
                       <td className="py-2.5 px-2.5">
                         <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${stale ? 'bg-[#fef2f2] text-[#b91c1c]' : 'bg-[#ecfdf5] text-[#047857]'}`}>

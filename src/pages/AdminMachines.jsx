@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { shopDate } from '@/lib/shopTime'
 import { useNavigate } from 'react-router-dom'
 import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
@@ -343,7 +344,7 @@ export default function AdminMachines(){
                   </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{m.cycle || 0}</td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">
-                    {m.lastServicedAt ? new Date(m.lastServicedAt).toLocaleDateString('pt-PT') : '—'}
+                    {m.lastServicedAt ? shopDate(m.lastServicedAt) : '—'}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-2">

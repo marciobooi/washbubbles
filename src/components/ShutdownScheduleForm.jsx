@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { shopDayKey } from '@/lib/shopTime'
 import api from '@/services/api'
 import { toast } from '@/components/ui/Toast'
 import { Input } from '@/components/ui/input'
@@ -10,7 +11,7 @@ const KEY = 'schedule.shutdown'
 const NAMES = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
 const ORDER = [1, 2, 3, 4, 5, 6, 0]
 const blank = () => Array.from({ length: 7 }, () => ({ enabled: true, time: '23:30' }))
-const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+const today = () => shopDayKey() // the PC runs on the shop's clock, so "today" is the shop's day
 
 /** Shutdown of the shop PC at night (done by the PC itself: backend/src/services/shutdownScheduler.js). */
 export default function ShutdownScheduleForm() {

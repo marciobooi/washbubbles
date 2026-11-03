@@ -28,6 +28,7 @@ import kioskWatchdog from './services/kioskWatchdog.js'
 import { startDomainWatcher } from './services/domainWatcher.js'
 import { hasRole } from './services/roles.js'
 import { startShutdownScheduler } from './services/shutdownScheduler.js'
+import { startFlowTimer } from './services/flows.js'
 
 // Enforce presence of JWT secret in production-like environments
 if (!process.env.JWT_SECRET) {
@@ -298,6 +299,7 @@ async function start() {
         console.warn('Failed to initialize CoinMachine (peripherals may not be connected):', err.message)
       }
     }
+    startFlowTimer() // customer actions (flows) are closed when idle and sent to the central server
     if (hasRole('worker')) kioskWatchdog.start()
     // central server only: moves new shops' site addresses along (DNS -> certificate -> "your site is live" e-mail)
     if (process.env.PUBLIC_LANDING_PAGE === 'true' && hasRole('worker')) startDomainWatcher()

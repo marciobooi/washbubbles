@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { shopDateTime } from '@/lib/shopTime'
 import api from '../services/api'
 import { toast } from '../components/ui/Toast'
 import { CreditCard, Search, RefreshCw, Mail, Phone, User, FileText, X, Calendar, Clock, Plus, Edit2, Save, Gift, Pencil } from 'lucide-react'
@@ -209,13 +210,7 @@ export default function AdminCards() {
 
   const formatDate = (date) => {
     if (!date) return '-'
-    return new Date(date).toLocaleDateString('pt-PT', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
+    return shopDateTime(date, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   }
 
   if (loading) {
