@@ -238,6 +238,7 @@
   "mbwayOff": "O MB WAY não está disponível.",
   "mbwayStartFailed": "Pagamento recebido, mas a máquina não arrancou. Fale com o balcão: o valor é devolvido.",
   "mbwayPaid": "Pago com MB WAY",
+  "mbwayPreparing": "A preparar o código…",
   "mbwayRecharged": "Cartão carregado: saldo {{balance}}",
   "mbwayCardPaid": "Cartão pago com MB WAY. Insira o cartão no leitor para o ativar.",
   "mbwayChoose": "Como quer indicar o número do MB WAY?",
