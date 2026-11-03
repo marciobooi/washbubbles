@@ -97,6 +97,8 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
 
   // Check if cart contains recharge items
   const hasRecharge = rechargeTotal > 0
+  // MB WAY pays machines, or ONE recharge on its own (the card in the reader), never the two mixed
+  const onlyOneRecharge = cart.length === 1 && hasRecharge
 
   // A dryer is sold in blocks of 15 minutes and the customer picks how many with + / -. If the money is
   // already there the cart used to pay the instant it opened, so the number was never chosen. For dryers
@@ -753,7 +755,7 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
                         </button>
                       )}
                     </div>
-                    {mbwayEnabled && !cart.some((i) => i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge'))) && !(credit > 0) && total >= 1 && (
+                    {mbwayEnabled && (onlyOneRecharge || !cart.some((i) => i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge')))) && !(credit > 0) && total >= 1 && (
                       <button
                         type="button"
                         onClick={() => { mbwayBatch.current = `mw-${Date.now().toString(36)}`; setMbwayOpen(true) }}
@@ -775,6 +777,8 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
           items={cart}
           total={total}
           couponCode={couponCode}
+          kind={onlyOneRecharge ? 'recharge' : 'machines'}
+          extra={onlyOneRecharge ? { amount: rechargeTotal } : null}
           batchId={mbwayBatch.current}
           onClose={() => setMbwayOpen(false)}
           onAbandon={() => { setMbwayOpen(false); clearCart(); onClose() }}

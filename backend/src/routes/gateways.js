@@ -422,11 +422,15 @@ router.get('/mbway/config', requireKiosk, async (req, res) => {
   res.json({ enabled: Boolean(cfg.enabled && cfg.apiKey && coinMachine.running), minAmount: MBWAY_MIN })
 })
 
+// What MB WAY needs from this shop PC: how to price machines, and which card is in the reader right now (the shop's own reading).
+const mbwayDeps = () => ({ resolveMachineLines, isRecharge, cardInReader: () => coinMachine.client?.getState?.().cardNumber || null })
+const KINDS = ['machines', 'card_purchase', 'recharge']
+
 router.post('/mbway/start', requireKiosk, async (req, res) => {
   try {
     if (!coinMachine.running) return res.status(409).json({ error: 'MB WAY is only available at the shop', code: 'mbway-off' })
-    const { items, phone, batchId, couponCode, expectedAmount } = req.body || {}
-    res.status(201).json(await startPayment({ tenantId: req.tenantId, items, phone, batchId, couponCode, expectedAmount: Number.isFinite(Number(expectedAmount)) ? Number(expectedAmount) : undefined }, { resolveMachineLines, isRecharge }))
+    const { items, phone, batchId, couponCode, expectedAmount, kind, customer, amount, cardCode } = req.body || {}
+    res.status(201).json(await startPayment({ tenantId: req.tenantId, items, phone, batchId, couponCode, kind: KINDS.includes(kind) ? kind : 'machines', customer, amount, cardCode, expectedAmount: Number.isFinite(Number(expectedAmount)) ? Number(expectedAmount) : undefined }, mbwayDeps()))
   } catch (e) { mbwayFail(res, e) }
 })
 
@@ -438,11 +442,12 @@ const dropOldLinks = () => { const now = Date.now(); for (const [k, v] of mbwayL
 router.post('/mbway/link', requireKiosk, async (req, res) => {
   try {
     if (!coinMachine.running) return res.status(409).json({ error: 'MB WAY is only available at the shop', code: 'mbway-off' })
-    const { items, batchId, couponCode } = req.body || {}
-    const { resolved } = await priceCart({ tenantId: req.tenantId, items, couponCode }, { resolveMachineLines, isRecharge })
-    const link = await mbwayLink.createLink({ amount: resolved.total, machines: resolved.lines.map((l) => l.machine.name) })
+    const { items, batchId, couponCode, kind: rawKind, customer, amount, cardCode } = req.body || {}
+    const kind = KINDS.includes(rawKind) ? rawKind : 'machines'
+    const { resolved } = await priceCart({ tenantId: req.tenantId, items, couponCode, kind, amount, cardCode }, mbwayDeps())
+    const link = await mbwayLink.createLink({ amount: resolved.total, machines: kind === 'card_purchase' ? ['Cartão novo'] : kind === 'recharge' ? ['Carregamento de cartão'] : resolved.lines.map((l) => l.machine.name) })
     dropOldLinks()
-    mbwayLinks.set(link.token, { tenantId: String(req.tenantId), items, batchId, couponCode, amount: resolved.total, expiresAt: new Date(link.expiresAt).getTime(), paymentId: null })
+    mbwayLinks.set(link.token, { tenantId: String(req.tenantId), items, batchId, couponCode, kind, customer, amount, cardCode, total: resolved.total, expiresAt: new Date(link.expiresAt).getTime(), paymentId: null })
     res.status(201).json({ token: link.token, url: link.url, amount: resolved.total, expiresAt: link.expiresAt })
   } catch (e) { mbwayFail(res, e) }
 })
@@ -465,7 +470,7 @@ router.get('/mbway/link/:token', requireKiosk, async (req, res) => {
     if (r.status === 'phone_received' && r.phone) {
       entry.starting = true
       try {
-        const payment = await startPayment({ tenantId: req.tenantId, items: entry.items, phone: r.phone, batchId: entry.batchId, couponCode: entry.couponCode, expectedAmount: entry.amount }, { resolveMachineLines, isRecharge })
+        const payment = await startPayment({ tenantId: req.tenantId, items: entry.items, phone: r.phone, batchId: entry.batchId, couponCode: entry.couponCode, kind: entry.kind, customer: entry.customer, amount: entry.amount, cardCode: entry.cardCode, expectedAmount: entry.total }, mbwayDeps())
         entry.paymentId = payment.id
         return res.json({ status: 'started', payment })
       } catch (e) {

@@ -347,6 +347,16 @@ function AppInner() {
   function handleMbwayPaid(res, items, batchId) {
     const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
     const kioskKey = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
+    // A card recharge: nothing starts, the card is topped up; back to the home screen with the new balance.
+    if (res?.kind === 'recharge') {
+      toast({ title: tr('mbwayRecharged', { balance: `${Number(res?.card?.balance ?? 0).toFixed(2).replace('.', ',')}€` }), variant: 'success' })
+      setReceiptBatchId(batchId)
+      setReceiptItems(items)
+      clearCart()
+      setCartOpen(false)
+      goHome()
+      return
+    }
     toast({ title: tr('mbwayPaid'), variant: 'success' })
     try { const names = items.map((i) => i.name).filter(Boolean); if (names.length) showMachineNotice(names) } catch { /* cosmetic */ }
     tryShowWifiVoucher(items, batchId, kioskKey)

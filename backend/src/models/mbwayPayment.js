@@ -12,6 +12,10 @@ const mbwayPaymentSchema = new Schema({
   reference: { type: String, default: '' },              // Eupago's
   transactionId: { type: String, default: '' },
   couponCode: { type: String, default: '' },
+  // machines (default) | card_purchase | recharge. The last two keep what they need in `payload` (price, credit, the customer's details
+  // for a new card; amount and card code for a recharge); the customer's details are wiped as soon as the card is sold.
+  kind: { type: String, enum: ['machines', 'card_purchase', 'recharge'], default: 'machines' },
+  payload: { type: Schema.Types.Mixed, default: null },
   lines: [{ machineId: { type: Schema.Types.ObjectId, ref: 'Machine' }, blocks: Number, price: Number, name: String, _id: false }],
   // pending: waiting for the customer | started: paid and the machines started | failed / expired: nothing was paid |
   // cancelled: the customer gave up at the kiosk | start_failed: PAID but a machine could not start (refund by hand) |
@@ -19,6 +23,11 @@ const mbwayPaymentSchema = new Schema({
   status: { type: String, enum: ['pending', 'paid', 'started', 'failed', 'expired', 'cancelled', 'start_failed', 'paid_unclaimed'], default: 'pending', index: true },
   error: { type: String, default: '' },
   lastPolledAt: { type: Date },
+  // What Eupago answered when we asked (so a payment that never turns 'paid' can be understood): its own word for the state,
+  // the last error of the question, and every CHANGE of that word with the time it was seen.
+  lastRawState: { type: String, default: '' },
+  lastCheckError: { type: String, default: '' },
+  stateHistory: { type: [{ at: Date, raw: String, _id: false }], default: [] },
   expiresAt: { type: Date, required: true },
   paidAt: { type: Date },
   startedAt: { type: Date },

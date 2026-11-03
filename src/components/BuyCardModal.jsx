@@ -9,6 +9,7 @@ import * as localApi from '@/services/local-api'
 import { useTranslation, Trans } from 'react-i18next'
 import { useCart } from '@/context/CartContext'
 import { useBranding } from '@/context/BrandingContext'
+import MbwayPanel from './MbwayPanel'
 
 const STEPS = {
   FORM: 'form',
@@ -21,6 +22,11 @@ const STEPS = {
 export default function BuyCardModal({ open, onClose }) {
   const { t, i18n } = useTranslation('buycard')
   const { branding } = useBranding() || {}
+  const { t: tc } = useTranslation('cart')
+  // MB WAY (Eupago): offered only when the admin has switched it on (setting payments.mbway.enabled, OFF by default)
+  const [mbwayEnabled, setMbwayEnabled] = useState(false)
+  const [mbwayOpen, setMbwayOpen] = useState(false)
+  const mbwayBatch = useRef('')
   const { credit } = useCart() // the cash really inserted (the shop's session), not a button
   const eur = (n) => `${Number(n).toFixed(2).replace('.', i18n.language === 'en' ? '.' : ',')}€`
   const [step, setStep] = useState(STEPS.FORM)
@@ -248,6 +254,28 @@ export default function BuyCardModal({ open, onClose }) {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Is MB WAY on? Asked whenever this window opens (the admin may switch it on or off at any time).
+  useEffect(() => {
+    if (!open) { setMbwayOpen(false); return undefined }
+    let alive = true
+    const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
+    const key = electronKey || localStorage.getItem('kiosk_api_key') || import.meta.env.VITE_KIOSK_API_KEY
+    api.request('/gateways/mbway/config', { headers: key ? { Authorization: `ApiKey ${key}` } : undefined, skipAuth: true, expect: 'json' })
+      .then((r) => { if (alive) setMbwayEnabled(Boolean(r?.enabled)) })
+      .catch(() => { if (alive) setMbwayEnabled(false) })
+    return () => { alive = false }
+  }, [open])
+
+  // The card was paid with MB WAY: the server has already released the blank card and registered it; the screen goes on to the reader.
+  function handleMbwayPaid(r) {
+    setMbwayOpen(false)
+    if (!r?.card?.code) { toast({ title: t('purchaseError'), variant: 'destructive' }); setStep(STEPS.PAYMENT); return }
+    setPurchasedCard(r.card)
+    setPurchasedLocally(false)
+    setStep(STEPS.INSERT_CARD)
+    toast({ title: t('dispensed'), description: tc('mbwayCardPaid'), variant: 'success' })
   }
 
   async function handleCardInserted() {
@@ -564,6 +592,15 @@ export default function BuyCardModal({ open, onClose }) {
               </div>
             </div>
 
+            {mbwayEnabled && !(paid > 0) && cardPrice >= 1 && (
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => { mbwayBatch.current = `mw-${Date.now().toString(36)}`; setMbwayOpen(true) }}
+                className="w-full min-h-[64px] py-3 px-4 rounded-2xl bg-[#d3101c] text-white font-bold text-xl shadow-sm active:scale-[0.99] disabled:opacity-50"
+              >{tc('mbwayButton')} · {eur(cardPrice)}</button>
+            )}
+
             <div className="grid grid-cols-2 gap-4 pt-6 border-t border-slate-200/80">
               <button
                 type="button"
@@ -674,6 +711,18 @@ export default function BuyCardModal({ open, onClose }) {
         {renderStepContent()}
       </div>
       <LegalModal open={showPrivacy} kind="privacy" onClose={() => setShowPrivacy(false)} />
+      {mbwayOpen && (
+        <MbwayPanel
+          items={[]}
+          total={cardPrice}
+          kind="card_purchase"
+          extra={{ customer: { name: formData.name, email: formData.email, phone: formData.phone, contribuinte: formData.contribuinte, marketingOptIn: formData.marketingOptIn, privacyConsent: hasPersonalData && formData.privacyConsent } }}
+          batchId={mbwayBatch.current}
+          onClose={() => setMbwayOpen(false)}
+          onAbandon={() => { setMbwayOpen(false); setStep(STEPS.PAYMENT) }}
+          onPaid={handleMbwayPaid}
+        />
+      )}
     </Modal>
   )
 }

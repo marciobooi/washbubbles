@@ -238,6 +238,8 @@
   "mbwayOff": "MB WAY no está disponible.",
   "mbwayStartFailed": "Pago recibido, pero la máquina no arrancó. Acuda al mostrador: se devuelve el importe.",
   "mbwayPaid": "Pagado con MB WAY",
+  "mbwayRecharged": "Tarjeta recargada: saldo {{balance}}",
+  "mbwayCardPaid": "Tarjeta pagada con MB WAY. Inserte la tarjeta en el lector para activarla.",
   "mbwayChoose": "¿Cómo quiere indicar su número de MB WAY?",
   "mbwayScan": "Leer el código QR con el móvil",
   "mbwayType": "Escribir el número aquí",

@@ -159,6 +159,9 @@ describe('Staff machines on the kiosk (PIN) — start with cycles / release by h
   this.timeout(30000)
   let app, tenant, kiosk, coinMachine, Machine, Interface, Setting, Sale, sent
   const saved = {}
+  // about WHICH blocks reach the machine (one command, n impulses); the separate-commands default has its own tests (dryerBlocks)
+  beforeEach(() => { process.env.DRYER_IMPULSE_MODE = 'batch' })
+  afterEach(() => { delete process.env.DRYER_IMPULSE_MODE })
   const auth = () => ({ Authorization: `ApiKey ${kiosk.apiKey}` })
   const call = (id, kind, body) => request(app).post(`/api/pos/staff/machines/${id}/${kind}`).set(auth()).send(body)
 

@@ -12,7 +12,7 @@ const cardPurchaseSchema = new Schema({
   initialCredit: { type: Number, required: true }, // Initial balance loaded on card
   
   // Payment information
-  paymentMethod: { type: String, enum: ['cash', 'card', 'gift'], default: 'cash' },
+  paymentMethod: { type: String, enum: ['cash', 'card', 'gift', 'mbway'], default: 'cash' },
   amountInserted: { type: Number, required: true },
   changeGiven: { type: Number, default: 0 },
   

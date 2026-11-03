@@ -6,7 +6,8 @@
  *             (exactly once: the row flips pending -> paid atomically) and the sales are booked with method "mbway"
  *   sweep  -> every 30 s, payments nobody is polling (the customer left, the screen crashed) are still followed to the end,
  *             so a payment that arrives late is never lost: it is started, or reported to the operator.
- * Only machines can be paid this way: a recharge or a card purchase is money onto a card and is cash only (owner's rule).
+ * Three kinds can be paid this way (field `kind`): a cart of MACHINES, a NEW CARD, or a RECHARGE of the card in the reader (the last two
+ * from 2026-11-03, the owner's decision; they run the same steps as the cash routes minus the cash: services/mbwayCards.js).
  */
 import MbwayPayment from '../models/mbwayPayment.js'
 import Setting from '../models/setting.js'
@@ -40,11 +41,35 @@ export async function mbwaySettings(tenantId) {
 }
 
 /** Price a cart of machines from the server's own tables and check it can be paid with MB WAY. Throws a coded error otherwise. */
-export async function priceCart({ tenantId, items, couponCode }, { resolveMachineLines, isRecharge }) {
+export async function priceCart({ tenantId, items, couponCode, kind = 'machines', amount, cardCode }, { resolveMachineLines, isRecharge, cardInReader }) {
   const cfg = await mbwaySettings(tenantId)
   if (!cfg.enabled || !cfg.apiKey) throw err(409, 'mbway-off', 'MB WAY is not available')
+  // A NEW CARD: the price and the starting credit are the shop's own settings, never the screen's figure.
+  if (kind === 'card_purchase') {
+    const rows = await Setting.find({ tenantId, key: { $in: ['loyaltyCard.cost', 'loyaltyCard.credit'] } }).lean()
+    const m = Object.fromEntries(rows.map((r) => [r.key, r.value]))
+    const price = roundMoney(m['loyaltyCard.cost'] ?? 0)
+    const credit = roundMoney(m['loyaltyCard.credit'] ?? 0)
+    if (!(price > 0)) throw err(409, 'card-price-missing', 'Card purchase price not configured')
+    if (price < MIN_AMOUNT) throw err(400, 'below-minimum', `MB WAY needs at least ${MIN_AMOUNT.toFixed(2)} EUR`)
+    const { default: Peripheral } = await import('../models/peripheral.js')
+    if (!(await withTenant(Peripheral, { tenantId }).findOne({ type: 'card_dispenser', enabled: true }))) throw err(409, 'no-dispenser', 'No card dispenser configured')
+    return { cfg, coupon: null, resolved: { total: price, lines: [] }, extra: { price, credit } }
+  }
+  // A RECHARGE: the card is the one in the reader RIGHT NOW (the shop's own reading, not what the screen says).
+  if (kind === 'recharge') {
+    const value = roundMoney(Number(amount))
+    if (!Number.isFinite(value) || value < MIN_AMOUNT) throw err(400, 'below-minimum', `MB WAY needs at least ${MIN_AMOUNT.toFixed(2)} EUR`)
+    if (value > 200) throw err(400, 'above-maximum', 'The amount is too high for a single MB WAY recharge')
+    const inReader = cardInReader ? cardInReader() : null
+    if (!inReader || (cardCode && String(cardCode) !== String(inReader))) throw err(409, 'no-card', 'Put the card in the reader first')
+    const { default: Card } = await import('../models/card.js')
+    const card = await withTenant(Card, { tenantId }).findOne({ code: String(inReader) }).select('status').lean()
+    if (!card || ['blocked', 'pending_write'].includes(card.status)) throw err(409, 'card-not-usable', 'This card cannot be recharged')
+    return { cfg, coupon: null, resolved: { total: value, lines: [] }, extra: { amount: value, cardCode: String(inReader) } }
+  }
   if (!Array.isArray(items) || items.length === 0) throw err(400, 'empty-cart', 'Empty cart')
-  if (items.some(isRecharge)) throw err(400, 'mbway-machines-only', 'MB WAY pays machines only; a recharge is paid in cash')
+  if (items.some(isRecharge)) throw err(400, 'mbway-machines-only', 'A recharge is paid on its own, not together with machines')
   const coupon = couponCode ? await findUsableCoupon(tenantId, couponCode) : null
   const resolved = await resolveMachineLines(items, withTenant(Machine, { tenantId }), withTenant(Price, { tenantId }), 'cash', coupon)
   if (!resolved.ok) throw Object.assign(err(resolved.status, 'cart-refused', resolved.error?.error || 'Cart refused'), { detail: resolved.error })
@@ -52,10 +77,10 @@ export async function priceCart({ tenantId, items, couponCode }, { resolveMachin
   return { cfg, coupon, resolved }
 }
 
-export async function startPayment({ tenantId, items, phone, batchId, couponCode, expectedAmount }, deps) {
+export async function startPayment({ tenantId, items, phone, batchId, couponCode, expectedAmount, kind = 'machines', customer, amount, cardCode }, deps) {
   const p9 = normalizePhone(phone)
   if (!p9) throw err(400, 'bad-phone', 'Invalid phone number')
-  const { cfg, coupon, resolved } = await priceCart({ tenantId, items, couponCode }, deps)
+  const { cfg, coupon, resolved, extra } = await priceCart({ tenantId, items, couponCode, kind, amount, cardCode }, deps)
   // The amount is fixed by the shop from its own prices. If the customer was shown another figure (a promo ended, a price changed while
   // the QR was on screen), nothing is charged: the session ends and a new one shows the new amount.
   if (expectedAmount !== undefined && Math.abs(roundMoney(expectedAmount) - resolved.total) > 0.005) throw err(409, 'price-changed', 'The price changed')
@@ -66,6 +91,8 @@ export async function startPayment({ tenantId, items, phone, batchId, couponCode
     tenantId, identifier, batchId, amount: resolved.total, phone: maskPhone(p9), couponCode: coupon ? coupon.code : '',
     lines: resolved.lines.map((l) => ({ machineId: l.machine._id, blocks: l.blocks, price: l.price, name: l.machine.name })),
     status: 'pending', expiresAt: new Date(now + WINDOW_MS),
+    kind,
+    payload: kind === 'card_purchase' ? { ...extra, customer: sanitizeCustomer(customer) } : kind === 'recharge' ? { ...extra } : null,
   })
   const r = await createMbway({ env: cfg.env, apiKey: cfg.apiKey, amount: resolved.total, phone: p9, identifier, fetchImpl })
   if (!r.ok) {
@@ -78,9 +105,16 @@ export async function startPayment({ tenantId, items, phone, batchId, couponCode
   return view(saved)
 }
 
+const clip = (v, n) => String(v ?? '').trim().slice(0, n)
+/** The customer's details for a new card, as the cash flow takes them: bounded text, and consent only when it was given. */
+function sanitizeCustomer(c = {}) {
+  return { name: clip(c.name, 80), email: clip(c.email, 120), phone: clip(c.phone, 30), contribuinte: clip(c.contribuinte, 20), marketingOptIn: Boolean(c.marketingOptIn), privacyConsent: Boolean(c.privacyConsent) }
+}
+
 export const view = (p) => ({
-  id: String(p._id), status: p.status, amount: p.amount, phone: p.phone, reference: p.reference,
+  id: String(p._id), status: p.status, amount: p.amount, phone: p.phone, reference: p.reference, kind: p.kind || 'machines',
   expiresAt: p.expiresAt, error: p.error || '', machines: (p.lines || []).map((l) => l.name),
+  ...(p.status === 'started' && p.payload?.card ? { card: p.payload.card } : {}),
 })
 
 async function startMachines(p) {
@@ -111,10 +145,29 @@ async function alertOperator(tenantId, subject, message) {
   console.error(`[MBWAY] ${subject}: ${message}`)
 }
 
+/** Paid card purchase / recharge: do it; if it cannot be done the customer HAS paid, so say so loudly (refund by hand). */
+async function finalizeCardPayment(p) {
+  const { default: coinMachine } = await import('./coinMachine.js')
+  const { fulfilCardPurchase, fulfilRecharge } = await import('./mbwayCards.js')
+  try {
+    const r = p.kind === 'card_purchase' ? await fulfilCardPurchase(p, { coinMachine }) : await fulfilRecharge(p)
+    // the customer's personal details were only kept to write the card: they are gone now
+    const payload = { ...(p.payload || {}), ...r.result }
+    if (payload.customer) payload.customer = {}
+    return await MbwayPayment.findByIdAndUpdate(p._id, { $set: { status: 'started', startedAt: new Date(), saleIds: r.saleIds, payload } }, { new: true })
+  } catch (e) {
+    const what = p.kind === 'card_purchase' ? 'o cartão não saiu' : 'o carregamento não foi feito'
+    const done = await MbwayPayment.findByIdAndUpdate(p._id, { $set: { status: 'start_failed', error: `Pago, mas ${what} (${e.message}). Devolver o valor no backoffice do Eupago.`, 'payload.customer': {} } }, { new: true })
+    await alertOperator(p.tenantId, 'MB WAY pago mas o cartão não foi tratado', `Referência ${p.reference}, ${p.amount.toFixed(2)} EUR. ${done.error}`)
+    return done
+  }
+}
+
 /** The row flips pending -> paid exactly once, and only the one that flipped it starts the machines. */
 async function finalizePaid(p) {
   const flipped = await MbwayPayment.findOneAndUpdate({ _id: p._id, status: 'pending' }, { $set: { status: 'paid', paidAt: new Date() } }, { new: true })
   if (!flipped) return MbwayPayment.findById(p._id)
+  if (flipped.kind === 'card_purchase' || flipped.kind === 'recharge') return finalizeCardPayment(flipped)
   const { saleIds, failed } = await startMachines(flipped)
   const owed = roundMoney(failed.reduce((s, f) => s + f.l.price, 0))
   const done = await MbwayPayment.findByIdAndUpdate(flipped._id, {
@@ -133,6 +186,13 @@ async function check(p) {
   const late = Date.now() > p.expiresAt.getTime() + GRACE_MS
   if (!cfg.apiKey) return p
   const r = await referenceState({ env: cfg.env, apiKey: cfg.apiKey, reference: p.reference, fetchImpl })
+  // Keep what Eupago said: its word for the state whenever it changes, and the error when it cannot be asked.
+  if (r.error) {
+    if (p.lastCheckError !== r.error) { await MbwayPayment.updateOne({ _id: p._id }, { $set: { lastCheckError: r.error } }); console.warn(`[MBWAY] ref ${p.reference}: could not read the state (${r.error})`) }
+  } else if (String(r.raw ?? '') !== (p.lastRawState || '')) {
+    await MbwayPayment.updateOne({ _id: p._id }, { $set: { lastRawState: String(r.raw ?? ''), lastCheckError: '' }, $push: { stateHistory: { $each: [{ at: new Date(), raw: String(r.raw ?? '') }], $slice: -20 } } })
+    console.log(`[MBWAY] ref ${p.reference}: Eupago state "${r.raw}" (${p.status})`)
+  }
   // A word for the state that we do not know: never treated as paid, but never ignored either.
   if (r.state && !isKnownState(r.raw) && !String(p.error || '').startsWith('Estado desconhecido')) {
     await MbwayPayment.updateOne({ _id: p._id }, { $set: { error: `Estado desconhecido do Eupago: ${r.raw}` } })

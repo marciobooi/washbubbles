@@ -17,7 +17,9 @@ const mmss = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Ma
  * MB WAY at the kiosk: the customer types the phone number, approves in the MB WAY app (5 minutes) and the machines start by
  * themselves when the shop sees the payment (it asks Eupago every 2 s). Machines only; a recharge is cash only.
  */
-export default function MbwayPanel({ items, total, couponCode, batchId, onPaid, onClose, onAbandon }) {
+// `kind` is 'machines' (a cart of machines, the default), 'card_purchase' (a new card: `extra` = { customer }) or 'recharge' (`extra` = { amount, cardCode }).
+// The server prices all of them itself; the screen only says WHAT is being bought.
+export default function MbwayPanel({ items, total, couponCode, batchId, kind = 'machines', extra = null, onPaid, onClose, onAbandon }) {
   const { t } = useTranslation('cart')
   const [step, setStep] = React.useState('choose') // choose | qr | phone | sending | waiting | problem
   // ONE QR = ONE session: a new code every time, and giving the screen up (back, cancel, error, retry, close) ends the code for good
@@ -40,7 +42,7 @@ export default function MbwayPanel({ items, total, couponCode, batchId, onPaid, 
   async function chooseQr() {
     setStep('sending')
     try {
-      const r = await call('/link', { method: 'POST', json: { items: items.map((i) => ({ _id: i._id || i.productId || i.id, quantity: i.quantity })), batchId, couponCode: couponCode || undefined } })
+      const r = await call('/link', { method: 'POST', json: { items: kind === 'machines' ? items.map((i) => ({ _id: i._id || i.productId || i.id, quantity: i.quantity })) : [], ...(kind !== 'machines' ? { kind, ...(extra || {}) } : {}), batchId, couponCode: couponCode || undefined } })
       const qr = await QRCode.toDataURL(r.url, { width: 560, margin: 1, errorCorrectionLevel: 'M' })
       if (!alive.current) { call(`/link/${r.token}/cancel`, { method: 'POST' }).catch(() => {}); return }
       linkRef.current = { token: r.token }
@@ -73,7 +75,7 @@ export default function MbwayPanel({ items, total, couponCode, batchId, onPaid, 
     if (!/^(?:00351|351)?9\d{8}$/.test(digits)) { toast({ title: t('mbwayBadPhone'), variant: 'warning' }); return }
     setStep('sending')
     try {
-      const body = { items: items.map((i) => ({ _id: i._id || i.productId || i.id, quantity: i.quantity })), phone: digits, batchId, couponCode: couponCode || undefined, expectedAmount: Number(total) }
+      const body = { items: kind === 'machines' ? items.map((i) => ({ _id: i._id || i.productId || i.id, quantity: i.quantity })) : [], ...(kind !== 'machines' ? { kind, ...(extra || {}) } : {}), phone: digits, batchId, couponCode: couponCode || undefined, expectedAmount: Number(total) }
       const r = await call('/start', { method: 'POST', json: body })
       if (!alive.current) return
       requested.current = true

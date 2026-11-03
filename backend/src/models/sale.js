@@ -65,11 +65,12 @@ saleSchema.index({ tenantId: 1, cardCode: 1, createdAt: -1 })
 
 // Announce NEW sales only (an update, e.g. flagging a sale refunded, is not new
 // money). The central uplink queues each one for the server.
-// THE RULE (2026-10-20): a card is never credited with anything but cash. A NEW recharge sale must be a cash sale; any code path
-// that tries to book one with another method (the 'recharge paid with the card' hole) fails here, whatever route it came from.
+// THE RULE (2026-10-20): a card is never credited with anything but REAL money. A NEW recharge sale must be a cash sale, or (from
+// 2026-11-03, the owner's decision) an MB WAY sale: money that really came in from outside. Any code path that tries to book one with
+// another method (the 'recharge paid with the card' hole) fails here, whatever route it came from.
 saleSchema.pre('validate', function (next) {
-  if (this.isNew && this.type === 'recharge' && this.method !== 'cash' && !(this.metadata && this.metadata.voided)) {
-    return next(new Error('A card recharge can only be paid in cash'))
+  if (this.isNew && this.type === 'recharge' && this.method !== 'cash' && this.method !== 'mbway' && !(this.metadata && this.metadata.voided)) {
+    return next(new Error('A card recharge can only be paid in cash or with MB WAY'))
   }
   next()
 })
