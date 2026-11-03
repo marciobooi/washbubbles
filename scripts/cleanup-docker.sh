@@ -12,7 +12,6 @@ log "start (free ${before} MB)"
 docker builder prune -f --max-used-space 5GB >/dev/null 2>&1   # keeps the most recent 5 GB of cache, drops the rest
 docker image prune -f >/dev/null 2>&1                       # dangling images only (no tag, no container)
 docker container prune -f --filter "until=72h" >/dev/null 2>&1
-find /root/backups -name 'washstore-*.archive.gz' -mtime +30 -delete 2>/dev/null   # backups: the script keeps 14 days; anything left over from before goes at 30
 after=$(df --output=avail -BM / | tail -1 | tr -dc '0-9')
 log "done (free ${after} MB, freed $((after - before)) MB)"
 used=$(df --output=pcent / | tail -1 | tr -dc '0-9')

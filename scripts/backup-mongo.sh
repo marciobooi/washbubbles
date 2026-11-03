@@ -4,7 +4,7 @@
 set -euo pipefail
 APP_DIR="${APP_DIR:-/opt/washbubbles}"
 OUT_DIR="${OUT_DIR:-/root/backups}"
-KEEP_DAYS="${KEEP_DAYS:-14}"
+KEEP="${KEEP:-1}"   # how many backups to keep: ONE, the latest that was made and checked (the old one goes only after the new one succeeded)
 DB="${DB:-washstore}"
 LOG="$OUT_DIR/backup.log"
 mkdir -p "$OUT_DIR"
@@ -25,7 +25,8 @@ copy=$(dc exec -T mongo mongosh --quiet "${DB}_restorecheck" --eval 'db.users.co
 dc exec -T mongo mongosh --quiet "${DB}_restorecheck" --eval 'db.dropDatabase()' > /dev/null
 [ "$live" = "$copy" ] || fail "restore check differs (live=$live copy=$copy)"
 
-find "$OUT_DIR" -name "$DB-*.archive.gz" -mtime +"$KEEP_DAYS" -delete
+# the new backup is complete and its restore check passed: only now are the older ones removed
+ls -1t "$OUT_DIR"/$DB-*.archive.gz 2>/dev/null | tail -n +$((KEEP + 1)) | xargs -r rm -f
 # Off-site copy (optional): set OFFSITE_DEST in /etc/default/washbubbles-backup to an rclone destination, e.g. "hetzner-box:washbubbles".
 if [ -r /etc/default/washbubbles-backup ]; then . /etc/default/washbubbles-backup; fi
 if [ -n "${OFFSITE_DEST:-}" ]; then
