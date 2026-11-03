@@ -3,7 +3,7 @@
 set -euo pipefail
 chmod +x /opt/washbubbles/scripts/backup-mongo.sh
 cat > /etc/cron.d/washbubbles-backup <<'CRON'
-20 3 * * * root /opt/washbubbles/scripts/backup-mongo.sh >> /root/backups/cron.out 2>&1
+20 3 * * * root bash /opt/washbubbles/scripts/backup-mongo.sh >> /root/backups/cron.out 2>&1
 CRON
 chmod 644 /etc/cron.d/washbubbles-backup
 echo installed
