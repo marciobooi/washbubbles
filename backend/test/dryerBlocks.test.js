@@ -67,6 +67,22 @@ describe('Dryer blocks: one impulse now, one more every block', function () {
     expect(after.busyUntil).to.be.instanceOf(Date)
   })
 
+  it('the same batch is paid once: a repeated request is answered, with no new sale, impulse or change', async () => {
+    const m = await dryer()
+    const pay = () => request(app).post('/api/gateways/cash/pay').set('Authorization', `Bearer ${kioskToken}`)
+      .send({ items: [{ _id: m._id, quantity: 1 }], inserted: 10, batchId: 'b-twice' })
+    const first = await pay()
+    expect(first.status).to.equal(200)
+    await new Promise((r) => setTimeout(r, 100))
+    const sentBefore = impulses.length
+    const second = await pay()
+    expect(second.status).to.equal(200)
+    expect(second.body.replayed).to.equal(true)
+    await new Promise((r) => setTimeout(r, 100))
+    expect(await Sale.countDocuments({ batchId: 'b-twice' })).to.equal(1)
+    expect(impulses.length).to.equal(sentBefore)
+  })
+
   it('blocksFor: dryers only, whole numbers, capped', () => {
     expect(coinMachine.blocksFor({ type: 'dry' }, { quantity: 3 })).to.equal(3)
     expect(coinMachine.blocksFor({ type: 'dry' }, { quantity: 99 })).to.equal(coinMachine.maxBlocks)
