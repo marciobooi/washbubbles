@@ -26,6 +26,9 @@ import Price from '../models/price.js'
 import Setting from '../models/setting.js'
 import Interface from '../models/interface.js'
 import Peripheral from '../models/peripheral.js'
+import Sale from '../models/sale.js'
+import Coupon from '../models/coupon.js'
+import Card from '../models/card.js'
 
 /** Machine fields owned by this site at runtime; a pull never overwrites them. */
 export const MACHINE_RUNTIME_FIELDS = [
@@ -117,6 +120,9 @@ export class Downlink extends EventEmitter {
     this.pulling = (async () => {
       try {
         for (const r of this.resources) await this.pullResource(r)
+        await this.pullSaleCorrections().catch((e) => console.warn('[Downlink] sale corrections skipped:', e.message))
+        await this.pullCoupons().catch((e) => console.warn('[Downlink] coupons skipped:', e.message))
+        await this.pullCardBlocks().catch((e) => console.warn('[Downlink] card blocks skipped:', e.message))
         this.lastPullAt = new Date()
         this.lastError = ''
         this.emit('synced', { ...this.counts })
@@ -133,7 +139,7 @@ export class Downlink extends EventEmitter {
     return this.pulling
   }
 
-  async fetchSnapshot(name) {
+  async fetchSnapshot(name, { object = false } = {}) {
     const ctrl = new AbortController()
     const t = setTimeout(() => ctrl.abort(), this.timeoutMs)
     try {
@@ -143,7 +149,7 @@ export class Downlink extends EventEmitter {
       })
       if (!res.ok) throw new Error(`${name}: HTTP ${res.status}`)
       const body = await res.json()
-      if (!Array.isArray(body)) throw new Error(`${name}: unexpected response`)
+      if (object ? (!body || typeof body !== 'object' || Array.isArray(body)) : !Array.isArray(body)) throw new Error(`${name}: unexpected response`)
       return body
     } finally {
       clearTimeout(t)
@@ -191,6 +197,70 @@ export class Downlink extends EventEmitter {
         { $set: { status: 'free', statusText: '' } })
     }
     this.counts[name] = docs.length
+  }
+
+  /**
+   * A refund or void the central admin made on a sale: copy it here. Without this the shop kept the sale as it was (the two sides
+   * disagreed for good). Written with updates, not save(): these rows came FROM the server and must not be sent back to it.
+   */
+  async pullSaleCorrections() {
+    const body = await this.fetchSnapshot('sale-corrections', { object: true })
+    const tenant = toOid(this.tenantId)
+    let changed = 0
+    for (const r of body.refunded || []) {
+      if (!r.localId || !mongoose.isValidObjectId(r.localId)) continue
+      const u = await Sale.updateOne({ _id: r.localId, tenantId: tenant, status: { $ne: 'refunded' } }, { $set: { status: 'refunded' } })
+      changed += u.modifiedCount || 0
+    }
+    for (const r of body.refunds || []) {
+      if (r.localId) continue // this shop made it itself
+      const u = await Sale.updateOne(
+        { tenantId: tenant, 'metadata.centralId': String(r.id) },
+        { $setOnInsert: {
+          machineId: r.machineId && mongoose.isValidObjectId(r.machineId) ? toOid(r.machineId) : null,
+          amount: r.amount, type: 'refund', method: r.method, batchId: r.batchId || `refund-${r.id}`, status: 'completed',
+          refundOf: r.refundOfLocalId && mongoose.isValidObjectId(r.refundOfLocalId) ? toOid(r.refundOfLocalId) : null,
+          refundReason: r.refundReason || '', inserted: 0, change: 0, items: [], createdAt: r.createdAt ? new Date(r.createdAt) : new Date(),
+          'metadata.syncedAt': new Date(),
+        } },
+        { upsert: true },
+      )
+      changed += u.upsertedCount || 0
+    }
+    if (changed) console.log(`[Downlink] ${changed} sale correction(s) from central applied`)
+    return changed
+  }
+
+  /**
+   * Coupons are made on the central server and USED at the shop. Settings (code, discount, expiry, limit, on/off) come from central;
+   * the count of uses is the larger of the two (the shop sends its own up, see uplink). A coupon central no longer has is switched
+   * off here, not deleted. Keyed by code (the ids differ).
+   */
+  async pullCoupons() {
+    const items = await this.fetchSnapshot('coupons')
+    const tenant = toOid(this.tenantId)
+    for (const item of items) {
+      const code = String(item.code || '').toUpperCase().trim()
+      if (!code) continue
+      const { _id, __v, tenantId, redemptionCount, createdAt, code: _c, ...cfg } = item
+      await Coupon.updateOne({ tenantId: tenant, code }, { $set: cfg, $max: { redemptionCount: Number(redemptionCount) || 0 } }, { upsert: true })
+    }
+    await Coupon.updateMany({ tenantId: tenant, code: { $nin: items.map((i) => String(i.code || '').toUpperCase().trim()) }, active: true }, { $set: { active: false } })
+    this.counts.coupons = items.length
+    return items.length
+  }
+
+  /**
+   * A card blocked on the central server (lost, stolen) must stop working at the shop too. Only ever BLOCKS: a card the shop has
+   * not heard of, the balance and the other states are left alone (the balance is the shop's, see the card wallet rules).
+   */
+  async pullCardBlocks() {
+    const items = await this.fetchSnapshot('cards')
+    const blocked = items.filter((c) => c.status === 'blocked' && c.code).map((c) => String(c.code))
+    if (!blocked.length) return 0
+    const u = await Card.updateMany({ tenantId: toOid(this.tenantId), code: { $in: blocked }, status: { $ne: 'blocked' } }, { $set: { status: 'blocked' } })
+    if (u.modifiedCount) console.log(`[Downlink] ${u.modifiedCount} card(s) blocked by central`)
+    return u.modifiedCount || 0
   }
 
   status() {

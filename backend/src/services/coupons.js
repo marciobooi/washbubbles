@@ -7,6 +7,7 @@
  */
 import Coupon from '../models/coupon.js'
 import { roundMoney } from '../utils/money.js'
+import modelEvents from './modelEvents.js'
 
 /**
  * Looks up a coupon and returns it if it's currently usable, or null.
@@ -39,6 +40,13 @@ export function applyCouponDiscount(price, coupon) {
  * not during price preview.
  */
 export async function redeemCoupon(tenantId, code) {
+  const done = await redeemCouponRow(tenantId, code)
+  // the shop counts its own uses; the central server learns the number (offline: when the link is back)
+  if (done) modelEvents.emit('coupon:redeemed', { tenantId: done.tenantId, code: done.code, redemptionCount: done.redemptionCount })
+  return done
+}
+
+function redeemCouponRow(tenantId, code) {
   return Coupon.findOneAndUpdate(
     {
       tenantId,

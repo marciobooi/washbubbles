@@ -41,6 +41,10 @@ export function salePayload(sale) {
     change_amount: o.change || 0,
     items: o.items,
     created_at: o.createdAt,
+    // a refund (its row is negative, 'refund_of' is this site's id of the sale it reverses) and a sale that has been refunded since
+    status: o.status || 'completed',
+    refund_of: o.refundOf ? String(o.refundOf) : undefined,
+    refund_reason: o.refundReason || undefined,
     // NOT sent: machine_id / card_id — they are this site's local ids and mean
     // nothing (or the wrong thing) on the server.
   }
@@ -143,11 +147,18 @@ export class Uplink extends EventEmitter {
       await this.enqueue('flow', flowId, payload)
     }
     const onFlowSafe = (x) => onFlow(x).catch(this.logQueueError)
+    const onCoupon = ({ tenantId, code, redemptionCount }) => {
+      if (sameTenant(tenantId)) this.enqueue('coupon', String(code), { code, redemption_count: redemptionCount }).catch(this.logQueueError)
+    }
+    modelEvents.on('coupon:redeemed', onCoupon)
     modelEvents.on('sale:created', onSale)
+    modelEvents.on('sale:refunded', onSale)
     modelEvents.on('dayclose:created', onDayClose)
     modelEvents.on('flow:closed', onFlowSafe)
     this.unsubscribers.push(
       () => modelEvents.off('sale:created', onSale),
+      () => modelEvents.off('coupon:redeemed', onCoupon),
+      () => modelEvents.off('sale:refunded', onSale),
       () => modelEvents.off('dayclose:created', onDayClose),
       () => modelEvents.off('flow:closed', onFlowSafe),
       onCardChanged((tenantId, code) => {
@@ -360,6 +371,9 @@ export class Uplink extends EventEmitter {
         return
       case 'flow':
         await this.post('/sync/push/flow', p)
+        return
+      case 'coupon':
+        await this.post('/sync/push/coupon', p)
         return
       case 'card': {
         // 1) make sure the card exists there (no-op if it does)

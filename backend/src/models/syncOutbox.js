@@ -15,7 +15,7 @@ const { Schema } = mongoose
  */
 const syncOutboxSchema = new Schema({
   tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', required: true, index: true },
-  entityType: { type: String, enum: ['sale', 'card', 'day_close', 'flow'], required: true },
+  entityType: { type: String, enum: ['sale', 'card', 'day_close', 'flow', 'coupon'], required: true },
   entityId: { type: String, required: true }, // sale/day-close _id, or the card code
   payload: { type: Schema.Types.Mixed, required: true },
   // Bumped every time a pending entry is refreshed, so a push that was in flight

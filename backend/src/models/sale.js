@@ -75,9 +75,14 @@ saleSchema.pre('validate', function (next) {
   next()
 })
 
-saleSchema.pre('save', function (next) { this.$locals.wasNew = this.isNew; next() })
+saleSchema.pre('save', function (next) {
+  this.$locals.wasNew = this.isNew
+  this.$locals.refundedNow = !this.isNew && this.isModified('status') && this.status === 'refunded'
+  next()
+})
 saleSchema.post('save', function (doc) {
   if (doc.$locals.wasNew) modelEvents.emit('sale:created', doc)
+  else if (doc.$locals.refundedNow) modelEvents.emit('sale:refunded', doc) // the shop's copy went to the central server earlier: tell it
 })
 
 export default mongoose.model('Sale', saleSchema)

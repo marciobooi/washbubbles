@@ -8,6 +8,7 @@ import { requireKiosk } from '../middleware/auth.js'
 import { withTenant } from '../services/tenant.js'
 
 import Sale from '../models/sale.js'
+import Coupon from '../models/coupon.js'
 import Card from '../models/card.js'
 import Machine from '../models/machine.js'
 import Price from '../models/price.js'
@@ -77,6 +78,12 @@ router.post('/push/sale', async (req, res) => {
     const existing = await SaleT.findOne({ $or: or })
 
     if (existing) {
+      // refunded at the shop after it was sent: the central copy follows (the shop works offline and tells us when it can)
+      if (data.status === 'refunded' && existing.status !== 'refunded') {
+        existing.status = 'refunded'
+        await existing.save()
+        return res.json({ success: true, id: existing._id, status: 'updated' })
+      }
       return res.json({ success: true, id: existing._id, status: 'duplicate' })
     }
 
@@ -87,8 +94,19 @@ router.post('/push/sale', async (req, res) => {
     // `admin_start` sales are legitimately €0, so zero is allowed here; negatives
     // are not — they would silently reduce the day's takings.
     const amount = Number(data.amount)
-    if (!Number.isFinite(amount) || amount < 0) {
-      return res.status(400).json({ success: false, error: 'amount must be a non-negative number' })
+    const isRefund = data.type === 'refund'
+    // a refund is the one row that is negative (it reverses a sale)
+    if (!Number.isFinite(amount) || (isRefund ? amount > 0 : amount < 0)) {
+      return res.status(400).json({ success: false, error: isRefund ? 'a refund must be zero or negative' : 'amount must be a non-negative number' })
+    }
+    let refundOfId
+    if (isRefund && data.refund_of) {
+      const ref = String(data.refund_of)
+      const orig = await SaleT.findOne({ $or: [{ 'metadata.localId': ref }, ...(mongoose.Types.ObjectId.isValid(ref) ? [{ _id: ref }] : [])] })
+      if (orig) {
+        refundOfId = orig._id
+        if (orig.status !== 'refunded') { orig.status = 'refunded'; await orig.save() }
+      }
     }
 
     // Create sale on server
@@ -105,6 +123,7 @@ router.post('/push/sale', async (req, res) => {
         ? (data.card_id || data.cardId)
         : undefined,
       cardCode: data.card_code || data.cardCode,
+      ...(isRefund ? { refundOf: refundOfId, refundReason: String(data.refund_reason || '').slice(0, 300) } : {}),
       inserted: roundMoney(Math.max(0, Number(data.inserted) || 0)),
       change: roundMoney(Math.max(0, Number(data.change_amount ?? data.change) || 0)),
       createdAt: data.created_at ? new Date(data.created_at) : new Date(),
@@ -535,6 +554,53 @@ async function handlePull(req, res, Model, label) {
   }
 }
 
+/**
+ * GET /api/sync/pull/sale-corrections
+ * What the central admin changed about SALES (a refund, a voided sale), for the shop to copy. The ids differ between the two sides, so
+ * every row carries the SHOP's own id (metadata.localId) where there is one. Sales have no updatedAt: the window is the sale's date.
+ */
+router.get('/pull/sale-corrections', async (req, res) => {
+  try {
+    const SaleT = withTenant(Sale, req)
+    const since = new Date(Date.now() - 400 * 86_400_000)
+    const rows = await SaleT.find({ createdAt: { $gte: since }, $or: [{ status: 'refunded' }, { type: 'refund' }] }).lean()
+    const refunds = rows.filter((r) => r.type === 'refund')
+    const origIds = refunds.map((r) => r.refundOf).filter(Boolean)
+    const origs = origIds.length ? await SaleT.find({ _id: { $in: origIds } }).select('metadata').lean() : []
+    const localOf = new Map(origs.map((o) => [String(o._id), o.metadata?.localId || null]))
+    res.json({
+      refunded: rows.filter((r) => r.type !== 'refund' && r.status === 'refunded').map((r) => ({ id: String(r._id), localId: r.metadata?.localId || null })),
+      refunds: refunds.map((r) => ({
+        id: String(r._id), localId: r.metadata?.localId || null, amount: r.amount, method: r.method, batchId: r.batchId,
+        machineId: r.machineId ? String(r.machineId) : null, refundReason: r.refundReason || '', createdAt: r.createdAt,
+        refundOfLocalId: r.refundOf ? (localOf.get(String(r.refundOf)) || null) : null,
+      })),
+    })
+  } catch (err) {
+    console.error('[Sync] Pull sale-corrections error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+/**
+ * POST /api/sync/push/coupon
+ * How many times the shop has used a coupon. The shop is where coupons are used; the number only ever goes up, so a late or repeated
+ * push can never lower it.
+ */
+router.post('/push/coupon', async (req, res) => {
+  try {
+    const code = String(req.body?.code || '').toUpperCase().trim()
+    const n = Math.floor(Number(req.body?.redemption_count))
+    if (!code || !Number.isFinite(n) || n < 0) return res.status(400).json({ success: false, error: 'code and redemption_count are required' })
+    await Coupon.updateOne({ tenantId: req.tenantId, code }, { $max: { redemptionCount: n } })
+    res.json({ success: true })
+  } catch (err) {
+    console.error('[Sync] Push coupon error:', err)
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+router.get('/pull/coupons', (req, res) => handlePull(req, res, Coupon, 'coupons'))
 router.get('/pull/cards', (req, res) => handlePull(req, res, Card, 'cards'))
 router.get('/pull/machines', (req, res) => handlePull(req, res, Machine, 'machines'))
 router.get('/pull/prices', (req, res) => handlePull(req, res, Price, 'prices'))
