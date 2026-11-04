@@ -942,6 +942,11 @@ router.get('/card-info', async (req, res) => {
 // Public: lightweight settings lookup for branding and card purchase keys (no auth)
 router.get('/settings/:key', async (req, res) => {
   const key = String(req.params.key || '')
+  // The shop's phone (the "Telefone" of Dados do negócio) for the kiosk's "call the shop" messages. Only the phone leaves the landing content.
+  if (key === 'shop.contact') {
+    const row = await withTenant(Setting, req).findOne({ key: 'landingPage.content' }).lean()
+    return res.json({ key, value: { phone: String(row?.value?.brand?.phone || '').slice(0, 40) } })
+  }
   // Allow branding, cardPurchase, loyaltyCard, the kiosk-lock toggle and the
   // homepage banner slides to be read publicly. None of these leak anything
   // sensitive — knowing whether the maintenance-lock feature is turned on

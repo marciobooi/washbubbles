@@ -31,6 +31,7 @@ export function PaymentProvider({ children }) {
           success: true, method: 'cash', total: resp.total, inserted: resp.inserted,
           change: resp.change, sales: resp.sales,
           changeDispensed: resp.changeDispensed, changeError: resp.changeError,
+          anomaly: !!resp.anomaly, failed: resp.failed || [],
         }
       } catch (e) {
         return { success: false, error: e }
@@ -43,7 +44,7 @@ export function PaymentProvider({ children }) {
         try {
           const payload = { items, cardCode: opts.cardCode, batchId: opts.batchId, couponCode: opts.couponCode }
           const resp = await api.gatewayCardPay(payload, { apiKey: kioskKeyFinal })
-          return { success: true, method: 'card', total: items.reduce((s,i)=>s+(i.price||i.amount||0),0), results: resp.sales, card: resp.card }
+          return { success: true, method: 'card', total: items.reduce((s,i)=>s+(i.price||i.amount||0),0), results: resp.sales, card: resp.card, anomaly: !!resp.anomaly, failed: resp.failed || [] }
         } catch (e) {
           return { success: false, error: e }
         }

@@ -167,6 +167,12 @@ function AppInner() {
   }
   const [wifiVoucher, setWifiVoucher] = React.useState(null)
   const [receiptBatchId, setReceiptBatchId] = React.useState(null)
+  const [shopPhone, setShopPhone] = React.useState('')
+  React.useEffect(() => {
+    let alive = true
+    api.getPublicSetting('shop.contact').then((s) => { if (alive && s?.value?.phone) setShopPhone(String(s.value.phone)) }).catch(() => {})
+    return () => { alive = false }
+  }, [])
   const [receiptItems, setReceiptItems] = React.useState(null)
   // While the customer is typing the email (or a send/print is running) the receipt popup must stay: no countdown.
   const [receiptHold, setReceiptHold] = React.useState(false)
@@ -459,7 +465,10 @@ function AppInner() {
         // Success: server already created sales and updated machines.
         // The sale is recorded either way, but if the hopper could not pay the
         // change out we must say so rather than let the customer walk away short.
-        if (res.change > 0 && res.changeDispensed === false) {
+        if (res.anomaly) {
+          // Paid, but a machine did not start: nothing is paid back by the system; the customer talks to the shop.
+          toast({ title: tr('paidNotStarted'), description: tr(shopPhone ? 'paidNotStartedHintPhone' : 'paidNotStartedHint', { machines: (res.failed || []).map((f) => f.machine).join(', '), phone: shopPhone }), variant: 'destructive' })
+        } else if (res.change > 0 && res.changeDispensed === false) {
           toast({
             title: tr('changeNotDelivered'),
             description: tr('changeNotDeliveredHint', { amount: `${Number(res.change).toFixed(2)}€` }),
@@ -470,7 +479,8 @@ function AppInner() {
         }
         // Show machine notification for machines purchased (if any)
         try {
-          const machineNames = items.filter(i => !(i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge')))).map(i => i.name).filter(Boolean)
+          const failedNames = new Set((res.failed || []).map((f) => f.machine))
+          const machineNames = items.filter(i => !(i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge')))).map(i => i.name).filter(Boolean).filter((n) => !failedNames.has(n))
           if (machineNames.length) showMachineNotice(machineNames)
         } catch { /* the notice is cosmetic; the payment already succeeded */ }
         tryShowWifiVoucher(items.filter(i => !(i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge')))), batchId, kioskKey)
@@ -582,7 +592,8 @@ function AppInner() {
           setReceiptBatchId(batchId)
           setReceiptItems(machineItems)
 
-          toast({ title: tr('paidCard'), variant: 'success' })
+          if (res.anomaly) toast({ title: tr('paidNotStarted'), description: tr(shopPhone ? 'paidNotStartedHintPhone' : 'paidNotStartedHint', { machines: (res.failed || []).map((f) => f.machine).join(', '), phone: shopPhone }), variant: 'destructive' })
+          else toast({ title: tr('paidCard'), variant: 'success' })
           clearCart()
           setCartOpen(false)
           goHome()

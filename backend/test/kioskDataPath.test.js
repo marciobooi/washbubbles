@@ -59,6 +59,15 @@ describe('What the kiosk fetches and shows agrees with what the server charges',
     expect(res.body.saving.wash).to.equal(0.8) // the most it saves on any wash machine
   })
 
+  it('the shop phone from "Dados do negócio" reaches the kiosk (and nothing else of the landing content)', async () => {
+    const Setting = (await import('../src/models/setting.js')).default
+    await Setting.create({ tenantId: tenant._id, key: 'landingPage.content', value: { brand: { phone: '+351 912 715 258', email: 'x@y.pt' }, hero: { heading: 'secret draft' } } })
+    const res = await request(app).get('/api/pos/settings/shop.contact')
+    expect(res.status).to.equal(200)
+    expect(res.body.value).to.deep.equal({ phone: '+351 912 715 258' })
+    expect((await request(app).get('/api/pos/settings/landingPage.content')).status).to.equal(404)
+  })
+
   it('the legal/GDPR text saved by the admin is readable by the kiosk without logging in', async () => {
     const Setting = (await import('../src/models/setting.js')).default
     await Setting.create({ tenantId: tenant._id, key: 'legal.info', value: { company: 'Fresh Bubbles Lda', privacy: { pt: 'Texto' } } })

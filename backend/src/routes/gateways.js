@@ -15,7 +15,7 @@ import { findUsableCoupon, applyCouponDiscount, redeemCoupon } from '../services
 import { startPayment, pollPayment, cancelPayment, priceCart, mbwaySettings, MIN_AMOUNT as MBWAY_MIN } from '../services/mbway.js'
 import * as mbwayLink from '../services/mbwayLinkClient.js'
 import MbwayPayment from '../models/mbwayPayment.js'
-import { flowRoute } from '../services/flows.js'
+import { flowRoute, step as flowStep } from '../services/flows.js'
 
 const router = express.Router()
 
@@ -146,6 +146,24 @@ router.post('/cards/:code/topup', requireKiosk, async (req, res) => {
 })
 
 // POST /api/gateways/card/pay - charge card for items (machines + optional recharges in same batch)
+/**
+ * A machine did not start although the customer paid. Nothing is paid back by the system: the customer is told to call the shop and the
+ * staff decides (start the machine from the staff menu, or give the money back by hand). The operator is told at once.
+ */
+async function reportStartAnomaly(req, batchId, failedLines, how) {
+  if (!failedLines.length) return
+  const names = failedLines.map((f) => f.machine).join(', ')
+  const amount = roundMoney(failedLines.reduce((s, f) => s + (Number(f.price) || 0), 0))
+  const msg = `O cliente pagou (${how}) e a máquina não arrancou: ${names} (${amount.toFixed(2)} €). Nada foi devolvido. O cliente deve contactar a loja; arranque a máquina pelo menu do staff ou devolva o valor em mão.`
+  console.error(`[gateways] ${msg} batch ${batchId || '-'}`)
+  await coinMachine.auditSystem?.('payment.start.failed', { batchId, machines: names, amount, how, errors: failedLines.map((f) => f.error) })?.catch?.(() => {})
+  flowStep(req.tenantId, 'start_failed', `Pago, mas não arrancou: ${names} (${amount.toFixed(2).replace('.', ',')} €). Nada devolvido; o cliente deve contactar a loja`, { failed: failedLines.map((f) => ({ machine: f.machine, error: f.error })) }, { ok: false })
+  try {
+    const { sendAlertForTenant } = await import('../services/alerts.js')
+    await sendAlertForTenant(req.tenantId, 'Cliente pagou e a máquina não arrancou', msg)
+  } catch (e) { console.error('[gateways] could not send the start-failure alert:', e.message) }
+}
+
 router.post('/card/pay', requireKiosk, flowRoute('Pedido de pagamento com cartão', { method: 'card' }), async (req, res) => {
   const { items = [], cardCode, batchId, couponCode } = req.body
   if (!Array.isArray(items) || !cardCode) return res.status(400).json({ error: 'Missing parameters' })
@@ -194,13 +212,11 @@ router.post('/card/pay', requireKiosk, flowRoute('Pedido de pagamento com cartã
       startedLines.push(l)
     } catch (e) {
       console.error(`[gateways] ${l.machine.name} did not start: ${e.message}`)
-      failedLines.push({ machine: l.machine.name, machineId: l.machine._id, error: e.message })
+      failedLines.push({ machine: l.machine.name, machineId: l.machine._id, price: l.price, error: e.message })
     }
   }
-  if (resolved.lines.length && startedLines.length === 0) {
-    return res.status(502).json({ error: 'A máquina não arrancou. Nada foi cobrado.', failed: failedLines })
-  }
-  const chargedTotal = roundMoney(startedLines.reduce((s, l) => s + l.price, 0))
+  const failedIds = new Set(failedLines.map((f) => String(f.machineId)))
+  const chargedTotal = roundMoney(resolved.lines.reduce((s, l) => s + l.price, 0))
   const net = roundMoney(rechargeTotal - chargedTotal)
   const updatedCard = await applyCardDelta(CardT, { _id: card._id }, net)
   if (!updatedCard) {
@@ -213,9 +229,10 @@ router.post('/card/pay', requireKiosk, flowRoute('Pedido de pagamento com cartã
     sales.push(await SaleT.create({ amount: line.amount, items: line.item, method: 'card', batchId, inserted: line.amount, change: 0, type: 'recharge', cardId: card._id, cardCode: card.code }))
   }
 
-  for (const { machine, price, item, blocks } of startedLines) {
+  for (const { machine, price, item, blocks } of resolved.lines) {
     const sale = await SaleT.create({ machineId: machine._id, amount: price, items: [{ ...item, quantity: blocks }], method: 'card', batchId, type: 'payment', cardId: card._id, cardCode: card.code })
     sales.push(sale)
+    if (failedIds.has(String(machine._id))) continue // paid but did not start: the machine is NOT marked busy, the staff sorts it out
 
     // Only mark the machine busy if it is still free — a second kiosk may have
     // taken it between validation and here.
@@ -237,7 +254,8 @@ router.post('/card/pay', requireKiosk, flowRoute('Pedido de pagamento com cartã
     await redeemCoupon(req.tenantId, coupon.code).catch((e) => console.error('[gateways] Failed to redeem coupon:', e.message))
   }
 
-  res.json({ success: true, sales, card })
+  await reportStartAnomaly(req, batchId, failedLines, 'cartão')
+  res.json({ success: true, sales, card, failed: failedLines, anomaly: failedLines.length > 0 })
 })
 
 // POST /api/gateways/cash/pay - charge by cash (inserted/change) and create sales
@@ -313,13 +331,11 @@ router.post('/cash/pay', requireKiosk, flowRoute('Pedido de pagamento em dinheir
       startedLines.push(l)
     } catch (e) {
       console.error(`[gateways] ${l.machine.name} did not start: ${e.message}`)
-      failedLines.push({ machine: l.machine.name, machineId: l.machine._id, error: e.message })
+      failedLines.push({ machine: l.machine.name, machineId: l.machine._id, price: l.price, error: e.message })
     }
   }
-  if (resolved.lines.length && startedLines.length === 0) {
-    return res.status(502).json({ error: 'A máquina não arrancou. Nada foi cobrado.', failed: failedLines })
-  }
-  const chargedTotal = roundMoney(startedLines.reduce((s, l) => s + l.price, 0) + rechargeLines.reduce((s, l) => s + l.amount, 0))
+  const failedIds = new Set(failedLines.map((f) => String(f.machineId)))
+  const chargedTotal = roundMoney(resolved.lines.reduce((s, l) => s + l.price, 0) + rechargeLines.reduce((s, l) => s + l.amount, 0))
   const change = roundMoney(insertedNum - chargedTotal)
 
   const sales = []
@@ -346,7 +362,7 @@ router.post('/cash/pay', requireKiosk, flowRoute('Pedido de pagamento em dinheir
 
   // Then machine sales — attach inserted/change to first machine sale
   let assigned = false
-  for (const { machine, price, item, blocks } of startedLines) {
+  for (const { machine, price, item, blocks } of resolved.lines) {
     let saleInserted = 0
     let saleChange = 0
     if (!assigned) {
@@ -357,6 +373,7 @@ router.post('/cash/pay', requireKiosk, flowRoute('Pedido de pagamento em dinheir
 
     const sale = await SaleT.create({ machineId: machine._id, amount: price, items: [{ ...item, quantity: blocks }], method: 'cash', batchId, inserted: saleInserted, change: saleChange, type: 'payment' })
     sales.push(sale)
+    if (failedIds.has(String(machine._id))) continue // paid but did not start: the machine is NOT marked busy, the staff sorts it out
 
     const updated = await MachineT.findOneAndUpdate(
       { _id: machine._id, status: { $ne: 'working' } },
@@ -419,7 +436,8 @@ router.post('/cash/pay', requireKiosk, flowRoute('Pedido de pagamento em dinheir
     await redeemCoupon(req.tenantId, coupon.code).catch((e) => console.error('[gateways] Failed to redeem coupon:', e.message))
   }
 
-  res.json({ success: true, sales, total: chargedTotal, inserted: insertedNum, change, changeDispensed, changeError, failed: failedLines })
+  await reportStartAnomaly(req, batchId, failedLines, 'dinheiro')
+  res.json({ success: true, sales, total: chargedTotal, inserted: insertedNum, change, changeDispensed, changeError, failed: failedLines, anomaly: failedLines.length > 0 })
 })
 
 // ---- MB WAY (Eupago): the admin switches it on or off (setting payments.mbway.enabled, OFF by default) -----------------------------

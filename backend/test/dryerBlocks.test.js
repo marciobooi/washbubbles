@@ -147,14 +147,36 @@ describe('Dryer blocks: one impulse now, one more every block', function () {
     expect((await Machine.findById(m._id)).pendingImpulses).to.equal(0)
   })
 
-  it('cash: when the machine cannot start nothing is recorded and the answer is a 502', async () => {
+  it('NORMAL flow is untouched: a normal payment has no anomaly, and a busy machine is refused before anything is charged', async () => {
+    const m = await dryer()
+    const ok = await request(app).post('/api/gateways/cash/pay').set('Authorization', `Bearer ${kioskToken}`)
+      .send({ items: [{ _id: m._id, quantity: 1 }], inserted: 5, batchId: 'b-normal' })
+    expect(ok.status).to.equal(200)
+    expect(ok.body.anomaly).to.equal(false)
+    expect(ok.body.failed).to.deep.equal([])
+    expect(ok.body.change).to.equal(3)
+    expect(await Sale.countDocuments({ batchId: 'b-normal' })).to.equal(1)
+    expect((await Machine.findById(m._id)).status).to.equal('working')
+    // someone else already runs it: 409, no sale, no impulse, the cash stays the customer's credit
+    const before = impulses.length
+    const busy = await request(app).post('/api/gateways/cash/pay').set('Authorization', `Bearer ${kioskToken}`)
+      .send({ items: [{ _id: m._id, quantity: 1 }], inserted: 5, batchId: 'b-busy' })
+    expect(busy.status).to.equal(409)
+    expect(await Sale.countDocuments({ batchId: 'b-busy' })).to.equal(0)
+    expect(impulses.length).to.equal(before)
+  })
+
+  it('cash: paid but the machine cannot start = NOT paid back: the sale is kept, the machine stays free, the customer is told to call the shop', async () => {
     const m = await dryer()
     coinMachine.__fail = true
     const res = await request(app).post('/api/gateways/cash/pay').set('Authorization', `Bearer ${kioskToken}`)
-      .send({ items: [{ _id: m._id, quantity: 1 }], inserted: 2, batchId: 'b-fail' })
-    expect(res.status).to.equal(502)
-    expect(await Sale.countDocuments({ batchId: 'b-fail' })).to.equal(0)
-    expect((await Machine.findById(m._id)).status).to.equal('free')
+      .send({ items: [{ _id: m._id, quantity: 1 }], inserted: 5, batchId: 'b-fail' })
+    expect(res.status).to.equal(200)
+    expect(res.body.anomaly).to.equal(true)
+    expect(res.body.failed).to.have.length(1)
+    expect(res.body.change).to.equal(3) // only the change of the money handed over; the 2 EUR of the machine are NOT returned
+    expect(await Sale.countDocuments({ batchId: 'b-fail' })).to.equal(1)
+    expect((await Machine.findById(m._id)).status).to.equal('free') // not marked busy: the staff starts it
   })
 
   describe('time block when the signal never shows the machine running', () => {
