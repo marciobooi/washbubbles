@@ -167,6 +167,7 @@ class CoinMachine extends EventEmitter {
           blank_card: async () => this.blankCardAtReader(),
           gift_card: async (p) => { const { issueGiftCard } = await import('./giftCard.js'); return issueGiftCard({ tenantId: this.tenantId }, this, { ...p, by: p?.by || 'admin (central)' }) },
           sync_now: async () => { await this.downlink?.pullAll?.(); return { success: true } },
+          reinit_hardware: async () => this.reinitHardware('remote'),
         },
       })
       this.remoteCommands.start()
@@ -202,6 +203,7 @@ class CoinMachine extends EventEmitter {
       this.setupEventHandlers()
       
       this.startCreditRefundWatch()
+      this.startHardwareRefresh()
       this.startImpulseScheduler()
       this.running = true
       this.emit('started')
@@ -266,6 +268,7 @@ class CoinMachine extends EventEmitter {
     this.downlink?.stop()
     this.remoteCommands?.stop()
     this.stopCreditRefundWatch()
+    this.stopHardwareRefresh()
     this.stopImpulseScheduler?.()
     // (the cash-session file is deliberately kept: money still in the session is restored on the next start)
     this.cashSub?.unsubscribe()
@@ -1101,6 +1104,46 @@ class CoinMachine extends EventEmitter {
     return sent
   }
 
+  // ---------------------------------------------------------------- reader re-initialisation
+  // 2026-11-04: from 08:13 to 09:43 the card reader delivered no event at all (no error, nothing in the log); customers could not read cards
+  // until the PC was restarted. What a restart does for the reader is the controller configuration (config_per) the backend sends when it
+  // connects. This sends the same thing without a restart: on request (admin) and, by itself, now and then while the kiosk is idle.
+  hardwareIdle() {
+    const s = this.client?.getState?.() || {}
+    return !(s.balance > 0) && !s.hasCard && Date.now() - this.lastCreditActivity > 120_000 && !this.refunding && !this.impulseBusy
+  }
+
+  async reinitHardware(reason = 'manual') {
+    if (!this.running) throw new Error('O quiosque não está ligado ao controlador neste PC')
+    if (typeof this.middleware?.reinitPeripherals !== 'function') throw new Error('Sem ligação ao controlador')
+    if (!this.hardwareIdle()) {
+      if (reason === 'auto') return { skipped: 'busy' }
+      throw new Error('Há um cliente a usar o quiosque (dinheiro ou cartão). Tente quando estiver livre.')
+    }
+    const r = await this.middleware.reinitPeripherals(['all'])
+    this.lastHardwareReinit = Date.now()
+    await this.auditSystem('hardware.reinit', { reason, sent: !!r?.sent, detail: r?.reason })
+    console.log(`[HW] peripherals re-initialised (${reason}): ${r?.sent ? 'sent' : r?.reason}`)
+    return { success: !!r?.sent, ...r }
+  }
+
+  startHardwareRefresh() {
+    this.stopHardwareRefresh()
+    const everyMin = process.env.HW_REINIT_EVERY_MIN !== undefined ? Number(process.env.HW_REINIT_EVERY_MIN) : 180
+    if (!(everyMin > 0)) return
+    this.lastHardwareReinit = Date.now()
+    this.hardwareRefreshTimer = setInterval(() => {
+      if (Date.now() - this.lastHardwareReinit < everyMin * 60_000) return
+      this.reinitHardware('auto').catch((e) => console.warn('[HW] automatic re-initialisation failed:', e.message))
+    }, 60_000)
+    this.hardwareRefreshTimer.unref?.()
+  }
+
+  stopHardwareRefresh() {
+    clearInterval(this.hardwareRefreshTimer)
+    this.hardwareRefreshTimer = null
+  }
+
   stopCreditRefundWatch() {
     clearInterval(this.refundTimer)
     this.refundTimer = null
@@ -1580,12 +1623,21 @@ class CoinMachine extends EventEmitter {
     }
   }
 
+  /** A warning that repeats on every poll is written once (and again after an hour). */
+  warnOnce(key, msg) {
+    this.warned = this.warned || new Map()
+    const last = this.warned.get(key) || 0
+    if (Date.now() - last < 3_600_000) return
+    this.warned.set(key, Date.now())
+    console.warn(msg)
+  }
+
   /**
    * Handle status_int event (status update from low-level)
    */
   async handleStatusInt(data) {
     // data contains machine status updates
-    console.log('Status update:', data)
+    if (process.env.LOWLEVEL_TRACE === 'true') console.log('Status update:', data) // every 10 s: only when tracing
     this.emit('status-update', data)
     
     // Update machine statuses in database
@@ -1673,7 +1725,7 @@ class CoinMachine extends EventEmitter {
       }))
 
       if (!machine) {
-        console.warn(`No machine found for Interface ${interfaceId} Port ${port}`)
+        this.warnOnce(`nomachine:${interfaceId}:${port}`, `No machine found for Interface ${interfaceId} Port ${port}`)
         return
       }
 
@@ -1690,7 +1742,12 @@ class CoinMachine extends EventEmitter {
         return
       }
 
-      console.log(`Machine ${machine.name} status update:`, status)
+      {
+        // the reading comes every few seconds: write it only when it changed
+        const sig = JSON.stringify(status)
+        this.lastStatusLogged = this.lastStatusLogged || new Map()
+        if (this.lastStatusLogged.get(machine.name) !== sig) { this.lastStatusLogged.set(machine.name, sig); console.log(`Machine ${machine.name} status update:`, status) }
+      }
 
       // The signal does work for this machine: from now on it, not the clock, decides when it is free.
       if (status.occupied && machine.busyUntil && !machine.sawBusy) machine.sawBusy = true
@@ -1820,7 +1877,7 @@ class CoinMachine extends EventEmitter {
       }))
 
       if (!machine) {
-        console.warn(`No machine found for Interface ${interfaceId} Port ${port}`)
+        this.warnOnce(`nomachine:${interfaceId}:${port}`, `No machine found for Interface ${interfaceId} Port ${port}`)
         return
       }
 

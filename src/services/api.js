@@ -419,6 +419,9 @@ export function createApi(config) {
 
   function adminCommand(id) { return request(`/admin/commands/${id}`, { method: 'GET', expect: 'json' }) }
 
+  function reinitHardware() {
+    return request('/admin/hardware/reinit', { method: 'POST', json: {}, expect: 'json' })
+  }
   function emptyHopper() {
     return request('/admin/hopper/empty', { method: 'POST', json: { confirm: true }, expect: 'json' })
   }
@@ -728,6 +731,7 @@ export function createApi(config) {
     addDayCloseFloat,
     refillHopper,
     emptyHopper,
+    reinitHardware,
     adminCommand,
     updateCardProfile,
     blankCardAtReader,

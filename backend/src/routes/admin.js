@@ -1508,6 +1508,26 @@ router.post('/cards/gift', requireAdmin, async (req, res) => {
   res.json({ queued: true, commandIds: cmds.map((c) => c._id) })
 })
 
+// POST /admin/hardware/reinit — put the readers (notes, coins, hopper, cards) back in order without restarting the PC. On the shop PC it
+// runs here; on the central server it is queued for the shop.
+router.post('/hardware/reinit', requireAdmin, async (req, res) => {
+  const { default: coinMachine } = await import('../services/coinMachine.js')
+  if (coinMachine.running) {
+    try {
+      const r = await coinMachine.reinitHardware('admin')
+      logAction(req, 'hardware.reinit', 'Peripheral', null, r)
+      return res.json({ queued: false, ...r })
+    } catch (e) { return res.status(409).json({ error: e.message }) }
+  }
+  const kiosks = await User.find({ tenantId: req.tenantId, role: 'KIOSK' }).select('_id').lean()
+  if (kiosks.length === 0) return res.status(409).json({ error: 'Nenhum quiosque registado para esta loja' })
+  const SyncCommandT = withTenant(SyncCommand, req)
+  const cmds = []
+  for (const k of kiosks) cmds.push(await SyncCommandT.create({ kioskId: k._id, type: 'reinit_hardware', payload: {} }))
+  logAction(req, 'hardware.reinit_requested', 'Peripheral', null, {})
+  res.json({ queued: true, commandIds: cmds.map((c) => c._id) })
+})
+
 // POST /admin/cards/blank-reader — wipe the card that is in the reader (name, tax id, balance) and forget it. On the shop PC it runs
 // here; on the central server it is queued for the shop, like Esvaziar hopper. EXPERIMENTAL: see Middleware.blankCardViaGateway.
 router.post('/cards/blank-reader', requireAdmin, async (req, res) => {

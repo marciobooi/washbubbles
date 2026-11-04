@@ -146,6 +146,39 @@ router.post('/cards/:code/topup', requireKiosk, async (req, res) => {
 })
 
 // POST /api/gateways/card/pay - charge card for items (machines + optional recharges in same batch)
+// Payments being processed right now, by tenant + batch. A second request for the same batch (the screen gave up waiting for a slow
+// hopper and sent it again) waits for the first and gets ITS result; it never pays again.
+const payingNow = new Map()
+
+const sumOf = (rows, k) => roundMoney(rows.reduce((t, x) => t + (Number(x[k]) || 0), 0))
+
+/**
+ * The same batch is paid ONCE. A screen that gave up waiting (a slow hopper) and sent the payment again used to be paid again in full:
+ * on 2026-10-31 one batch was charged three times, the machines were already running (4 sales owed a refund) and the change came out
+ * three times. A batch already paid is answered with what was recorded (returns those sales); one being paid right now is waited for.
+ * Returns null when the batch is new, and the caller carries on.
+ */
+async function batchGuard(req, res, SaleT, batchId) {
+  if (!batchId) return null
+  const k = `${req.tenantId}:${batchId}`
+  const running = payingNow.get(k)
+  if (running) {
+    await Promise.race([running, new Promise((r) => setTimeout(r, 90_000).unref?.())])
+  } else {
+    let done
+    const pr = new Promise((r) => { done = r })
+    payingNow.set(k, pr)
+    const release = () => { if (payingNow.get(k) === pr) payingNow.delete(k); done() }
+    res.once('finish', release)
+    res.once('close', () => setTimeout(release, 120_000).unref?.()) // a screen that hung up: the payment goes on, the batch stays guarded
+  }
+  const already = await SaleT.find({ batchId: String(batchId) })
+  if (!already.length) return null
+  console.warn(`[gateways] batch ${batchId} was already paid (${already.length} sale(s)); answering with the recorded payment, nothing repeated`)
+  return already
+}
+
+
 /**
  * A machine did not start although the customer paid. Nothing is paid back by the system: the customer is told to call the shop and the
  * staff decides (start the machine from the staff menu, or give the money back by hand). The operator is told at once.
@@ -171,6 +204,8 @@ router.post('/card/pay', requireKiosk, flowRoute('Pedido de pagamento com cartã
   const CardT = withTenant(Card, req)
   const SaleT = withTenant(Sale, req)
   const MachineT = withTenant(Machine, req)
+  const priorCard = await batchGuard(req, res, SaleT, batchId)
+  if (priorCard) return res.json({ success: true, replayed: true, sales: priorCard, card: await CardT.findOne({ code: cardCode }), failed: [], anomaly: false })
   const coupon = couponCode ? await findUsableCoupon(req.tenantId, couponCode) : null
 
   // Fetch card
@@ -281,17 +316,9 @@ router.post('/cash/pay', requireKiosk, flowRoute('Pedido de pagamento em dinheir
   const SaleT = withTenant(Sale, req)
   const MachineT = withTenant(Machine, req)
 
-  // The same batch is paid ONCE. A screen that gave up waiting (a slow hopper) and sent the payment again used to be paid again in full:
-  // on 2026-10-31 one batch was charged three times, the machines were already running (4 sales owed a refund) and the change came out
-  // three times. A batch that already has sales is answered with what was recorded, and nothing else happens (no machine, no change).
-  if (batchId) {
-    const already = await SaleT.find({ batchId: String(batchId) })
-    if (already.length) {
-      console.warn(`[gateways] batch ${batchId} was already paid (${already.length} sale(s)); answering with the recorded payment, nothing repeated`)
-      const sum = (k) => roundMoney(already.reduce((s, x) => s + (Number(x[k]) || 0), 0))
-      return res.json({ success: true, replayed: true, sales: already, total: sum('amount'), inserted: roundMoney(Math.max(...already.map((x) => Number(x.inserted) || 0))), change: sum('change'), changeDispensed: true, changeError: null, failed: [] })
-    }
-  }
+  // The same batch is paid ONCE (see batchGuard).
+  const prior = await batchGuard(req, res, SaleT, batchId)
+  if (prior) return res.json({ success: true, replayed: true, sales: prior, total: sumOf(prior, 'amount'), inserted: roundMoney(Math.max(...prior.map((x) => Number(x.inserted) || 0))), change: sumOf(prior, 'change'), changeDispensed: true, changeError: null, failed: [] })
 
   // Validate the whole cart before recording anything.
   const rechargeLines = []

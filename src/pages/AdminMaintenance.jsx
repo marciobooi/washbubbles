@@ -10,6 +10,27 @@ export default function AdminMaintenance() {
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('open')
   const [resolvingId, setResolvingId] = useState(null)
+  const [reiniting, setReiniting] = useState(false)
+
+  async function reinitHardware() {
+    setReiniting(true)
+    try {
+      let r = await api.reinitHardware()
+      if (r.queued) {
+        const id = r.commandIds?.[0]
+        r = { success: false, error: 'A loja não respondeu a tempo. Veja se o PC está ligado.' }
+        for (let i = 0; i < 20; i++) {
+          await new Promise((ok) => setTimeout(ok, 3000))
+          const c = await api.adminCommand(id).catch(() => null)
+          if (c?.status === 'done') { r = c.result || { success: true }; break }
+          if (c?.status === 'failed') { r = { success: false, error: c.error }; break }
+        }
+      }
+      toast({ title: r.success ? 'Leitores reiniciados' : 'Não foi possível reiniciar os leitores', description: r.success ? 'Notas, moedas, hopper e cartões voltam a ficar prontos dentro de alguns segundos.' : (r.error || r.reason), variant: r.success ? 'success' : 'destructive' })
+    } catch (err) {
+      toast({ title: err?.body?.error || 'Erro ao reiniciar os leitores', variant: 'destructive' })
+    } finally { setReiniting(false) }
+  }
 
   async function load() {
     setLoading(true)
@@ -43,6 +64,15 @@ export default function AdminMaintenance() {
   return (
     <div className="p-4 space-y-4">
       <h2 className="text-2xl font-bold">Manutenção</h2>
+      <Card>
+        <CardHeader>
+          <CardTitle>Leitores do quiosque</CardTitle>
+          <CardDescription>Se o leitor de cartões, de notas ou de moedas deixar de responder, use isto antes de reiniciar o PC. Só funciona com o quiosque livre (sem dinheiro nem cartão). Faz sozinho de 3 em 3 horas.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button disabled={reiniting} onClick={reinitHardware}>{reiniting ? 'A reiniciar…' : 'Reiniciar leitores'}</Button>
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle>Avarias reportadas</CardTitle>

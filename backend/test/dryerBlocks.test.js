@@ -147,6 +147,34 @@ describe('Dryer blocks: one impulse now, one more every block', function () {
     expect((await Machine.findById(m._id)).pendingImpulses).to.equal(0)
   })
 
+  it('readers: re-initialised on request only while the kiosk is idle; the automatic round skips a busy kiosk', async () => {
+    const calls = []
+    coinMachine.middleware.reinitPeripherals = async (types) => { calls.push(types); return { sent: true } }
+    coinMachine.lastCreditActivity = Date.now() - 300_000
+    coinMachine.client.client.balance = 0
+    const done = await coinMachine.reinitHardware('admin')
+    expect(done.success).to.equal(true)
+    expect(calls).to.deep.equal([['all']]) // the complete set, like at connect
+    coinMachine.client.client.balance = 5 // a customer's cash is in the session
+    expect(await coinMachine.reinitHardware('auto')).to.deep.equal({ skipped: 'busy' })
+    let err
+    try { await coinMachine.reinitHardware('admin') } catch (e) { err = e }
+    expect(err.message).to.match(/cliente/)
+    expect(calls).to.have.length(1)
+  })
+
+  it('two requests for the same batch at the SAME time: one payment, both answered', async () => {
+    const m = await dryer()
+    const pay = () => request(app).post('/api/gateways/cash/pay').set('Authorization', `Bearer ${kioskToken}`)
+      .send({ items: [{ _id: m._id, quantity: 1 }], inserted: 5, batchId: 'b-parallel' })
+    const [a, b] = await Promise.all([pay(), pay()])
+    expect([a.status, b.status]).to.deep.equal([200, 200])
+    expect(await Sale.countDocuments({ batchId: 'b-parallel' })).to.equal(1)
+    expect([a.body.replayed, b.body.replayed].filter(Boolean)).to.have.length(1)
+    await new Promise((r) => setTimeout(r, 100))
+    expect(impulses.length).to.equal(1)
+  })
+
   it('NORMAL flow is untouched: a normal payment has no anomaly, and a busy machine is refused before anything is charged', async () => {
     const m = await dryer()
     const ok = await request(app).post('/api/gateways/cash/pay').set('Authorization', `Bearer ${kioskToken}`)
