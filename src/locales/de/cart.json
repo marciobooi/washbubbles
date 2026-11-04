@@ -39,6 +39,7 @@
   "manual": "Manuelle Zahlung (Personal / Hilfe)",
   "empty": "Warenkorb ist leer",
   "closeBtn": "Schließen",
+  "insertCardToRecharge": "Karte zum Aufladen in das Lesegerät stecken",
   "cardDetected": "Karte erkannt",
   "paymentError": "Zahlungsfehler",
   "rejectedCoin": "Münze {{reason}}",

@@ -39,6 +39,7 @@
   "manual": "Manual payment (staff / help)",
   "empty": "Cart is empty",
   "closeBtn": "Close",
+  "insertCardToRecharge": "Insert the card in the reader to recharge it",
   "cardDetected": "Card detected",
   "paymentError": "Payment error",
   "rejectedCoin": "Coin {{reason}}",

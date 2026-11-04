@@ -39,6 +39,7 @@
   "manual": "Paiement manuel (personnel / aide)",
   "empty": "Panier vide",
   "closeBtn": "Fermer",
+  "insertCardToRecharge": "Insérez la carte dans le lecteur pour la recharger",
   "cardDetected": "Carte détectée",
   "paymentError": "Erreur de paiement",
   "rejectedCoin": "Pièce {{reason}}",

@@ -39,6 +39,7 @@
   "manual": "Pago manual (personal / ayuda)",
   "empty": "Carrito vacío",
   "closeBtn": "Cerrar",
+  "insertCardToRecharge": "Introduce la tarjeta en el lector para recargarla",
   "cardDetected": "Tarjeta detectada",
   "paymentError": "Error en el pago",
   "rejectedCoin": "Moneda {{reason}}",

@@ -247,11 +247,12 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
   React.useEffect(() => {
     if (!open || autoPaid.current) return
     if (!confirmed) return
+    if (hasRecharge && !detectedCardCode) return // a recharge needs the card in the reader (the shop refuses it otherwise)
     if (total > 0 && credit >= total) {
       autoPaid.current = true
       setTimeout(() => handleCashConfirm(credit), 500)
     }
-  }, [open, credit, total, confirmed])
+  }, [open, credit, total, confirmed, hasRecharge, detectedCardCode])
 
   // The customer confirmed: pay the card that was already presented, if any (cash is paid by the effect above).
   function confirmCart() {
@@ -717,11 +718,17 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
                     </div>
 
                     {/* Dryer: nothing is paid until the customer has chosen the cycles and confirms */}
+                    {hasRecharge && !detectedCardCode && (
+                      <div role="alert" className="w-full rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-base font-bold px-4 py-3 text-center">
+                        {t('insertCardToRecharge')}
+                      </div>
+                    )}
                     {waitingConfirm && total > 0 && (
                       <button
                         type="button"
                         onClick={confirmCart}
-                        className="w-full min-h-[54px] rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-base font-bold shadow-md active:scale-[0.99] transition-all"
+                        disabled={hasRecharge && !detectedCardCode}
+                        className="w-full min-h-[54px] rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-base font-bold shadow-md active:scale-[0.99] transition-all disabled:opacity-40 disabled:pointer-events-none"
                       >
                         {t('confirm')} · {eur(total)}
                       </button>
