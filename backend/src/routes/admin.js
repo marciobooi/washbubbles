@@ -526,6 +526,8 @@ router.post('/transactions/:id/refund', requireAdmin, async (req, res) => {
     const CardT = withTenant(Card, req)
     // No status guard on creditCard — this must succeed even onto a blocked card.
     await creditCard(CardT, { _id: sale.cardId }, sale.amount)
+    // on the central server the shop's own card must follow (the shop PC has no SYNC_SERVER_URL set to itself)
+    if (!process.env.SYNC_SERVER_URL) await CardT.findByIdAndUpdate(sale.cardId, { $push: { shopAdjustments: { $each: [{ opId: `refund-${sale._id}`, delta: sale.amount, reason: 'refund', at: new Date() }], $slice: -50 } } })
   }
 
   const refund = await SaleT.create({
@@ -587,7 +589,15 @@ router.put('/cards/:id', requireAdmin, async (req, res) => {
     if (req.body[field] !== undefined) update[field] = cut(req.body[field], max)
   }
   if (update.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(update.email)) return res.status(400).json({ error: 'Email inválido' })
-  const c = await CardT.findByIdAndUpdate(req.params.id, update, { new: true })
+  const set = Object.fromEntries(Object.entries(update).filter(([, v]) => v !== undefined))
+  if (['name', 'email', 'phone', 'contribuinte'].some((f) => set[f] !== undefined && set[f] !== (before[f] || ''))) set.profileEditedAt = new Date()
+  const upd = { $set: set }
+  if (set.balance !== undefined && !process.env.SYNC_SERVER_URL) {
+    // central server: the shop applies the DIFFERENCE (see Card.shopAdjustments)
+    const d = Math.round((set.balance - (before.balance || 0)) * 100) / 100
+    if (Math.abs(d) >= 0.005) upd.$push = { shopAdjustments: { $each: [{ opId: String(new mongoose.Types.ObjectId()), delta: d, reason: 'admin', at: new Date() }], $slice: -50 } }
+  }
+  const c = await CardT.findByIdAndUpdate(req.params.id, upd, { new: true })
   if (!c) return res.status(404).json({ error: 'Card not found' })
   // This path bypasses cardBalance.js's atomic $inc entirely — a direct
   // overwrite, not a delta — so it's the one most worth flagging clearly.

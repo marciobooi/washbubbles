@@ -7,6 +7,8 @@ import Coupon from '../src/models/coupon.js'
 import Card from '../src/models/card.js'
 import { redeemCoupon } from '../src/services/coupons.js'
 import modelEvents from '../src/services/modelEvents.js'
+import AuditLog from '../src/models/auditLog.js'
+import { signToken } from './setup.test-helper.js'
 import { Downlink } from '../src/services/downlink.js'
 import { salePayload } from '../src/services/uplink.js'
 
@@ -124,12 +126,108 @@ describe('Coupons and blocked cards stay in step between the shop and the centra
   it('central -> shop: a card blocked on the server is blocked at the shop; nothing else of the card is touched', async () => {
     await Card.create({ tenantId: tenant._id, code: 'C1', balance: 12, status: 'active' })
     await Card.create({ tenantId: tenant._id, code: 'C2', balance: 5, status: 'active' })
-    const n = await fakeDownlink([{ code: 'C1', status: 'blocked', balance: 0 }, { code: 'C2', status: 'active', balance: 99 }]).pullCardBlocks()
+    const n = await fakeDownlink([{ code: 'C1', status: 'blocked', balance: 0 }, { code: 'C2', status: 'active', balance: 99 }]).pullCards()
     expect(n).to.equal(1)
     const c1 = await Card.findOne({ code: 'C1' })
     expect(c1.status).to.equal('blocked')
     expect(c1.balance).to.equal(12) // the balance is the shop's
     expect((await Card.findOne({ code: 'C2' })).balance).to.equal(5)
-    expect(await fakeDownlink([{ code: 'C1', status: 'blocked' }]).pullCardBlocks()).to.equal(0) // once
+    expect(await fakeDownlink([{ code: 'C1', status: 'blocked' }]).pullCards()).to.equal(0) // once
+  })
+})
+
+describe('Cards (details, balance changes) and the shop audit trail stay in step', function () {
+  this.timeout(30000)
+  let app, tenant, admin, savedSync
+  const kioskKey = 'test-kiosk-api-key'
+  // the CENTRAL server has no SYNC_SERVER_URL (a shop PC has): the adjustments are only recorded there
+  before(async () => { savedSync = process.env.SYNC_SERVER_URL; delete process.env.SYNC_SERVER_URL; await startTestDb(); app = await buildTestApp() })
+  after(async () => { if (savedSync !== undefined) process.env.SYNC_SERVER_URL = savedSync; await stopTestDb() })
+  beforeEach(async () => { await clearTestDb(); const s = await seedTenantAndUsers(); tenant = s.tenant; admin = s.admin })
+  const fakeDownlink = (body, opts = {}) => {
+    const sent = []
+    const dl = new Downlink({ tenantId: tenant._id, url: 'http://central.test/api', apiKey: 'k', resources: [], ...opts, fetchImpl: async (url, init) => { if (init?.method === 'POST') sent.push({ url, body: JSON.parse(init.body) }); return { ok: true, json: async () => body } } })
+    dl.sent = sent
+    return dl
+  }
+  const kiosk = (m, path, b) => request(app)[m]('/api/sync' + path).set('Authorization', `ApiKey ${kioskKey}`).send(b)
+
+  it('the NEWER edit of the holder\'s details wins, in both directions', async () => {
+    await Card.create({ tenantId: tenant._id, code: 'P1', name: 'Local', status: 'active', profileEditedAt: new Date('2026-11-01T10:00:00Z') })
+    // central edited later: the shop copies it
+    await fakeDownlink([{ code: 'P1', status: 'active', name: 'Central', email: 'c@x.pt', profileEditedAt: '2026-11-02T10:00:00Z' }]).pullCards()
+    let c = await Card.findOne({ code: 'P1' })
+    expect(c.name).to.equal('Central')
+    expect(c.email).to.equal('c@x.pt')
+    // central's copy is OLDER than the shop's: the shop keeps its own
+    await fakeDownlink([{ code: 'P1', status: 'active', name: 'Old', profileEditedAt: '2026-10-01T10:00:00Z' }]).pullCards()
+    expect((await Card.findOne({ code: 'P1' })).name).to.equal('Central')
+    // shop -> central: a later edit at the shop reaches the server; an older one does not
+    await Card.create({ tenantId: tenant._id, code: 'P2', name: 'Server', status: 'active', profileEditedAt: new Date('2026-11-02T10:00:00Z') })
+    await kiosk('post', '/push/card', { create: true, code: 'P2', status: 'active', name: 'Shop OLD', profileEditedAt: '2026-11-01T10:00:00Z' })
+    expect((await Card.findOne({ code: 'P2' })).name).to.equal('Server')
+    await kiosk('post', '/push/card', { create: true, code: 'P2', status: 'active', name: 'Shop NEW', email: 'n@x.pt', profileEditedAt: '2026-11-03T10:00:00Z' })
+    const p2 = await Card.findOne({ code: 'P2' })
+    expect(p2.name).to.equal('Shop NEW')
+    expect(p2.email).to.equal('n@x.pt')
+  })
+
+  it('a balance change made on the server reaches the shop as a DELTA, applied once and acknowledged', async () => {
+    // the admin edits the card on the server: balance 10 -> 25
+    const card = await Card.create({ tenantId: tenant._id, code: 'B1', balance: 10, status: 'active' })
+    const r = await request(app).put(`/api/admin/cards/${card._id}`).set('Authorization', `Bearer ${signToken(admin)}`).send({ balance: 25 })
+    expect(r.status).to.equal(200)
+    const central = await Card.findOne({ code: 'B1' }).lean()
+    expect(central.balance).to.equal(25)
+    expect(central.shopAdjustments).to.have.length(1)
+    expect(central.shopAdjustments[0].delta).to.equal(15)
+    // the shop: its own copy says 10; central offers the adjustment
+    await Card.deleteMany({})
+    await Card.create({ tenantId: tenant._id, code: 'B1', balance: 10, status: 'active' })
+    const adjusted = []
+    const dl = fakeDownlink([{ code: 'B1', status: 'active', shopAdjustments: central.shopAdjustments }], { onCardAdjusted: (c) => adjusted.push(c) })
+    await dl.pullCards()
+    expect((await Card.findOne({ code: 'B1' })).balance).to.equal(25)
+    expect(adjusted).to.deep.equal(['B1'])
+    expect(dl.sent).to.have.length(1)
+    expect(dl.sent[0].url).to.match(/push\/card-ack/)
+    expect(dl.sent[0].body.opIds).to.deep.equal([central.shopAdjustments[0].opId])
+    // offered AGAIN (the acknowledgement never arrived): not applied twice, only acknowledged
+    await dl.pullCards()
+    expect((await Card.findOne({ code: 'B1' })).balance).to.equal(25)
+    // a card in the reader is left for later
+    await Card.updateOne({ code: 'B1' }, { $set: { balance: 10, appliedDeltas: [] } })
+    const busy = fakeDownlink([{ code: 'B1', status: 'active', shopAdjustments: central.shopAdjustments }], { cardBusy: () => true })
+    await busy.pullCards()
+    expect((await Card.findOne({ code: 'B1' })).balance).to.equal(10)
+    // the server removes what the shop acknowledged
+    await kiosk('post', '/push/card-ack', { code: 'B1', opIds: [central.shopAdjustments[0].opId] })
+    // (the central row was deleted above; this only proves the route answers)
+  })
+
+  it('the acknowledgement removes the adjustment on the server', async () => {
+    await Card.create({ tenantId: tenant._id, code: 'B2', balance: 5, status: 'active', shopAdjustments: [{ opId: 'x1', delta: 2, reason: 'admin', at: new Date() }, { opId: 'x2', delta: 3, reason: 'admin', at: new Date() }] })
+    expect((await kiosk('post', '/push/card-ack', { code: 'B2', opIds: ['x1'] })).status).to.equal(200)
+    const c = await Card.findOne({ code: 'B2' }).lean()
+    expect(c.shopAdjustments.map((a) => a.opId)).to.deep.equal(['x2'])
+    expect((await kiosk('post', '/push/card-ack', { code: 'B2', opIds: [] })).status).to.equal(400)
+  })
+
+  it('the shop\'s audit entries reach the server once; an entry that came from a shop is not sent back', async () => {
+    const seen = []
+    const on = (a) => seen.push(a.action)
+    modelEvents.on('audit:created', on)
+    await AuditLog.create({ tenantId: tenant._id, action: 'hardware.reinit', details: { reason: 'auto' } }) // written at the shop
+    await AuditLog.create({ tenantId: tenant._id, action: 'came.from.shop', shopLocalId: 'abc' }) // arrived from a shop
+    modelEvents.off('audit:created', on)
+    expect(seen).to.deep.equal(['hardware.reinit'])
+    const body = { local_id: 'S1', action: 'cash.refund', target_type: 'Sale', target_id: 'z', actor: 'sistema', details: { amount: 4 }, created_at: '2026-11-04T10:00:00Z' }
+    expect((await kiosk('post', '/push/audit', body)).status).to.equal(200)
+    expect((await kiosk('post', '/push/audit', body)).status).to.equal(200) // a retry
+    const rows = await AuditLog.find({ shopLocalId: 'S1' }).lean()
+    expect(rows).to.have.length(1)
+    expect(rows[0].details.source).to.equal('loja')
+    expect(rows[0].details.amount).to.equal(4)
+    expect((await kiosk('post', '/push/audit', { action: 'x' })).status).to.equal(400)
   })
 })

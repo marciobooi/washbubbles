@@ -56,6 +56,15 @@ const cardSchema = new Schema({
   cardSyncedBalance: { type: Number, default: null },
   cardSyncedAt: { type: Date, default: null },
 
+  /** When the holder's details (name, e-mail, phone, tax id) were last edited, by the customer at the shop or by the admin. The newer edit wins on both sides. */
+  profileEditedAt: { type: Date, default: null },
+  /**
+   * CENTRAL SERVER ONLY. Balance changes the admin made on the server (a manual edit, a refund onto the card): the shop applies each
+   * one ONCE (by opId, like every delta) and acknowledges it, then it is removed. The shop's card carries the balance, so a bare
+   * number written on the server would be overwritten by the shop's next push; a delta cannot be lost that way.
+   */
+  shopAdjustments: { type: [{ opId: String, delta: Number, reason: String, at: Date, _id: false }], default: undefined },
+
   metadata: { type: Schema.Types.Mixed },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }

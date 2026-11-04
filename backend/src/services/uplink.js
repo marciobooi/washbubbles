@@ -23,6 +23,8 @@ import Card, { onCardChanged } from '../models/card.js'
 import Peripheral from '../models/peripheral.js'
 import Flow from '../models/flow.js'
 import Machine from '../models/machine.js'
+import AuditLog from '../models/auditLog.js'
+import Setting from '../models/setting.js'
 import modelEvents from './modelEvents.js'
 
 const MAX_ATTEMPTS = 10
@@ -151,6 +153,11 @@ export class Uplink extends EventEmitter {
       if (sameTenant(tenantId)) this.enqueue('coupon', String(code), { code, redemption_count: redemptionCount }).catch(this.logQueueError)
     }
     modelEvents.on('coupon:redeemed', onCoupon)
+    const onAudit = (a) => {
+      if (!sameTenant(a.tenantId)) return
+      this.enqueue('audit', String(a._id), { local_id: String(a._id), action: a.action, target_type: a.targetType, target_id: a.targetId, actor: a.actorUsername, details: a.details, created_at: a.createdAt }).catch(this.logQueueError)
+    }
+    modelEvents.on('audit:created', onAudit)
     modelEvents.on('sale:created', onSale)
     modelEvents.on('sale:refunded', onSale)
     modelEvents.on('dayclose:created', onDayClose)
@@ -158,6 +165,7 @@ export class Uplink extends EventEmitter {
     this.unsubscribers.push(
       () => modelEvents.off('sale:created', onSale),
       () => modelEvents.off('coupon:redeemed', onCoupon),
+      () => modelEvents.off('audit:created', onAudit),
       () => modelEvents.off('sale:refunded', onSale),
       () => modelEvents.off('dayclose:created', onDayClose),
       () => modelEvents.off('flow:closed', onFlowSafe),
@@ -169,6 +177,7 @@ export class Uplink extends EventEmitter {
     this.timer = setInterval(() => this.flush().catch(() => {}), this.intervalMs)
     this.timer.unref?.()
     this.flush().catch(() => {}) // drain anything left from before a restart
+    this.backfillAudit().catch((e) => console.warn('[Uplink] audit backfill skipped:', e.message))
     // Live peripheral health is a state, not an event: it is sent as-is, never queued.
     this.statusTimer = setInterval(() => this.pushPeripheralStatus().catch(() => {}), this.statusIntervalMs)
     this.statusTimer.unref?.()
@@ -195,6 +204,26 @@ export class Uplink extends EventEmitter {
   logQueueError = (err) => console.error('[Uplink] could not queue record:', err.message)
 
   // -------------------------------------------------------------- queueing
+
+  /**
+   * ONCE: the shop's audit trail from before it was sent to the central server goes up too (the newest 5000 entries; the server
+   * ignores any it already has). The flag is a setting, so a restart never repeats it.
+   */
+  async backfillAudit() {
+    const key = 'sync.auditBackfilled'
+    if (await Setting.findOne({ tenantId: this.tenantId, key }).lean()) return 0
+    const rows = await AuditLog.find({ tenantId: this.tenantId, shopLocalId: { $exists: false } }).sort({ createdAt: -1 }).limit(5000).lean()
+    for (const a of rows) {
+      await this.Outbox.updateOne(
+        { tenantId: this.tenantId, entityType: 'audit', entityId: String(a._id), status: 'pending' },
+        { $setOnInsert: { payload: { local_id: String(a._id), action: a.action, target_type: a.targetType, target_id: a.targetId, actor: a.actorUsername, details: a.details, created_at: a.createdAt }, attempts: 0, createdAt: new Date(), nextAttemptAt: new Date() } },
+        { upsert: true },
+      ).catch((e) => { if (e?.code !== 11000) throw e })
+    }
+    await Setting.updateOne({ tenantId: this.tenantId, key }, { $set: { value: new Date().toISOString() } }, { upsert: true })
+    if (rows.length) console.log(`[Uplink] ${rows.length} earlier audit entries queued for the central server`)
+    return rows.length
+  }
 
   /** Queue one record. Idempotent: an already-pending record is refreshed, not duplicated. */
   async enqueue(entityType, entityId, payload) {
@@ -230,6 +259,7 @@ export class Uplink extends EventEmitter {
       contribuinte: card.contribuinte || '',
       marketingOptIn: Boolean(card.marketingOptIn),
       privacyConsentAt: card.privacyConsentAt || null,
+      profileEditedAt: card.profileEditedAt || undefined,
       // The purchase was re-keyed to the chip's own id: the central must RENAME its row, not add a second card.
       previousCode: card.metadata?.previousCode || undefined,
     })
@@ -374,6 +404,9 @@ export class Uplink extends EventEmitter {
         return
       case 'coupon':
         await this.post('/sync/push/coupon', p)
+        return
+      case 'audit':
+        await this.post('/sync/push/audit', p)
         return
       case 'card': {
         // 1) make sure the card exists there (no-op if it does)

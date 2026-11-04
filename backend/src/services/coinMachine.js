@@ -122,7 +122,11 @@ class CoinMachine extends EventEmitter {
       // hardware config. Pull once BEFORE loading them so a new/empty site comes up
       // already configured; offline just keeps what is stored locally (no-op unless
       // SYNC_SERVER_URL / SYNC_API_KEY are set).
-      this.downlink = new Downlink({ tenantId: this.tenantId })
+      this.downlink = new Downlink({
+        tenantId: this.tenantId,
+        cardBusy: (code) => String(this.client?.getState?.().cardNumber || '') === String(code),
+        onCardAdjusted: (code) => { this.cardSync?.push?.(String(code))?.catch?.((e) => console.error('[Downlink] could not write the adjusted card:', e.message)) },
+      })
       // Whatever the central server changed (refund time, coin/bill codes, bonuses) takes effect
       // on the next pull, not only after a restart.
       this.downlink.on('synced', () => {

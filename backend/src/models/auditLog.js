@@ -1,4 +1,5 @@
 import mongoose from 'mongoose'
+import modelEvents from '../services/modelEvents.js'
 
 const { Schema } = mongoose
 
@@ -14,9 +15,14 @@ const auditLogSchema = new Schema({
   targetType: { type: String, default: '' }, // e.g. 'Price', 'Sale', 'User'
   targetId: { type: String, default: '' },
   details: { type: Schema.Types.Mixed, default: null },
+  // CENTRAL: the id this entry has on the shop PC it came from (makes the shop's pushes idempotent)
+  shopLocalId: { type: String, default: undefined },
   createdAt: { type: Date, default: Date.now }
 })
 
 auditLogSchema.index({ tenantId: 1, createdAt: -1 })
+auditLogSchema.index({ tenantId: 1, shopLocalId: 1 }, { unique: true, partialFilterExpression: { shopLocalId: { $type: 'string' } } })
+// what the shop writes is sent to the central server too (an entry that CAME from a shop is not sent back)
+auditLogSchema.post('save', function (doc) { if (!doc.shopLocalId) modelEvents.emit('audit:created', doc) })
 
 export default mongoose.model('AuditLog', auditLogSchema)

@@ -82,8 +82,13 @@ export class Downlink extends EventEmitter {
     timeoutMs = 15_000,
     fetchImpl = globalThis.fetch,
     resources = RESOURCES,
+    // the shop PC tells us whether a card is in the reader (its balance is then in the session: leave it alone) and writes the chip
+    cardBusy = () => false,
+    onCardAdjusted = () => {},
   }) {
     super()
+    this.cardBusy = cardBusy
+    this.onCardAdjusted = onCardAdjusted
     this.tenantId = tenantId
     this.url = url ? String(url).replace(/\/+$/, '') : ''
     this.apiKey = apiKey
@@ -122,7 +127,7 @@ export class Downlink extends EventEmitter {
         for (const r of this.resources) await this.pullResource(r)
         await this.pullSaleCorrections().catch((e) => console.warn('[Downlink] sale corrections skipped:', e.message))
         await this.pullCoupons().catch((e) => console.warn('[Downlink] coupons skipped:', e.message))
-        await this.pullCardBlocks().catch((e) => console.warn('[Downlink] card blocks skipped:', e.message))
+        await this.pullCards().catch((e) => console.warn('[Downlink] cards skipped:', e.message))
         this.lastPullAt = new Date()
         this.lastError = ''
         this.emit('synced', { ...this.counts })
@@ -251,16 +256,65 @@ export class Downlink extends EventEmitter {
   }
 
   /**
-   * A card blocked on the central server (lost, stolen) must stop working at the shop too. Only ever BLOCKS: a card the shop has
-   * not heard of, the balance and the other states are left alone (the balance is the shop's, see the card wallet rules).
+   * What the central admin did to CARDS, copied here:
+   *  - blocked (lost, stolen): blocked here too. Only ever blocks on its own.
+   *  - the holder's details: the NEWER edit wins (profileEditedAt), so the shop's own newer edit is not wound back.
+   *  - a balance change (a manual edit, a refund onto the card): applied here ONCE (by opId) and acknowledged, so central stops
+   *    offering it. The shop's balance is otherwise never overwritten (the card carries it). A card in the reader is left for the next round.
    */
-  async pullCardBlocks() {
+  async pullCards() {
     const items = await this.fetchSnapshot('cards')
-    const blocked = items.filter((c) => c.status === 'blocked' && c.code).map((c) => String(c.code))
-    if (!blocked.length) return 0
-    const u = await Card.updateMany({ tenantId: toOid(this.tenantId), code: { $in: blocked }, status: { $ne: 'blocked' } }, { $set: { status: 'blocked' } })
-    if (u.modifiedCount) console.log(`[Downlink] ${u.modifiedCount} card(s) blocked by central`)
-    return u.modifiedCount || 0
+    const tenant = toOid(this.tenantId)
+    let changed = 0
+    for (const c of items) {
+      if (!c.code) continue
+      const local = await Card.findOne({ tenantId: tenant, code: String(c.code) }).lean()
+      if (!local) continue
+      if (c.status === 'blocked' && local.status !== 'blocked') {
+        await Card.updateOne({ _id: local._id }, { $set: { status: 'blocked' } })
+        changed++
+      }
+      const cAt = c.profileEditedAt ? new Date(c.profileEditedAt) : null
+      if (cAt && !Number.isNaN(cAt.getTime()) && (!local.profileEditedAt || cAt > new Date(local.profileEditedAt))) {
+        await Card.updateOne({ _id: local._id }, { $set: { name: c.name || '', email: c.email || '', phone: c.phone || '', contribuinte: c.contribuinte || '', profileEditedAt: cAt } })
+        changed++
+      }
+      const adj = Array.isArray(c.shopAdjustments) ? c.shopAdjustments : []
+      if (adj.length && !this.cardBusy(String(c.code))) {
+        const done = []
+        let fresh = local
+        for (const a of adj) {
+          if (!a?.opId || !Number.isFinite(Number(a.delta))) continue
+          if ((fresh.appliedDeltas || []).includes(a.opId)) { done.push(a.opId); continue } // applied before, only the acknowledgement was lost
+          const next = Math.max(0, Math.round((Number(fresh.balance || 0) + Number(a.delta)) * 100) / 100)
+          const u = await Card.findOneAndUpdate(
+            { _id: local._id, balance: fresh.balance, appliedDeltas: { $ne: a.opId } },
+            { $set: { balance: next }, $push: { appliedDeltas: { $each: [a.opId], $slice: -200 } } },
+            { new: true },
+          ).lean()
+          if (!u) break // the balance moved under us: try again next round
+          fresh = u
+          done.push(a.opId)
+          changed++
+        }
+        if (done.length) {
+          this.onCardAdjusted(String(c.code))
+          await this.postJson('/sync/push/card-ack', { code: String(c.code), opIds: done }).catch(() => {})
+        }
+      }
+    }
+    if (changed) console.log(`[Downlink] ${changed} card change(s) from central applied`)
+    return changed
+  }
+
+  async postJson(path, body) {
+    const ctrl = new AbortController()
+    const t = setTimeout(() => ctrl.abort(), this.timeoutMs)
+    try {
+      const res = await this.fetch(`${this.url}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `ApiKey ${this.apiKey}` }, body: JSON.stringify(body), signal: ctrl.signal })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return res
+    } finally { clearTimeout(t) }
   }
 
   status() {

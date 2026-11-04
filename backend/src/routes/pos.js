@@ -728,7 +728,7 @@ router.post('/cards/:code/profile', cardLookupLimiter, requireKiosk, async (req,
   if (!card) return res.status(404).json({ error: 'Card not found' })
   // Personal data needs the holder's authorisation (GDPR): ticked now, or given before.
   if (hasData && !req.body?.privacyConsent && !card.privacyConsentAt) return res.status(400).json({ error: 'Consentimento em falta', code: 'consent-required' })
-  const set = { name, email, phone, contribuinte, marketingOptIn: hasData && Boolean(req.body?.marketingOptIn) }
+  const set = { name, email, phone, contribuinte, marketingOptIn: hasData && Boolean(req.body?.marketingOptIn), profileEditedAt: new Date() }
   if (!hasData) set.privacyConsentAt = null
   else if (req.body?.privacyConsent && !card.privacyConsentAt) set.privacyConsentAt = new Date()
   const updated = await CardT.findOneAndUpdate({ code }, { $set: set }, { new: true }).lean()

@@ -189,6 +189,14 @@ router.post('/push/card', async (req, res) => {
         },
         { upsert: true, new: true, setDefaultsOnInsert: true }
       )
+      // The holder's details edited at the shop AFTER the row existed (a customer typed them at the kiosk): the newer edit wins.
+      const at = data.profileEditedAt ? new Date(data.profileEditedAt) : null
+      if (at && !Number.isNaN(at.getTime())) {
+        await CardT.findOneAndUpdate(
+          { code: data.code, $or: [{ profileEditedAt: null }, { profileEditedAt: { $lt: at } }] },
+          { $set: { name: data.name || '', email: data.email || '', phone: data.phone || '', contribuinte: data.contribuinte || '', marketingOptIn: Boolean(data.marketingOptIn), privacyConsentAt: data.privacyConsentAt ? new Date(data.privacyConsentAt) : null, profileEditedAt: at } },
+        )
+      }
       return res.json({ success: true, id: created._id, status: 'created', balance: created.balance })
     }
 
@@ -596,6 +604,46 @@ router.post('/push/coupon', async (req, res) => {
     res.json({ success: true })
   } catch (err) {
     console.error('[Sync] Push coupon error:', err)
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+/**
+ * POST /api/sync/push/card-ack  { code, opIds }
+ * The shop has applied these balance adjustments (see Card.shopAdjustments): they are removed here.
+ */
+router.post('/push/card-ack', async (req, res) => {
+  try {
+    const code = String(req.body?.code || '')
+    const opIds = (Array.isArray(req.body?.opIds) ? req.body.opIds : []).map(String).slice(0, 100)
+    if (!code || !opIds.length) return res.status(400).json({ success: false, error: 'code and opIds are required' })
+    await Card.updateOne({ tenantId: req.tenantId, code }, { $pull: { shopAdjustments: { opId: { $in: opIds } } } })
+    res.json({ success: true })
+  } catch (err) {
+    console.error('[Sync] Card ack error:', err)
+    res.status(500).json({ success: false, error: err.message })
+  }
+})
+
+/**
+ * POST /api/sync/push/audit
+ * An entry of the shop PC's own audit trail (system events, staff actions at the shop). Idempotent by the shop's id.
+ */
+router.post('/push/audit', async (req, res) => {
+  try {
+    const b = req.body || {}
+    const localId = String(b.local_id || '')
+    if (!localId || !b.action) return res.status(400).json({ success: false, error: 'local_id and action are required' })
+    const at = b.created_at ? new Date(b.created_at) : new Date()
+    const AuditLog = (await import('../models/auditLog.js')).default
+    await AuditLog.updateOne(
+      { tenantId: req.tenantId, shopLocalId: localId },
+      { $setOnInsert: { action: String(b.action).slice(0, 80), targetType: String(b.target_type || '').slice(0, 40), targetId: String(b.target_id || '').slice(0, 80), actorUsername: String(b.actor || '').slice(0, 80) || 'loja', details: { ...(b.details && typeof b.details === 'object' ? b.details : {}), source: 'loja' }, createdAt: Number.isNaN(at.getTime()) ? new Date() : at } },
+      { upsert: true },
+    )
+    res.json({ success: true })
+  } catch (err) {
+    console.error('[Sync] Push audit error:', err)
     res.status(500).json({ success: false, error: err.message })
   }
 })
