@@ -1403,9 +1403,10 @@ export default function AdminSettings(){
             <div>
               <div className="font-medium text-sm">Aceitar MB WAY no quiosque</div>
               <p className="text-xs text-muted-foreground mt-1">
-                Desligado por omissão. Quando ligado, a janela de pagamento oferece MB WAY: o cliente escreve o número, aprova no telemóvel
-                (tem 5 minutos) e a máquina arranca sozinha quando o Eupago confirma. Só paga máquinas: as recargas são sempre em dinheiro.
-                Mínimo 1,00€. O quiosque confirma o pagamento diretamente no Eupago, sem precisar de webhook.
+                Desligado por omissão. Quando ligado, a janela de pagamento oferece MB WAY: o quiosque mostra um código QR, o cliente lê-o com o
+                telemóvel, escreve o número no próprio telemóvel e aprova (tem 5 minutos); depois a máquina arranca, ou o cartão é entregue ou
+                carregado. Serve para pagar máquinas, comprar um cartão e carregar um cartão. Mínimo 1,00€. O quiosque confirma o pagamento
+                diretamente no Eupago, sem precisar de webhook.
               </p>
             </div>
             <button type="button" role="switch" aria-checked={mbwayEnabled} onClick={() => toggleMbway(!mbwayEnabled)} disabled={savingMbway}
