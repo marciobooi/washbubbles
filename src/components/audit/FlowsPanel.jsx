@@ -155,7 +155,7 @@ export default function FlowsPanel() {
                               <span className={`text-sm ${s.ok === false ? 'text-rose-700 font-medium' : 'text-neutral-800'}`}>{s.text}</span>
                               <span className="text-[11px] text-neutral-400 tabular-nums ml-auto shrink-0">{shopTime(s.at)}</span>
                             </div>
-                            {s.data && Object.keys(s.data).length > 0 && (
+                            {s.data && Object.values(s.data).some((v) => v != null && v !== '' && !(Array.isArray(v) && !v.length)) && (
                               <details className="ml-[3.75rem]"><summary className="text-[11px] text-neutral-400 cursor-pointer">dados</summary><pre className="text-[11px] bg-white border rounded p-2 mt-1 overflow-x-auto">{JSON.stringify(s.data, null, 2)}</pre></details>
                             )}
                           </li>

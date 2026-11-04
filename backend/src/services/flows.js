@@ -24,10 +24,11 @@ const PAID_TYPES = new Set(['sale_recorded', 'recharge_done', 'card_sold', 'mbwa
 /** Steps that start something (a new customer). */
 const STARTERS = new Set(['cash_in', 'card_in', 'cart_selected', 'pay_requested'])
 
-function kindOf(type, current) {
+function kindOf(type, current, recharge) {
   if (type === 'card_sold' || type === 'card_purchase_requested') return 'card_purchase'
   if (type === 'recharge_done' || type === 'recharge_requested') return 'recharge'
   if (type.startsWith('mbway')) return current === 'other' || current === 'machine_payment' ? 'mbway' : current
+  if (type === 'sale_recorded' && recharge && (current === 'other' || current === 'card' || current === 'machine_payment')) return 'recharge'
   if (type === 'impulse_sent' || type === 'sale_recorded') return current === 'other' || current === 'card' ? 'machine_payment' : current
   if (type === 'credit_refunded' || type === 'credit_refund_short') return current === 'other' ? 'refund' : current
   if (type === 'admin_start' || type === 'admin_release') return 'admin'
@@ -73,6 +74,8 @@ function persistNow(f) {
 }
 
 function close(f, status) {
+  // a refusal the customer then corrected (paid afterwards) is not a problem
+  if (f.paid) f.problems = f.steps.filter((s) => s.ok === false && s.type !== 'pay_refused').length
   f.status = status || (f.problems ? 'problem' : 'done')
   f.endedAt = new Date()
   f.title = titleOf(f)
@@ -96,7 +99,8 @@ export function step(tenantId, type, text, data = null, opts = {}) {
     const ok = opts.ok !== false
     if (!ok) f.problems += 1
     f.steps.push({ at, type, text, ok, data })
-    f.kind = kindOf(type, f.kind)
+    if (Array.isArray(data?.items) && data.items.some((i) => /recarga/i.test(String(i)))) f.recharge = true
+    f.kind = kindOf(type, f.kind, f.recharge)
     if (opts.machine && !f.machines.includes(opts.machine)) f.machines.push(opts.machine)
     if (opts.cardCode) f.cardCode = String(opts.cardCode).slice(-4)
     if (opts.method) f.method = opts.method

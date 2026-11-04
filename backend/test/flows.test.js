@@ -53,6 +53,20 @@ describe('Flows: every customer action as one log with its steps', function () {
     expect(done[0].endedAt).to.be.instanceOf(Date)
   })
 
+  it('a cash card recharge is a recharge (not a machine), and a refusal the customer corrected is not a problem', async () => {
+    flows.step(t(), 'cash_in', 'Nota de 10,00 € inserida', null, { inserted: 10 })
+    flows.step(t(), 'pay_requested', 'Pedido de pagamento em dinheiro: Recarga de Cartão - 12€', { items: ['Recarga de Cartão - 12€'] }, { method: 'cash' })
+    flows.step(t(), 'pay_refused', 'Recusado: Insert the card in the reader to recharge it', null, { ok: false })
+    flows.step(t(), 'card_in', 'Cartão •••5456 no leitor', null, { cardCode: '5456' })
+    flows.step(t(), 'pay_requested', 'Pedido de pagamento em dinheiro: Recarga de Cartão - 12€', { items: ['Recarga de Cartão - 12€'] }, { method: 'cash' })
+    flows.step(t(), 'sale_recorded', 'Venda registada · 12,00 € · dinheiro', null, { amount: 12, method: 'cash' })
+    await flows.closeIdle({ all: true }); await wait()
+    const [row] = await Flow.find({ tenantId: t() }).lean()
+    expect(row.kind).to.equal('recharge')
+    expect(row.title).to.match(/^Carregamento de cartão •••5456/)
+    expect(row.status).to.equal('done')
+  })
+
   it('a failed step marks the flow as having a problem (status "problem" when it closes)', async () => {
     flows.step(t(), 'cash_in', 'Nota', null, { inserted: 5 })
     flows.step(t(), 'change_short', 'Troco incompleto: pago 0 €, faltam 3 €', null, { ok: false })
