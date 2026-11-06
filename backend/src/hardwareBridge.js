@@ -106,7 +106,16 @@ export function startBridge({
       log(`handing over ${fresh.length} held money event(s)`)
       setTimeout(() => { for (const m of fresh) { try { client.write(m.raw) } catch { /* gone */ } } }, 500)
     }
+    // The backend can ask for a fresh controller session ({"op":"bridge-reset"}): the controller was found answering nothing at all
+    // while the TCP connection still looked fine (2026-11-06), which only a new connection (or a power cycle) cures.
+    const fromBackend = new LowLevelStreamParser()
     client.on('data', (chunk) => {
+      const msgs = fromBackend.push(chunk)
+      if (msgs.some((m) => m?.c?.op === 'bridge-reset' || m?.op === 'bridge-reset')) {
+        log('backend asked for a new controller session')
+        controller?.destroy() // 'close' reconnects by itself
+        return
+      }
       if (controllerUp && controller) controller.write(chunk)
     })
     const gone = () => { if (clients.delete(client)) log(`backend disconnected (${clients.size} left)`) }

@@ -448,6 +448,15 @@ async function requireStaffPin(req, res) {
   return true
 }
 
+// POST /pos/hardware/reset-link — staff PIN: a new session with the controller when the machines do not start (it only reconnects).
+router.post('/hardware/reset-link', requireKiosk, async (req, res) => {
+  if (!(await requireStaffPin(req, res))) return
+  try {
+    const r = await coinMachine.resetControllerLink('staff')
+    res.json(r)
+  } catch (e) { res.status(409).json({ error: e.message }) }
+})
+
 // GET /pos/central-key/status — is a key waiting for the connection? (no secret in the answer)
 router.get('/central-key/status', requireKiosk, async (req, res) => {
   if (!coinMachine.tenantId) return res.json({ pending: false, lastResult: null })

@@ -584,6 +584,7 @@ class Middleware extends EventEmitter {
 
   async onLowLevelConnected() {
     this.lastLinkError = null
+    this.linkUpAt = Date.now()
     console.log('[HW] Low-level controller connected')
     this.emit('low-level-connected')
     // Same opening questions the legacy kiosk asks (all read-only), but ONE AT A TIME after a quiet
@@ -716,6 +717,18 @@ class Middleware extends EventEmitter {
         await new Promise((r) => setTimeout(r, delay))
       }
     } catch (e) { console.error('[HW] send-once failed:', e.message) }
+  }
+
+  /** How long the controller has said nothing although the link is up (ms), or null when there is no link. */
+  controllerSilenceMs() {
+    if (!this.lowLevel?.isConnected) return null
+    return Date.now() - Math.max(this.lastReplyAt || 0, this.linkUpAt || 0)
+  }
+
+  /** Ask the bridge for a fresh session with the controller (see hardwareBridge.js). */
+  resetControllerLink() {
+    if (!this.lowLevel?.isConnected) return { sent: false, reason: 'not connected' }
+    return { sent: this.sendPackage({ op: 'bridge-reset' }) !== false }
   }
 
   async onLowLevelDisconnected() {
@@ -2456,6 +2469,7 @@ class Middleware extends EventEmitter {
    */
   handlePackage(pkg) {
     if (!pkg || !pkg.op) return
+    if (pkg.op !== 'bridge-status') this.lastReplyAt = Date.now() // the controller itself spoke (the bridge's own status does not count)
 
     this.emit('package', pkg)
 

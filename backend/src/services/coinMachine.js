@@ -172,6 +172,7 @@ class CoinMachine extends EventEmitter {
           gift_card: async (p) => { const { issueGiftCard } = await import('./giftCard.js'); return issueGiftCard({ tenantId: this.tenantId }, this, { ...p, by: p?.by || 'admin (central)' }) },
           sync_now: async () => { await this.downlink?.pullAll?.(); return { success: true } },
           reinit_hardware: async () => this.reinitHardware('remote'),
+          reset_link: async () => this.resetControllerLink('remote'),
         },
       })
       this.remoteCommands.start()
@@ -208,6 +209,7 @@ class CoinMachine extends EventEmitter {
       
       this.startCreditRefundWatch()
       this.startHardwareRefresh()
+      this.startControllerWatch()
       this.startImpulseScheduler()
       this.running = true
       this.emit('started')
@@ -273,6 +275,7 @@ class CoinMachine extends EventEmitter {
     this.remoteCommands?.stop()
     this.stopCreditRefundWatch()
     this.stopHardwareRefresh()
+    this.stopControllerWatch()
     this.stopImpulseScheduler?.()
     // (the cash-session file is deliberately kept: money still in the session is restored on the next start)
     this.cashSub?.unsubscribe()
@@ -1141,6 +1144,69 @@ class CoinMachine extends EventEmitter {
       this.reinitHardware('auto').catch((e) => console.warn('[HW] automatic re-initialisation failed:', e.message))
     }, 60_000)
     this.hardwareRefreshTimer.unref?.()
+  }
+
+  // ---------------------------------------------------------------- controller watchdog
+  // 2026-11-06: from 09:30 the controller answered nothing (no status, no version, no start of any machine) while the TCP link looked
+  // fine, and nobody noticed until customers could not start a machine. The app polls the controller every minute and it always answers,
+  // so a long silence on a connected link means the controller is stuck. This notices it, tries a fresh session by itself, and tells the owner.
+  controllerHealth() {
+    const ms = this.middleware?.controllerSilenceMs?.()
+    return { running: !!this.running, connected: ms !== null && ms !== undefined, silent: !!this.controllerSilentSince, since: this.controllerSilentSince || null, silentSeconds: ms == null ? null : Math.round(ms / 1000) }
+  }
+
+  async resetControllerLink(reason = 'manual') {
+    if (!this.running) throw new Error('O quiosque não está ligado ao controlador neste PC')
+    const r = this.middleware?.resetControllerLink?.() || { sent: false, reason: 'no controller link' }
+    this.lastLinkResetAt = Date.now()
+    await this.auditSystem('hardware.link_reset', { reason, sent: !!r.sent, detail: r.reason })
+    console.log(`[HW] new controller session requested (${reason}): ${r.sent ? 'sent' : r.reason}`)
+    return { success: !!r.sent, ...r }
+  }
+
+  async checkControllerSilence() {
+    const ms = this.middleware?.controllerSilenceMs?.()
+    if (ms === null || ms === undefined) return // no link: that has its own alerts
+    const limit = (Number(process.env.CONTROLLER_SILENCE_SEC) || 180) * 1000
+    const alert = async (subject, msg) => {
+      try { const { sendAlertForTenant } = await import('./alerts.js'); await sendAlertForTenant(this.tenantId, subject, msg) } catch (e) { console.error('[HW] could not send the controller alert:', e.message) }
+    }
+    if (ms < limit) {
+      if (this.controllerSilentSince) {
+        const mins = Math.round((Date.now() - this.controllerSilentSince) / 60_000)
+        this.controllerSilentSince = null
+        await this.auditSystem('hardware.controller.back', { minutes: mins })
+        console.log('[HW] the controller answers again')
+        await alert('Controlador voltou a responder', `O controlador voltou a responder depois de ${mins} min sem resposta. As máquinas devem voltar a arrancar; faça um arranque de teste.`)
+      }
+      return
+    }
+    const now = Date.now()
+    if (!this.controllerSilentSince) {
+      this.controllerSilentSince = now - ms
+      this.controllerAlertedAt = 0
+      this.lastLinkResetAt = 0
+      await this.auditSystem('hardware.controller.silent', { silentSeconds: Math.round(ms / 1000) })
+      console.error(`[HW] the controller has not answered for ${Math.round(ms / 1000)} s`)
+    }
+    if (now - (this.lastLinkResetAt || 0) > 10 * 60_000) await this.resetControllerLink('auto').catch(() => {})
+    if (now - this.controllerAlertedAt > 60 * 60_000) {
+      this.controllerAlertedAt = now
+      await alert('URGENTE: controlador sem resposta - as máquinas não arrancam', `O controlador (a caixa das máquinas) não responde há ${Math.round(ms / 60_000)} min. As máquinas não vão arrancar. O sistema já tentou uma nova ligação. Se continuar, desligue a energia da caixa do controlador, espere 30 segundos e volte a ligar; depois confirme com um arranque de teste. No admin: Manutenção > Ligação ao controlador.`)
+    }
+  }
+
+  startControllerWatch() {
+    this.stopControllerWatch()
+    const everySec = process.env.CONTROLLER_WATCH_SEC !== undefined ? Number(process.env.CONTROLLER_WATCH_SEC) : 30
+    if (!(everySec > 0)) return
+    this.controllerWatchTimer = setInterval(() => { this.checkControllerSilence().catch((e) => console.warn('[HW] controller watch failed:', e.message)) }, everySec * 1000)
+    this.controllerWatchTimer.unref?.()
+  }
+
+  stopControllerWatch() {
+    clearInterval(this.controllerWatchTimer)
+    this.controllerWatchTimer = null
   }
 
   stopHardwareRefresh() {

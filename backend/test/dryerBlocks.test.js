@@ -163,6 +163,29 @@ describe('Dryer blocks: one impulse now, one more every block', function () {
     expect(calls).to.have.length(1)
   })
 
+  it('controller watchdog: a connected link that stays silent is noticed, a new session is requested once, and the recovery is noticed', async () => {
+    let silence = 10_000
+    let resets = 0
+    coinMachine.middleware.controllerSilenceMs = () => silence
+    coinMachine.middleware.resetControllerLink = () => { resets++; return { sent: true } }
+    coinMachine.controllerSilentSince = null
+    coinMachine.controllerAlertedAt = 0
+    await coinMachine.checkControllerSilence()
+    expect(coinMachine.controllerHealth().silent).to.equal(false)
+    silence = 200_000
+    await coinMachine.checkControllerSilence()
+    expect(coinMachine.controllerHealth().silent).to.equal(true)
+    expect(resets).to.equal(1)
+    await coinMachine.checkControllerSilence()
+    expect(resets).to.equal(1) // not again for ten minutes
+    silence = 2_000
+    await coinMachine.checkControllerSilence()
+    expect(coinMachine.controllerHealth().silent).to.equal(false)
+    silence = null // no link at all: that is another alarm, not this one
+    await coinMachine.checkControllerSilence()
+    expect(coinMachine.controllerHealth().silent).to.equal(false)
+  })
+
   it('two requests for the same batch at the SAME time: one payment, both answered', async () => {
     const m = await dryer()
     const pay = () => request(app).post('/api/gateways/cash/pay').set('Authorization', `Bearer ${kioskToken}`)

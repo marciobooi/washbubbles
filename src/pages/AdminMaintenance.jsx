@@ -11,6 +11,36 @@ export default function AdminMaintenance() {
   const [statusFilter, setStatusFilter] = useState('open')
   const [resolvingId, setResolvingId] = useState(null)
   const [reiniting, setReiniting] = useState(false)
+  const [resetting, setResetting] = useState(false)
+  const [health, setHealth] = useState(null)
+
+  useEffect(() => {
+    let alive = true
+    const tick = () => api.getHardwareHealth().then((h) => { if (alive) setHealth(h) }).catch(() => {})
+    tick()
+    const id = setInterval(tick, 15000)
+    return () => { alive = false; clearInterval(id) }
+  }, [])
+
+  async function resetLink() {
+    setResetting(true)
+    try {
+      let r = await api.resetControllerLink()
+      if (r.queued) {
+        const id = r.commandIds?.[0]
+        r = { success: false, error: 'A loja não respondeu a tempo. Veja se o PC está ligado.' }
+        for (let i = 0; i < 20; i++) {
+          await new Promise((ok) => setTimeout(ok, 3000))
+          const c = await api.adminCommand(id).catch(() => null)
+          if (c?.status === 'done') { r = c.result || { success: true }; break }
+          if (c?.status === 'failed') { r = { success: false, error: c.error }; break }
+        }
+      }
+      toast({ title: r.success ? 'Nova ligação pedida' : 'Não foi possível pedir a nova ligação', description: r.success ? 'Se o controlador responder, as máquinas voltam a arrancar dentro de segundos. Faça um arranque de teste.' : (r.error || r.reason), variant: r.success ? 'success' : 'destructive' })
+    } catch (err) {
+      toast({ title: err?.body?.error || 'Erro ao pedir a nova ligação', variant: 'destructive' })
+    } finally { setResetting(false) }
+  }
 
   async function reinitHardware() {
     setReiniting(true)
@@ -64,6 +94,17 @@ export default function AdminMaintenance() {
   return (
     <div className="p-4 space-y-4">
       <h2 className="text-2xl font-bold">Manutenção</h2>
+      <Card className={health?.silent ? 'border-red-500' : ''}>
+        <CardHeader>
+          <CardTitle>Ligação ao controlador (máquinas)</CardTitle>
+          <CardDescription>Se as máquinas não arrancam e nada responde, use isto. O sistema também tenta sozinho e avisa por e-mail quando o controlador fica sem responder. Se não resolver, desligue a energia da caixa do controlador, espere 30 segundos e volte a ligar.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {health?.silent && <p className="text-sm font-semibold text-red-600">O controlador não responde há {Math.max(1, Math.round((Date.now() - new Date(health.since).getTime()) / 60000))} min — as máquinas não arrancam.</p>}
+          {health && health.running === false && <p className="text-sm text-neutral-500">O estado em direto só aparece no PC da loja; o pedido segue para lá.</p>}
+          <Button disabled={resetting} onClick={resetLink}>{resetting ? 'A pedir…' : 'Reiniciar ligação ao controlador'}</Button>
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle>Leitores do quiosque</CardTitle>

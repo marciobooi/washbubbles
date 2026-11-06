@@ -422,6 +422,16 @@ export function createApi(config) {
   function reinitHardware() {
     return request('/admin/hardware/reinit', { method: 'POST', json: {}, expect: 'json' })
   }
+  function resetControllerLink() {
+    return request('/admin/hardware/reset-link', { method: 'POST', json: {}, expect: 'json' })
+  }
+  function getHardwareHealth() {
+    return request('/admin/hardware/health', { method: 'GET', expect: 'json' })
+  }
+  function kioskResetControllerLink(payload, opts) {
+    const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
+    return request('/pos/hardware/reset-link', { method: 'POST', json: payload, headers, skipAuth: true, expect: 'json' })
+  }
   function emptyHopper() {
     return request('/admin/hopper/empty', { method: 'POST', json: { confirm: true }, expect: 'json' })
   }
@@ -732,6 +742,9 @@ export function createApi(config) {
     refillHopper,
     emptyHopper,
     reinitHardware,
+    resetControllerLink,
+    getHardwareHealth,
+    kioskResetControllerLink,
     adminCommand,
     updateCardProfile,
     blankCardAtReader,

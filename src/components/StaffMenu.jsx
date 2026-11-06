@@ -54,6 +54,17 @@ export default function StaffMenu() {
       setKeyResult({ ok: false, text: e?.body?.error || e?.message || 'Não foi possível guardar a chave.', needUrl: code === 'no-server' })
     } finally { setKeyBusy(false) }
   }
+  const [linkBusy, setLinkBusy] = useState(false)
+  const [linkResult, setLinkResult] = useState(null) // { ok, text }
+  async function resetLink() {
+    setLinkBusy(true); setLinkResult(null)
+    try {
+      const r = await api.kioskResetControllerLink({ pin: verifiedPin }, { apiKey: getKioskApiKey() })
+      setLinkResult(r?.success ? { ok: true, text: 'Nova ligação pedida. Daqui a uns segundos tente arrancar uma máquina. Se continuar sem arrancar, desligue a energia da caixa do controlador, espere 30 segundos e volte a ligar.' } : { ok: false, text: r?.reason || 'Sem ligação ao controlador.' })
+    } catch (e) {
+      setLinkResult({ ok: false, text: e?.body?.error || e?.message || 'Não foi possível pedir a nova ligação.' })
+    } finally { setLinkBusy(false) }
+  }
   const [giftBusy, setGiftBusy] = useState(false)
   const [giftResult, setGiftResult] = useState(null) // { ok, text }
 
@@ -93,7 +104,7 @@ export default function StaffMenu() {
     let timer
     const leave = () => {
       setShowPinPrompt(false); setShowChooser(false); setShowGift(false); setShowDayClose(false); setShowMachines(false); setShowKey(false); setKeyText(''); setKeyResult(null)
-      setPin(''); setPinError(null); setVerifiedPin(null); setGiftResult(null)
+      setPin(''); setPinError(null); setVerifiedPin(null); setGiftResult(null); setLinkResult(null)
     }
     const arm = () => { clearTimeout(timer); timer = setTimeout(leave, STAFF_IDLE_MS) }
     arm()
@@ -110,6 +121,7 @@ export default function StaffMenu() {
 
   function closeAll() {
     setVerifiedPin(null)
+    setLinkResult(null)
     setShowPinPrompt(false)
     setShowChooser(false)
     setPin('')
@@ -204,6 +216,19 @@ export default function StaffMenu() {
                 <div className="text-xs text-neutral-500">Introduzir a chave nova de ligação ao servidor</div>
               </div>
             </button>
+
+            <button
+              onClick={resetLink}
+              disabled={linkBusy}
+              className="w-full flex items-center gap-3 rounded-xl border border-neutral-200 hover:border-teal-400 hover:bg-teal-50 px-4 py-4 text-left transition disabled:opacity-60"
+            >
+              <WashingMachine className="w-6 h-6 text-teal-600 shrink-0" aria-hidden />
+              <div>
+                <div className="font-semibold text-neutral-800">{linkBusy ? 'A pedir…' : 'Ligação às máquinas'}</div>
+                <div className="text-xs text-neutral-500">Se as máquinas não arrancam: pede uma nova ligação ao controlador</div>
+              </div>
+            </button>
+            {linkResult && <div className={`text-sm ${linkResult.ok ? 'text-teal-700' : 'text-red-600'} font-semibold`}>{linkResult.text}</div>}
 
             {lockFeatureEnabled && (
               <button

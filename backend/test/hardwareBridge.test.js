@@ -78,4 +78,17 @@ describe('Hardware bridge: the controller session outlives the backend', functio
     expect(text.split('"controller":"connected"').length - 1).to.be.at.least(2)
     c.destroy()
   })
+
+  it('opens a brand-new controller session when the backend asks, without passing the request on', async () => {
+    const c = await connectClient()
+    await wait(100)
+    c.write('{"cl":"9","c":{"op":"bridge-reset"}}')
+    await wait(400)
+    expect(fakeSockets).to.have.length(2) // a second session with the controller
+    expect(received.join('')).to.not.include('bridge-reset')
+    c.write('{"cl":"9","c":{"op":"get-version"}}')
+    await wait(100)
+    expect(received.join('')).to.include('get-version') // and requests still flow
+    c.destroy()
+  })
 })
