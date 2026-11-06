@@ -1004,7 +1004,10 @@ class CoinMachine extends EventEmitter {
     const spaced = mode === 'spaced' && n > 1
     // Throws when the controller is not connected: the caller then charges nothing.
     await this.middleware.sendMachineActivation(machine, iface, staggered || spaced ? 1 : n)
-    const minutes = await this.cycleMinutes(machine, n)
+    // A dryer whose line never shows it running (Secar 10) is held by this clock; it is freed 2 minutes AFTER the paid time (15 -> 17,
+    // 2 blocks 30 -> 32: the margin is added once, not per block) so nobody is sent to a machine that is still turning.
+    const grace = (machine.type || 'wash') === 'dry' ? (Number(process.env.DRYER_CLOCK_GRACE_MIN) >= 0 ? Number(process.env.DRYER_CLOCK_GRACE_MIN) : 2) : 0
+    const minutes = (await this.cycleMinutes(machine, n)) + grace
     machine.busyUntil = new Date(Date.now() + minutes * 60_000)
     machine.sawBusy = false
     machine.pendingImpulses = staggered ? n - 1 : 0

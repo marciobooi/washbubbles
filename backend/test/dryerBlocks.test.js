@@ -238,7 +238,7 @@ describe('Dryer blocks: one impulse now, one more every block', function () {
       const m = await dryer()
       await coinMachine.startPaidMachine(m._id, 2)
       let cur = await Machine.findById(m._id)
-      expect(cur.busyUntil.getTime()).to.be.within(Date.now() + 29 * 60_000, Date.now() + 31 * 60_000) // 2 x 15 min
+      expect(cur.busyUntil.getTime()).to.be.within(Date.now() + 31 * 60_000, Date.now() + 33 * 60_000) // 2 x 15 min + the 2 min margin, added once
       expect(cur.sawBusy).to.equal(false)
       await Machine.updateOne({ _id: m._id }, { status: 'working' })
       for (let i = 0; i < 6; i++) await coinMachine.handleMachineStatusUpdate(idle(cur))
@@ -267,6 +267,15 @@ describe('Dryer blocks: one impulse now, one more every block', function () {
       cur = await Machine.findById(m._id)
       expect(cur.status).to.equal('free')
     })
+
+    for (const [blocks, mins] of [[1, 17], [3, 47]]) {
+      it(`dryer clock margin: 2 minutes in total, whatever the number of blocks (${blocks} block(s) -> ${mins} min)`, async () => {
+        const m = await dryer()
+        await coinMachine.startPaidMachine(m._id, blocks)
+        const cur = await Machine.findById(m._id)
+        expect(cur.busyUntil.getTime()).to.be.within(Date.now() + (mins - 0.5) * 60_000, Date.now() + (mins + 0.5) * 60_000)
+      })
+    }
 
     it('a washer is held for its price duration', async () => {
       const iface = await Interface.create({ tenantId: tenant._id, name: 'INT 1', address: 11, serialNumber: 'S11', status: 'active' })
