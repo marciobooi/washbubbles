@@ -337,6 +337,11 @@ class CoinMachine extends EventEmitter {
     })
     this.subscriptions.push(coinSub)
 
+    // A start order the controller never confirmed: it is NOT repeated (it may well have run, 2026-11-06 Secar 10), staff are told to look.
+    const onUnconfirmed = (d) => this.reportUnconfirmedStart(d).catch(() => {})
+    this.middleware.on('activation-unconfirmed', onUnconfirmed)
+    this.subscriptions.push({ unsubscribe: () => this.middleware.off('activation-unconfirmed', onUnconfirmed) })
+
     // Bill inserted
     const billSub = this.middleware.subscribe('bill-inserted', (data) => {
       this.handleBillInserted(data)
@@ -1144,6 +1149,16 @@ class CoinMachine extends EventEmitter {
       this.reinitHardware('auto').catch((e) => console.warn('[HW] automatic re-initialisation failed:', e.message))
     }, 60_000)
     this.hardwareRefreshTimer.unref?.()
+  }
+
+  async reportUnconfirmedStart({ machine, interface: iface, channel }) {
+    const name = machine || `interface ${iface} canal ${channel}`
+    await this.auditSystem('machine.start.unconfirmed', { machine: name, interface: iface, channel })
+    flows.step(this.tenantId, 'start_unconfirmed', `O controlador não confirmou o arranque: ${name}. A ordem foi enviada e não foi repetida; verificar se a máquina arrancou`, { machine: name }, { ok: false })
+    try {
+      const { sendAlertForTenant } = await import('./alerts.js')
+      await sendAlertForTenant(this.tenantId, `Arranque sem confirmação: ${name}`, `O controlador não confirmou o arranque de ${name}. A ordem foi enviada e NÃO foi repetida (se a máquina já estiver a trabalhar, repetir daria um segundo arranque). Confirme se a máquina está a trabalhar; se não estiver, arranque-a pelo menu de Staff (sem pagamento).`)
+    } catch (e) { console.error('[HW] could not send the unconfirmed-start alert:', e.message) }
   }
 
   // ---------------------------------------------------------------- controller watchdog

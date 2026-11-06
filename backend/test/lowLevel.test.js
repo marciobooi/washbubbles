@@ -186,6 +186,7 @@ function gatewayMiddleware({ connected = true } = {}) {
   mw.coinEqTable = { '0x05': 1, '0x06': 2 }
   mw.billEqTable = { '0x10': 5 }
   mw.sent = sent
+  mw.activationAck = 0 // the fake controller does not answer; the acknowledgement wait has its own tests
   return mw
 }
 const periph = (id, type, extra = {}) => ({ _id: id, name: type, type, enabled: true, protocol: 'cctalk', address: '2', ...extra })
@@ -334,6 +335,31 @@ describe('Middleware over the low-level gateway', () => {
     mw.activationGap = 0
     let e1; try { await mw.sendMachineActivation({ _id: 'a', port: 1 }, { _id: 'i1', address: 11 }) } catch (e) { e1 = e }
     expect(e1?.message).to.match(/not connected/)
+  })
+
+  it('a start order the controller never confirms is reported once and NOT sent again (2026-11-06: Secar 10 ran although its answer was lost)', async () => {
+    const mw = gatewayMiddleware()
+    mw.activationAck = 60
+    const seen = []
+    mw.on('activation-unconfirmed', (d) => seen.push(d))
+    await mw.sendMachineActivation({ _id: 'a', name: 'Secar 10', port: 2 }, { _id: 'i5', name: 'Int 5', address: 15 })
+    expect(seen).to.have.length(1)
+    expect(seen[0]).to.include({ machine: 'Secar 10', interface: '15', channel: '2' })
+    expect(mw.sent.filter((x) => x.op === 'activate-machine')).to.have.length(1) // never repeated: it may already be running
+  })
+
+  it('a confirmed start order raises nothing and does not wait', async () => {
+    const mw = gatewayMiddleware()
+    mw.activationAck = 2000
+    const seen = []
+    mw.on('activation-unconfirmed', (d) => seen.push(d))
+    const p = mw.sendMachineActivation({ _id: 'a', name: 'Secar 9', port: 1 }, { _id: 'i4', name: 'Int 4', address: 14 })
+    await tick(10)
+    const t0 = Date.now()
+    mw.handlePackage({ op: 'activate-machine', code: '200', msg: 'YeahAc!' })
+    await p
+    expect(Date.now() - t0).to.be.below(200)
+    expect(seen).to.have.length(0)
   })
 
   it('refuses to report an activation when the controller is unreachable', async () => {

@@ -870,6 +870,17 @@ class Middleware extends EventEmitter {
     return Number.isFinite(env) && env >= 0 ? env : 20000
   }
 
+  /**
+   * The controller answers every activate-machine with code 200 within a few milliseconds. 2026-11-06 20:59: Secar 10 got no answer at all
+   * (2 of ~560 starts since 26/10) and still RAN (the order had arrived, only the answer was lost). So a missing answer must never be
+   * "fixed" by sending the order again (that would start the machine twice); it is only reported (see 'activation-unconfirmed').
+   */
+  activationAckMs() {
+    if (Number.isFinite(this.activationAck)) return this.activationAck
+    const env = Number(process.env.ACTIVATION_ACK_MS)
+    return Number.isFinite(env) && env >= 0 ? env : 3000
+  }
+
   /** Resolves (never rejects) when the controller reports this channel started, or after `ms`. Call BEFORE sending. */
   waitMachineStarted(addr, chn, ms) {
     return new Promise((resolve) => {
@@ -889,9 +900,15 @@ class Middleware extends EventEmitter {
       const prev = this.lastActivation
       if (prev && prev.addr === addr) await prev.started // same interface: let it finish the previous machine first
       const started = this.waitMachineStarted(addr, machine.port, this.activationConfirmMs())
+      const ackMs = this.activationAckMs()
+      const ack = ackMs > 0 ? this.waitForReply('activate-machine', { timeoutMs: ackMs }).then(() => true, () => false) : Promise.resolve(true)
       try {
         const item = await this.sendActivation(machine, iface, impulses)
         this.lastActivation = { addr, started }
+        if (!(await ack)) {
+          console.warn(`[HW] the controller did not confirm the start of ${machine.name || item.id + '/' + item.chn} within ${ackMs} ms (the order was sent; NOT repeated)`)
+          this.emit('activation-unconfirmed', { machine: machine.name, machineId: machine._id, interface: item.id, channel: item.chn })
+        }
         return item
       } catch (err) { this._cancelStartWait?.(false); throw err }
     }
