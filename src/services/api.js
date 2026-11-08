@@ -422,6 +422,9 @@ export function createApi(config) {
   function reinitHardware() {
     return request('/admin/hardware/reinit', { method: 'POST', json: {}, expect: 'json' })
   }
+  function keepCredit() {
+    return request('/admin/credit/keep', { method: 'POST', json: { confirm: true }, expect: 'json' })
+  }
   function resetControllerLink() {
     return request('/admin/hardware/reset-link', { method: 'POST', json: {}, expect: 'json' })
   }
@@ -743,6 +746,7 @@ export function createApi(config) {
     emptyHopper,
     reinitHardware,
     resetControllerLink,
+    keepCredit,
     getHardwareHealth,
     kioskResetControllerLink,
     adminCommand,

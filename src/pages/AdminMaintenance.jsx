@@ -22,6 +22,29 @@ export default function AdminMaintenance() {
     return () => { alive = false; clearInterval(id) }
   }, [])
 
+  const [keeping, setKeeping] = useState(false)
+  async function keepCredit() {
+    const v = health?.running !== false && Number.isFinite(health?.credit) ? ` (${health.credit.toFixed(2).replace('.', ',')} €)` : ''
+    if (!window.confirm(`O dinheiro inserido e não gasto${v} FICA na máquina: não é devolvido e não fica como crédito. Fica registado como entrada de dinheiro. Continuar?`)) return
+    setKeeping(true)
+    try {
+      let r = await api.keepCredit()
+      if (r.queued) {
+        const id = r.commandIds?.[0]
+        r = { success: false, error: 'A loja não respondeu a tempo. Veja se o PC está ligado.' }
+        for (let i = 0; i < 20; i++) {
+          await new Promise((ok) => setTimeout(ok, 3000))
+          const c = await api.adminCommand(id).catch(() => null)
+          if (c?.status === 'done') { r = c.result || { success: true }; break }
+          if (c?.status === 'failed') { r = { success: false, error: c.error }; break }
+        }
+      }
+      toast({ title: r.success ? 'Dinheiro mantido na máquina' : 'Não foi possível manter o dinheiro', description: r.success ? `${Number(r.kept || 0).toFixed(2).replace('.', ',')} € ficaram na máquina e foram registados.` : (r.error || r.reason), variant: r.success ? 'success' : 'destructive' })
+    } catch (err) {
+      toast({ title: err?.body?.error || 'Erro ao manter o dinheiro', variant: 'destructive' })
+    } finally { setKeeping(false) }
+  }
+
   async function resetLink() {
     setResetting(true)
     try {
@@ -94,6 +117,16 @@ export default function AdminMaintenance() {
   return (
     <div className="p-4 space-y-4">
       <h2 className="text-2xl font-bold">Manutenção</h2>
+      <Card>
+        <CardHeader>
+          <CardTitle>Dinheiro inserido no quiosque</CardTitle>
+          <CardDescription>Normalmente o dinheiro que não é gasto é devolvido. Se quiser que fique na máquina (não devolver, sem ficar como crédito), carregue aqui: o valor fica registado como entrada de dinheiro. Se não carregar, tudo funciona como sempre.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {health?.running !== false && Number.isFinite(health?.credit) && <p className="text-sm">Dinheiro inserido agora: <b>{health.credit.toFixed(2).replace('.', ',')} €</b></p>}
+          <Button disabled={keeping} onClick={keepCredit}>{keeping ? 'A registar…' : 'Ficar com o dinheiro (não devolver)'}</Button>
+        </CardContent>
+      </Card>
       <Card className={health?.silent ? 'border-red-500' : ''}>
         <CardHeader>
           <CardTitle>Ligação ao controlador (máquinas)</CardTitle>

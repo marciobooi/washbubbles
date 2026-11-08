@@ -173,6 +173,7 @@ class CoinMachine extends EventEmitter {
           sync_now: async () => { await this.downlink?.pullAll?.(); return { success: true } },
           reinit_hardware: async () => this.reinitHardware('remote'),
           reset_link: async () => this.resetControllerLink('remote'),
+          keep_credit: async () => this.keepCredit({ by: 'admin (remoto)' }),
         },
       })
       this.remoteCommands.start()
@@ -1170,7 +1171,7 @@ class CoinMachine extends EventEmitter {
   // so a long silence on a connected link means the controller is stuck. This notices it, tries a fresh session by itself, and tells the owner.
   controllerHealth() {
     const ms = this.middleware?.controllerSilenceMs?.()
-    return { running: !!this.running, connected: ms !== null && ms !== undefined, silent: !!this.controllerSilentSince, since: this.controllerSilentSince || null, silentSeconds: ms == null ? null : Math.round(ms / 1000) }
+    return { running: !!this.running, credit: roundMoney(this.client?.getState?.().balance || 0), connected: ms !== null && ms !== undefined, silent: !!this.controllerSilentSince, since: this.controllerSilentSince || null, silentSeconds: ms == null ? null : Math.round(ms / 1000) }
   }
 
   async resetControllerLink(reason = 'manual') {
@@ -1292,6 +1293,27 @@ class CoinMachine extends EventEmitter {
       return { success: remaining <= 0, refunded: dispensed, remaining, error }
     })().finally(() => { this.refunding = null })
     return this.refunding
+  }
+
+  /**
+   * The operator decides that the cash inserted and not spent STAYS in the machine (nothing is paid back, nothing stays as credit).
+   * Only when they ask for it: the normal flow (automatic / manual refund) is untouched. The amount is booked as a cash entry
+   * (type 'other', "Dinheiro mantido") so the day close and the reports still add up.
+   */
+  async keepCredit({ by = 'admin' } = {}) {
+    if (!this.running) throw new Error('O quiosque não está ligado ao controlador neste PC')
+    if (this.refunding) throw new Error('Está a decorrer uma devolução; espere que termine')
+    const state = this.client.getState()
+    const amount = roundMoney(state.balance)
+    if (!(amount > 0)) throw new Error('Não há dinheiro inserido no quiosque')
+    this.client.restoreBalances({ balance: 0, balanceCard: state.balanceCard })
+    const SaleModel = (await import('../models/sale.js')).default
+    const sale = await SaleModel.create({ tenantId: this.tenantId, amount, items: [{ type: 'cash_kept', name: 'Dinheiro mantido na máquina', amount }], type: 'other', method: 'cash', batchId: `kept-${Date.now()}`, inserted: amount, change: 0 })
+    await this.auditSystem('cash.kept', { amount, by, saleId: String(sale._id) })
+    flows.step(this.tenantId, 'credit_kept', `Dinheiro de ${amount.toFixed(2).replace('.', ',')} € mantido na máquina por decisão do operador (${by}); não devolvido`, { amount, by, saleId: String(sale._id) }, { ok: true })
+    broadcastHardwareEvent(this.tenantId, 'credit:kept', { amount })
+    console.log(`[Refund] EUR ${amount.toFixed(2)} kept in the machine by ${by} (not paid back)`)
+    return { success: true, kept: amount }
   }
 
   /** Wipe the card at the reader and forget it here (its sales stay: that money really came in). */

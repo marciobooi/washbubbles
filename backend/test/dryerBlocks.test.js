@@ -163,6 +163,19 @@ describe('Dryer blocks: one impulse now, one more every block', function () {
     expect(calls).to.have.length(1)
   })
 
+  it('keep credit: only on request, the cash stays in the machine (no refund, no credit) and is booked as a cash entry', async () => {
+    coinMachine.lastCreditActivity = Date.now() - 300_000
+    coinMachine.client.client.balance = 2
+    const r = await coinMachine.keepCredit({ by: 'admin' })
+    expect(r).to.deep.equal({ success: true, kept: 2 })
+    expect(coinMachine.client.getState().balance).to.equal(0)
+    const sale = await Sale.findOne({ type: 'other', method: 'cash' })
+    expect(sale.amount).to.equal(2)
+    let err
+    try { await coinMachine.keepCredit({ by: 'admin' }) } catch (e) { err = e }
+    expect(err.message).to.match(/Não há dinheiro/) // nothing left to keep
+  })
+
   it('controller watchdog: a connected link that stays silent is noticed, a new session is requested once, and the recovery is noticed', async () => {
     let silence = 10_000
     let resets = 0
