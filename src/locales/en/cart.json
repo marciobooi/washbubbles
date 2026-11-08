@@ -39,7 +39,7 @@
   "manual": "Manual payment (staff / help)",
   "empty": "Cart is empty",
   "closeBtn": "Close",
-  "insertCardToRecharge": "Insert the card in the reader to recharge it",
+  "insertCardToRecharge": "Insert your card in the reader to top it up",
   "cardDetected": "Card detected",
   "paymentError": "Payment error",
   "rejectedCoin": "Coin {{reason}}",
@@ -201,7 +201,6 @@
   "legalComplaints": "Complaints Book",
   "legalComplaintsHint": "Point your phone camera at the QR code to open the online Complaints Book.",
   "legalController": "Controller",
-  "insertCardToRecharge": "Insert your card in the reader to top it up",
   "rechargeRemoved": "Top-up removed from the basket: the card was taken out",
   "holderPhone": "Phone",
   "holderEmail": "Email",
@@ -256,5 +255,13 @@
   "mbwayCartChanged": "The purchase changed meanwhile. Go back and try again.",
   "mbwayOk": "OK",
   "connOnline": "Online",
-  "connOffline": "Offline"
+  "connOffline": "Offline",
+  "choiceHint": "What would you like to do?",
+  "choiceAdd": "Add to cart",
+  "choiceAddHint": "Pick more machines before paying",
+  "choicePay": "Pay",
+  "choicePayHint": "Pay for this machine now",
+  "choiceRemove": "Remove from cart",
+  "choiceInCart": "Already in the cart",
+  "choiceCycle": "{{min}} min • {{price}}"
 }

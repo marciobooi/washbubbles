@@ -39,7 +39,7 @@
   "manual": "Pago manual (personal / ayuda)",
   "empty": "Carrito vacío",
   "closeBtn": "Cerrar",
-  "insertCardToRecharge": "Introduce la tarjeta en el lector para recargarla",
+  "insertCardToRecharge": "Inserte la tarjeta en el lector para recargarla",
   "cardDetected": "Tarjeta detectada",
   "paymentError": "Error en el pago",
   "rejectedCoin": "Moneda {{reason}}",
@@ -201,7 +201,6 @@
   "legalComplaints": "Libro de Reclamaciones",
   "legalComplaintsHint": "Apunte la cámara de su teléfono al código QR para abrir el Libro de Reclamaciones en línea.",
   "legalController": "Responsable",
-  "insertCardToRecharge": "Inserte la tarjeta en el lector para recargarla",
   "rechargeRemoved": "Recarga retirada de la cesta: se retiró la tarjeta",
   "holderPhone": "Teléfono",
   "holderEmail": "Correo",
@@ -256,5 +255,13 @@
   "mbwayCartChanged": "La compra cambió entretanto. Vuelva atrás e inténtelo de nuevo.",
   "mbwayOk": "OK",
   "connOnline": "En línea",
-  "connOffline": "Sin conexión"
+  "connOffline": "Sin conexión",
+  "choiceHint": "¿Qué desea hacer?",
+  "choiceAdd": "Añadir al carrito",
+  "choiceAddHint": "Elegir más máquinas antes de pagar",
+  "choicePay": "Pagar",
+  "choicePayHint": "Pagar ya esta máquina",
+  "choiceRemove": "Quitar del carrito",
+  "choiceInCart": "Ya está en el carrito",
+  "choiceCycle": "{{min}} min • {{price}}"
 }

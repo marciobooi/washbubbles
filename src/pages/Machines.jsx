@@ -2,6 +2,8 @@ import React from 'react'
 import i18n from '@/lib/i18n'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import MachineCard from '../components/MachineCard'
+import MachineChoiceModal from '../components/MachineChoiceModal'
+import { getEffectivePrice } from '@/lib/promo'
 import { toast } from '@/components/ui/Toast'
 import Wave from '../components/ui/wave'
 import Loading from '../components/ui/loading'
@@ -82,12 +84,12 @@ export default function Machines() {
   const { cart, addToCart, removeFromCart, clearCart, openCart } = useCart()
   const { t: tc } = useTranslation('cart')
 
-  async function openForAdd(m) {
-    // Fetch fresh price data before adding to cart
+  async function openForAdd(m, { notice = true, priceData: known = null } = {}) {
+    // Fetch fresh price data before adding to cart (the choice popup has just loaded it: then it is reused)
     let machineWithPrice = { ...m }
     if (m.type && m.weight) {
       try {
-        const priceData = await api.getPriceByTypeWeightPublic(m.type, m.weight)
+        const priceData = known || await api.getPriceByTypeWeightPublic(m.type, m.weight)
         if (priceData) {
           // Add calculated prices to the machine object
           const { getEffectivePrice } = await import('@/lib/promo')
@@ -101,7 +103,8 @@ export default function Machines() {
     }
     
     // Already in the basket: the cart context shows the warning, so no "added" banner here
-    if (addToCart(machineWithPrice) === false) return
+    if (addToCart(machineWithPrice) === false) return false
+    if (!notice) return true // the choice popup already told the customer what happened
     // Don't auto-open cart; show the banner with a button to view it
     const base = Number(m.tImp) || 15
     const price = Number(machineWithPrice.cashPrice ?? machineWithPrice.price ?? 0)
@@ -133,13 +136,34 @@ export default function Machines() {
   const typeLabel = t(`machines.type.${type}`)
 
   const inCartItem = (m) => cart.find((c) => String(c.productId || c._id) === String(m._id || m.id))
+  // Tapping a machine opens a popup: add it to the cart (and keep choosing) or pay now. Both continue in the normal cart / payment flow.
+  const [choice, setChoice] = React.useState(null) // the machine that was tapped
+  const [choicePrice, setChoicePrice] = React.useState(null)
+  const [choicePriceData, setChoicePriceData] = React.useState(null)
   const toggle = (id) => {
     const found = machines.find((x) => String(x._id || x.id) === String(id))
     if (!found) return
-    const item = inCartItem(found)
-    if (item) removeFromCart(item.id)
-    else openForAdd(found)
+    setChoicePrice(null)
+    setChoicePriceData(null)
+    setChoice(found)
+    if (found.type && found.weight) {
+      api.getPriceByTypeWeightPublic(found.type, found.weight)
+        .then((p) => { if (p) { setChoicePriceData(p); setChoicePrice(getEffectivePrice(p, 'cash')) } })
+        .catch(() => {})
+    }
   }
+  const closeChoice = () => setChoice(null)
+  const choiceItem = choice ? inCartItem(choice) : null
+  const choiceAdd = async () => { const m = choice; const priceData = choicePriceData; setChoice(null); if (m) await openForAdd(m, { notice: false, priceData }) }
+  const choicePay = async () => {
+    const m = choice
+    const priceData = choicePriceData
+    setChoice(null)
+    if (!m) return
+    if (!inCartItem(m)) await openForAdd(m, { notice: false, priceData })
+    setTimeout(() => openCart(), 0) // after the basket update, so the cart modal does not close itself as "empty"
+  }
+  const choiceRemove = () => { const item = choice && inCartItem(choice); setChoice(null); if (item) removeFromCart(item.id) }
 
   return (
     <div className='flex-1 container mx-auto p-4'>
@@ -174,7 +198,7 @@ export default function Machines() {
           className="text-emerald-700 font-bold shrink-0 min-h-[56px] px-4 rounded-xl active:bg-emerald-50"
         >{t('machines.howTo')}</button>
       </div>
-      {/* MachineModal removed — clicking a machine adds directly to cart */}
+      <MachineChoiceModal open={Boolean(choice)} machine={choice} price={choicePrice} inCart={Boolean(choiceItem)} onAdd={choiceAdd} onPay={choicePay} onRemove={choiceRemove} onClose={closeChoice} />
 
       <Wave height="12vh" className="mt-2" />
     </div>

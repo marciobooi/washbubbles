@@ -39,7 +39,7 @@
   "manual": "Paiement manuel (personnel / aide)",
   "empty": "Panier vide",
   "closeBtn": "Fermer",
-  "insertCardToRecharge": "Insérez la carte dans le lecteur pour la recharger",
+  "insertCardToRecharge": "Insérez votre carte dans le lecteur pour la recharger",
   "cardDetected": "Carte détectée",
   "paymentError": "Erreur de paiement",
   "rejectedCoin": "Pièce {{reason}}",
@@ -201,7 +201,6 @@
   "legalComplaints": "Livre de réclamations",
   "legalComplaintsHint": "Pointez l’appareil photo de votre téléphone vers le code QR pour ouvrir le livre de réclamations en ligne.",
   "legalController": "Responsable",
-  "insertCardToRecharge": "Insérez votre carte dans le lecteur pour la recharger",
   "rechargeRemoved": "Recharge retirée du panier : la carte a été retirée",
   "holderPhone": "Téléphone",
   "holderEmail": "E-mail",
@@ -256,5 +255,13 @@
   "mbwayCartChanged": "L’achat a changé entre-temps. Revenez en arrière et réessayez.",
   "mbwayOk": "OK",
   "connOnline": "En ligne",
-  "connOffline": "Hors ligne"
+  "connOffline": "Hors ligne",
+  "choiceHint": "Que souhaitez-vous faire ?",
+  "choiceAdd": "Ajouter au panier",
+  "choiceAddHint": "Choisir d'autres machines avant de payer",
+  "choicePay": "Payer",
+  "choicePayHint": "Payer cette machine maintenant",
+  "choiceRemove": "Retirer du panier",
+  "choiceInCart": "Déjà dans le panier",
+  "choiceCycle": "{{min}} min • {{price}}"
 }
