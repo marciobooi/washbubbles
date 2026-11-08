@@ -174,6 +174,7 @@ class CoinMachine extends EventEmitter {
           reinit_hardware: async () => this.reinitHardware('remote'),
           reset_link: async () => this.resetControllerLink('remote'),
           keep_credit: async () => this.keepCredit({ by: 'admin (remoto)' }),
+          pay_out: async (p) => this.payOutCash(p?.amount, { reason: 'refund (remoto)' }),
         },
       })
       this.remoteCommands.start()
@@ -1314,6 +1315,23 @@ class CoinMachine extends EventEmitter {
     broadcastHardwareEvent(this.tenantId, 'credit:kept', { amount })
     console.log(`[Refund] EUR ${amount.toFixed(2)} kept in the machine by ${by} (not paid back)`)
     return { success: true, kept: amount }
+  }
+
+  /**
+   * Pay `amount` out of the hopper to a customer (an admin refund of a cash sale). Same payout (with its retries) as the change;
+   * answers what was really paid: { success, dispensed, remaining, error, unconfirmed }.
+   */
+  async payOutCash(amount, { reason = 'refund' } = {}) {
+    if (!this.running) throw new Error('O quiosque não está ligado ao controlador neste PC')
+    const want = roundMoney(Number(amount))
+    if (!(want > 0) || want > 200) throw new Error('Valor a pagar inválido')
+    const hopper = await Peripheral.findOne(this.scoped({ type: 'hopper', enabled: true }))
+    if (!hopper) return { success: false, dispensed: 0, remaining: want, error: 'Nenhum hopper configurado' }
+    const result = await this.dispenseChange(hopper._id, want, { noFlow: true })
+    const dispensed = roundMoney(Math.min(want, Math.max(0, Number(result?.dispensed ?? (result?.success === false ? 0 : want)))))
+    const remaining = roundMoney(want - dispensed)
+    await this.auditSystem('cash.payout', { reason, requested: want, dispensed, remaining, error: result?.error, unconfirmed: !!result?.unconfirmed })
+    return { success: remaining <= 0, dispensed, remaining, error: result?.error || '', unconfirmed: !!result?.unconfirmed }
   }
 
   /** Wipe the card at the reader and forget it here (its sales stay: that money really came in). */

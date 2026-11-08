@@ -27,6 +27,16 @@ export default function AdminTransactions() {
   const [refundTarget, setRefundTarget] = useState(null) // { _id, amount }
   const [refundReason, setRefundReason] = useState('')
   const [refunding, setRefunding] = useState(false)
+  const [refundAmount, setRefundAmount] = useState('') // what to give back (a part of the sale or all of it)
+  const [refundPayout, setRefundPayout] = useState(false) // the hopper pays it to the customer now (cash sales)
+  const isCashSale = (t) => Boolean(t) && !t.cardCode && !t.cardId && t.method === 'cash'
+  const money = (n) => Number(n || 0).toFixed(2).replace('.', ',') + ' €'
+  function openRefund(t) {
+    setRefundTarget(t)
+    setRefundAmount(Number(t.amount).toFixed(2))
+    setRefundPayout(isCashSale(t))
+  }
+  function closeRefund() { setRefundTarget(null); setRefundReason(''); setRefundAmount(''); setRefundPayout(false) }
   // Opens on today's transactions; "Todos os dias" clears the dates.
   const [filters, setFilters] = useState(() => ({ from: today(), to: today(), type: '' }))
   const [sortDir, setSortDir] = useState('desc') // 'desc' = newest first (default), 'asc' = oldest first
@@ -64,12 +74,21 @@ export default function AdminTransactions() {
   async function submitRefund(e) {
     e.preventDefault()
     if (!refundReason.trim()) return toast({ title: 'Indique um motivo para o reembolso', variant: 'destructive' })
+    const amount = Number(String(refundAmount).replace(',', '.'))
+    if (!(amount > 0) || amount > Number(refundTarget.amount) + 0.001) return toast({ title: `O valor deve estar entre 0,01 € e ${money(refundTarget.amount)}`, variant: 'destructive' })
     setRefunding(true)
     try {
-      await api.refundTransaction(refundTarget._id, refundReason.trim())
-      toast({ title: 'Reembolso efetuado', variant: 'success' })
-      setRefundTarget(null)
-      setRefundReason('')
+      const payout = refundPayout && isCashSale(refundTarget)
+      const r = await api.refundTransaction(refundTarget._id, refundReason.trim(), { amount, payout })
+      if (r?.payout) {
+        const p = r.payout
+        toast(p.owed > 0
+          ? { title: `Pago ${money(p.dispensed)} pelo hopper; FALTAM ${money(p.owed)}`, description: p.unconfirmed ? 'A loja não confirmou: veja o que saiu do hopper e pague a diferença em mão.' : 'Pague a diferença em mão ao cliente.', variant: 'destructive' }
+          : { title: `Reembolso efetuado: ${money(p.dispensed)} pagos pelo hopper`, variant: 'success' })
+      } else {
+        toast({ title: 'Reembolso efetuado', variant: 'success' })
+      }
+      closeRefund()
       load()
     } catch (e) {
       console.error(e)
@@ -247,7 +266,7 @@ export default function AdminTransactions() {
                         <button onClick={() => setExpanded((s)=>({...s,[g.key]:!s[g.key]}))} className="text-sm underline">{expanded[g.key] ? 'Ocultar' : 'Detalhes'}</button>
                         {refundable && (
                           <button
-                            onClick={() => setRefundTarget(g.items[0])}
+                            onClick={() => openRefund(g.items[0])}
                             className="text-sm text-red-600 underline"
                           >
                             Reembolsar
@@ -294,14 +313,40 @@ export default function AdminTransactions() {
         )}
       </div>
 
-      <Modal open={!!refundTarget} onClose={() => { setRefundTarget(null); setRefundReason('') }} title="Reembolsar transacção">
+      <Modal open={!!refundTarget} onClose={refunding ? () => {} : closeRefund} title="Reembolsar transacção">
         <form onSubmit={submitRefund} className="space-y-3">
           <h3 className="font-semibold text-lg">Reembolsar transacção</h3>
           {refundTarget && (
             <p className="text-sm text-muted-foreground">
               Valor: <span className="font-medium">{Number(refundTarget.amount).toFixed(2)}€</span>
-              {refundTarget.cardCode ? ' — devolvido ao saldo do cartão.' : ' — dinheiro, pagamento manual na gaveta.'}
+              {refundTarget.cardCode ? ' — devolvido ao saldo do cartão.' : isCashSale(refundTarget) ? ' — dinheiro.' : ''}
             </p>
+          )}
+          {refundTarget && (
+            <div>
+              <label className="block text-sm font-medium mb-1">Valor a devolver (€)</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className="w-32 border rounded p-2 text-lg font-semibold"
+                  value={refundAmount}
+                  onChange={(e) => setRefundAmount(e.target.value)}
+                  aria-label="Valor a devolver"
+                />
+                <Button type="button" variant="outline" onClick={() => setRefundAmount(Number(refundTarget.amount).toFixed(2))}>Valor total ({money(refundTarget.amount)})</Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Pode devolver só uma parte (por exemplo 0,50 €).</p>
+            </div>
+          )}
+          {isCashSale(refundTarget) && (
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" className="mt-1" checked={refundPayout} onChange={(e) => setRefundPayout(e.target.checked)} />
+              <span>
+                <b>Pagar este valor agora pelo hopper</b> (as moedas saem na loja; o cliente deve estar junto da máquina).
+                {refundPayout && <span className="block text-xs text-muted-foreground">Se o hopper não tiver moedas para tudo, paga o que puder e avisa quanto falta. Se o PC da loja não responder, nada é pago nem registado.</span>}
+              </span>
+            </label>
           )}
           <div>
             <label className="block text-sm font-medium mb-1">Motivo</label>
@@ -314,8 +359,8 @@ export default function AdminTransactions() {
             />
           </div>
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={() => { setRefundTarget(null); setRefundReason('') }}>Cancelar</Button>
-            <Button type="submit" variant="destructive" disabled={refunding}>{refunding ? 'A processar…' : 'Confirmar reembolso'}</Button>
+            <Button type="button" variant="outline" disabled={refunding} onClick={closeRefund}>Cancelar</Button>
+            <Button type="submit" variant="destructive" disabled={refunding}>{refunding ? (refundPayout ? 'A pagar… o cliente deve esperar' : 'A processar…') : (refundPayout && isCashSale(refundTarget) ? `Reembolsar e pagar ${money(Number(String(refundAmount).replace(',', '.')) || 0)}` : 'Confirmar reembolso')}</Button>
           </div>
         </form>
       </Modal>

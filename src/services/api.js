@@ -297,8 +297,8 @@ export function createApi(config) {
 
   // Reverses a sale: credits the card back (if any) and records a new
   // `refund`-type Sale rather than deleting anything. See routes/admin.js.
-  function refundTransaction(id, reason) {
-    return request(`/admin/transactions/${id}/refund`, { method: 'POST', json: { reason }, expect: 'json' });
+  function refundTransaction(id, reason, extra = {}) {
+    return request(`/admin/transactions/${id}/refund`, { method: 'POST', json: { reason, ...extra }, expect: 'json' });
   }
 
   // Audit log

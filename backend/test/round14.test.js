@@ -63,6 +63,109 @@ describe('Round 14 — refunds, roles, coupons, audit log', function () {
       expect(res.body.refund.cardId).to.be.null
     })
 
+    describe('partial refund and hopper payout', () => {
+      let coinMachine, saved
+      const pay = (sale, body) => request(app).post(`/api/admin/transactions/${sale._id}/refund`).set('Authorization', `Bearer ${adminToken}`).send({ reason: 'Faltou troco', ...body })
+      beforeEach(async () => {
+        coinMachine = (await import('../src/services/coinMachine.js')).default
+        saved = { running: coinMachine.running, payOutCash: coinMachine.payOutCash, tenantId: coinMachine.tenantId }
+        coinMachine.running = true
+        coinMachine.tenantId = tenant._id
+        process.env.REFUND_PAYOUT_WAIT_MS = '150'
+        process.env.REFUND_PAYOUT_GRACE_MS = '150'
+        process.env.REFUND_PAYOUT_POLL_MS = '20'
+      })
+      afterEach(() => {
+        coinMachine.running = saved.running
+        coinMachine.payOutCash = saved.payOutCash
+        coinMachine.tenantId = saved.tenantId
+        delete process.env.REFUND_PAYOUT_WAIT_MS; delete process.env.REFUND_PAYOUT_GRACE_MS; delete process.env.REFUND_PAYOUT_POLL_MS
+      })
+
+      it('a part of the sale: records exactly that amount (0.50 of 4)', async () => {
+        const sale = await createSale({ amount: 4 })
+        const res = await pay(sale, { amount: 0.5 })
+        expect(res.status).to.equal(200)
+        expect(res.body.refund.amount).to.equal(-0.5)
+        expect(res.body.payout).to.equal(null)
+      })
+
+      it('the amount cannot exceed the sale nor be zero or garbage', async () => {
+        const sale = await createSale({ amount: 4 })
+        expect((await pay(sale, { amount: 4.5 })).status).to.equal(400)
+        expect((await pay(sale, { amount: 0 })).status).to.equal(400)
+        expect((await pay(sale, { amount: 'abc' })).status).to.equal(400)
+        expect((await pay(sale, { amount: '2,10' })).status).to.equal(200) // a comma is accepted
+      })
+
+      it('payout: the hopper pays the amount, then the refund is recorded', async () => {
+        const calls = []
+        coinMachine.payOutCash = async (a) => { calls.push(a); return { success: true, dispensed: a, remaining: 0 } }
+        const sale = await createSale({ amount: 4 })
+        const res = await pay(sale, { amount: 2.1, payout: true })
+        expect(res.status).to.equal(200)
+        expect(calls).to.deep.equal([2.1])
+        expect(res.body.payout).to.deep.include({ requested: 2.1, dispensed: 2.1, owed: 0 })
+        expect(res.body.refund.amount).to.equal(-2.1)
+      })
+
+      it('payout that comes up short: records the refund, says how much is still owed', async () => {
+        coinMachine.payOutCash = async () => ({ success: false, dispensed: 2, remaining: 0.1, error: 'sem moedas de 10c' })
+        const sale = await createSale({ amount: 4 })
+        const res = await pay(sale, { amount: 2.1, payout: true })
+        expect(res.status).to.equal(200)
+        expect(res.body.payout.owed).to.equal(0.1)
+        expect(res.body.refund.refundReason).to.match(/EM FALTA 0\.10/)
+      })
+
+      it('payout where the hopper pays NOTHING: nothing is recorded and the sale stays refundable', async () => {
+        coinMachine.payOutCash = async () => ({ success: false, dispensed: 0, remaining: 2.1, error: 'hopper encravado' })
+        const sale = await createSale({ amount: 4 })
+        const res = await pay(sale, { amount: 2.1, payout: true })
+        expect(res.status).to.equal(409)
+        const Sale = (await import('../src/models/sale.js')).default
+        expect((await Sale.findById(sale._id)).status).to.equal('completed')
+        expect(await Sale.countDocuments({ type: 'refund' })).to.equal(0)
+      })
+
+      it('a card sale cannot be paid out by the hopper', async () => {
+        const Card = (await import('../src/models/card.js')).default
+        const card = await Card.create({ tenantId: tenant._id, code: 'CARDP', balance: 1 })
+        const sale = await createSale({ amount: 4, method: 'card', cardId: card._id, cardCode: card.code })
+        expect((await pay(sale, { payout: true })).status).to.equal(400)
+      })
+
+      it('central server: the shop PC is asked; no answer in time = nothing paid, nothing recorded, the order withdrawn', async () => {
+        coinMachine.running = false // this process is the central server
+        const sale = await createSale({ amount: 4 })
+        const res = await pay(sale, { amount: 1, payout: true })
+        expect(res.status).to.equal(504)
+        const SyncCommand = (await import('../src/models/syncCommand.js')).default
+        const cmd = await SyncCommand.findOne({ type: 'pay_out' })
+        expect(cmd.status).to.equal('failed') // it can never run later
+        const Sale = (await import('../src/models/sale.js')).default
+        expect(await Sale.countDocuments({ type: 'refund' })).to.equal(0)
+      })
+
+      it('central server: the shop answers, the refund is recorded with what was paid', async () => {
+        coinMachine.running = false
+        const SyncCommand = (await import('../src/models/syncCommand.js')).default
+        const sale = await createSale({ amount: 4 })
+        const answer = (async () => {
+          for (let i = 0; i < 100; i++) {
+            const c = await SyncCommand.findOne({ type: 'pay_out', status: 'pending' })
+            if (c) { expect(c.payload.amount).to.equal(0.5); await SyncCommand.updateOne({ _id: c._id }, { status: 'done', result: { success: true, dispensed: 0.5, remaining: 0 } }); return }
+            await new Promise((r) => setTimeout(r, 10))
+          }
+        })()
+        process.env.REFUND_PAYOUT_WAIT_MS = '3000'
+        const res = await pay(sale, { amount: 0.5, payout: true })
+        await answer
+        expect(res.status).to.equal(200)
+        expect(res.body.payout).to.deep.include({ dispensed: 0.5, owed: 0 })
+      })
+    })
+
     it('rejects a refund with no reason', async () => {
       const sale = await createSale()
       const res = await request(app)

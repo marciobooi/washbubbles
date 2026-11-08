@@ -25,6 +25,7 @@ import multer from 'multer'
 import sharp from 'sharp'
 import Card from '../models/card.js'
 import SyncCommand from '../models/syncCommand.js'
+import { roundMoney, parseAmount } from '../utils/money.js'
 import DayClose from '../models/dayClose.js'
 import { broadcastMachines, broadcastMachine, listClients, disconnectClient } from '../wsServer.js'
 import { logAction } from '../services/auditLog.js'
@@ -512,6 +513,37 @@ router.get('/transactions/:id', requireStaffRead, async (req, res) => {
 // operation instead of the old hard-delete. See services/cardBalance.js for
 // the atomic credit-back and services/dayClose.js for why the reversal is a
 // brand-new Sale row rather than a mutation of a possibly-already-closed one.
+// Optional body: amount (a PART of the sale, default all of it) and payout:true (cash sales only: the hopper pays that amount to the
+// customer now). On the shop PC the hopper is used directly; on the central server the shop PC is asked and must answer within seconds
+// (nothing is queued for later: money must not come out when nobody is looking).
+const refundsInFlight = new Set()
+async function payOutForRefund(req, amount, sale) {
+  const { default: coinMachine } = await import('../services/coinMachine.js')
+  if (coinMachine.running) return coinMachine.payOutCash(amount, { reason: 'refund' })
+  const kiosks = await User.find({ tenantId: req.tenantId, role: 'KIOSK' }).select('_id').lean()
+  if (kiosks.length !== 1) { const e = new Error(kiosks.length ? 'Há mais de um quiosque: pague o reembolso no PC da loja' : 'Nenhum quiosque registado para esta loja'); e.status = 409; throw e }
+  const SyncCommandT = withTenant(SyncCommand, req)
+  const cmd = await SyncCommandT.create({ kioskId: kiosks[0]._id, type: 'pay_out', payload: { amount, saleId: String(sale._id) } })
+  const waitMs = Number(process.env.REFUND_PAYOUT_WAIT_MS) >= 0 ? Number(process.env.REFUND_PAYOUT_WAIT_MS) : 30_000
+  const graceMs = Number(process.env.REFUND_PAYOUT_GRACE_MS) >= 0 ? Number(process.env.REFUND_PAYOUT_GRACE_MS) : 15_000
+  const pollMs = Number(process.env.REFUND_PAYOUT_POLL_MS) > 0 ? Number(process.env.REFUND_PAYOUT_POLL_MS) : 1000
+  const until = Date.now() + waitMs
+  let cancelled = false
+  for (;;) {
+    const c = await SyncCommandT.findById(cmd._id).lean()
+    if (c?.status === 'done') return c.result || { success: true, dispensed: amount, remaining: 0 }
+    if (c?.status === 'failed') { const e = new Error(c.error || 'A loja recusou o pagamento'); e.status = 502; e.nothingPaid = true; throw e }
+    if (Date.now() >= until && !cancelled) {
+      // Not picked up in time: withdraw it so it can never run later. If the shop already took it, give it a little more time.
+      const gone = await SyncCommandT.findOneAndUpdate({ _id: cmd._id, status: 'pending' }, { status: 'failed', error: 'Sem resposta da loja' })
+      if (gone) { const e = new Error('O PC da loja não respondeu. Nada foi pago nem registado.'); e.status = 504; e.nothingPaid = true; throw e }
+      cancelled = true
+    }
+    if (cancelled && Date.now() >= until + graceMs) return { success: false, dispensed: 0, remaining: amount, unconfirmed: true, error: 'A loja não confirmou o pagamento' }
+    await new Promise((r) => setTimeout(r, pollMs))
+  }
+}
+
 router.post('/transactions/:id/refund', requireAdmin, async (req, res) => {
   const reason = String(req.body?.reason || '').trim()
   if (!reason) return res.status(400).json({ error: 'A refund reason is required' })
@@ -522,24 +554,52 @@ router.post('/transactions/:id/refund', requireAdmin, async (req, res) => {
   if (sale.type === 'refund') return res.status(400).json({ error: 'Cannot refund a refund' })
   if (sale.status === 'refunded') return res.status(400).json({ error: 'Transaction already refunded' })
 
+  // How much: all of the sale, or a part of it.
+  let amount = sale.amount
+  const given = req.body?.amount
+  if (given !== undefined && given !== null && given !== '') {
+    const p = parseAmount(String(given).replace(',', '.'))
+    if (!p.ok) return res.status(400).json({ error: 'Valor inválido' })
+    if (p.value > roundMoney(sale.amount) + 0.001) return res.status(400).json({ error: `O valor não pode ser maior que a venda (${sale.amount.toFixed(2)} €)` })
+    amount = p.value
+  }
+  const payout = req.body?.payout === true
+  if (payout && (sale.cardId || sale.method !== 'cash')) return res.status(400).json({ error: 'Só as vendas em dinheiro podem ser pagas pelo hopper' })
+  if (refundsInFlight.has(String(sale._id))) return res.status(409).json({ error: 'Este reembolso já está a ser processado' })
+  refundsInFlight.add(String(sale._id))
+  try {
+
+  // The cash goes out FIRST: when the hopper pays nothing, nothing is recorded and the admin can try again.
+  let paid = null
+  if (payout) {
+    try {
+      paid = await payOutForRefund(req, amount, sale)
+    } catch (e) {
+      return res.status(e.status || 500).json({ error: e.message })
+    }
+    if (!(paid.dispensed > 0) && !paid.unconfirmed) return res.status(409).json({ error: `O hopper não conseguiu pagar${paid.error ? ` (${paid.error})` : ''}. Nada foi registado.`, payout: paid })
+  }
+
   if (sale.cardId) {
     const CardT = withTenant(Card, req)
     // No status guard on creditCard — this must succeed even onto a blocked card.
-    await creditCard(CardT, { _id: sale.cardId }, sale.amount)
+    await creditCard(CardT, { _id: sale.cardId }, amount)
     // on the central server the shop's own card must follow (the shop PC has no SYNC_SERVER_URL set to itself)
-    if (!process.env.SYNC_SERVER_URL) await CardT.findByIdAndUpdate(sale.cardId, { $push: { shopAdjustments: { $each: [{ opId: `refund-${sale._id}`, delta: sale.amount, reason: 'refund', at: new Date() }], $slice: -50 } } })
+    if (!process.env.SYNC_SERVER_URL) await CardT.findByIdAndUpdate(sale.cardId, { $push: { shopAdjustments: { $each: [{ opId: `refund-${sale._id}`, delta: amount, reason: 'refund', at: new Date() }], $slice: -50 } } })
   }
 
+  const owed = paid ? roundMoney(Math.max(0, amount - (Number(paid.dispensed) || 0))) : 0
+  const note = paid ? ` [pago pelo hopper: ${(Number(paid.dispensed) || 0).toFixed(2)} €${owed > 0 ? `; EM FALTA ${owed.toFixed(2)} €${paid.unconfirmed ? ' (sem confirmação da loja)' : ''}` : ''}]` : ''
   const refund = await SaleT.create({
     machineId: sale.machineId || null,
-    amount: -sale.amount,
+    amount: -amount,
     type: 'refund',
     method: sale.method,
     batchId: `refund-${sale._id}`,
     cardId: sale.cardId || null,
     cardCode: sale.cardCode || null,
     refundOf: sale._id,
-    refundReason: reason
+    refundReason: reason + note
     // dayCloseId intentionally left null — it rolls into the next open
     // period the same way every other sale does (services/dayClose.js:141),
     // rather than retroactively touching a closed report's frozen totals.
@@ -548,8 +608,15 @@ router.post('/transactions/:id/refund', requireAdmin, async (req, res) => {
   sale.status = 'refunded'
   await sale.save()
 
-  logAction(req, 'transaction.refund', 'Sale', sale._id, { amount: sale.amount, reason, refundId: refund._id })
-  res.json({ success: true, refund })
+  logAction(req, 'transaction.refund', 'Sale', sale._id, { amount, saleAmount: sale.amount, reason, refundId: refund._id, payout: paid ? { dispensed: paid.dispensed, owed, unconfirmed: !!paid.unconfirmed } : null })
+  if (owed > 0) {
+    try {
+      const { sendAlertForTenant } = await import('../services/alerts.js')
+      await sendAlertForTenant(req.tenantId, 'Reembolso: falta pagar dinheiro ao cliente', `Reembolso de ${amount.toFixed(2)} €: o hopper pagou ${(Number(paid.dispensed) || 0).toFixed(2)} € e FALTAM ${owed.toFixed(2)} €${paid.unconfirmed ? ' (a loja não confirmou o pagamento: confirme o que saiu do hopper)' : ''}. Pague a diferença em mão ao cliente.`)
+    } catch (e) { console.error('[admin] could not send the refund shortfall alert:', e.message) }
+  }
+  res.json({ success: true, refund, payout: paid ? { requested: amount, dispensed: paid.dispensed, owed, unconfirmed: !!paid.unconfirmed } : null })
+  } finally { refundsInFlight.delete(String(sale._id)) }
 })
 
 // Loyalty Cards (admin)

@@ -176,6 +176,21 @@ describe('Dryer blocks: one impulse now, one more every block', function () {
     expect(err.message).to.match(/Não há dinheiro/) // nothing left to keep
   })
 
+  it('payOutCash: pays through the hopper and reports what really came out (and refuses silly amounts)', async () => {
+    const Peripheral = (await import('../src/models/peripheral.js')).default
+    await Peripheral.create({ tenantId: tenant._id, name: 'Hopper', type: 'hopper', enabled: true, protocol: 'cctalk', address: '3' })
+    const asked = []
+    const orig = coinMachine.dispenseChange
+    coinMachine.dispenseChange = async (id, amount) => { asked.push(amount); return { success: false, dispensed: 2, remaining: 0.1, error: 'moeda em falta' } }
+    try {
+      const r = await coinMachine.payOutCash(2.1)
+      expect(asked).to.deep.equal([2.1])
+      expect(r).to.deep.include({ success: false, dispensed: 2, remaining: 0.1 })
+      let err; try { await coinMachine.payOutCash(0) } catch (e) { err = e }
+      expect(err.message).to.match(/inválido/)
+    } finally { coinMachine.dispenseChange = orig }
+  })
+
   it('controller watchdog: a connected link that stays silent is noticed, a new session is requested once, and the recovery is noticed', async () => {
     let silence = 10_000
     let resets = 0
