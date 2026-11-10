@@ -182,10 +182,11 @@ export default function AdminDayClose() {
                           <InfoRow label="Fim" value={shopDateTime(dc.periodTo || dc.createdAt)} />
                           <InfoRow label="Vendas" value={`${fmt(dc.totalSales)}€ (${fmt(dc.totalCash)} din${Number(dc.totalMbway) > 0 ? ` + ${fmt(dc.totalMbway)} MB WAY` : ''} + ${fmt(dc.totalCard)} cart)`} />
                           <InfoRow label="Fundo inicial" value={`${fmt(dc.openingFloat)}€`} />
+                          {Number(dc.floatAdded) > 0 && <InfoRow label="Fundo adicionado" value={`${fmt(dc.floatAdded)}€`} />}
                           {dc.totalChangeDispensed > 0 && <InfoRow label="Troco dispensado" value={`${fmt(dc.totalChangeDispensed)}€`} />}
                         </DetailBlock>
                         <DetailBlock title="Reconciliacao">
-                          <InfoRow label="Esperado" value={`${fmt(dc.expectedCash ?? (Number(dc.openingFloat||0)+Number(dc.totalCash||0)))}€`} />
+                          <InfoRow label="Esperado" value={`${fmt(dc.expectedCash ?? (Number(dc.openingFloat||0)+Number(dc.totalCash||0)+Number(dc.floatAdded||0)))}€`} />
                           <InfoRow label="Contado" value={`${fmt(dc.countedCash)}€`} />
                           <div className="flex justify-between pt-0.5">
                             <span className="text-neutral-500">Diferenca</span><DiscrepancyPill value={disc} />

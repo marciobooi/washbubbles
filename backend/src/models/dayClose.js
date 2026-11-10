@@ -35,12 +35,13 @@ const dayCloseSchema = new Schema({
   // required field here rejected every offline close.
   amountToBank: { type: Number, default: 0 }, // cash removed for bank deposit
   floatLeft:    { type: Number, default: 0 },  // cash left to start next session
+  floatAdded:   { type: Number, default: 0 },  // cash put in the till (hopper reinforcements) since the previous close, expected in this count
 
   // ── Origin ──
   // 'adjustment' = a standalone cash top-up (e.g. seeding the starting float)
   // created via createFloatAdjustment — no bank split, no physical count, so
-  // it's tagged distinctly from a real reconciliation close even though it
-  // still counts as the float chain's baseline (see findLastDashboardClose).
+  // it's tagged distinctly from a real reconciliation close and is NOT the
+  // float chain's baseline: only real closes are (see findLastDashboardClose).
   source: { type: String, enum: ['dashboard', 'kiosk', 'adjustment'], default: 'dashboard' },
   totalRecharges: { type: Number, default: 0 },
   salesCount: { type: Number, default: 0 },

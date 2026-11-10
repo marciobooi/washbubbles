@@ -39,7 +39,7 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
   const mechanismTotal    = denomSum(mechanismDenoms)
   const hopperActualTotal = denomSum(hopperActualDenoms)
   const hopperTargetTotal = denomSum(hopperTargetDenoms)
-  const expectedCash      = summary ? Number(summary.openingFloat || 0) + Number(summary.totalCash || 0) : 0
+  const expectedCash      = summary ? Number(summary.openingFloat || 0) + Number(summary.totalCash || 0) + Number(summary.floatAdded || 0) : 0
   const discrepancy       = countedCash - expectedCash
   const hopperGap         = computeGap(hopperTargetDenoms, hopperActualDenoms)
   const hopperGapTotal    = hopperGap.reduce((s, d) => s + d.toAdd * d.value, 0)
@@ -194,6 +194,7 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
         <div className="bg-white rounded-2xl border border-neutral-200 shadow-sm p-5 space-y-4">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <StatCard label="Fundo inicial"     value={`${fmt(summary.openingFloat)}€`} color="neutral" />
+            {Number(summary.floatAdded) > 0 && <StatCard label="Fundo adicionado" value={`${fmt(summary.floatAdded)}€`} color="neutral" sub="reforços do hopper desde o último fecho" />}
             <StatCard label="Vendas dinheiro"   value={`${fmt(summary.cashSales ?? summary.totalCash)}€`}    color="green" sub={summary.totalRecharges ? `+ ${fmt(summary.totalRecharges)}€ em recargas` : undefined} />
             {Number(summary.totalMbway) > 0 && <StatCard label="MB WAY" value={`${fmt(summary.totalMbway)}€`} color="green" sub="pago no banco: não está na caixa" />}
             <StatCard label="Consumo de cartões" value={`${fmt(summary.totalCard)}€`}    color="blue" sub="só informativo, não entra na contabilidade" />

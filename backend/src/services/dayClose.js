@@ -30,9 +30,22 @@ import { getCashDrawerLedger, resetCashDrawerLedger } from './cashDrawer.js'
  * from this same wizard running on the kiosk — is always tagged `dashboard`;
  * kiosk auto-pushes are a record, not a reconciliation.
  */
+/**
+ * The last REAL close (counted by a person). A float top-up ('adjustment') is not one: it used to be taken as the baseline, which
+ * swept every sale since the real close into one "balanced" record that nobody had counted, and made all that cash the new "float"
+ * (2026-11-08: 48 days, 534 sales, 2005.90 EUR became a starting float of 2182.40 EUR). Top-ups are added on top of the last real
+ * close instead (see floatAddedSince).
+ */
 export async function findLastDashboardClose(DayCloseT) {
-  const arr = await DayCloseT.find({ source: { $ne: 'kiosk' } }).sort({ createdAt: -1 }).limit(1).lean()
+  const arr = await DayCloseT.find({ source: 'dashboard' }).sort({ createdAt: -1 }).limit(1).lean()
   return arr[0] || null
+}
+
+/** Cash put into the till (a hopper reinforcement, a float top-up) since the last real close: expected in the count, never a sale. */
+export async function floatAddedSince(DayCloseT, lastClose) {
+  const since = lastClose ? (lastClose.periodTo || lastClose.createdAt) : new Date(0)
+  const rows = await DayCloseT.find({ source: 'adjustment', createdAt: { $gt: since } }).select('metadata').lean()
+  return Number(rows.reduce((s, r) => s + (Number(r.metadata?.adjustmentAmount) || 0), 0).toFixed(2))
 }
 
 /**
@@ -89,7 +102,8 @@ export async function getDayCloseSummary(req) {
   const sales = await SaleT.find({ createdAt: { $gt: periodFrom } }).lean()
   const tally = tallySales(sales)
   const tc = tally.totalCash
-  const expectedCash = Number((openingFloat + tc).toFixed(2))
+  const floatAdded = await floatAddedSince(DayCloseT, lastClose)
+  const expectedCash = Number((openingFloat + tc + floatAdded).toFixed(2))
 
   // Coins/bills the hardware has actually accepted since the last close — see
   // services/cashDrawer.js. Lets Step 1 start from what's already known
@@ -101,6 +115,7 @@ export async function getDayCloseSummary(req) {
     periodFrom,
     periodTo: new Date(),
     openingFloat,
+    floatAdded,
     totalCash: tc,
     cashSales: tally.cashSales,
     totalRecharges: tally.totalRecharges,
@@ -186,7 +201,8 @@ export async function createDayClose(req, {
     const tally = tallySales(sales)
     const tc = tally.totalCash
     const tk = tally.totalCard
-    const expectedCash = Number((openingFloat + tc).toFixed(2))
+    const floatAdded = await floatAddedSince(DayCloseT, lastClose)
+    const expectedCash = Number((openingFloat + tc + floatAdded).toFixed(2))
     const totalChangeDispensed = tally.totalChangeDispensed
 
     // If countedCash wasn't provided, derive it from denomination sum
@@ -215,6 +231,7 @@ export async function createDayClose(req, {
     const dc = await DayCloseT.create({
       source: 'dashboard',
       openingFloat,
+      floatAdded,
       expectedCash,
       countedCash: actualCountedCash,
       discrepancy,
@@ -266,13 +283,9 @@ export async function createDayClose(req, {
  * one up outside a normal count — without it ever being treated as bankable
  * sales money and without producing a false "discrepancy" in the history.
  *
- * Unlike `createDayClose`, this never asks for a physical count: the counted
- * amount is defined to equal the expected amount (opening float + any sales
- * swept in since the last close + the top-up itself), so discrepancy is
- * always exactly 0. `amountToBank` is always 0 — this action never banks
- * money, only a real close (`createDayClose`) does that. Still sweeps and
- * tags any pending sales the same way a real close does, so nothing between
- * the last close and now silently falls out of the period chain.
+ * Unlike `createDayClose`, this never asks for a physical count, and it is NOT a close: it does not touch the sales (they stay
+ * open for the next real count) and does not become the baseline of the next period. It only records that this much was put in the
+ * till; the next real close expects it on top of the last close's float (see floatAddedSince). `amountToBank` is always 0.
  *
  * `denominations` is the coin/bill breakdown (e.g. 10× €2) the admin actually
  * put in the till — the total is always derived from it server-side, the
@@ -293,46 +306,37 @@ export async function createFloatAdjustment(req, { amount, denominations = [], n
 
   try {
     const DayCloseT = withTenant(DayClose, req)
-    const SaleT = withTenant(Sale, req)
 
     const lastClose = await findLastDashboardClose(DayCloseT)
-    const periodFrom = lastClose ? (lastClose.periodTo || lastClose.createdAt) : new Date(0)
     const openingFloat = lastClose ? Number(lastClose.floatLeft || 0) : 0
-    const periodTo = new Date()
-
-    const sales = await SaleT.find({ createdAt: { $gt: periodFrom, $lte: periodTo } }).lean()
-    const tally = tallySales(sales)
-    const tc = tally.totalCash
-    const tk = tally.totalCard
+    const now = new Date()
     const roundedAmt = Number(amt.toFixed(2))
-    const expectedCash = Number((openingFloat + tc + roundedAmt).toFixed(2))
+    // Only the float: what was in the till at the last real close plus what has been put in since (this top-up included). The sales
+    // since then are NOT swept in and NOT closed: they stay open for the next real count.
+    const floatNow = Number((openingFloat + await floatAddedSince(DayCloseT, lastClose) + roundedAmt).toFixed(2))
 
     const dc = await DayCloseT.create({
       source: 'adjustment',
       openingFloat,
-      expectedCash,
-      countedCash: expectedCash,
+      expectedCash: floatNow,
+      countedCash: floatNow,
       discrepancy: 0,
       countedDenominations: denomsClean,
       amountToBank: 0,
-      floatLeft: expectedCash,
-      totalCash: tc,
-      totalCard: tk,
-      totalMbway: tally.totalMbway,
-      totalRecharges: tally.totalRecharges,
-      totalSales: tally.totalSales,
-      salesCount: sales.length,
+      floatLeft: floatNow,
+      totalCash: 0,
+      totalCard: 0,
+      totalMbway: 0,
+      totalRecharges: 0,
+      totalSales: 0,
+      salesCount: 0,
       notes: `Fundo adicionado: +${roundedAmt.toFixed(2)}€${notes ? ` — ${String(notes).slice(0, 400)}` : ''}`,
       closedBy: req.userModel?._id,
       closedByUsername: req.userModel?.username || '',
-      periodFrom,
-      periodTo,
+      periodFrom: now,
+      periodTo: now,
       metadata: { adjustmentAmount: roundedAmt }
     })
-
-    if (sales.length) {
-      await SaleT.updateMany({ _id: { $in: sales.map(s => s._id) } }, { $set: { dayCloseId: dc._id } })
-    }
 
     return { status: 200, body: dc }
   } finally {
