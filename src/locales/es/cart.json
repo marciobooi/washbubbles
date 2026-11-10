@@ -83,6 +83,7 @@
   "pinNone": "No hay ningún PIN de administrador configurado para este local.",
   "pinTooMany": "Demasiados intentos. Espere unos minutos.",
   "pinInvalid": "PIN no válido",
+  "pinExpired": "PIN caducado. Pida al administrador que cree un PIN nuevo en el panel de administración.",
   "totalCharge": "Total a cobrar",
   "cash": "Efectivo",
   "card": "Tarjeta",

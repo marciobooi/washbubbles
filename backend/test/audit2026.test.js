@@ -246,6 +246,76 @@ describe('Audit 2026-11', function () {
     })
   })
 
+  describe('the staff PIN lasts a week', () => {
+    let Setting
+    const setPin = (value) => request(app).post('/api/admin/settings').set(adminAuth()).send({ key: 'adminPin', value })
+    const tryPin = (pin) => request(app).post('/api/pos/admin/verify-pin').set(kioskAuth()).send({ pin })
+    const madeDaysAgo = (d) => Setting.updateOne({ tenantId: tenant._id, key: 'adminPin.setAt' }, { $set: { value: new Date(Date.now() - d * 24 * 3600e3).toISOString() } })
+    before(async () => { Setting = (await import('../src/models/setting.js')).default })
+    beforeEach(async () => { (await import('../src/routes/pos.js'))._resetPinGuards() }) // the PIN attempts limit is per kiosk key
+
+    it('a new PIN works, and after seven days the kiosk answers that it has expired', async () => {
+      expect((await setPin('4821')).status).to.equal(200)
+      expect((await tryPin('4821')).status).to.equal(200)
+      await madeDaysAgo(6)
+      expect((await tryPin('4821')).status).to.equal(200)
+      await madeDaysAgo(8)
+      const old = await tryPin('4821')
+      expect(old.status).to.equal(410)
+      expect(old.body.code).to.equal('pin-expired')
+      expect((await tryPin('0000')).status).to.equal(401) // a wrong PIN is still just wrong
+      const info = await request(app).get('/api/admin/settings/adminPin').set(adminAuth())
+      expect(info.body.expired).to.equal(true)
+      expect(info.body.value).to.equal(null)
+    })
+
+    it('the new PIN must be a different one, and it starts a new week', async () => {
+      await setPin('4821')
+      await madeDaysAgo(8)
+      expect((await setPin('4821')).status).to.equal(400)
+      expect((await tryPin('4821')).status).to.equal(410)
+      expect((await setPin('7733')).status).to.equal(200)
+      expect((await tryPin('7733')).status).to.equal(200)
+      const info = await request(app).get('/api/admin/settings/adminPin').set(adminAuth())
+      expect(info.body.expired).to.equal(false)
+      expect(info.body.daysLeft).to.equal(7)
+    })
+
+    it('the date cannot be pushed forward by hand, and a PIN from before this rule gets its week at start-up', async () => {
+      expect((await request(app).post('/api/admin/settings').set(adminAuth()).send({ key: 'adminPin.setAt', value: new Date().toISOString() })).status).to.equal(400)
+      const { hashPin, datePins } = await import('../src/services/staffPin.js')
+      await Setting.create({ tenantId: tenant._id, key: 'adminPin', value: await hashPin('1234') })
+      expect((await tryPin('1234')).status).to.equal(200) // no date yet: not locked out
+      expect(await datePins(Setting)).to.equal(1)
+      expect(await datePins(Setting)).to.equal(0)
+      expect((await tryPin('1234')).status).to.equal(200)
+    })
+  })
+
+  describe('the staff menu cannot hand the shop to another server', () => {
+    it('only the server already in use, or one listed on the PC, is accepted', async () => {
+      const { applyCentralKey, serverAllowed } = await import('../src/services/centralKey.js')
+      const env = { url: process.env.SYNC_SERVER_URL, allowed: process.env.SYNC_SERVER_ALLOWED }
+      try {
+        process.env.SYNC_SERVER_URL = 'https://freshbubbles.pt/api'
+        delete process.env.SYNC_SERVER_ALLOWED
+        let asked = 0
+        const fetchImpl = async () => { asked++; return { ok: true, status: 200, json: async () => ({}) } }
+        const r = await applyCentralKey('a'.repeat(24), { serverUrl: 'https://evil.example/api', fetchImpl, envFile: '/nonexistent/.env' })
+        expect(r.ok).to.equal(false)
+        expect(r.code).to.equal('server-not-allowed')
+        expect(asked).to.equal(0) // the key is never sent to the unknown server
+        expect(serverAllowed('https://freshbubbles.pt/api/')).to.equal(true)
+        process.env.SYNC_SERVER_ALLOWED = 'novo.example, outro.example'
+        expect(serverAllowed('https://novo.example/api')).to.equal(true)
+        expect(serverAllowed('https://evil.example/api')).to.equal(false)
+      } finally {
+        if (env.url === undefined) delete process.env.SYNC_SERVER_URL; else process.env.SYNC_SERVER_URL = env.url
+        if (env.allowed === undefined) delete process.env.SYNC_SERVER_ALLOWED; else process.env.SYNC_SERVER_ALLOWED = env.allowed
+      }
+    })
+  })
+
   describe('what the central server accepts from a shop', () => {
     it('a machine status outside the known ones is refused', async () => {
       const m = await Machine.create({ tenantId: tenant._id, name: 'L1', type: 'wash', status: 'free' })

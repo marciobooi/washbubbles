@@ -182,6 +182,14 @@ router.post('/sale', requireAdmin, async (req, res) => {
  * know. Compared in constant time, since a short numeric PIN is otherwise
  * brute-forcible in minutes.
  */
+const pinMailed = new Map() // shop + the PIN's date + subject -> sent (one e-mail per PIN, not one per use)
+function pinMail(tenantId, setAt, subject, text) {
+  const k = `${tenantId}:${setAt}:${subject}`
+  if (pinMailed.has(k)) return
+  pinMailed.set(k, true)
+  import('../services/alerts.js').then(({ sendAlertForTenant }) => sendAlertForTenant(tenantId, subject, text)).catch(() => {})
+}
+
 async function checkAdminPin(req, pin) {
   if (typeof pin !== 'string' || !pin) return { ok: false, status: 400, error: 'Missing pin' }
 
@@ -194,6 +202,15 @@ async function checkAdminPin(req, pin) {
 
   const { verifyPin } = await import('../services/staffPin.js')
   if (!(await verifyPin(expected, pin))) return { ok: false, status: 401, error: 'Invalid PIN' }
+
+  // The right PIN, but older than a week: it no longer opens anything until a new one is made in the admin.
+  const { pinAge, PIN_SET_AT } = await import('../services/staffPin.js')
+  const age = pinAge((await SettingT.findOne({ key: PIN_SET_AT }).lean())?.value)
+  if (age.expired) {
+    pinMail(req.tenantId, age.setAt, 'PIN de staff expirado', 'O PIN de staff expirou e foi usado no quiosque sem efeito. Crie um PIN novo no admin (Definições → Staff) para o staff voltar a ter acesso.')
+    return { ok: false, status: 410, code: 'pin-expired', error: 'PIN expirado. Crie um PIN novo no admin.' }
+  }
+  if (age.daysLeft === 1) pinMail(req.tenantId, age.setAt, 'O PIN de staff expira amanhã', 'O PIN de staff expira em menos de 24 horas. Crie um PIN novo no admin (Definições → Staff) e passe-o aos funcionários.')
 
   return { ok: true }
 }
@@ -209,7 +226,7 @@ async function checkAdminPin(req, pin) {
  */
 router.post('/admin/verify-pin', adminPinLimiter, requireKiosk, async (req, res) => {
   const result = await checkAdminPin(req, req.body.pin)
-  if (!result.ok) return res.status(result.status).json({ error: result.error, ...(result.configured === false ? { configured: false } : {}) })
+  if (!result.ok) return res.status(result.status).json({ error: result.error, ...(result.code ? { code: result.code } : {}), ...(result.configured === false ? { configured: false } : {}) })
   res.json({ ok: true })
 })
 
@@ -461,7 +478,7 @@ async function requireStaffPin(req, res) {
   const pinCheck = await checkAdminPin(req, req.body?.pin)
   if (!pinCheck.ok) {
     if (pinCheck.status === 401) { const r = staffPinFails.get(ip) || { n: 0, since: Date.now() }; r.n++; staffPinFails.set(ip, r) }
-    res.status(pinCheck.status).json({ error: pinCheck.error })
+    res.status(pinCheck.status).json({ error: pinCheck.error, ...(pinCheck.code ? { code: pinCheck.code } : {}) })
     return false
   }
   staffPinFails.delete(ip)

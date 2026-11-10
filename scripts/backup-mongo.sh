@@ -4,7 +4,7 @@
 set -euo pipefail
 APP_DIR="${APP_DIR:-/opt/washbubbles}"
 OUT_DIR="${OUT_DIR:-/root/backups}"
-KEEP="${KEEP:-1}"   # how many backups to keep: ONE, the latest that was made and checked (the old one goes only after the new one succeeded)
+KEEP="${KEEP:-7}"   # how many backups to keep: a week (the older ones go only after the new one was made and checked)
 DB="${DB:-washstore}"
 LOG="$OUT_DIR/backup.log"
 mkdir -p "$OUT_DIR"

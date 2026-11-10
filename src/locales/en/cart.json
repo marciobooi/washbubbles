@@ -83,6 +83,7 @@
   "pinNone": "No administrator PIN is set for this shop.",
   "pinTooMany": "Too many attempts. Please wait a few minutes.",
   "pinInvalid": "Invalid PIN",
+  "pinExpired": "PIN expired. Ask the administrator to create a new PIN in the admin.",
   "totalCharge": "Total to charge",
   "cash": "Cash",
   "card": "Card",

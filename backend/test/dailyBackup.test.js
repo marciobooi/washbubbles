@@ -55,16 +55,19 @@ describe('Daily copy of the data, kept on the shop PC and on the central server'
     expect(central.filter((l) => l.c === 'tenants')).to.have.length(1)
   })
 
-  it('the previous copy is deleted only when the new one is in place', async () => {
-    await run('20261110')
-    await run('20261111')
-    expect(fs.readdirSync(shopDir).sort()).to.deep.equal(['central-20261111.json.gz', 'shop-20261111.json.gz'])
-    expect(fs.readdirSync(path.join(centralDir, String(tenant._id))).sort()).to.deep.equal(['central-20261111.json.gz', 'shop-20261111.json.gz'])
+  it('a week of copies is kept, and an older one is deleted only when the new one is in place', async () => {
+    for (let d = 3; d <= 11; d++) await run('202611' + String(d).padStart(2, '0')) // nine days
+    const week = ['05', '06', '07', '08', '09', '10', '11']
+    const expected = [...week.map((d) => `central-202611${d}.json.gz`), ...week.map((d) => `shop-202611${d}.json.gz`)]
+    expect(fs.readdirSync(shopDir).sort()).to.deep.equal(expected)
+    expect(fs.readdirSync(path.join(centralDir, String(tenant._id))).sort()).to.deep.equal(expected)
     // the central server cannot be reached: yesterday's central copy stays, today's shop copy is still made
     let failed = null
     try { await runShopBackup({ key: '20261112', dir: shopDir, url: 'http://127.0.0.1:9/api', apiKey: kiosk.apiKey }) } catch (e) { failed = e }
     expect(failed).to.be.an('error')
-    expect(fs.readdirSync(shopDir).sort()).to.deep.equal(['central-20261111.json.gz', 'shop-20261112.json.gz'])
+    const after = fs.readdirSync(shopDir)
+    expect(after).to.include('shop-20261112.json.gz').and.to.include('central-20261111.json.gz').and.to.include('central-20261105.json.gz')
+    expect(after).to.not.include('central-20261112.json.gz').and.to.not.include('shop-20261105.json.gz')
   })
 
   it('a copy that is cut short is refused, by the reader and by the central server', async () => {

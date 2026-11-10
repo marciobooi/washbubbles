@@ -434,7 +434,9 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
       setShowPinPrompt(false)
       setPin('')
     } catch (e) {
-      if (e?.status === 409) {
+      if (e?.status === 410) {
+        setPinError(t('pinExpired'))
+      } else if (e?.status === 409) {
         setPinError(t('pinNone'))
       } else if (e?.status === 429) {
         setPinError(t('pinTooMany'))

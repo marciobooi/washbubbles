@@ -830,7 +830,9 @@ router.get('/settings/:key', requireAdmin, async (req, res) => {
   if (req.params.key === 'adminPin') {
     // Never the PIN or its hash: only whether one is set (the screen shows 'PIN definido').
     const row = await withTenant(Setting, req).findOne({ key: 'adminPin' }).lean()
-    return res.json({ key: 'adminPin', value: null, isSet: Boolean(row?.value) })
+    const { pinAge, PIN_SET_AT } = await import('../services/staffPin.js')
+    const at = row?.value ? (await withTenant(Setting, req).findOne({ key: PIN_SET_AT }).lean())?.value : null
+    return res.json({ key: 'adminPin', value: null, isSet: Boolean(row?.value), ...pinAge(at) })
   }
   const SettingT = withTenant(Setting, req)
   const s = await SettingT.findOne({ key: req.params.key }).lean()
@@ -904,6 +906,7 @@ router.post('/settings', requireAdmin, async (req, res) => {
   if (!key || typeof key !== 'string' || key.length > 100) return res.status(400).json({ error: 'Missing key' })
   // sync.* is the link between the shop and the central server (keys, pending key changes): written by the server itself, never from this form.
   if (key.startsWith('sync.')) return res.status(400).json({ error: 'Esta definição não pode ser alterada aqui' })
+  if (key === 'adminPin.setAt') return res.status(400).json({ error: 'Esta definição não pode ser alterada aqui' }) // written with the PIN itself
   if (key === 'shopmail.account') return res.status(400).json({ error: 'Use /shop-mail' }) // the password must be encrypted on its way in
   // Seconds before unspent cash is paid back from the hopper; 0 = never. A bad value here
   // would either keep a customer's money forever or pay it out at once, so refuse it.
@@ -916,10 +919,17 @@ router.post('/settings', requireAdmin, async (req, res) => {
   // The staff PIN is stored as a hash (never the digits); an empty value removes it.
   let toStore = value
   if (key === 'adminPin') {
-    const { PIN_FORMAT, hashPin } = await import('../services/staffPin.js')
+    const { PIN_FORMAT, hashPin, verifyPin, PIN_SET_AT } = await import('../services/staffPin.js')
     if (value === null || value === '' || value === undefined) toStore = null
     else if (!PIN_FORMAT.test(String(value))) return res.status(400).json({ error: 'O PIN deve ter entre 4 e 8 dígitos' })
-    else toStore = await hashPin(String(value))
+    else {
+      // a new PIN is a different PIN: saving the same digits again would only reset the week
+      const cur = await withTenant(Setting, req).findOne({ key: 'adminPin' }).lean()
+      if (cur?.value && await verifyPin(cur.value, String(value))) return res.status(400).json({ error: 'Escolha um PIN diferente do actual' })
+      toStore = await hashPin(String(value))
+    }
+    // the day it was made goes with it (services/staffPin.js: a PIN lasts a week)
+    await withTenant(Setting, req).findOneAndUpdate({ key: PIN_SET_AT }, { value: toStore ? new Date().toISOString() : null }, { upsert: true })
   }
   const SettingT = withTenant(Setting, req)
   const s = await SettingT.findOneAndUpdate({ key }, { value: toStore }, { upsert: true, new: true })

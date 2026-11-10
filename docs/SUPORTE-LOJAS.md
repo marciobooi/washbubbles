@@ -11,7 +11,7 @@
 | Trocar o PC de uma loja | Lojas → **Gerar instalação do posto** outra vez: a chave nova fica pendente; o PC antigo continua até o novo ligar |
 | Loja deixou de pagar / encerrou | **Suspender** (admins não entram, posto deixa de sincronizar, site "indisponível"; os dados ficam). **Reativar** volta ao normal |
 | Entrar numa loja para ajudar | **Gerir** (fica na auditoria: `tenant.act_as`) |
-| Backups | `/root/backups` no Hetzner, diário às 23:00, fica a última (`backup.log`); mais as cópias por loja, ver "Cópias de segurança diárias". Restauro: `mongorestore --gzip --archive=<ficheiro> --nsInclude 'washstore.*'` num Mongo à parte primeiro |
+| Backups | `/root/backups` no Hetzner, diário às 23:00, 7 dias (`backup.log`); mais as cópias por loja, ver "Cópias de segurança diárias". Restauro: `mongorestore --gzip --archive=<ficheiro> --nsInclude 'washstore.*'` num Mongo à parte primeiro |
 
 **Contactos / acessos:** Hetzner `ssh root@128.140.118.209` (`/opt/washbubbles`); PCs por Tailscale. Registos do servidor: `/var/log/washbubbles-deploy.log`, `-release.log`, `-domains.log`.
 
@@ -22,7 +22,7 @@ Todos os dias às 23:00 (hora de Lisboa) o PC da loja faz uma cópia da sua base
 - PC da loja: `C:\washbubbles\backups\shop-AAAAMMDD.json.gz` e `central-AAAAMMDD.json.gz`
 - Servidor central: `/opt/washbubbles/backups/<id da loja>/` com os mesmos dois ficheiros
 
-A cópia anterior só é apagada depois de a nova estar escrita e conferida (lida de volta e contada). Um PC que estava desligado às 23:00 faz a cópia quando voltar a arrancar. Se falhar, tenta de 30 em 30 minutos e envia um e-mail de alerta ("Cópia de segurança falhou"). O resultado fica em `backups\last.json` e na auditoria (`backup.done`).
+Guardam-se as cópias dos últimos 7 dias de cada uma; as mais antigas só são apagadas depois de a nova estar escrita e conferida (lida de volta e contada). Um PC que estava desligado às 23:00 faz a cópia quando voltar a arrancar. Se falhar, tenta de 30 em 30 minutos e envia um e-mail de alerta ("Cópia de segurança falhou"). O resultado fica em `backups\last.json` e na auditoria (`backup.done`).
 
 À mesma hora o servidor central faz também a cópia completa de todas as lojas (`scripts/backup-mongo.sh`, em `/root/backups`), que nunca sai do servidor.
 

@@ -87,6 +87,7 @@ export default function AdminSettings(){
   // Staff & maintenance helper state
   const [adminPin, setAdminPin] = useState('')
   const [pinIsSet, setPinIsSet] = useState(false) // the PIN itself is never sent back: only whether one exists
+  const [pinAge, setPinAge] = useState(null) // { setAt, expiresAt, expired, daysLeft }: a staff PIN lasts a week
   const [savingPin, setSavingPin] = useState(false)
   const [kioskLockEnabled, setKioskLockEnabled] = useState(false)
   const [savingLockToggle, setSavingLockToggle] = useState(false)
@@ -336,6 +337,7 @@ export default function AdminSettings(){
       const lockEnabled = await api.getSetting('kioskLockEnabled').catch(() => null)
       setAdminPin('')
       setPinIsSet(Boolean(pin && pin.isSet))
+      setPinAge(pin && pin.isSet && pin.expiresAt ? pin : null)
       setKioskLockEnabled(Boolean(lockEnabled && lockEnabled.value))
     } catch (e) { console.warn('loadStaffSettings failed', e) }
   }
@@ -571,7 +573,7 @@ export default function AdminSettings(){
     setSavingPin(true)
     try {
       await api.setSetting({ key: 'adminPin', value: null })
-      setAdminPin(''); setPinIsSet(false)
+      setAdminPin(''); setPinIsSet(false); setPinAge(null)
       toast({ title: 'PIN de staff removido — ações de staff ficam bloqueadas', variant: 'success' })
     } catch (e) {
       toast({ title: 'Erro ao remover o PIN', variant: 'destructive' })
@@ -590,10 +592,11 @@ export default function AdminSettings(){
     try {
       await api.setSetting({ key: 'adminPin', value: adminPin })
       setAdminPin(''); setPinIsSet(true)
-      toast({ title: 'PIN de staff atualizado', variant: 'success' })
+      toast({ title: 'PIN de staff atualizado', description: 'Vale durante 7 dias. Passe-o aos funcionários.', variant: 'success' })
+      loadStaffSettings()
     } catch (e) {
       console.error(e)
-      toast({ title: 'Erro ao guardar PIN', variant: 'destructive' })
+      toast({ title: e?.body?.error || 'Erro ao guardar PIN', variant: 'destructive' })
     } finally {
       setSavingPin(false)
     }
@@ -1351,7 +1354,15 @@ export default function AdminSettings(){
               value={adminPin}
               onChange={(e) => setAdminPin(e.target.value.replace(/\D/g, '').slice(0, 8))}
             />
+            {pinAge && (
+              <p className={`text-sm font-medium ${pinAge.expired ? 'text-red-600' : pinAge.daysLeft <= 1 ? 'text-amber-600' : 'text-muted-foreground'}`}>
+                {pinAge.expired
+                  ? 'PIN expirado: o quiosque já não o aceita. Crie um PIN novo.'
+                  : `PIN válido até ${new Date(pinAge.expiresAt).toLocaleString('pt-PT', { dateStyle: 'short', timeStyle: 'short' })} (${pinAge.daysLeft === 1 ? 'falta menos de 1 dia' : `faltam ${pinAge.daysLeft} dias`}).`}
+              </p>
+            )}
             <p className="text-xs text-muted-foreground">
+              O PIN vale 7 dias: depois disso o quiosque responde &quot;PIN expirado&quot; até ser criado um novo aqui.
               Necessário no quiosque para pagamento manual, fecho de caixa e bloqueio de ecrã.
               Sem um PIN definido, essas ações ficam bloqueadas — nunca desativadas por omissão.
             </p>

@@ -123,7 +123,9 @@ describe('The staff PIN is stored as a hash', function () {
     expect((await verify('4821')).unlocked).to.equal(true)
     expect((await verify('1234')).status).to.equal(401)
     const one = await request(app).get('/api/admin/settings/adminPin').set('Authorization', `Bearer ${adminToken}`)
-    expect(one.body).to.deep.equal({ key: 'adminPin', value: null, isSet: true })
+    // never the PIN or its hash: only that one is set, and until when it is valid (a PIN lasts a week)
+    expect(one.body).to.include({ key: 'adminPin', value: null, isSet: true, expired: false, daysLeft: 7 })
+    expect(Object.keys(one.body).sort()).to.deep.equal(['daysLeft', 'expired', 'expiresAt', 'isSet', 'key', 'setAt', 'value'])
     const list = await request(app).get('/api/admin/settings').set('Authorization', `Bearer ${adminToken}`)
     expect(JSON.stringify(list.body)).to.not.include(row.value)
     const AuditLog = (await import('../src/models/auditLog.js')).default

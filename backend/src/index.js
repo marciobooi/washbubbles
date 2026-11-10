@@ -283,6 +283,9 @@ async function start() {
       const SettingModel = (await import('./models/setting.js')).default
       const n = await migrateAdminPins(SettingModel)
       if (n) console.log(`[Settings] ${n} staff PIN(s) stored as a hash`)
+      const { datePins } = await import('./services/staffPin.js')
+      const d = await datePins(SettingModel)
+      if (d) console.log(`[Settings] ${d} staff PIN(s) dated today: they expire in a week`)
     } catch (err) { console.warn('[Settings] could not migrate the staff PIN:', err.message) }
     // Card balances are whole cents: round away any float dust left by older updates (a no-op when all are exact).
     try {

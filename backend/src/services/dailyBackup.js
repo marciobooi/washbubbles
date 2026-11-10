@@ -6,8 +6,8 @@
  *   central server  $BACKUP_DIR/<shop id>/ the same two files
  *
  * The shop PC drives it (startDailyBackup): it writes its copy, sends it to the central server (POST /sync/backup/shop, in parts) and
- * fetches the central one (GET /sync/backup/central). A copy is read back and counted before it is trusted, and only then is the
- * previous one deleted: there is always one good copy of each, never none. A PC that was off at 23:00 does it when it next starts.
+ * fetches the central one (GET /sync/backup/central). A copy is read back and counted before it is trusted, and only then are the
+ * ones older than a week deleted (KEEP_DAYS = 7 of each). A PC that was off at 23:00 does it when it next starts.
  * The central server never hands a shop anything but that shop's own rows.
  *
  * File format: gzip, one JSON document per line (MongoDB Extended JSON, so dates and ids survive): a header, the rows as
@@ -89,15 +89,14 @@ export async function verifyDump(file) {
   return { docs, collections, header }
 }
 
-/** Delete the older copies with this prefix, keeping `keep`. Only called after `keep` was verified. */
+/** Keep the last KEEP_DAYS copies with this prefix (the newest is `keep`) and delete the older ones. Only called after `keep` was verified. */
+export const KEEP_DAYS = Number(process.env.BACKUP_KEEP_DAYS) || 7
 export function pruneOlder(dir, prefix, keep) {
-  let removed = 0
-  for (const f of fs.readdirSync(dir)) {
-    if (!f.startsWith(prefix) || f === path.basename(keep)) continue
-    if (!/\.json\.gz(\.part)?$/.test(f)) continue
-    fs.rmSync(path.join(dir, f), { force: true }); removed++
-  }
-  return removed
+  const mine = fs.readdirSync(dir).filter((f) => f.startsWith(prefix) && f !== path.basename(keep))
+  const whole = mine.filter((f) => f.endsWith('.json.gz')).sort().reverse() // the date is in the name: newest first
+  const gone = [...whole.slice(KEEP_DAYS - 1), ...mine.filter((f) => f.endsWith('.json.gz.part'))] // and any half-written leftover
+  for (const f of gone) fs.rmSync(path.join(dir, f), { force: true })
+  return gone.length
 }
 
 /** Today's copy, reused when a retry finds it already made and good. */

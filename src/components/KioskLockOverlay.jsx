@@ -33,7 +33,7 @@ export default function KioskLockOverlay() {
       unlock('day-close')
       setPin('')
     } catch (e) {
-      setError(e?.status === 409 ? i18n.t('lockPinNone', { ns: 'cart' }) : i18n.t('lockPinInvalid', { ns: 'cart' }))
+      setError(e?.status === 410 ? i18n.t('pinExpired', { ns: 'cart' }) : e?.status === 409 ? i18n.t('lockPinNone', { ns: 'cart' }) : i18n.t('lockPinInvalid', { ns: 'cart' }))
       setPin('')
     } finally {
       setChecking(false)

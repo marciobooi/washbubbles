@@ -34,6 +34,15 @@ function writeEnv(values, file = ENV_FILE()) {
   fs.renameSync(tmp, file)
 }
 
+const hostOf = (u) => { try { return new URL(u).host.toLowerCase() } catch { return '' } }
+/** Is this address the server the shop already uses, or one listed on this PC? */
+export function serverAllowed(url) {
+  const host = hostOf(url)
+  if (!host) return false
+  const listed = String(process.env.SYNC_SERVER_ALLOWED || '').split(/[\s,]+/).map((s) => s.trim().toLowerCase()).filter(Boolean)
+  return host === hostOf(process.env.SYNC_SERVER_URL) || listed.includes(host)
+}
+
 /**
  * @returns {{ok:true}|{ok:false, code:'invalid-format'|'rejected'|'offline'|'no-server'|'server-error', message:string}}
  */
@@ -42,6 +51,9 @@ export async function applyCentralKey(rawKey, { serverUrl, coin, fetchImpl = glo
   if (!/^[0-9a-f]{24,64}$/.test(key)) return { ok: false, code: 'invalid-format', message: 'A chave não tem o formato certo (24 caracteres, letras de a a f e números).' }
   const url = String(serverUrl || process.env.SYNC_SERVER_URL || '').replace(/\/+$/, '')
   if (!url) return { ok: false, code: 'no-server', message: 'Este posto ainda não tem o endereço do servidor. Indique-o também.' }
+  // A shop that is already linked can only be pointed at a server this PC knows: its own, or one listed in SYNC_SERVER_ALLOWED
+  // (host names, in backend\.env). Whoever knows the staff PIN can change the key, not hand the shop to another server.
+  if (process.env.SYNC_SERVER_URL && !serverAllowed(url)) return { ok: false, code: 'server-not-allowed', message: 'Este posto só aceita o servidor a que já está ligado. Para mudar de servidor é preciso alterar a configuração no próprio PC.' }
 
   // A PC installed for one shop is locked to it (SHOP_TENANT_ID, written by the installer): another shop's key is refused, so a
   // PC that already holds a shop's data can never start mixing in another shop's.

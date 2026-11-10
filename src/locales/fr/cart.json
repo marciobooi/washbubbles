@@ -83,6 +83,7 @@
   "pinNone": "Aucun PIN administrateur n'est configuré pour ce site.",
   "pinTooMany": "Trop de tentatives. Veuillez patienter quelques minutes.",
   "pinInvalid": "PIN invalide",
+  "pinExpired": "PIN expiré. Demandez à l’administrateur de créer un nouveau PIN dans l’administration.",
   "totalCharge": "Total à encaisser",
   "cash": "Espèces",
   "card": "Carte",

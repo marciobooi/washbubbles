@@ -83,6 +83,7 @@
   "pinNone": "Für diesen Standort ist keine Administrator-PIN eingerichtet.",
   "pinTooMany": "Zu viele Versuche. Bitte einige Minuten warten.",
   "pinInvalid": "Ungültige PIN",
+  "pinExpired": "PIN abgelaufen. Bitten Sie den Administrator, im Admin-Bereich eine neue PIN zu erstellen.",
   "totalCharge": "Zu kassierender Betrag",
   "cash": "Bargeld",
   "card": "Karte",
