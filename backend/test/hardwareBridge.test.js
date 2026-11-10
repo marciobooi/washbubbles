@@ -92,3 +92,34 @@ describe('Hardware bridge: the controller session outlives the backend', functio
     c.destroy()
   })
 })
+
+describe('Hardware bridge: what it writes down when the controller drops', function () {
+  this.timeout(10000)
+  it('says how long the session lasted, how long it was down and what the attempts in between got', async () => {
+    const lines = []
+    const sockets = []
+    let fake = net.createServer((s) => sockets.push(s))
+    await new Promise((r) => fake.listen(0, '127.0.0.1', r))
+    const port = fake.address().port
+    const bridgePort = await freePort()
+    const bridge = startBridge({ controllerHost: '127.0.0.1', controllerPort: port, listenPort: bridgePort, reconnectMs: 40, log: (m) => lines.push(m) })
+    try {
+      await wait(120)
+      // the controller's program stops: the session is cut and the port refuses connections for a while
+      sockets.forEach((s) => s.destroy())
+      await new Promise((r) => fake.close(r))
+      await wait(250)
+      fake = net.createServer((s) => sockets.push(s))
+      await new Promise((r) => fake.listen(port, '127.0.0.1', r))
+      await wait(250)
+      const lost = lines.find((l) => /link lost/.test(l))
+      expect(lost).to.match(/after a session of \d+ min/)
+      const back = lines.filter((l) => /controller connected/.test(l))[1]
+      expect(back).to.match(/down for \d+ s; [1-9]\d* failed attempt\(s\): ECONNREFUSED/)
+    } finally {
+      bridge.close()
+      sockets.forEach((s) => s.destroy())
+      await new Promise((r) => fake.close(r))
+    }
+  })
+})

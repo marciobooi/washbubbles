@@ -33,7 +33,8 @@ export function startBridge({
   listenPort = BRIDGE_DEFAULT_PORT,
   reconnectMs = 2000,
   bufferTtlMs = 120_000,
-  log = (...a) => console.log('[bridge]', ...a),
+  // with the time: bridge.log had none, so a controller drop could not be matched with anything else (2026-11-10)
+  log = (...a) => console.log(new Date().toISOString().replace('T', ' ').slice(0, 19), '[bridge]', ...a),
 } = {}) {
   const clients = new Set()
   const parser = new LowLevelStreamParser()
@@ -41,6 +42,10 @@ export function startBridge({
   let controllerUp = false
   let controllerSince = null
   let reconnectTimer = null
+  // What happens between a drop and the next connection says what the controller did: attempts REFUSED at once = its program
+  // restarted (the device stayed on); attempts that TIME OUT = the device or its network was off.
+  let lostAt = null
+  let failed = [] // error codes of the attempts since the drop
   let stopped = false
   let heldMoney = [] // { raw, at }
 
@@ -65,7 +70,9 @@ export function startBridge({
     sock.on('connect', () => {
       controllerUp = true
       controllerSince = Date.now()
-      log(`controller connected ${controllerHost}:${controllerPort}`)
+      log(`controller connected ${controllerHost}:${controllerPort}` + (lostAt ? ` (down for ${Math.round((Date.now() - lostAt) / 1000)} s; ${failed.length} failed attempt(s)${failed.length ? ': ' + [...new Set(failed)].join(', ') : ''})` : ''))
+      lostAt = null
+      failed = []
       tellClients()
     })
     sock.on('data', (chunk) => {
@@ -85,7 +92,13 @@ export function startBridge({
       const was = controllerUp
       controllerUp = false
       controller = null
-      if (was) log(`controller link lost (${why})`)
+      if (was) {
+        log(`controller link lost (${why}) after a session of ${controllerSince ? Math.round((Date.now() - controllerSince) / 60000) : '?'} min`)
+        lostAt = Date.now()
+      } else if (why !== 'closed') {
+        failed.push(why) // not logged one by one (every 2 s): summed up when it connects again
+        if (failed.length > 500) failed = failed.slice(-500)
+      }
       tellClients()
       if (!stopped) reconnectTimer = setTimeout(connectController, reconnectMs)
     }
