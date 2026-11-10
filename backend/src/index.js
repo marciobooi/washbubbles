@@ -29,6 +29,7 @@ import kioskWatchdog from './services/kioskWatchdog.js'
 import { startDomainWatcher } from './services/domainWatcher.js'
 import { hasRole } from './services/roles.js'
 import { startShutdownScheduler } from './services/shutdownScheduler.js'
+import { startDailyBackup } from './services/dailyBackup.js'
 import { startFlowTimer } from './services/flows.js'
 
 // Enforce presence of JWT secret in production-like environments
@@ -297,6 +298,7 @@ async function start() {
         await coinMachine.start()
         console.log('CoinMachine system initialized')
         startShutdownScheduler(coinMachine) // only on a shop PC: the central server never gets here (ENABLE_COIN_MACHINE=false)
+        startDailyBackup(coinMachine) // 23:00: a copy of the data here and on the central server (same rule: shop PC only)
       } catch (err) {
         console.warn('Failed to initialize CoinMachine (peripherals may not be connected):', err.message)
       }

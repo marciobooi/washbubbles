@@ -32,6 +32,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 export const MAX_CARD_BALANCE = Number(process.env.CARD_SYNC_MAX_BALANCE) || 1000
 
 /**
+ * The most money a chip alone may bring INTO the database: the balance of a card we have never seen, or how far a known card may
+ * be above what we hold for it. A chip can be copied or rewritten, so beyond this it is refused and the staff is told (2026-11 audit).
+ */
+export const MAX_CHIP_GAIN = Number(process.env.CARD_SYNC_MAX_GAIN) || 100
+
+/**
  * What to do when the card and the database disagree.
  *
  * `syncedBalance` is what we last CONFIRMED the card to hold. It lets us tell
@@ -64,6 +70,7 @@ export class CardSync extends EventEmitter {
     retryMs = 1500,
     retries = 3,
     maxBalance = MAX_CARD_BALANCE,
+    maxGain = MAX_CHIP_GAIN,
   }) {
     super()
     this.middleware = middleware
@@ -76,6 +83,7 @@ export class CardSync extends EventEmitter {
     this.retryMs = retryMs
     this.retries = retries
     this.maxBalance = maxBalance
+    this.maxGain = maxGain
     this.inflight = new Map() // code -> Promise
     this.dirty = new Set()    // codes that changed again while a push was running
     this.locks = new Map()    // code -> tail of the reconcile chain (one at a time per card)
@@ -118,6 +126,11 @@ export class CardSync extends EventEmitter {
       { tenantId: this.tenantObjectId, code },
       { $set: { cardSyncedBalance: roundMoney(Number(balance) || 0), cardSyncedAt: new Date() } },
     )
+  }
+
+  /** E-mail the shop (never throws, never waited for). */
+  alert(subject, message) {
+    import('./alerts.js').then(({ sendAlertForTenant }) => sendAlertForTenant(this.tenantId, subject, message)).catch(() => {})
   }
 
   async audit(action, code, details) {
@@ -233,6 +246,11 @@ export class CardSync extends EventEmitter {
     let existing = await this.Card.findOne({ tenantId: this.tenantId, code })
 
     if (!existing) {
+      if (cardBalance > this.maxGain) {
+        await this.audit('card.reject', code, { reason: 'unknown card above the adoption limit', cardBalance, limit: this.maxGain })
+        this.alert('Cartão desconhecido recusado', `Um cartão que não existe na base (${code}) trazia ${cardBalance.toFixed(2)} € no chip, acima do limite de ${this.maxGain} € para cartões desconhecidos. Não foi aceite. Se for um cartão verdadeiro, crie-o no admin com o saldo certo.`)
+        return { status: 'invalid', reason: `unknown card with €${cardBalance.toFixed(2)} exceeds the €${this.maxGain} adoption limit` }
+      }
       try {
         // The unique (tenantId, code) index makes adoption race-safe: of two
         // simultaneous adopters exactly one wins, the other falls through below.
@@ -248,6 +266,7 @@ export class CardSync extends EventEmitter {
           metadata: { adopted: { at: new Date(), from: 'controller-card', balance: cardBalance, ownerId: cardData.ownerId ?? null } },
         })
         await this.audit('card.adopt', code, { balance: cardBalance })
+        if (cardBalance > 0) this.alert('Cartão desconhecido aceite com saldo', `O cartão ${code} não existia na base e foi aceite com os ${cardBalance.toFixed(2)} € que trazia no chip. Confirme que é um cartão da loja.`)
         this.emit('adopted', { code, balance: cardBalance })
         return { status: 'adopted', balance: cardBalance, card: created }
       } catch (err) {
@@ -287,6 +306,11 @@ export class CardSync extends EventEmitter {
       }
 
       case 'card-wins':
+        if (cardBalance - Number(existing.balance || 0) > this.maxGain) {
+          await this.audit('card.reject', code, { reason: 'chip far above the database', db: existing.balance, card: cardBalance, limit: this.maxGain })
+          this.alert('Cartão com saldo a mais no chip', `O cartão ${code} tem ${Number(existing.balance || 0).toFixed(2)} € na base e trazia ${cardBalance.toFixed(2)} € no chip. A diferença passa o limite de ${this.maxGain} € e não foi aceite; o saldo da base não mudou.`)
+          return { status: 'invalid', reason: `chip €${cardBalance.toFixed(2)} is more than €${this.maxGain} above the database` }
+        }
         // The card was used elsewhere, or this database was restored from a backup.
         await this.Card.collection.updateOne(
           { tenantId: this.tenantObjectId, code },

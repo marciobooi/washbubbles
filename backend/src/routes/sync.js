@@ -19,6 +19,7 @@ import SyncCommand from '../models/syncCommand.js'
 import DayClose from '../models/dayClose.js'
 import { roundMoney } from '../utils/money.js'
 import { logAction } from '../services/auditLog.js'
+import { receiveShopPart, makeCentralCopy, MAX_PART_BYTES, MAX_PARTS } from '../services/dailyBackup.js'
 
 const router = express.Router()
 
@@ -31,6 +32,43 @@ const MAX_APPLIED_DELTAS = 200
 
 // All sync routes require kiosk authentication
 router.use(requireKiosk)
+
+// ─── Daily copy of the data, kept on both sides (services/dailyBackup.js) ───
+// The shop PC sends its own copy here in parts, and fetches the copy of what this server holds FOR THAT SHOP (never another shop's rows).
+const stampOf = (req) => (/^\d{8}$/.test(String(req.query.stamp || '')) ? String(req.query.stamp) : null)
+
+router.post('/backup/shop', async (req, res) => {
+  const stamp = stampOf(req)
+  const part = Number(req.query.part)
+  const parts = Number(req.query.parts)
+  if (!stamp || !Number.isInteger(part) || !Number.isInteger(parts) || parts < 1 || parts > MAX_PARTS || part < 0 || part >= parts) return res.status(400).json({ error: 'Bad backup part' })
+  const chunks = []
+  let size = 0
+  for await (const c of req) {
+    size += c.length
+    if (size > MAX_PART_BYTES) return res.status(413).json({ error: 'Part too large' })
+    chunks.push(c)
+  }
+  if (!size) return res.status(400).json({ error: 'Empty part' })
+  try {
+    res.json(await receiveShopPart({ tenantId: req.tenantId, stamp, part, parts, body: Buffer.concat(chunks) }))
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message })
+  }
+})
+
+router.get('/backup/central', async (req, res) => {
+  const stamp = stampOf(req)
+  if (!stamp) return res.status(400).json({ error: 'Bad stamp' })
+  try {
+    const file = await makeCentralCopy({ tenantId: req.tenantId, stamp })
+    res.set('Content-Type', 'application/gzip')
+    res.sendFile(file)
+  } catch (e) {
+    console.error('[Backup] central copy failed:', e.message)
+    res.status(500).json({ error: 'Backup failed' })
+  }
+})
 
 // ─── Mail relay: a shop PC sends its e-mails THROUGH the central server ───
 // The shop's mailbox password lives (encrypted) only here. The PC hands over one message; the server sends it with the SHOP's own

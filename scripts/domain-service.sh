@@ -12,7 +12,10 @@ SLUG_RE='^[a-z0-9]([a-z0-9-]{0,38}[a-z0-9])?$'
 ID_RE='^[0-9a-f]{24}$'
 SERVER_IP="${SERVER_PUBLIC_IP:-128.140.118.209}"
 log() { echo "[$(date '+%F %T')] $*"; }
-mongo() { docker compose --env-file .env.docker exec -T mongo mongosh --quiet washstore --eval "$1"; }
+# With MONGO_AUTH=--auth the database asks for a user: the administrator's is in .env.docker (MONGO_ROOT_USER / MONGO_ROOT_PASS).
+MU=$(grep -s '^MONGO_ROOT_USER=' .env.docker | cut -d= -f2-); MP=$(grep -s '^MONGO_ROOT_PASS=' .env.docker | cut -d= -f2-)
+AUTH=""; [ -n "$MU" ] && AUTH="--username $MU --password $MP --authenticationDatabase admin"
+mongo() { docker compose --env-file .env.docker exec -T mongo mongosh $AUTH --quiet washstore --eval "$1"; }
 setstate() { # id state message [attempts increment]
   local msg="${3//\'/ }"
   mongo "db.tenants.updateOne({_id:ObjectId('$1')},{\$set:{'domainState.state':'$2','domainState.message':'$msg','domainState.checkedAt':new Date()},\$inc:{'domainState.attempts':${4:-0}}})" > /dev/null

@@ -13,6 +13,9 @@ services:
     image: mongo:7
     restart: unless-stopped
     logging: *default-logging
+    # MONGO_AUTH=--auth in .env.docker makes the database ask for a user and password (create the users first, see
+    # docs/SUPORTE-LOJAS.md); unset, it runs open as before, which is only acceptable because the port is not published.
+    command: ["mongod", "--bind_ip_all", "${MONGO_AUTH:---noauth}"]
     volumes:
       - washbubbles_mongo_data:/data/db
     ports:
@@ -48,8 +51,11 @@ services:
       - washbubbles_uploads:/public/uploads
       # The program as a zip + its version, written by scripts/hetzner-autodeploy.sh: shop PCs install and update from it (routes/installer.js).
       - ./release:/release:ro
+      # The daily copies: each shop's own and this server's copy of that shop (services/dailyBackup.js).
+      - ${BACKUP_HOST_DIR:-./backups}:/backups
     environment:
-      MONGODB_URL: mongodb://mongo:27017/washstore
+      MONGODB_URL: ${MONGODB_URL:-mongodb://mongo:27017/washstore}
+      BACKUP_DIR: /backups
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.docker}
       PORT: 3000
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin1234}

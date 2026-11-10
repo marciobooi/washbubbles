@@ -156,6 +156,21 @@ describe('CardSync (real Mongo test DB, fake controller)', function () {
       expect(await auditActions()).to.include('card.reject')
     })
 
+    it('an unknown card is adopted with at most 100 on its chip', async () => {
+      expect((await sync.reconcile(onCard('NEW-150', 150))).status).to.equal('invalid')
+      expect(await cardIn('NEW-150')).to.equal(null)
+      expect((await sync.reconcile(onCard('NEW-100', 100))).status).to.equal('adopted')
+    })
+
+    it('a known card cannot come back with far more on its chip than the database holds', async () => {
+      await Card.create({ tenantId: tenant._id, code: 'KNOWN-1', balance: 10, cardSyncedBalance: 10, status: 'active' })
+      const r = await sync.reconcile(onCard('KNOWN-1', 150))
+      expect(r.status).to.equal('invalid')
+      expect((await cardIn('KNOWN-1')).balance).to.equal(10)
+      expect((await sync.reconcile(onCard('KNOWN-1', 60))).status).to.equal('card-wins')
+      expect((await cardIn('KNOWN-1')).balance).to.equal(60)
+    })
+
     it('refuses unreadable data, skips admin cards and blank cards', async () => {
       expect((await sync.reconcile({ cardId: 'X', balance: 'garbage' })).status).to.equal('invalid')
       expect((await sync.reconcile({ cardId: 'X', balance: '-5' })).status).to.equal('invalid')

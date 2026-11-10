@@ -36,3 +36,6 @@ dist-new/
 dist-old/
 
 release/
+
+# Daily copies of the data (services/dailyBackup.js)
+/backups/
