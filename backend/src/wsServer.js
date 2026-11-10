@@ -9,7 +9,8 @@ import { findUserByApiKey } from './services/apiKeys.js'
  * Bulletproofing:
  * - Tenant Isolation (Clients only receive data for their tenant)
  * - Mandatory Authentication (No anonymous fallback)
- * - Origin validation
+ * - Origin validation when CORS_ORIGINS is set (see originAllowed)
+ * - Clients only listen: nothing a client sends is passed on to the others
  */
 
 let _wss = null
@@ -21,6 +22,21 @@ let _heartbeatInterval = null
  * (auth) message before being dropped.
  */
 const AUTH_TIMEOUT_MS = 5000
+
+/** A client only ever sends its auth message: anything bigger is not ours. */
+const MAX_PAYLOAD = 16 * 1024
+
+/**
+ * A browser page from another site must not open this socket. Checked only where CORS_ORIGINS is set (the central server), as
+ * for the API: no Origin header (a program, not a browser), the page's own address, or a listed origin pass.
+ */
+export function originAllowed(request) {
+  const allowed = (process.env.CORS_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean)
+  const origin = request.headers.origin
+  if (!allowed.length || allowed.includes('*') || !origin) return true
+  if (allowed.includes(origin)) return true
+  try { return new URL(origin).host === request.headers.host } catch { return false }
+}
 
 /**
  * Runs the same credential lookup the old query-string auth used —
@@ -35,7 +51,10 @@ async function resolveUser({ token, apiKey }) {
   if (token && JWT_SECRET) {
     try {
       const decoded = jwt.verify(token, JWT_SECRET)
-      return await User.findById(decoded.sub)
+      const user = await User.findById(decoded.sub)
+      // same rule as the API: a token issued before the last password change is dead
+      if (user && user.passwordChangedAt && decoded.iat * 1000 < user.passwordChangedAt.getTime() - 2000) return null
+      return user
     } catch (e) {
       return null
     }
@@ -117,12 +136,13 @@ export function broadcastHardwareEvent(tenantId, type, payload) {
 }
 
 export function initWebSocket(server) {
-  const wss = new WebSocketServer({ noServer: true })
+  const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_PAYLOAD })
   _wss = wss
 
   server.on('upgrade', (request, socket, head) => {
     const pathname = new URL(request.url, 'http://localhost').pathname
     if (pathname === '/ws' || pathname === '/') {
+      if (!originAllowed(request)) { socket.destroy(); return }
       wss.handleUpgrade(request, socket, head, (ws) => {
         wss.emit('connection', ws, request)
       })
@@ -192,13 +212,9 @@ export function initWebSocket(server) {
         return
       }
 
-      // Inbound messages are only allowed for admins/kiosks
-      // For security, only broadcast to the SAME tenant
-      wss.clients.forEach((client) => {
-        if (client.readyState === 1 && client.tenantId === socket.tenantId) {
-          client.send(JSON.stringify(data))
-        }
-      })
+      // Clients only listen. Whatever a client sent used to be passed on to the whole shop, so any holder of a kiosk key or
+      // a login could fake "card in the reader", "cash inserted" or "reload the screen" for every screen. Events come from
+      // the server only (the broadcast* functions below).
     })
 
     socket.on('close', () => {

@@ -124,6 +124,17 @@ router.post('/cards/:code/topup', requireKiosk, async (req, res) => {
   if (!parsed.ok) return res.status(400).json({ error: parsed.error })
   const topUp = parsed.value
 
+  const CardT = withTenant(Card, req)
+  const SaleT = withTenant(Sale, req)
+  // The same request sent twice (the screen gave up waiting and tried again) loads the card once.
+  if (batchId) {
+    const prior = await SaleT.findOne({ batchId: String(batchId), type: 'recharge', cardCode: String(code) })
+    if (prior) return res.json({ success: true, replayed: true, sale: prior, card: await CardT.findOne({ code }) })
+  }
+  // Only a card that exists is loaded (a mistyped code used to create a new card and put the money on it).
+  let card = await CardT.findOne({ code })
+  if (!card) return res.status(404).json({ error: 'Card not found' })
+
   // The money must really be in the machine: the cash of the session pays the top-up (it used to be credited on the screen's word).
   const session = coinMachine.client?.getState?.()
   if (!coinMachine.running || !session || roundMoney(session.balance) + 0.005 < topUp) {
@@ -131,12 +142,6 @@ router.post('/cards/:code/topup', requireKiosk, async (req, res) => {
   }
   coinMachine.client.restoreBalances({ balance: roundMoney(session.balance - topUp), balanceCard: session.balanceCard })
 
-  const CardT = withTenant(Card, req)
-  const SaleT = withTenant(Sale, req)
-  let card = await CardT.findOne({ code })
-  if (!card) {
-    card = await CardT.create({ code, balance: 0 })
-  }
   // Atomic: a concurrent top-up on the same card must not overwrite this one.
   card = await creditCard(CardT, { _id: card._id }, topUp)
 
@@ -197,6 +202,16 @@ async function reportStartAnomaly(req, batchId, failedLines, how) {
   } catch (e) { console.error('[gateways] could not send the start-failure alert:', e.message) }
 }
 
+/**
+ * On the shop PC a card pays only while it sits in the reader: the code alone (known to anyone who saw the card, or sent by
+ * a forged request) must not spend its balance. The central server has no reader, so there the check does not apply.
+ */
+export function cardNotInReader(code) {
+  if (!coinMachine.running) return false
+  const st = coinMachine.client?.getState?.() || {}
+  return !(st.hasCard && String(st.cardNumber) === String(code))
+}
+
 router.post('/card/pay', requireKiosk, flowRoute('Pedido de pagamento com cartão', { method: 'card' }), async (req, res) => {
   const { items = [], cardCode, batchId, couponCode } = req.body
   if (!Array.isArray(items) || !cardCode) return res.status(400).json({ error: 'Missing parameters' })
@@ -224,6 +239,7 @@ router.post('/card/pay', requireKiosk, flowRoute('Pedido de pagamento com cartã
   // credited here with no cash at all, so a cart holding only a recharge, paid with the card in the reader, gave free credit
   // (2026-10-20: two recharges of 10 EUR, nothing paid).
   if (items.some(isRecharge)) return res.status(400).json({ error: 'Recharge must be paid in cash', code: 'recharge-needs-cash' })
+  if (cardNotInReader(cardCode)) return res.status(409).json({ error: 'Insira o cartão no leitor', code: 'card-not-in-reader' })
   const rechargeLines = []
 
   const resolved = await resolveMachineLines(items.filter((i) => !isRecharge(i)), MachineT, withTenant(Price, req), 'card', coupon)
@@ -238,7 +254,15 @@ router.post('/card/pay', requireKiosk, flowRoute('Pedido de pagamento com cartã
   // ── Apply ──
   // One atomic $inc for the whole batch (recharges credited, machines debited),
   // guarded so a concurrent spend elsewhere cannot push the balance negative.
-  // Start the machine(s) before the card is touched: one that cannot start is not charged.
+  // The card pays first: when the balance changed under us nothing has started yet (it used to answer 409 with the machines running).
+  const chargedTotal = roundMoney(resolved.lines.reduce((s, l) => s + l.price, 0))
+  const net = roundMoney(rechargeTotal - chargedTotal)
+  const updatedCard = await applyCardDelta(CardT, { _id: card._id }, net)
+  if (!updatedCard) {
+    return res.status(409).json({ error: 'Card balance changed concurrently; please retry', balance: card.balance })
+  }
+  card = updatedCard
+
   const startedLines = []
   const failedLines = []
   for (const l of resolved.lines) {
@@ -251,13 +275,6 @@ router.post('/card/pay', requireKiosk, flowRoute('Pedido de pagamento com cartã
     }
   }
   const failedIds = new Set(failedLines.map((f) => String(f.machineId)))
-  const chargedTotal = roundMoney(resolved.lines.reduce((s, l) => s + l.price, 0))
-  const net = roundMoney(rechargeTotal - chargedTotal)
-  const updatedCard = await applyCardDelta(CardT, { _id: card._id }, net)
-  if (!updatedCard) {
-    return res.status(409).json({ error: 'Card balance changed concurrently; please retry', balance: card.balance })
-  }
-  card = updatedCard
 
   const sales = []
   for (const line of rechargeLines) {

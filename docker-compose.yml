@@ -16,7 +16,7 @@ services:
     volumes:
       - washbubbles_mongo_data:/data/db
     ports:
-      - "27018:27017"
+      - "127.0.0.1:27018:27017" # this machine only (the host nginx and ssh tunnels); never the internet
 
   # Free, self-hosted machine translation for the public page's admin-written text
   # (services/translator.js). Internal only: no published port, the backend reaches it by name.
@@ -90,7 +90,7 @@ services:
     depends_on:
       - mongo
     ports:
-      - "3010:3000"
+      - "127.0.0.1:3010:3000"
 
   frontend:
     build:
@@ -107,7 +107,7 @@ services:
     depends_on:
       - backend
     ports:
-      - "8081:80"
+      - "127.0.0.1:8081:80" # the host nginx (TLS) is the only door
 
 volumes:
   washbubbles_lt_models:

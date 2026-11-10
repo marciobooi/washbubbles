@@ -220,6 +220,7 @@
   "payNoBalance": "Not enough balance on the card. Top it up or pay with cash.",
   "payNoBalanceAmt": "Not enough balance on the card (it has {{balance}}). Top it up or pay with cash.",
   "payNoCash": "Not enough cash. Insert the missing amount.",
+  "payCardNotInReader": "Put your card in the reader and leave it there until the machine starts.",
   "payCardUnknown": "Card not recognised.",
   "cardInReaderAria": "Card in the reader: open my card",
   "payRechargeCashOnly": "Top-ups can only be paid in cash: insert the amount in coins or notes.",

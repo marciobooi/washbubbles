@@ -1017,7 +1017,10 @@ class CoinMachine extends EventEmitter {
     machine.startedAt = new Date()
     await machine.save()
     flows.step(this.tenantId, 'impulse_sent', spaced ? `Impulso 1 de ${n} enviado à ${machine.name}` : `${n > 1 ? `${n} impulsos` : 'Impulso'} enviado${n > 1 ? 's' : ''} à ${machine.name}`, { machine: machine.name, blocks: n, interface: iface.name || null, port: machine.port }, { machine: machine.name })
-    if (spaced) this.sendRemainingImpulses(machine._id, n - 1).catch((err) => console.error('[Cycle] remaining impulses:', err.message))
+    if (spaced) {
+      this.impulseJobs = (this.impulseJobs || 0) + 1 // the updater waits for these before it restarts the backend (/pos/busy)
+      this.sendRemainingImpulses(machine._id, n - 1).catch((err) => console.error('[Cycle] remaining impulses:', err.message)).finally(() => { this.impulseJobs -= 1 })
+    }
     console.log(`[Cycle] ${machine.name} started: ${spaced ? 'impulse 1 of ' + n + ', the rest follow as separate commands' : staggered ? 'block 1 of ' + n + ', next impulse at ' + machine.nextImpulseAt.toISOString() : n + ' impulse(s) sent at once'}`)
     return { success: true, blocks: n }
   }

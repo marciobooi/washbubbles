@@ -59,6 +59,12 @@ router.post('/mail', async (req, res) => {
 
 // ─── Push: POS → Server ───
 
+// A sale whose items are not valid JSON is still a sale: keep the money, drop the unreadable detail (a 500 here was retried for ever).
+function parseItems(items) {
+  if (typeof items !== 'string') return items
+  try { return JSON.parse(items) } catch { return [] }
+}
+
 /**
  * POST /api/sync/push/sale
  * Receives a sale created locally on the POS
@@ -105,7 +111,10 @@ router.post('/push/sale', async (req, res) => {
       const orig = await SaleT.findOne({ $or: [{ 'metadata.localId': ref }, ...(mongoose.Types.ObjectId.isValid(ref) ? [{ _id: ref }] : [])] })
       if (orig) {
         refundOfId = orig._id
-        if (orig.status !== 'refunded') { orig.status = 'refunded'; await orig.save() }
+        // a partial refund leaves the sale open: only when the refunds add up to the sale is it closed
+        const earlier = await SaleT.find({ refundOf: orig._id, type: 'refund' }).select('amount').lean()
+        const total = earlier.reduce((sum, r) => sum + Math.abs(Number(r.amount) || 0), 0) + Math.abs(amount)
+        if (orig.status !== 'refunded' && total >= Number(orig.amount || 0) - 0.005) { orig.status = 'refunded'; await orig.save() }
       }
     }
 
@@ -115,7 +124,7 @@ router.post('/push/sale', async (req, res) => {
         ? (data.machine_id || data.machineId)
         : undefined,
       amount: roundMoney(amount),
-      items: typeof data.items === 'string' ? JSON.parse(data.items) : data.items,
+      items: parseItems(data.items),
       type: data.type || 'payment',
       method: data.method,
       batchId: data.batch_id || data.batchId,
@@ -381,8 +390,11 @@ router.post('/push/machine', async (req, res) => {
     }
 
     // Update runtime status (POS wins for status)
-    if (data.status) machine.status = data.status
-    if (data.statusText) machine.statusText = data.statusText
+    if (data.status) {
+      if (!Machine.schema.path('status').enumValues.includes(data.status)) return res.status(400).json({ success: false, error: 'Unknown machine status' })
+      machine.status = data.status
+    }
+    if (data.statusText) machine.statusText = String(data.statusText).slice(0, 120)
     if (data.cycle !== undefined) machine.cycle = data.cycle
     if (data.currentProgram !== undefined) machine.currentProgram = data.currentProgram
     if (data.startedAt !== undefined) machine.startedAt = data.startedAt ? new Date(data.startedAt) : null

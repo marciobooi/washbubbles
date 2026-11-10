@@ -83,6 +83,7 @@ function friendlyPayError(err, raw, tr) {
   const bal = err?.body?.balance
   if (/insufficient balance/i.test(s)) return Number.isFinite(Number(bal)) ? tr('payNoBalanceAmt', { balance: `${Number(bal).toFixed(2)}€` }) : tr('payNoBalance')
   if (/insufficient (cash|payment|credits)/i.test(s)) return tr('payNoCash')
+  if (err?.body?.code === 'card-not-in-reader') return tr('payCardNotInReader')
   if (/card not found/i.test(s)) return tr('payCardUnknown')
   return s
 }
@@ -575,7 +576,7 @@ function AppInner() {
           if (!res.success) {
             const status = res.error?.status || res.error?.response?.status
             const msg = friendlyPayError(res.error, res.error?.message || (res.error && res.error.body && res.error.body.error) || res.error || 'Erro desconhecido', tr)
-            if (status === 409) {
+            if (status === 409 && res.error?.body?.code !== 'card-not-in-reader') {
               toast({ title: tr('machineBusy'), description: String(msg), variant: 'destructive' })
             } else {
               toast({ title: tr('payErrorCard'), description: String(msg), variant: 'destructive' })
@@ -600,26 +601,8 @@ function AppInner() {
           return
         }
 
-        // Fallback: no cardCode provided — persist machine sales as card payments using cart recharges
-        for (const it of machineItems) {
-          const machineId = it._id || it.id
-          const payload = { machineId, amount: Number(it.price || it.amount || 0), items: [it], method: 'card', inserted: Number(it.price || it.amount || 0), batchId, localId: `${batchId}:${it.id}` }
-          await api.request('/pos/sale', { method: 'POST', json: payload, headers: kioskKey ? { Authorization: `ApiKey ${kioskKey}` } : undefined, skipAuth: true, expect: 'json' })
-        }
-
-        // Show machine notification for machines purchased (if any)
-        try {
-          const machineNames = machineItems.map(i => i.name).filter(Boolean)
-          if (machineNames.length) showMachineNotice(machineNames)
-        } catch { /* the notice is cosmetic; the payment already succeeded */ }
-        tryShowWifiVoucher(machineItems, batchId, kioskKey)
-        setReceiptBatchId(batchId)
-        setReceiptItems(machineItems)
-
-        toast({ title: tr('paidCard'), variant: 'success' })
-        clearCart()
-        setCartOpen(false)
-        goHome()
+        // No card: nothing can be charged, so nothing is reported as paid (this used to book a "paid" sale without starting the machine).
+        toast({ title: tr('payErrorCard'), variant: 'destructive' })
       } catch (e) {
         console.warn('Failed to persist card transactions', e)
         const status = e?.status || e?.response?.status || (e?.body && e.body.status)

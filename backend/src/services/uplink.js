@@ -457,7 +457,8 @@ export class Uplink extends EventEmitter {
     }
 
     const attempts = item.attempts + 1
-    const dead = attempts >= this.maxAttempts && err.httpStatus < 500
+    // 408 / 429 mean "later", not "this record is wrong": they never kill a record.
+    const dead = attempts >= this.maxAttempts && err.httpStatus < 500 && ![408, 429].includes(err.httpStatus)
     await this.Outbox.updateOne(
       { _id: item._id },
       {
@@ -471,6 +472,13 @@ export class Uplink extends EventEmitter {
     if (dead) {
       console.error(`[Uplink] giving up on ${item.entityType} ${item.entityId}: ${err.message}`)
       this.emit('dead', { entityType: item.entityType, entityId: item.entityId, error: err.message })
+      // Somebody must know: this record will never reach the central server by itself. One e-mail an hour at most.
+      if (!this.lastDeadAlert || Date.now() - this.lastDeadAlert > 3600_000) {
+        this.lastDeadAlert = Date.now()
+        import('./alerts.js')
+          .then(({ sendAlertForTenant }) => sendAlertForTenant(item.tenantId, 'Sincronização: registo recusado pelo servidor central', `O registo ${item.entityType} ${item.entityId} foi recusado ${attempts} vezes (${err.message.slice(0, 200)}) e deixou de ser enviado. Veja a fila de sincronização no Admin.`))
+          .catch(() => {})
+      }
     }
     return 'failed'
   }

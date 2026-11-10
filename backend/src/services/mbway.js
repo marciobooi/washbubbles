@@ -23,6 +23,7 @@ import { findUsableCoupon, redeemCoupon } from './coupons.js'
 export const WINDOW_MS = 5 * 60 * 1000       // what the customer has to approve
 const GRACE_MS = 60 * 1000                    // we keep asking a little after it
 const SWEEP_UNTIL_MS = 8 * 60 * 1000
+const STUCK_PAID_MS = 3 * 60 * 1000 // far longer than starting the machines or releasing a card ever takes
 export const MIN_AMOUNT = 1                   // the smallest Eupago accepted (0.50 was AMOUNT_INVALID)
 
 let fetchImpl = (...a) => globalThis.fetch(...a)
@@ -242,6 +243,18 @@ export async function sweep() {
   const stale = new Date(Date.now() - 15000)
   const list = await MbwayPayment.find({ status: { $in: ['pending', 'cancelled'] }, reference: { $ne: '' }, createdAt: { $gte: since }, $or: [{ lastPolledAt: null }, { lastPolledAt: { $lt: stale } }] }).limit(25)
   for (const p of list) { try { await check(p) } catch (e) { console.error('[MBWAY] sweep:', e.message) } }
+  // Paid, and then nothing: the backend stopped (or threw) between "paid" and starting the machines / handing the card. Nobody
+  // knows what was delivered, so it is never started again blindly: the row is closed as failed and the operator is told.
+  for (;;) {
+    const stuck = await MbwayPayment.findOneAndUpdate(
+      { status: 'paid', paidAt: { $lt: new Date(Date.now() - STUCK_PAID_MS) } },
+      { $set: { status: 'start_failed', error: 'Pago, mas o sistema parou antes de confirmar a entrega. Verificar se a máquina arrancou / o cartão saiu; se não, devolver o valor no backoffice do Eupago.' } },
+      { new: true },
+    )
+    if (!stuck) break
+    flows.step(stuck.tenantId, 'mbway_start_failed', 'Pago com MB WAY, mas a entrega não ficou confirmada', { reference: stuck.reference }, { ok: false })
+    await alertOperator(stuck.tenantId, 'MB WAY pago e por confirmar', `Referência ${stuck.reference}, ${Number(stuck.amount || 0).toFixed(2)} EUR (${stuck.phone || 'sem número'}). ${stuck.error}`).catch((e) => console.error('[MBWAY] alert:', e.message))
+  }
   // anything still pending far past the window is over
   await MbwayPayment.updateMany({ status: 'pending', expiresAt: { $lt: new Date(Date.now() - 4 * 60 * 1000) } }, { $set: { status: 'expired' } })
 }

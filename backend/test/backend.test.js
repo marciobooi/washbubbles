@@ -110,7 +110,7 @@ describe('WashBubbles backend', function () {
 
       const res = await request(app)
         .post('/api/pos/sale')
-        .set('Authorization', `Bearer ${kioskToken}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .send({ machineId: machine._id.toString(), amount: 5, items: [{ name: 'Sale Test Machine' }], method: 'cash', inserted: 5 })
 
       expect(res.status).to.equal(200)
@@ -449,7 +449,7 @@ describe('WashBubbles backend', function () {
 
       const sale = await request(app)
         .post('/api/pos/sale')
-        .set('Authorization', `Bearer ${kioskToken}`)
+        .set('Authorization', `Bearer ${adminToken}`)
         .send({ machineId: machine._id.toString(), amount: 5, items: [{}], method: 'card', cardCode: 'BLANK-CARD' })
       expect(sale.status).to.equal(409)
 
@@ -528,7 +528,7 @@ describe('WashBubbles backend', function () {
       const Machine = (await import('../src/models/machine.js')).default
       await Machine.updateOne({ _id: dcMachine._id }, { $set: { status: 'free' } })
       return request(app).post('/api/pos/sale')
-        .set('Authorization', `Bearer ${dcKioskToken}`)
+        .set('Authorization', `Bearer ${dcAdminToken}`)
         .send({ machineId: dcMachine._id.toString(), amount, items: [{}], method: 'cash', inserted: amount })
     }
 

@@ -126,12 +126,13 @@ export const CartProvider = ({ children }) => {
     return () => clearInterval(t)
   }, [credit > 0, syncFromShop])
 
-  // After a cash payment the money is spent: clear it here AND in the backend, otherwise it
-  // would come back as phantom credit the next time the page loads.
+  // After a cash payment the shop has already settled the session by itself (spent the money, paid the change, or kept as
+  // credit the change the hopper could not pay). The screen only clears its own counter and reads back what the shop holds:
+  // it used to wipe the whole session there, which erased that credit and any coin put in meanwhile.
   const resetCredit = () => {
     setCredit(0)
     setRefundAt(null)
-    api.request('/middleware/client/reset', { method: 'POST', expect: 'json', headers: kioskHeaders(), skipAuth: true }).catch(() => {})
+    syncFromShop()
   }
 
   function addToCart(item) {

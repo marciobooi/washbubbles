@@ -4,7 +4,7 @@ import Machine from '../models/machine.js'
 import Sale from '../models/sale.js'
 import Setting from '../models/setting.js'
 import Price from '../models/price.js'
-import { requireKiosk, requireKioskOrAdmin } from '../middleware/auth.js'
+import { requireKiosk, requireKioskOrAdmin, requireAdmin } from '../middleware/auth.js'
 import { broadcastMachines, broadcastMachine, broadcastHardwareEvent } from '../wsServer.js'
 import { withTenant } from '../services/tenant.js'
 import { roundMoney, parseAmount } from '../utils/money.js'
@@ -14,7 +14,7 @@ import { limitKey, _resetLimitKeys } from '../middleware/limitKey.js'
 import { flowRoute } from '../services/flows.js'
 import crypto from 'crypto'
 import coinMachine from '../services/coinMachine.js'
-import { promoIsActive } from './gateways.js'
+import { promoIsActive, cardNotInReader } from './gateways.js'
 import { sendAlert } from '../services/alerts.js'
 import { sendMail } from '../services/mailer.js'
 import { renderEmailHtml, escapeHtml } from '../services/emailTemplate.js'
@@ -99,7 +99,9 @@ router.get('/machines', requireKiosk, async (req, res) => {
   res.json(data)
 })
 
-router.post('/sale', requireKiosk, async (req, res) => {
+// Operator only: it books a sale and marks the machine busy on the caller's word (no cash checked, no machine started).
+// The kiosk pays through /gateways/cash/pay and /gateways/card/pay.
+router.post('/sale', requireAdmin, async (req, res) => {
   const { machineId, amount, items, method, inserted, type, cardCode, cardId, batchId, localId } = req.body
   if (!machineId || !items) return res.status(400).json({ error: 'Missing parameters' })
 
@@ -276,6 +278,24 @@ router.get('/receipt-hint/:batchId', requireKiosk, async (req, res) => {
 
 // "Refresh the kiosk screens": called by the shop PC's updater when an update is done (kiosk key). Every screen of the shop reloads as
 // soon as nobody is touching it (src/lib/autoReload.js).
+// Is a customer in the middle of something? The updater on the shop PC asks before it restarts the backend (scripts/kiosk-update.ps1):
+// money in the session, a refund or dryer impulses on their way, or an MB WAY payment between the request and the delivery.
+router.get('/busy', requireKiosk, async (req, res) => {
+  const reasons = []
+  try {
+    if (coinMachine.running) {
+      const st = coinMachine.client?.getState?.() || {}
+      if (roundMoney(st.balance || 0) > 0) reasons.push('cash')
+      if (st.hasCard) reasons.push('card')
+      if (coinMachine.refunding) reasons.push('refund')
+      if (coinMachine.impulseJobs > 0) reasons.push('impulses')
+    }
+    const MbwayPayment = (await import('../models/mbwayPayment.js')).default
+    if (await MbwayPayment.exists({ tenantId: req.tenantId, status: { $in: ['pending', 'paid'] }, createdAt: { $gt: new Date(Date.now() - 15 * 60 * 1000) } })) reasons.push('mbway')
+  } catch (e) { console.error('[pos] busy check:', e.message) }
+  res.json({ busy: reasons.length > 0, reasons })
+})
+
 router.post('/screen-reload', requireKiosk, (req, res) => {
   broadcastHardwareEvent(req.tenantId, 'screen:reload', {})
   res.json({ ok: true })
@@ -665,18 +685,37 @@ router.post('/card/purchase', requireKiosk, flowRoute('Pedido de compra de cart�
     let changeDispensed = false
     let changeError = null
     if (changeAmount > 0) {
+      let owed = changeAmount
+      let alerted = false
       try {
         const hopper = await PeripheralT.findOne({ type: 'hopper', enabled: true })
         if (!hopper) throw new Error('No hopper configured')
         const result = await coinMachine.dispenseChange(hopper._id, changeAmount)
         changeDispensed = result?.success !== false
-        if (!changeDispensed) changeError = result?.error || 'Hopper reported a fault'
+        if (!changeDispensed) {
+          changeError = result?.error || 'Hopper reported a fault'
+          alerted = true // dispenseChange has already e-mailed the staff
+          const paid = Number(result?.dispensed)
+          if (!result?.unconfirmed && paid > 0 && paid < changeAmount) owed = roundMoney(changeAmount - paid)
+        }
       } catch (e) {
         changeError = e.message
         console.error('[pos] Failed to dispense change on card purchase:', e.message)
       }
       if (!changeDispensed) {
-        console.error(`[pos] Change of €${changeAmount.toFixed(2)} owed on card sale ${sale._id}: ${changeError}`)
+        console.error(`[pos] Change of €${owed.toFixed(2)} owed on card sale ${sale._id}: ${changeError}`)
+        // Same as a cash payment for machines: the change the hopper did not pay stays as the customer's credit (the refund tries
+        // again, or the operator pays it by hand) and is written down. It used to be lost with only a log line.
+        try {
+          const st = coinMachine.client?.getState?.()
+          if (st && coinMachine.running) coinMachine.client.restoreBalances({ balance: roundMoney(Number(st.balance || 0) + owed), balanceCard: st.balanceCard })
+        } catch { /* the audit entry below already tells the operator */ }
+        coinMachine.auditSystem?.('cash.change.owed', { batchId, saleId: String(sale._id), amount: owed, error: changeError })?.catch?.(() => {})
+        if (!alerted) {
+          import('../services/alerts.js')
+            .then(({ sendAlertForTenant }) => sendAlertForTenant(req.tenantId, 'Falta de troco: cliente por pagar', `Compra de cartão: ficaram por pagar ${owed.toFixed(2)} € de troco (${changeError}). O valor ficou como crédito no quiosque.`))
+            .catch(() => {})
+        }
       }
     }
 
@@ -991,6 +1030,7 @@ router.post('/cards/:code/spend', requireKiosk, async (req, res) => {
   const CardT = withTenant(Card, req)
   let card = await CardT.findOne({ code })
   if (!card) return res.status(404).json({ error: 'Card not found' })
+  if (cardNotInReader(code)) return res.status(409).json({ error: 'Insira o cartão no leitor', code: 'card-not-in-reader' })
 
   // Check the machine is free *before* debiting — otherwise a 409 leaves the
   // customer charged for a wash that never starts.
@@ -1021,19 +1061,21 @@ router.post('/cards/:code/spend', requireKiosk, async (req, res) => {
     }
   }
 
-  // Start the machine BEFORE the card is debited: if it cannot start nothing is charged.
+  // The card pays first (one atomic update that also checks the balance): the machine used to start before the balance was
+  // looked at, so a card without enough money got the wash for free. If the machine then does not start the money goes back.
+  const debited = await debitCard(CardT, { _id: card._id }, chargePrice)
+  if (!debited) return res.status(400).json({ error: 'Insufficient balance', balance: card.balance })
+  card = debited
+
   if (machineId) {
     try {
       await coinMachine.startPaidMachine(machineId, blocks)
     } catch (e) {
       console.error('[pos] machine did not start:', e.message)
+      await creditCard(CardT, { _id: card._id }, chargePrice)
       return res.status(502).json({ error: 'A máquina não arrancou. Nada foi cobrado.', detail: e.message })
     }
   }
-
-  const debited = await debitCard(CardT, { _id: card._id }, chargePrice)
-  if (!debited) return res.status(400).json({ error: 'Insufficient balance', balance: card.balance })
-  card = debited
 
   const SaleT = withTenant(Sale, req)
   const sale = await SaleT.create({ machineId, amount: chargePrice, items, method: 'card', batchId, type: 'payment', cardId: card._id, cardCode: card.code })

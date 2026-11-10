@@ -35,10 +35,17 @@ import { translateBannersSoon } from '../services/bannerTranslate.js'
 import { translatorEnabled } from '../services/translator.js'
 import { bumpLandingVersion } from '../services/landingCache.js'
 import { loadGlossary, sanitizeGlossary, GLOSSARY_KEY } from '../services/landingGlossary.js'
-import { creditCard } from '../services/cardBalance.js'
+import { creditCard, balanceUpdate } from '../services/cardBalance.js'
 import AuditLog from '../models/auditLog.js'
 
 const router = express.Router()
+
+// An :id that is not a database id is simply "not found" (it used to reach the database and come back as a 500).
+// /flows/:id also takes a flow's own id, so it is left alone.
+router.param('id', (req, res, next, id) => {
+  if (req.path.startsWith('/flows/') || mongoose.isValidObjectId(id)) return next()
+  res.status(404).json({ error: 'Not found' })
+})
 
 // Any dashboard role (ADMIN/SUPERADMIN/STAFF/TECHNICIAN) can reach this
 // router at all; individual routes narrow further with requireAdmin,
@@ -339,9 +346,13 @@ async function machineAdminAction(req, res, kind) {
     return res.status(409).json({ error: 'A loja está sem ligação à internet neste momento, por isso não recebe o pedido. Tente de novo quando voltar (o quiosque na loja continua a funcionar com dinheiro).', code: 'shop-offline' })
   }
   const SyncCommandT = withTenant(SyncCommand, req)
+  // A double click (seen live: two start orders 60 ms apart) is one order: the one already on its way is answered again.
+  const type = kind === 'start' ? 'start_machine' : 'end_machine'
+  const twin = await SyncCommandT.find({ type, 'payload.machineId': String(machine._id), createdAt: { $gt: new Date(Date.now() - 15_000) } }).select('_id').lean()
+  if (twin.length) return res.json({ success: true, queued: true, commandIds: twin.map((c) => c._id), duplicate: true })
   const cmds = []
   for (const k of kiosks) {
-    cmds.push(await SyncCommandT.create({ kioskId: k._id, type: kind === 'start' ? 'start_machine' : 'end_machine', payload: kind === 'start' ? { machineId: String(machine._id), blocks } : { machineId: String(machine._id) } }))
+    cmds.push(await SyncCommandT.create({ kioskId: k._id, type, payload: kind === 'start' ? { machineId: String(machine._id), blocks } : { machineId: String(machine._id) } }))
   }
   logAction(req, `machine.admin_${kind}_requested`, 'Machine', machine._id, { name: machine.name })
   res.json({ success: true, queued: true, commandIds: cmds.map((c) => c._id) })
@@ -424,6 +435,7 @@ router.put('/users/:id', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 8 characters' })
     }
     update.password = await bcrypt.hash(password, 10)
+    update.passwordChangedAt = new Date()
   }
   const UserT = withTenant(User, req)
   const u = await UserT.findOneAndUpdate({ _id: req.params.id, ...hideSuperadmins(req) }, update, { new: true }).select('username role apiKey createdAt')
@@ -467,7 +479,9 @@ router.get('/transactions', requireStaffRead, async (req, res) => {
 // list route above), used for accounting exports. Hand-built CSV: the shape
 // is simple enough that a library would be pure overhead.
 function csvCell(v) {
-  const s = v == null ? '' : String(v)
+  let s = v == null ? '' : String(v)
+  // A text that a spreadsheet would run as a formula (a card holder named "=HYPERLINK(...)") is made plain text. Numbers stay numbers.
+  if (/^[=+\-@\t\r]/.test(s) && !/^[+-]?\d+([.,]\d+)?$/.test(s)) s = "'" + s
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
@@ -554,20 +568,49 @@ router.post('/transactions/:id/refund', requireAdmin, async (req, res) => {
   if (sale.type === 'refund') return res.status(400).json({ error: 'Cannot refund a refund' })
   if (sale.status === 'refunded') return res.status(400).json({ error: 'Transaction already refunded' })
 
-  // How much: all of the sale, or a part of it.
-  let amount = sale.amount
+  // What earlier (partial) refunds already gave back: a sale can be refunded in parts, never beyond its amount.
+  const earlier = await SaleT.find({ refundOf: sale._id, type: 'refund' }).select('amount').lean()
+  const alreadyRefunded = roundMoney(earlier.reduce((sum, r) => sum + Math.abs(Number(r.amount) || 0), 0))
+  const left = roundMoney(sale.amount - alreadyRefunded)
+  if (!(left > 0)) return res.status(400).json({ error: 'Transaction already refunded' })
+
+  // How much: all that is left of the sale, or a part of it.
+  let amount = left
   const given = req.body?.amount
   if (given !== undefined && given !== null && given !== '') {
     const p = parseAmount(String(given).replace(',', '.'))
     if (!p.ok) return res.status(400).json({ error: 'Valor inválido' })
-    if (p.value > roundMoney(sale.amount) + 0.001) return res.status(400).json({ error: `O valor não pode ser maior que a venda (${sale.amount.toFixed(2)} €)` })
+    if (p.value > left + 0.001) return res.status(400).json({ error: alreadyRefunded > 0 ? `Já foram reembolsados ${alreadyRefunded.toFixed(2)} € desta venda: só restam ${left.toFixed(2)} €` : `O valor não pode ser maior que a venda (${sale.amount.toFixed(2)} €)` })
     amount = p.value
   }
   const payout = req.body?.payout === true
-  if (payout && (sale.cardId || sale.method !== 'cash')) return res.status(400).json({ error: 'Só as vendas em dinheiro podem ser pagas pelo hopper' })
+  if (payout && sale.method !== 'cash') return res.status(400).json({ error: 'Só as vendas em dinheiro podem ser pagas pelo hopper' })
+  // A sale that PUT money on a card (a recharge, the balance that came with a new card) is undone by taking that balance back off
+  // the card. A sale PAID with a card is undone by giving the balance back. (Crediting in both cases gave the customer the money twice.)
+  const loadedCard = Boolean(sale.cardId) && ['recharge', 'card_purchase', 'gift_card'].includes(sale.type)
+  // of a new card's price only the balance that came with it is on the card; of a gift card nothing was paid at all
+  const loadedCredit = sale.type === 'recharge' ? sale.amount : roundMoney(Number(sale.metadata?.initialCredit) || 0)
+  const takeBack = loadedCard ? roundMoney(Math.max(0, Math.min(amount, loadedCredit - alreadyRefunded))) : 0
   if (refundsInFlight.has(String(sale._id))) return res.status(409).json({ error: 'Este reembolso já está a ser processado' })
   refundsInFlight.add(String(sale._id))
   try {
+
+  const CardT = withTenant(Card, req)
+  // on the central server the shop's own card must follow (the shop PC has no SYNC_SERVER_URL set to itself)
+  const tellShop = async (delta) => {
+    if (!process.env.SYNC_SERVER_URL) await CardT.findByIdAndUpdate(sale.cardId, { $push: { shopAdjustments: { $each: [{ opId: String(new mongoose.Types.ObjectId()), delta, reason: 'refund', at: new Date() }], $slice: -50 } } })
+  }
+
+  // Balance that the sale loaded comes off the card BEFORE any money goes out: what was already spent cannot be refunded.
+  if (takeBack > 0) {
+    // plain atomic update (not debitCard): a blocked card must still give its balance back
+    const took = await CardT.findOneAndUpdate({ _id: sale.cardId, balance: { $gte: takeBack - 0.005 } }, balanceUpdate(-takeBack), { new: true })
+    if (!took) {
+      const c = await CardT.findById(sale.cardId).select('balance').lean()
+      return res.status(409).json({ error: `O cartão só tem ${Number(c?.balance || 0).toFixed(2)} € de saldo: o resto já foi gasto. Reembolse no máximo esse valor.` })
+    }
+  }
+  const giveBack = async () => { if (takeBack > 0) await creditCard(CardT, { _id: sale.cardId }, takeBack) }
 
   // The cash goes out FIRST: when the hopper pays nothing, nothing is recorded and the admin can try again.
   let paid = null
@@ -575,17 +618,20 @@ router.post('/transactions/:id/refund', requireAdmin, async (req, res) => {
     try {
       paid = await payOutForRefund(req, amount, sale)
     } catch (e) {
+      await giveBack()
       return res.status(e.status || 500).json({ error: e.message })
     }
-    if (!(paid.dispensed > 0) && !paid.unconfirmed) return res.status(409).json({ error: `O hopper não conseguiu pagar${paid.error ? ` (${paid.error})` : ''}. Nada foi registado.`, payout: paid })
+    if (!(paid.dispensed > 0) && !paid.unconfirmed) {
+      await giveBack()
+      return res.status(409).json({ error: `O hopper não conseguiu pagar${paid.error ? ` (${paid.error})` : ''}. Nada foi registado.`, payout: paid })
+    }
   }
 
-  if (sale.cardId) {
-    const CardT = withTenant(Card, req)
+  if (takeBack > 0) await tellShop(-takeBack)
+  if (sale.cardId && !loadedCard) {
     // No status guard on creditCard — this must succeed even onto a blocked card.
     await creditCard(CardT, { _id: sale.cardId }, amount)
-    // on the central server the shop's own card must follow (the shop PC has no SYNC_SERVER_URL set to itself)
-    if (!process.env.SYNC_SERVER_URL) await CardT.findByIdAndUpdate(sale.cardId, { $push: { shopAdjustments: { $each: [{ opId: `refund-${sale._id}`, delta: amount, reason: 'refund', at: new Date() }], $slice: -50 } } })
+    await tellShop(amount)
   }
 
   const owed = paid ? roundMoney(Math.max(0, amount - (Number(paid.dispensed) || 0))) : 0
@@ -605,10 +651,13 @@ router.post('/transactions/:id/refund', requireAdmin, async (req, res) => {
     // rather than retroactively touching a closed report's frozen totals.
   })
 
-  sale.status = 'refunded'
-  await sale.save()
+  // a part refunded leaves the sale open for the rest; only the whole amount closes it
+  if (roundMoney(alreadyRefunded + amount) >= roundMoney(sale.amount) - 0.001) {
+    sale.status = 'refunded'
+    await sale.save()
+  }
 
-  logAction(req, 'transaction.refund', 'Sale', sale._id, { amount, saleAmount: sale.amount, reason, refundId: refund._id, payout: paid ? { dispensed: paid.dispensed, owed, unconfirmed: !!paid.unconfirmed } : null })
+  logAction(req, 'transaction.refund', 'Sale', sale._id, { amount, saleAmount: sale.amount, alreadyRefunded, cardDebited: takeBack, reason, refundId: refund._id, payout: paid ? { dispensed: paid.dispensed, owed, unconfirmed: !!paid.unconfirmed } : null })
   if (owed > 0) {
     try {
       const { sendAlertForTenant } = await import('../services/alerts.js')
@@ -639,7 +688,9 @@ router.post('/cards', requireAdmin, async (req, res) => {
   const CardT = withTenant(Card, req)
   const existing = await CardT.findOne({ code })
   if (existing) return res.status(400).json({ error: 'Card already exists' })
-  const c = await CardT.create({ code, balance: Number(balance || 0), metadata })
+  const start = Math.round(Number(balance || 0) * 100) / 100
+  if (!Number.isFinite(start) || start < 0 || start > 1000) return res.status(400).json({ error: 'Saldo inválido (0 a 1000 €)' })
+  const c = await CardT.create({ code: String(code), balance: start, metadata })
   logAction(req, 'card.create', 'Card', c._id, { code: c.code, balance: c.balance })
   res.json(c)
 })
@@ -651,7 +702,9 @@ router.put('/cards/:id', requireAdmin, async (req, res) => {
   if (!before) return res.status(404).json({ error: 'Card not found' })
   // The holder's details (the edit form sends them together with the balance): cleaned, length-limited, e-mail checked.
   const cut = (v, n) => String(v ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, n)
-  const update = { balance: balance == null ? undefined : Number(balance), metadata }
+  const wanted = balance == null || balance === '' ? undefined : Math.round(Number(balance) * 100) / 100
+  if (wanted !== undefined && (!Number.isFinite(wanted) || wanted < 0 || wanted > 1000)) return res.status(400).json({ error: 'Saldo inválido (0 a 1000 €)' })
+  const update = { balance: wanted, metadata }
   for (const [field, max] of [['name', 80], ['email', 120], ['phone', 30], ['contribuinte', 20]]) {
     if (req.body[field] !== undefined) update[field] = cut(req.body[field], max)
   }
@@ -848,7 +901,9 @@ router.post('/shop-mail/test', requireAdmin, async (req, res) => {
 
 router.post('/settings', requireAdmin, async (req, res) => {
   const { key, value } = req.body
-  if (!key) return res.status(400).json({ error: 'Missing key' })
+  if (!key || typeof key !== 'string' || key.length > 100) return res.status(400).json({ error: 'Missing key' })
+  // sync.* is the link between the shop and the central server (keys, pending key changes): written by the server itself, never from this form.
+  if (key.startsWith('sync.')) return res.status(400).json({ error: 'Esta definição não pode ser alterada aqui' })
   if (key === 'shopmail.account') return res.status(400).json({ error: 'Use /shop-mail' }) // the password must be encrypted on its way in
   // Seconds before unspent cash is paid back from the hopper; 0 = never. A bad value here
   // would either keep a customer's money forever or pay it out at once, so refuse it.
@@ -1717,7 +1772,9 @@ router.get('/analytics/revenue', requireStaffRead, async (req, res) => {
     } },
     { $group: {
         _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: 'Europe/Lisbon' } }, // the shop's day, not UTC's
-        total: { $sum: "$amount" },
+        // Same rule as the day close: money counts when it comes in. What is spent from a card was counted when the card was loaded.
+        total: { $sum: { $cond: [{ $eq: ["$method", "card"] }, 0, "$amount"] } },
+        mbway: { $sum: { $cond: [{ $eq: ["$method", "mbway"] }, "$amount", 0] } },
         count: { $sum: 1 },
         cash: { $sum: { $cond: [{ $eq: ["$method", "cash"] }, "$amount", 0] } },
         card: { $sum: { $cond: [{ $eq: ["$method", "card"] }, "$amount", 0] } }
@@ -1735,15 +1792,17 @@ router.get('/analytics/revenue.csv', requireStaffRead, async (req, res) => {
     { $match: { tenantId: new mongoose.Types.ObjectId(req.tenantId), createdAt: { $gte: thirtyDaysAgo } } },
     { $group: {
         _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: 'Europe/Lisbon' } }, // the shop's day, not UTC's
-        total: { $sum: "$amount" },
+        // Same rule as the day close: money counts when it comes in. What is spent from a card was counted when the card was loaded.
+        total: { $sum: { $cond: [{ $eq: ["$method", "card"] }, 0, "$amount"] } },
+        mbway: { $sum: { $cond: [{ $eq: ["$method", "mbway"] }, "$amount", 0] } },
         cash: { $sum: { $cond: [{ $eq: ["$method", "cash"] }, "$amount", 0] } },
         card: { $sum: { $cond: [{ $eq: ["$method", "card"] }, "$amount", 0] } }
     } },
     { $sort: { _id: 1 } }
   ])
-  const lines = [['Data', 'Dinheiro', 'Cartão', 'Total'].map(csvCell).join(',')]
+  const lines = [['Data', 'Dinheiro', 'MB WAY', 'Total recebido', 'Gasto de cartões (já contado na recarga)'].map(csvCell).join(',')]
   for (const row of stats) {
-    lines.push([row._id, row.cash.toFixed(2), row.card.toFixed(2), row.total.toFixed(2)].map(csvCell).join(','))
+    lines.push([row._id, row.cash.toFixed(2), row.mbway.toFixed(2), row.total.toFixed(2), row.card.toFixed(2)].map(csvCell).join(','))
   }
   res.setHeader('Content-Type', 'text/csv; charset=utf-8')
   res.setHeader('Content-Disposition', `attachment; filename="revenue-${new Date().toISOString().slice(0, 10)}.csv"`)

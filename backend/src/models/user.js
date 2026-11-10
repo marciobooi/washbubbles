@@ -15,6 +15,8 @@ const userSchema = new Schema({
   // A rotation stages the new key here; the first request that uses it makes it the apiKey (see services/apiKeys.js).
   apiKeyNext: { type: String, default: null },
   apiKeyNextAt: { type: Date, default: null },
+  // Tokens issued before this moment stop working (a stolen session dies with the password change).
+  passwordChangedAt: { type: Date, default: null },
   resetPasswordToken: { type: String, default: null },
   resetPasswordExpires: { type: Date, default: null },
   lastSeen: { type: Date, default: null },

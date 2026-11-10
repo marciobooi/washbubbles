@@ -81,6 +81,11 @@ describe('Card purchase on the shop PC charges the cash really inserted', functi
     expect(sale.amount).to.equal(5)
     expect(sale.inserted).to.equal(10) // not the 50 the screen claimed
     expect(sale.change).to.equal(5)
-    expect(coinMachine.client.getState().balance).to.equal(0)
+    // No hopper here, so the 5 of change could not be paid: it stays as the customer's credit instead of being lost.
+    expect(res.body.changeDispensed).to.equal(false)
+    expect(coinMachine.client.getState().balance).to.equal(5)
+    const AuditLog = (await import('../src/models/auditLog.js')).default
+    const owed = await AuditLog.findOne({ action: 'cash.change.owed' })
+    if (owed) expect(owed.details.amount).to.equal(5)
   })
 })

@@ -27,7 +27,7 @@ export async function refillHopper(req, { coins = [], notes = '' } = {}) {
     const h = hoppers.find((x) => Math.abs(Number(x.hopperConfig?.coinValue) - c.value) < 0.001)
     if (!h) { noHopper.push(c); continue }
     await PeripheralT.findOneAndUpdate({ _id: h._id }, { $inc: { 'hopperConfig.currentCount': c.count } })
-    refilled.push({ ...c, hopper: h.name })
+    refilled.push({ ...c, hopper: h.name, hopperId: h._id })
   }
 
   const label = clean.map((c) => `${c.count}×${c.value}€`).join(', ')
@@ -35,6 +35,10 @@ export async function refillHopper(req, { coins = [], notes = '' } = {}) {
     denominations: clean,
     notes: `Reforço do hopper: ${label}${notes ? ` — ${String(notes).slice(0, 300)}` : ''}`,
   })
-  if (status !== 200) return { status, body }
-  return { status: 200, body: { adjustment: body, refilled, noHopper } }
+  if (status !== 200) {
+    // The cash movement was refused (e.g. a day close is running): the stock goes back, or it would count coins nobody booked.
+    for (const r of refilled) await PeripheralT.findOneAndUpdate({ _id: r.hopperId }, { $inc: { 'hopperConfig.currentCount': -r.count } })
+    return { status, body }
+  }
+  return { status: 200, body: { adjustment: body, refilled: refilled.map(({ hopperId, ...r }) => r), noHopper } }
 }

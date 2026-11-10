@@ -220,6 +220,7 @@
   "payNoBalance": "Saldo insuficiente no cartão. Recarregue-o ou pague em dinheiro.",
   "payNoBalanceAmt": "Saldo insuficiente no cartão (tem {{balance}}). Recarregue-o ou pague em dinheiro.",
   "payNoCash": "Dinheiro insuficiente. Insira o valor em falta.",
+  "payCardNotInReader": "Insira o cartão no leitor e deixe-o lá até a máquina arrancar.",
   "payCardUnknown": "Cartão não reconhecido.",
   "cardInReaderAria": "Cartão no leitor: ver o meu cartão",
   "payRechargeCashOnly": "As recargas só se pagam com dinheiro: insira o valor em moedas ou notas.",

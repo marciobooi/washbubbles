@@ -28,6 +28,8 @@ async function resolveUserFromRequest(req) {
     try {
       const decoded = jwt.verify(token, JWT_SECRET)
       userModel = await User.findById(decoded.sub)
+      // a token issued before the last password change is dead (2 s of slack: iat is in whole seconds)
+      if (userModel && userModel.passwordChangedAt && decoded.iat * 1000 < userModel.passwordChangedAt.getTime() - 2000) return { error: 'Invalid token' }
       if (userModel) return { userModel, tokenUser: decoded }
     } catch (err) {
       return { error: 'Invalid token' }

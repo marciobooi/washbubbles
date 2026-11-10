@@ -63,7 +63,7 @@ router.post('/login', loginLimiter, accountLimiter, async (req, res) => {
   } else {
     user = await User.findOne({ username: String(username) }).collation({ locale: 'en', strength: 2 }) // case-insensitive; names are unique in the whole system
     if (!user) return res.status(401).json({ error: 'Invalid credentials' })
-    const ok = await bcrypt.compare(password, user.password)
+    const ok = await bcrypt.compare(String(password), user.password)
     if (!ok) return res.status(401).json({ error: 'Invalid credentials' })
   }
 
@@ -106,9 +106,12 @@ router.post('/change-password', requireAuth, async (req, res) => {
 
   const hash = await bcrypt.hash(newPassword, 10)
   user.password = hash
+  user.passwordChangedAt = new Date()
   await user.save()
 
-  res.json({ success: true })
+  // the session that changed the password keeps working: hand it a token issued after the change
+  const token = jwt.sign({ sub: user._id.toString(), role: user.role, username: user.username }, process.env.JWT_SECRET, { expiresIn: '8h' })
+  res.json({ success: true, token })
 })
 
 // --- password recovery ---------------------------------------------------
@@ -119,6 +122,7 @@ router.post('/forgot-password', passwordResetLimiter, async (req, res) => {
   const { email } = req.body
   if (!email) return res.status(400).json({ error: 'Missing email' })
   // the same address may exist in several shops: only the shop of the site the request came from
+  if (typeof email !== 'string') return res.status(400).json({ error: 'Missing email' })
   const user = await User.findOne({ email, ...(req.tenantId ? { tenantId: req.tenantId } : {}) })
   if (user) {
     const token = crypto.randomBytes(32).toString('hex')
@@ -161,7 +165,9 @@ router.post('/forgot-password', passwordResetLimiter, async (req, res) => {
 router.post('/reset-password', passwordResetLimiter, async (req, res) => {
   const { token, newPassword } = req.body
   if (!token || !newPassword) return res.status(400).json({ error: 'Missing fields' })
-  if (typeof newPassword !== 'string' || newPassword.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters' })
+  // a token that is not a plain string (e.g. {"$ne": null}) would match any account with a pending reset
+  if (typeof token !== 'string' || token.length < 32) return res.status(400).json({ error: 'Token invalid or expired' })
+  if (typeof newPassword !== 'string' || newPassword.length < 8) return res.status(400).json({ error: 'New password must be at least 8 characters' })
 
   const user = await User.findOne({
     resetPasswordToken: token,
@@ -171,6 +177,7 @@ router.post('/reset-password', passwordResetLimiter, async (req, res) => {
 
   const hash = await bcrypt.hash(newPassword, 10)
   user.password = hash
+  user.passwordChangedAt = new Date()
   user.resetPasswordToken = null
   user.resetPasswordExpires = null
   await user.save()

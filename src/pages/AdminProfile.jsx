@@ -19,7 +19,7 @@ function usernameFrom(token) {
 
 /** Every dashboard user changes their own password here (reached from the role menu in the top bar). */
 export default function AdminProfile() {
-  const { token } = useAuth()
+  const { token, role, tenant, login } = useAuth()
   const [currentPassword, setCurrentPassword] = React.useState('')
   const [newPassword, setNewPassword] = React.useState('')
   const [confirm, setConfirm] = React.useState('')
@@ -32,7 +32,9 @@ export default function AdminProfile() {
     if (newPassword === currentPassword) { toast({ title: 'A nova palavra-passe tem de ser diferente da atual', variant: 'destructive' }); return }
     try {
       setLoading(true)
-      await api.changePassword({ currentPassword, newPassword })
+      const res = await api.changePassword({ currentPassword, newPassword })
+      // every session opened before the change is closed by the server; this one carries on with the new token
+      if (res?.token) login({ token: res.token, role, tenant })
       toast({ title: 'Palavra-passe atualizada', variant: 'success' })
       setCurrentPassword(''); setNewPassword(''); setConfirm('')
     } catch (err) {

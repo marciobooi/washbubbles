@@ -70,6 +70,7 @@ export async function buildTestApp() {
   app.disable('x-powered-by') // as in src/index.js
   app.use(cors())
   app.use(express.json())
+  app.use((await import('../src/middleware/noOperators.js')).noOperators) // as in src/index.js
   app.use(resolveTenant)
   app.use('/api/auth', authRoutes)
   app.use('/api/installer', (await import('../src/routes/installer.js')).default)
@@ -79,6 +80,7 @@ export async function buildTestApp() {
   app.use('/api', posRoutes)
   app.use('/api/gateways', gatewaysRoutes)
   app.use('/api/sync', syncRoutes)
+  app.use('/api/middleware', (await import('../src/routes/middleware.js')).default)
   app.use('/api/wifi', wifiRoutes)
   app.use('/api/mbway-link', mbwayLinkRoutes.shopRouter)
   app.use(mbwayLinkRoutes.publicRouter)

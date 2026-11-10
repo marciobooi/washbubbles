@@ -55,14 +55,11 @@ export function connect(url = import.meta.env.VITE_HW_BRIDGE_URL || defaultWsUrl
   })
 
   socket.addEventListener('message', (evt) => {
-    try {
-      const data = JSON.parse(evt.data)
-      if (data && data.type === 'auth-ok') { retryMs = 1000; tokenRejected = false } // only a connection that was accepted resets the back-off
-      listeners.forEach((cb) => cb(data))
-    } catch (err) {
-      // non-json messages
-      listeners.forEach((cb) => cb(evt.data))
-    }
+    let data
+    try { data = JSON.parse(evt.data) } catch { return } // the server only sends JSON; anything else is ignored
+    if (data && data.type === 'auth-ok') { retryMs = 1000; tokenRejected = false } // only a connection that was accepted resets the back-off
+    // One listener that throws must not stop the others (it used to make every listener run a second time, with the raw text).
+    listeners.forEach((cb) => { try { cb(data) } catch (err) { console.error('[ws] listener failed:', err) } })
   })
 
   socket.addEventListener('close', (ev) => {

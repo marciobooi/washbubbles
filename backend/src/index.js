@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url'
 import express from 'express'
 import http from 'http'
 import cors from 'cors'
+import { noOperators } from './middleware/noOperators.js'
 import { connectMongo } from './db.js'
 import authRoutes from './routes/auth.js'
 import adminRoutes, { uploadDir } from './routes/admin.js'
@@ -58,6 +59,7 @@ const corsOrigins = (process.env.CORS_ORIGINS || '').split(',').map((s) => s.tri
 app.disable('x-powered-by')
 app.use(corsOrigins.length && !corsOrigins.includes('*') ? cors({ origin: corsOrigins }) : cors())
 app.use(express.json())
+app.use(noOperators)
 // Resolve tenant early so routes can use `req.tenantFilter` and `req.tenantId`
 app.use(resolveTenant)
 // We import models directly where needed (no request-scoped ORM)

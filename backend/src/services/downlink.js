@@ -29,6 +29,7 @@ import Peripheral from '../models/peripheral.js'
 import Sale from '../models/sale.js'
 import Coupon from '../models/coupon.js'
 import Card from '../models/card.js'
+import AuditLog from '../models/auditLog.js'
 
 /** Machine fields owned by this site at runtime; a pull never overwrites them. */
 export const MACHINE_RUNTIME_FIELDS = [
@@ -198,7 +199,9 @@ export class Downlink extends EventEmitter {
         { $set: { status: 'fault', statusText: 'Avariada' } })
       await Model.updateMany({ tenantId: tenant, outOfService: true, serviceStatus: { $ne: 'fault' }, status: { $ne: 'offline' } },
         { $set: { status: 'offline', statusText: 'Fora de servi\u00e7o' } })
-      await Model.updateMany({ tenantId: tenant, outOfService: { $ne: true }, status: 'offline' },
+      // Back in service: only the machines that were offline BECAUSE of that decision. One the controller reports as not
+      // answering is also 'offline' and must stay unsellable (it used to be freed here every 30 s).
+      await Model.updateMany({ tenantId: tenant, outOfService: { $ne: true }, status: 'offline', statusText: 'Fora de servi\u00e7o' },
         { $set: { status: 'free', statusText: '' } })
     }
     this.counts[name] = docs.length
@@ -286,7 +289,8 @@ export class Downlink extends EventEmitter {
         for (const a of adj) {
           if (!a?.opId || !Number.isFinite(Number(a.delta))) continue
           if ((fresh.appliedDeltas || []).includes(a.opId)) { done.push(a.opId); continue } // applied before, only the acknowledgement was lost
-          const next = Math.max(0, Math.round((Number(fresh.balance || 0) + Number(a.delta)) * 100) / 100)
+          const wanted = Math.round((Number(fresh.balance || 0) + Number(a.delta)) * 100) / 100
+          const next = Math.max(0, wanted)
           const u = await Card.findOneAndUpdate(
             { _id: local._id, balance: fresh.balance, appliedDeltas: { $ne: a.opId } },
             { $set: { balance: next }, $push: { appliedDeltas: { $each: [a.opId], $slice: -200 } } },
@@ -296,6 +300,13 @@ export class Downlink extends EventEmitter {
           fresh = u
           done.push(a.opId)
           changed++
+          // A debit bigger than what the card still had here (the customer spent it meanwhile): the balance stops at zero and the
+          // part that could not be taken is written down, instead of passing as fully applied.
+          if (wanted < 0) {
+            const short = Math.round(-wanted * 100) / 100
+            console.warn(`[downlink] card ${c.code}: adjustment ${a.opId} of ${Number(a.delta).toFixed(2)} applied only in part, ${short.toFixed(2)} could not be taken (balance was not enough)`)
+            await AuditLog.create({ tenantId: tenant, actorUsername: 'system', action: 'card.adjust.short', targetType: 'Card', targetId: String(local._id), details: { code: String(c.code), opId: a.opId, delta: Number(a.delta), notTaken: short } }).catch((e) => console.error('[downlink] audit:', e.message))
+          }
         }
         if (done.length) {
           this.onCardAdjusted(String(c.code))

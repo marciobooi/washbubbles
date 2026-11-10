@@ -29,7 +29,9 @@ export default function AdminTransactions() {
   const [refunding, setRefunding] = useState(false)
   const [refundAmount, setRefundAmount] = useState('') // what to give back (a part of the sale or all of it)
   const [refundPayout, setRefundPayout] = useState(false) // the hopper pays it to the customer now (cash sales)
-  const isCashSale = (t) => Boolean(t) && !t.cardCode && !t.cardId && t.method === 'cash'
+  // a sale that LOADED a card (recharge, new card) was paid in cash too: its refund takes the balance back off the card
+  const loadedCard = (t) => Boolean(t) && ['recharge', 'card_purchase'].includes(t.type) && Boolean(t.cardCode || t.cardId)
+  const isCashSale = (t) => Boolean(t) && t.method === 'cash' && (loadedCard(t) || (!t.cardCode && !t.cardId))
   const money = (n) => Number(n || 0).toFixed(2).replace('.', ',') + ' €'
   function openRefund(t) {
     setRefundTarget(t)
@@ -319,7 +321,7 @@ export default function AdminTransactions() {
           {refundTarget && (
             <p className="text-sm text-muted-foreground">
               Valor: <span className="font-medium">{Number(refundTarget.amount).toFixed(2)}€</span>
-              {refundTarget.cardCode ? ' — devolvido ao saldo do cartão.' : isCashSale(refundTarget) ? ' — dinheiro.' : ''}
+              {loadedCard(refundTarget) ? ' — o saldo carregado é retirado do cartão (só o que ainda lá estiver).' : refundTarget.cardCode ? ' — devolvido ao saldo do cartão.' : isCashSale(refundTarget) ? ' — dinheiro.' : ''}
             </p>
           )}
           {refundTarget && (

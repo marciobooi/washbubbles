@@ -1,0 +1,258 @@
+import { expect } from 'chai'
+import request from 'supertest'
+import { startTestDb, stopTestDb, clearTestDb, buildTestApp, seedTenantAndUsers, signToken } from './setup.test-helper.js'
+
+// The fixes of the 2026-11 audit (todo.md): each of these was a way to take money, balance or an account.
+describe('Audit 2026-11', function () {
+  this.timeout(20000)
+  let app, tenant, admin, kiosk, Card, Machine, Sale, User, coinMachine, saved
+  const kioskAuth = () => ({ Authorization: `ApiKey ${kiosk.apiKey}` })
+  const adminAuth = () => ({ Authorization: `Bearer ${signToken(admin)}` })
+
+  before(async () => {
+    await startTestDb()
+    app = await buildTestApp()
+    Card = (await import('../src/models/card.js')).default
+    Machine = (await import('../src/models/machine.js')).default
+    Sale = (await import('../src/models/sale.js')).default
+    User = (await import('../src/models/user.js')).default
+    coinMachine = (await import('../src/services/coinMachine.js')).default
+  })
+  after(async () => { await stopTestDb() })
+  beforeEach(async () => {
+    await clearTestDb()
+    ;({ tenant, admin, kiosk } = await seedTenantAndUsers())
+    saved = { running: coinMachine.running, tenantId: coinMachine.tenantId, start: coinMachine.startPaidMachine, client: { ...coinMachine.client.client } }
+  })
+  afterEach(() => {
+    coinMachine.running = saved.running
+    coinMachine.tenantId = saved.tenantId
+    coinMachine.startPaidMachine = saved.start
+    Object.assign(coinMachine.client.client, saved.client)
+  })
+
+  describe('password reset', () => {
+    it('refuses a token that is a query operator, and the account keeps its password', async () => {
+      await User.updateOne({ _id: admin._id }, { $set: { resetPasswordToken: 'a'.repeat(64), resetPasswordExpires: Date.now() + 3600e3 } })
+      const r = await request(app).post('/api/auth/reset-password').send({ token: { $ne: null }, newPassword: 'hacked-password' })
+      expect(r.status).to.equal(400)
+      const login = await request(app).post('/api/auth/login').send({ username: 'admin', password: 'admin1234' })
+      expect(login.status).to.equal(200)
+    })
+
+    it('refuses any body or query carrying a $ operator', async () => {
+      const r = await request(app).post('/api/auth/login').send({ username: { $gt: '' }, password: 'x' })
+      expect(r.status).to.equal(400)
+    })
+
+    it('a session opened before the password changed stops working', async () => {
+      const old = signToken(admin)
+      await User.updateOne({ _id: admin._id }, { $set: { passwordChangedAt: new Date(Date.now() + 60e3) } })
+      const r = await request(app).get('/api/admin/machines').set({ Authorization: `Bearer ${old}` })
+      expect(r.status).to.equal(401)
+    })
+  })
+
+  describe('old session routes are closed to the kiosk key', () => {
+    for (const [path, body] of [
+      ['/api/middleware/client/add-cash', { amount: 50 }],
+      ['/api/middleware/client/load-card', { cardNumber: 'X' }],
+      ['/api/middleware/client/reset', {}],
+      ['/api/middleware/payment', { machineId: '1', amount: 1 }],
+      ['/api/middleware/activate-machine', { machineId: '1' }],
+      ['/api/pos/sale', { machineId: '1', items: [{}], amount: 1 }],
+    ]) {
+      it(path, async () => {
+        const r = await request(app).post(path).set(kioskAuth()).send(body)
+        expect(r.status).to.equal(403)
+      })
+    }
+  })
+
+  describe('paying with a card', () => {
+    let machine, started
+    beforeEach(async () => {
+      machine = await Machine.create({ tenantId: tenant._id, name: 'Lavar 1', type: 'wash', weight: 10, number: 1, status: 'free' })
+      await (await import('../src/models/price.js')).default.create({ tenantId: tenant._id, type: 'wash', weight: 10, cashPrice: 5, cardPrice: 5 })
+      started = []
+      coinMachine.startPaidMachine = async (id) => { started.push(String(id)) }
+    })
+
+    it('/pos/cards/:code/spend does not start the machine when the card cannot pay', async () => {
+      await Card.create({ tenantId: tenant._id, code: 'C-POOR', balance: 1, status: 'active' })
+      const r = await request(app).post('/api/pos/cards/C-POOR/spend').set(kioskAuth()).send({ machineId: String(machine._id), amount: 5, items: [{}] })
+      expect(r.status).to.equal(400)
+      expect(started).to.deep.equal([])
+      expect((await Card.findOne({ code: 'C-POOR' })).balance).to.equal(1)
+    })
+
+    it('/pos/cards/:code/spend gives the money back when the machine does not start', async () => {
+      await Card.create({ tenantId: tenant._id, code: 'C-OK', balance: 10, status: 'active' })
+      coinMachine.startPaidMachine = async () => { throw new Error('controller down') }
+      const r = await request(app).post('/api/pos/cards/C-OK/spend').set(kioskAuth()).send({ machineId: String(machine._id), amount: 5, items: [{}] })
+      expect(r.status).to.equal(502)
+      expect((await Card.findOne({ code: 'C-OK' })).balance).to.equal(10)
+      expect(await Sale.countDocuments({})).to.equal(0)
+    })
+
+    it('on the shop PC the card must be in the reader (both routes)', async () => {
+      await Card.create({ tenantId: tenant._id, code: 'C-AWAY', balance: 10, status: 'active' })
+      coinMachine.tenantId = tenant._id
+      coinMachine.running = true
+      Object.assign(coinMachine.client.client, { hasCard: false, cardNumber: null })
+      const items = [{ _id: String(machine._id), name: 'Lavar 1', price: 5 }]
+      const a = await request(app).post('/api/gateways/card/pay').set(kioskAuth()).send({ cardCode: 'C-AWAY', batchId: 'r1', items })
+      expect(a.status).to.equal(409)
+      expect(a.body.code).to.equal('card-not-in-reader')
+      const b = await request(app).post('/api/pos/cards/C-AWAY/spend').set(kioskAuth()).send({ machineId: String(machine._id), amount: 5, items: [{}] })
+      expect(b.status).to.equal(409)
+      expect(started).to.deep.equal([])
+      expect((await Card.findOne({ code: 'C-AWAY' })).balance).to.equal(10)
+
+      Object.assign(coinMachine.client.client, { hasCard: true, cardNumber: 'C-AWAY' })
+      const ok = await request(app).post('/api/gateways/card/pay').set(kioskAuth()).send({ cardCode: 'C-AWAY', batchId: 'r2', items })
+      expect(ok.status, JSON.stringify(ok.body)).to.equal(200)
+      expect(started).to.have.length(1)
+    })
+  })
+
+  describe('refunds', () => {
+    const refund = (id, body) => request(app).post(`/api/admin/transactions/${id}/refund`).set(adminAuth()).send({ reason: 'teste', ...body })
+
+    it('refunding a recharge takes the balance off the card instead of adding it again', async () => {
+      const card = await Card.create({ tenantId: tenant._id, code: 'C-RECH', balance: 10, status: 'active' })
+      const sale = await Sale.create({ tenantId: tenant._id, amount: 10, method: 'cash', type: 'recharge', cardId: card._id, cardCode: card.code, items: [{}] })
+      const r = await refund(sale._id, {})
+      expect(r.status).to.equal(200)
+      expect((await Card.findById(card._id)).balance).to.equal(0)
+    })
+
+    it('a recharge already spent is not refunded', async () => {
+      const card = await Card.create({ tenantId: tenant._id, code: 'C-SPENT', balance: 2, status: 'active' })
+      const sale = await Sale.create({ tenantId: tenant._id, amount: 10, method: 'cash', type: 'recharge', cardId: card._id, cardCode: card.code, items: [{}] })
+      const r = await refund(sale._id, {})
+      expect(r.status).to.equal(409)
+      expect((await Card.findById(card._id)).balance).to.equal(2)
+      expect((await Sale.findById(sale._id)).status).to.not.equal('refunded')
+    })
+
+    it('a part refund leaves the sale open for the rest, and never more than the sale', async () => {
+      const sale = await Sale.create({ tenantId: tenant._id, amount: 5, method: 'cash', type: 'payment', items: [{}] })
+      const a = await refund(sale._id, { amount: 2 })
+      expect(a.status).to.equal(200)
+      expect((await Sale.findById(sale._id)).status).to.not.equal('refunded')
+      const tooMuch = await refund(sale._id, { amount: 4 })
+      expect(tooMuch.status).to.equal(400)
+      const b = await refund(sale._id, { amount: 3 })
+      expect(b.status).to.equal(200)
+      expect((await Sale.findById(sale._id)).status).to.equal('refunded')
+      expect((await refund(sale._id, {})).status).to.equal(400)
+    })
+  })
+  describe('card top-up at the kiosk', () => {
+    const topup = (code, body) => request(app).post(`/api/gateways/cards/${code}/topup`).set(kioskAuth()).send(body)
+    beforeEach(() => { coinMachine.running = true; coinMachine.tenantId = tenant._id })
+
+    it('a code that is not a card is refused and the cash stays in the session', async () => {
+      coinMachine.client.client.balance = 10
+      const r = await topup('NO-SUCH-CARD', { amount: 10, batchId: 'b-1' })
+      expect(r.status).to.equal(404)
+      expect(await Card.countDocuments({})).to.equal(0)
+      expect(coinMachine.client.getState().balance).to.equal(10)
+    })
+
+    it('the same request sent twice loads the card once', async () => {
+      await Card.create({ tenantId: tenant._id, code: 'C-TOP', balance: 0, status: 'active' })
+      coinMachine.client.client.balance = 20
+      const first = await topup('C-TOP', { amount: 10, batchId: 'b-2' })
+      expect(first.status).to.equal(200)
+      const again = await topup('C-TOP', { amount: 10, batchId: 'b-2' })
+      expect(again.status).to.equal(200)
+      expect(again.body.replayed).to.equal(true)
+      expect((await Card.findOne({ code: 'C-TOP' })).balance).to.equal(10)
+      expect(await Sale.countDocuments({ type: 'recharge' })).to.equal(1)
+      expect(coinMachine.client.getState().balance).to.equal(10)
+    })
+  })
+
+  describe('MB WAY paid and never delivered', () => {
+    it('is closed as failed after a few minutes, never started again; a recent one is left alone', async () => {
+      const MbwayPayment = (await import('../src/models/mbwayPayment.js')).default
+      const { sweep } = await import('../src/services/mbway.js')
+      const base = { tenantId: tenant._id, amount: 5, reference: 'R', expiresAt: new Date(Date.now() + 60e3), status: 'paid' }
+      const old = await MbwayPayment.create({ ...base, identifier: 'old', paidAt: new Date(Date.now() - 10 * 60e3) })
+      const fresh = await MbwayPayment.create({ ...base, identifier: 'fresh', paidAt: new Date() })
+      await sweep()
+      expect((await MbwayPayment.findById(old._id)).status).to.equal('start_failed')
+      expect((await MbwayPayment.findById(fresh._id)).status).to.equal('paid')
+    })
+  })
+
+  describe('the updater asks before restarting', () => {
+    const busy = () => request(app).get('/api/pos/busy').set(kioskAuth())
+    it('free when nothing is going on, busy with cash in the machine or an MB WAY payment open', async () => {
+      coinMachine.running = true
+      coinMachine.client.client.balance = 0
+      const free = await busy()
+      expect(free.status).to.equal(200)
+      expect(free.body.busy).to.equal(false)
+      coinMachine.client.client.balance = 2
+      expect((await busy()).body.reasons).to.include('cash')
+      coinMachine.client.client.balance = 0
+      const MbwayPayment = (await import('../src/models/mbwayPayment.js')).default
+      await MbwayPayment.create({ tenantId: tenant._id, identifier: 'p', amount: 5, expiresAt: new Date(Date.now() + 60e3), status: 'pending' })
+      expect((await busy()).body.reasons).to.deep.equal(['mbway'])
+    })
+    it('is not for the public', async () => {
+      expect((await request(app).get('/api/pos/busy')).status).to.be.oneOf([401, 403])
+    })
+  })
+
+  describe('admin', () => {
+    it('revenue counts cash and MB WAY; what is spent from a card was counted when it was loaded', async () => {
+      const mk = (method, amount, type = 'payment') => Sale.create({ tenantId: tenant._id, amount, method, type, items: [{}] })
+      await mk('cash', 10, 'recharge'); await mk('card', 4); await mk('mbway', 3); await mk('cash', 2)
+      const r = await request(app).get('/api/admin/analytics/revenue').set(adminAuth())
+      expect(r.status).to.equal(200)
+      const sum = (k) => r.body.reduce((t, d) => t + d[k], 0)
+      expect(sum('total')).to.equal(15)
+      expect(sum('cash')).to.equal(12)
+      expect(sum('mbway')).to.equal(3)
+      expect(sum('card')).to.equal(4)
+    })
+
+    it('the link with the central server cannot be changed from the settings form', async () => {
+      const r = await request(app).post('/api/admin/settings').set(adminAuth()).send({ key: 'sync.centralKey', value: 'x' })
+      expect(r.status).to.equal(400)
+      const obj = await request(app).post('/api/admin/settings').set(adminAuth()).send({ key: ['a'], value: 'x' })
+      expect(obj.status).to.equal(400)
+    })
+
+    it('an id that is not an id answers 404, not 500', async () => {
+      const r = await request(app).put('/api/admin/cards/not-an-id').set(adminAuth()).send({ balance: 1 })
+      expect(r.status).to.equal(404)
+    })
+
+    it('a card balance must be a sane amount', async () => {
+      const post = (balance) => request(app).post('/api/admin/cards').set(adminAuth()).send({ code: 'C-' + String(balance), balance })
+      expect((await post(-5)).status).to.equal(400)
+      expect((await post('abc')).status).to.equal(400)
+      expect((await post(100000)).status).to.equal(400)
+      expect((await post(12.5)).status).to.equal(200)
+      const card = await Card.findOne({ code: 'C-12.5' })
+      const put = (balance) => request(app).put(`/api/admin/cards/${card._id}`).set(adminAuth()).send({ balance })
+      expect((await put(-1)).status).to.equal(400)
+      expect((await Card.findById(card._id)).balance).to.equal(12.5)
+    })
+  })
+
+  describe('what the central server accepts from a shop', () => {
+    it('a machine status outside the known ones is refused', async () => {
+      const m = await Machine.create({ tenantId: tenant._id, name: 'L1', type: 'wash', status: 'free' })
+      const push = (status) => request(app).post('/api/sync/push/machine').set(kioskAuth()).send({ id: String(m._id), status })
+      expect((await push('hacked')).status).to.equal(400)
+      expect((await Machine.findById(m._id)).status).to.equal('free')
+      expect((await push('offline')).status).to.equal(200)
+    })
+  })
+})

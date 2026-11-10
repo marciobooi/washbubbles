@@ -83,12 +83,37 @@ $new = (Invoke-Git rev-parse origin/main).Trim()
 if ($old -eq $new -and -not $Force) { Log "up to date at $($old.Substring(0,7))"; exit 0 }
 if (Invoke-Git status --porcelain --untracked-files=no) { Log 'tracked files were changed on this PC: not updating (look at git status)'; exit 2 }
 
+function Busy {
+  try {
+    $k = Select-String -Path (Join-Path $root 'backend\.env') -Pattern '^KIOSK_API_KEY=' | Select-Object -First 1
+    $key = ($k.Line -replace '^KIOSK_API_KEY=', '').Trim().Trim('"')
+    $r = Invoke-RestMethod -Uri "http://127.0.0.1:$(Port)/api/pos/busy" -Headers @{ Authorization = "ApiKey $key" } -TimeoutSec 5
+    if ($r.busy) { return ($r.reasons -join ',') }
+  } catch {}   # backend down, or a version without /pos/busy: nothing to wait for
+  return ''
+}
 $files = @(Invoke-Git diff --name-only $old $new)
 $pkg = [bool]($files | Where-Object { $_ -match '(^|/)package(-lock)?\.json$' })
 $front = [bool]($files | Where-Object { $_ -match '^(src/|public/|index\.html$|vite\.config|tailwind|postcss|components\.json$)' })
 $back = [bool]($files | Where-Object { $_ -match '^backend/' })
 Log ("update {0} -> {1}: {2} files (packages={3} screen={4} backend={5})" -f $old.Substring(0, 7), $new.Substring(0, 7), $files.Count, $pkg, $front, $back)
 if ($DryRun) { Log 'dry run: stopping here'; exit 0 }
+
+# A customer in the middle of something (cash inserted, card in the reader, change or dryer impulses on their way, MB WAY being
+# paid) is never cut off by the restart: this run does nothing and the next one (a minute later) asks again. After 30 minutes of
+# "busy" it goes ahead anyway, so a stuck state cannot hold an update back for ever. -Force skips the wait.
+$waitFile = Join-Path $root 'logs\update.waiting'
+if ($back -and -not $Force) {
+  $why = Busy
+  if ($why) {
+    # a wait file left by an update that never happened (older than 45 minutes) does not count: the wait starts again
+    if (-not (Test-Path $waitFile) -or ((Get-Date) - (Get-Item $waitFile).LastWriteTime).TotalMinutes -gt 45) { Set-Content $waitFile (Get-Date) }
+    $mins = ((Get-Date) - (Get-Item $waitFile).LastWriteTime).TotalMinutes
+    if ($mins -lt 30) { Log "kiosk in use ($why): update put off, trying again next run"; exit 0 }
+    Log "kiosk still in use after 30 minutes ($why): updating anyway"
+  }
+}
+Remove-Item $waitFile -Force -ErrorAction SilentlyContinue
 
 function Rollback($why) {
   Log "FAILED ($why): going back to $($old.Substring(0,7))"
