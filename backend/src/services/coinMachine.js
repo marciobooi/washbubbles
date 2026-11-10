@@ -49,6 +49,7 @@ class CoinMachine extends EventEmitter {
      * bit must not end a paid cycle. See handleMachineStatusUpdate.
      */
     this.idleReadings = new Map()
+    this.lateAlerted = new Map() // machine id -> true while a late block has already been reported
     /**
      * The tenant whose hardware this process drives.
      *
@@ -270,7 +271,7 @@ class CoinMachine extends EventEmitter {
     console.log('Stopping CoinMachine...')
     
     // Save any pending card data
-    await this.client.saveCardBalance()
+    try { await this.client.saveCardBalance() } catch (e) { console.error('[CoinMachine] could not save the card balance on stop:', e.message) }
     
     this.cardSync?.stop()
     this.uplink?.stop()
@@ -1153,12 +1154,14 @@ class CoinMachine extends EventEmitter {
           machine.statusText = 'Ocupado'
           await machine.save()
           sent++
+          this.lateAlerted.delete(String(machine._id))
           console.log(`[Cycle] ${machine.name}: next block sent, ${machine.pendingImpulses} to go`)
         } catch (err) {
           console.error(`[Cycle] ${machine.name}: could not send the next block (${err.message}); will retry`)
           const lateMin = (Date.now() - new Date(machine.nextImpulseAt).getTime()) / 60_000
-          if (lateMin >= 5 && !machine.__alerted) {
-            machine.__alerted = true
+          const key = String(machine._id)
+          if (lateMin >= 5 && !this.lateAlerted.has(key)) {
+            this.lateAlerted.set(key, true) // the machine is loaded fresh every tick, so the flag lives here
             await this.auditSystem('machine.block.late', { machine: machine.name, pending: machine.pendingImpulses, lateMinutes: Math.round(lateMin), error: err.message })
             broadcastHardwareEvent(this.tenantId, 'machine:block-late', { machine: machine.name, pending: machine.pendingImpulses })
           }
@@ -1477,13 +1480,14 @@ class CoinMachine extends EventEmitter {
     const remaining = roundMoney(Number(result.remaining) > 0 ? Number(result.remaining) : requested)
     const unconfirmed = !!result.unconfirmed
     const now = Date.now()
-    if (this.lastShortfallAlert && now - this.lastShortfallAlert < 60_000) return
-    this.lastShortfallAlert = now
+    const limited = !!(this.lastShortfallAlert && now - this.lastShortfallAlert < 60_000)
+    if (!limited) this.lastShortfallAlert = now
     const msg = unconfirmed
       ? `O troco de ${requested.toFixed(2)} € não foi confirmado pela máquina. Verifique se o cliente o recebeu; se não, devolva-lhe ${remaining.toFixed(2)} €.`
       : `Falhou o troco: pedido ${requested.toFixed(2)} €, ficaram por pagar ${remaining.toFixed(2)} €. O cliente ficou a dever ${remaining.toFixed(2)} €: dê-lhos em mão e verifique o hopper (moedas, encravado).`
     console.warn(`[Change] ${msg}`)
     await this.auditSystem('change.shortfall', { requested, remaining, unconfirmed, error: result.error })
+    if (limited) return // audit and log above are always written; only the broadcast and e-mail are limited
     broadcastHardwareEvent(this.tenantId, 'change:shortfall', { requested, remaining, unconfirmed })
     const { sendAlertForTenant } = await import('./alerts.js')
     await sendAlertForTenant(this.tenantId, 'Falta de troco: cliente por pagar', msg)

@@ -58,8 +58,9 @@ services:
       BACKUP_DIR: /backups
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.docker}
       PORT: 3000
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin1234}
-      KIOSK_PASSWORD: ${KIOSK_PASSWORD:-kiosk1234}
+      # Only read by the first-time seed (backend/scripts/seed.cjs). No built-in default: a server is never born with a known password.
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env.docker}
+      KIOSK_PASSWORD: ${KIOSK_PASSWORD:?set KIOSK_PASSWORD in .env.docker}
       KIOSK_API_KEY: ${KIOSK_API_KEY:?set KIOSK_API_KEY in .env.docker}
       # Outbound email (password reset, day-close reports, receipts, alerts —
       # see docs/SHOP-HARDWARE-AND-COMMUNICATIONS.md §15). Optional: unset

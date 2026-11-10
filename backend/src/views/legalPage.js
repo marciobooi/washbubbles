@@ -124,7 +124,8 @@ export function renderLegalPage(doc, { lang = 'pt', brand, legal, available = ['
   const titleOf = { privacy: L.privacyLink, terms: L.termsLink, cookies: L.cookiesLink }
   const title = titleOf[doc] || L.privacyLink
   const text = doc === 'cookies' ? COOKIES[lang].body : legalText(doc === 'terms' ? legal.terms : legal.privacy, lang)
-  const parts = [legal.company, legal.nif && `NIF ${legal.nif}`, legal.address, legal.phone, legal.email].filter(Boolean)
+  // one line per detail, each with its name (Nome / NIF / Morada / ...), instead of one run-on line separated by dots
+  const rows = [[L.entName, legal.company], [L.entNif, legal.nif], [L.entAddress, legal.address], [L.entPhone, legal.phone], [L.entEmail, legal.email]].filter(([, v]) => v)
   const langs = LANGS.filter((l) => l === 'pt' || available.includes(l))
   const switcher = langs.length > 1
     ? `<nav class="langs" aria-label="${esc(L.langAria)}">${langs.map((l) => `<a href="${langPath(l) === '/' ? '' : langPath(l)}/legal/${doc}"${l === lang ? ' aria-current="true"' : ''}>${l.toUpperCase()}</a>`).join('')}</nav>`
@@ -171,7 +172,13 @@ h1{ font-size:30px; line-height:1.2; color:var(--p9); margin:12px 0 18px }
 h2{ font-size:19px; color:var(--p9); margin:28px 0 8px }
 ul{ padding-left:22px } li{ margin:4px 0 }
 .entity{ margin-top:32px; padding:16px 18px; border:1px solid rgba(13,148,136,.2); border-radius:14px; background:#f8fffd; color:var(--soft); font-size:15px }
-.entity b{ display:block; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#7a9a95; margin-bottom:4px }
+.entity b{ display:block; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:#7a9a95; margin-bottom:10px }
+.entity dl{ margin:0 }
+.entity dl div{ display:flex; gap:12px; padding:5px 0; border-top:1px solid rgba(13,148,136,.12) }
+.entity dl div:first-child{ border-top:0 }
+.entity dt{ flex:0 0 96px; color:#7a9a95; font-size:13px }
+.entity dd{ margin:0; flex:1; min-width:0; overflow-wrap:anywhere; color:var(--ink,inherit); font-weight:500 }
+@media (max-width:480px){ .entity dl div{ flex-direction:column; gap:0 } .entity dt{ flex:none } }
 footer{ max-width:860px; margin:0 auto; padding:0 20px 40px; font-size:13px; color:#7a9a95; display:flex; gap:18px; flex-wrap:wrap }
 footer a{ color:inherit }
 </style>
@@ -185,7 +192,7 @@ footer a{ color:inherit }
   <a class="back" href="${esc(home)}">&larr; ${esc(L.legalBack)}</a>
   <h1>${esc(title)}</h1>
   ${blocksHtml(text, lang)}
-  ${parts.length ? `<div class="entity"><b>${esc(L.legalEntity)}</b>${esc(parts.join(' · '))}</div>` : ''}
+  ${rows.length ? `<div class="entity"><b>${esc(L.legalEntity)}</b><dl>${rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl></div>` : ''}
 </main>
 <footer>
   <a href="${esc(home)}">${esc(L.legalBack)}</a>

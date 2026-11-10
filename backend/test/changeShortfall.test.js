@@ -10,7 +10,7 @@ describe('Change that could not be paid: the shop is told', function () {
   before(async () => { await startTestDb(); await clearTestDb(); ;({ tenant } = await seedTenantAndUsers()) })
   after(async () => { await stopTestDb() })
 
-  it('writes the audit trail, e-mails the shop (support address) and rate-limits to once a minute', async () => {
+  it('writes the audit trail, e-mails the shop (support address) and rate-limits only the e-mail to once a minute', async () => {
     await Setting.create({ tenantId: tenant._id, key: 'support.email', value: 'geral@loja.pt' })
     const cm = new CoinMachine({ tenantId: tenant._id, middleware: { dispenseChange: async () => ({ success: false, dispensed: 0, remaining: 3, error: 'Hopper fault' }) } })
     const printed = []
@@ -18,12 +18,13 @@ describe('Change that could not be paid: the shop is told', function () {
     try {
       await cm.dispenseChange('h1', 3, { retryDelayMs: 5 })
       await new Promise((r) => setTimeout(r, 300))
-      await cm.dispenseChange('h1', 3, { retryDelayMs: 5 }) // within a minute: no second alert
+      await cm.dispenseChange('h1', 3, { retryDelayMs: 5 }) // within a minute: no second e-mail, but still written down
       await new Promise((r) => setTimeout(r, 300))
     } finally { console.log = orig }
     const rows = await AuditLog.find({ tenantId: tenant._id, action: 'change.shortfall' }).lean()
-    expect(rows).to.have.length(1)
+    expect(rows).to.have.length(2) // the audit entry is never rate limited
     expect(rows[0].details.remaining).to.equal(3)
+    expect(printed.filter((l) => l.startsWith('to: geral@loja.pt'))).to.have.length(1) // ...the e-mail is
     expect(printed.join('\n')).to.include('geral@loja.pt') // the (unconfigured) mailer prints its recipient
     expect(printed.join('\n')).to.include('ficaram por pagar 3.00')
   })
@@ -32,7 +33,7 @@ describe('Change that could not be paid: the shop is told', function () {
     const cm = new CoinMachine({ tenantId: tenant._id, middleware: { dispenseChange: async () => ({ success: false, dispensed: 12, remaining: 9987 }) } })
     await cm.dispenseChange('h1', 9999)
     await new Promise((r) => setTimeout(r, 200))
-    expect(await AuditLog.countDocuments({ tenantId: tenant._id, action: 'change.shortfall' })).to.equal(1) // still only the first
+    expect(await AuditLog.countDocuments({ tenantId: tenant._id, action: 'change.shortfall' })).to.equal(2) // nothing new: the two from the test above
   })
 })
 

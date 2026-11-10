@@ -34,8 +34,10 @@ async function main() {
   const Machine = require('../src/models/machine.js').default
   const Setting = require('../src/models/setting.js').default
 
-  const adminPassword = process.env.ADMIN_PASSWORD || 'admin1234'
-  const kioskPassword = process.env.KIOSK_PASSWORD || 'kiosk1234'
+  // no password given: a random one (printed once at the end), never a well-known default
+  const randomPassword = () => require('crypto').randomBytes(9).toString('base64url')
+  const adminPassword = process.env.ADMIN_PASSWORD || randomPassword()
+  const kioskPassword = process.env.KIOSK_PASSWORD || randomPassword()
   const kioskApiKey = process.env.KIOSK_API_KEY || require('crypto').randomBytes(24).toString('hex')
   const adminHash = await bcrypt.hash(adminPassword, 10)
   const kioskHash = await bcrypt.hash(kioskPassword, 10)

@@ -30,8 +30,8 @@ Quick start
 
  - `npm run seed` now waits up to ~15s for a local MongoDB server (configured by `MONGODB_URL`) to be reachable and will print a clear message if it cannot connect. If you prefer to skip this waiting behavior, set `SEED_WAIT=false` and run the command; note the seed will then fail if the DB is not reachable.
  - `npm run seed` will create the admin and kiosk users if missing. The defaults are:
-    - Admin: username `admin`, password `admin1234` (configurable via `ADMIN_PASSWORD`).
-    - Kiosk: username `kiosk`, password `kiosk1234` (configurable via `KIOSK_PASSWORD`).
+    - Admin: username `admin`, password from `ADMIN_PASSWORD` (a random one is generated and printed when it is not set).
+    - Kiosk: username `kiosk`, password from `KIOSK_PASSWORD` (same rule).
 
 4. REST endpoints (local server):
    - `POST /auth/login` : { username, password }

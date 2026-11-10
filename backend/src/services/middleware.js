@@ -609,26 +609,11 @@ class Middleware extends EventEmitter {
     // acceptor off when the program goes away and only re-enables it when the configuration is sent again.
     // The list REPLACES the controller's own, so it is always the complete set, with the controller's own
     // protocol spelling (ccTalk / pulse / rs232 / spi): lowercase "cctalk" was accepted but never initialised.
-    let want = String(process.env.LOWLEVEL_REINIT_ON_CONNECT ?? 'none').split(',').map((s) => s.trim()).filter((s) => s && s !== 'none')
-    // One-shot recovery: an operator drops data/reinit-once.json ({"types":["all"]}); it is read and deleted.
-    try {
-      const fs = await import('fs')
-      const path = await import('path')
-      const url = await import('url')
-      const dir = process.env.DATA_DIR || path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '../../data')
-      const file = path.join(dir, 'reinit-once.json')
-      if (fs.existsSync(file)) {
-        const j = JSON.parse(fs.readFileSync(file, 'utf8'))
-        fs.rmSync(file, { force: true })
-        if (Array.isArray(j.types) && j.types.length) want = j.types
-      }
-    } catch (e) { console.error('[HW] reinit-once file ignored:', e.message) }
+    const want = String(process.env.LOWLEVEL_REINIT_ON_CONNECT ?? 'none').split(',').map((s) => s.trim()).filter((s) => s && s !== 'none')
     if (want.length) {
       const t = setTimeout(() => { this.reinitPeripherals(want).catch((e) => console.error('[HW] re-init failed:', e.message)) }, quiet + steps.length * gap + 500)
       t.unref?.()
     }
-    const t2 = setTimeout(() => { this.sendOnceFromFile() }, quiet + steps.length * gap + 6000)
-    t2.unref?.()
   }
 
   /**
@@ -700,31 +685,6 @@ class Middleware extends EventEmitter {
     return { sent: Boolean(sent), per }
   }
 
-  /**
-   * Diagnostics: send a handful of packages once, read from data/send-once.json
-   * ({"packages":[{"op":"machine-reserved","data":{"id":"11","chn":"1"}}], "delayMs":8000}), then delete the file.
-   * Only for testing on the shop controller with someone watching; not an application feature.
-   */
-  async sendOnceFromFile() {
-    try {
-      const fs = await import('fs')
-      const path = await import('path')
-      const url = await import('url')
-      const dir = process.env.DATA_DIR || path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '../../data')
-      const file = path.join(dir, 'send-once.json')
-      if (!fs.existsSync(file)) return
-      const j = JSON.parse(fs.readFileSync(file, 'utf8'))
-      fs.rmSync(file, { force: true })
-      const delay = Number(j.delayMs) || 8000
-      for (const pkg of (Array.isArray(j.packages) ? j.packages : [])) {
-        if (!pkg || typeof pkg.op !== 'string') continue
-        console.log('[HW] send-once ->', JSON.stringify(pkg))
-        this.sendPackage(pkg)
-        await new Promise((r) => setTimeout(r, delay))
-      }
-    } catch (e) { console.error('[HW] send-once failed:', e.message) }
-  }
-
   /** How long the controller has said nothing although the link is up (ms), or null when there is no link. */
   controllerSilenceMs() {
     if (!this.lowLevel?.isConnected) return null
@@ -740,6 +700,8 @@ class Middleware extends EventEmitter {
   async onLowLevelDisconnected() {
     console.warn('[HW] Low-level controller disconnected')
     this.emit('low-level-disconnected')
+    // A card taken out while the link was down would otherwise still be believed to be in the reader.
+    this.lastCard = null
     for (const conn of this.connections.values()) {
       if (conn.gateway) await this.updatePeripheralStatus(conn.peripheral._id, 'offline')
     }

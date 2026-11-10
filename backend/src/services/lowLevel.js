@@ -86,7 +86,10 @@ export class LowLevelStreamParser {
       }
     }
 
-    if (this.buf.length > MAX_BUFFER_CHARS) this.buf = ''
+    if (this.buf.length > MAX_BUFFER_CHARS) {
+      console.error(`[LowLevel] receive buffer over 1 MB, dropped ${this.buf.length} bytes`)
+      this.buf = ''
+    }
     return out
   }
 
@@ -227,6 +230,7 @@ export class LowLevelLink extends EventEmitter {
     this.socket = socket
     this.parser = new LowLevelStreamParser()
     socket.setNoDelay(true)
+    socket.setKeepAlive?.(true, 30000) // so a half-dead link is noticed
 
     socket.on('connect', () => {
       this.connected = true

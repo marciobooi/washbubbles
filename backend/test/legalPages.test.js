@@ -42,7 +42,11 @@ describe('Website legal pages (privacy, terms, cookies) and footer links', funct
     await Setting.create({ tenantId: tenant._id, key: 'legal.translations', value: { privacy: { pt: '## Um\ntexto', de: '## Eins\nText' } } })
     const pt = await request(app).get('/legal/privacy')
     expect(pt.text).to.contain('Fresh Bubbles Lda')
-    expect(pt.text).to.contain('NIF 500000000')
+    // one labelled line per detail
+    expect(pt.text).to.contain('<dt>Nome</dt><dd>Fresh Bubbles Lda</dd>')
+    expect(pt.text).to.contain('<dt>NIF</dt><dd>500000000</dd>')
+    expect(pt.text).to.contain('<dt>E-mail</dt><dd>dpo@freshbubbles.pt</dd>')
+    expect(pt.text).to.not.contain('<dt>Morada</dt>') // a detail that is not filled in is not shown empty
     const de = await request(app).get('/de/legal/privacy')
     expect(de.status).to.equal(200)
     expect(de.text).to.contain('<h2>Eins</h2>')

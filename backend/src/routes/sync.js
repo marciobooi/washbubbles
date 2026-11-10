@@ -325,8 +325,8 @@ router.post('/push/card', async (req, res) => {
       // Absolute value fallback (single POS scenario). Last-writer-wins by
       // definition — only safe on a single-kiosk site.
       const balance = Number(data.balance)
-      if (!Number.isFinite(balance) || balance < 0) {
-        return res.status(400).json({ success: false, error: 'balance must be a non-negative number' })
+      if (!Number.isFinite(balance) || balance < 0 || balance > 1000) {
+        return res.status(400).json({ success: false, error: 'balance must be a number from 0 to 1000' })
       }
       const updated = await CardT.findByIdAndUpdate(
         card._id,
