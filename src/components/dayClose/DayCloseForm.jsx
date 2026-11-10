@@ -30,7 +30,10 @@ function SummaryPanel({ summary }) {
   const withdrawn = Number(summary.floatWithdrawn || 0)
   const added = Number(summary.floatAdded || 0)
   const opening = Number(summary.openingFloat || 0)
-  const toBank = Math.max(0, Math.round((sold - withdrawn) * 100) / 100)
+  // Everything the CUSTOMERS put in as cash (sales, card top-ups, new cards), minus what was already taken out. The hopper reinforcements
+  // and the admin's own float top-ups are the shop's money, not the customers': they do not count, they are shown for information.
+  const fromCustomers = Number(summary.totalCash ?? sold + recharges)
+  const toBank = Math.max(0, Math.round((fromCustomers - withdrawn) * 100) / 100)
   const Row = ({ label, hint, value, sign, strong, muted }) => (
     <div className={`flex items-baseline justify-between gap-4 py-2 border-b border-neutral-100 last:border-0 ${strong ? 'font-bold text-neutral-900' : muted ? 'text-neutral-500' : 'text-neutral-700'}`}>
       <div className="min-w-0">
@@ -52,25 +55,26 @@ function SummaryPanel({ summary }) {
           <div className="text-sm font-semibold text-emerald-700">Dinheiro a levar ao banco</div>
           <div className="text-5xl font-black text-emerald-800 leading-tight mt-1">{fmt(toBank)}€</div>
           <p className="text-sm text-emerald-800/80 mt-2">
-            Só o dinheiro das vendas{withdrawn > 0 ? `, menos ${fmt(withdrawn)}€ que já levantou` : ''}. Não inclui recargas de cartões, consumo de cartões nem MB WAY.
+            Todo o dinheiro que os clientes puseram desde o último fecho: vendas ({fmt(sold)}€) e recargas de cartões ({fmt(recharges)}€){withdrawn > 0 ? `, menos ${fmt(withdrawn)}€ que já levantou` : ''}. Não conta o dinheiro do hopper e do admin, o consumo de cartões nem o MB WAY.
           </p>
           <div className="mt-auto pt-4 text-xs text-emerald-800/70">
-            Na máquina deve ficar o fundo para troco: <strong>{fmt(opening + added)}€</strong> ({fmt(opening)}€ do último fecho + {fmt(added)}€ de reforços do hopper).
+            Fica na máquina o fundo para troco: <strong>{fmt(opening + added)}€</strong> ({fmt(opening)}€ do último fecho + {fmt(added)}€ de reforços do hopper), que não é dos clientes.
           </div>
         </div>
         {/* expected count */}
         <div className="rounded-2xl border border-neutral-200 bg-white p-5">
           <div className="text-sm font-semibold text-neutral-500 mb-1">Esperado na máquina (para a contagem)</div>
           <Row label="Fundo inicial" hint="o que ficou no último fecho" value={opening} />
-          {added > 0 && <Row label="Reforços do hopper" hint="moedas postas na máquina desde o último fecho" value={added} sign="+" />}
+          {added > 0 && <Row label="Reforços do hopper" hint="dinheiro do admin, para a contagem física; não vai para o banco" value={added} sign="+" />}
           <Row label="Vendas em dinheiro" hint="máquinas e venda de cartões" value={sold} sign="+" />
-          <Row label="Recargas de cartões" hint="dinheiro dos clientes: está na máquina mas não é venda" value={recharges} sign="+" />
+          <Row label="Recargas de cartões" hint="dinheiro dos clientes" value={recharges} sign="+" />
           {withdrawn > 0 && <Row label="Levantamentos" hint="já retirado da máquina" value={withdrawn} sign="-" />}
           <Row label="Esperado em caixa" value={Number(summary.expectedCash)} strong />
         </div>
         {/* not counted */}
         <div className="rounded-2xl border border-blue-100 bg-blue-50/50 p-5">
           <div className="text-sm font-semibold text-blue-700 mb-1">Não entra na conta</div>
+          <Row label="Reforços do hopper e fundo do admin" hint="dinheiro da loja, não dos clientes: só informativo" value={added} />
           <Row label="Consumo de cartões" hint="gasto do saldo dos cartões: já foi contado quando o cartão foi recarregado" value={Number(summary.totalCard || 0)} muted />
           <Row label="MB WAY" hint="pago direto ao banco: não passa pela máquina" value={Number(summary.totalMbway || 0)} muted />
           {Number(summary.totalChangeDispensed) > 0 && <Row label="Troco dado" hint="já descontado nas vendas em dinheiro" value={Number(summary.totalChangeDispensed)} muted />}
