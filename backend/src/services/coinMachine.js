@@ -1768,7 +1768,8 @@ class CoinMachine extends EventEmitter {
    */
   async handleStatusInt(data) {
     // data contains machine status updates
-    if (process.env.LOWLEVEL_TRACE === 'true') console.log('Status update:', data) // every 10 s: only when tracing
+    // every 10 s: only when tracing, and only when something changed since the last one
+    if (process.env.LOWLEVEL_TRACE === 'true') { const sig = JSON.stringify(data); if (sig !== this.lastStatusUpdateSig) { this.lastStatusUpdateSig = sig; console.log('Status update:', data) } }
     this.emit('status-update', data)
     
     // Update machine statuses in database

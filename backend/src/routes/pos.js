@@ -1,5 +1,6 @@
 import { getEmailBrand } from '../services/emailBrand.js'
 import express from 'express'
+import { shopOnly } from '../middleware/shopOnly.js'
 import Machine from '../models/machine.js'
 import Sale from '../models/sale.js'
 import Setting from '../models/setting.js'
@@ -247,6 +248,8 @@ router.post('/admin/verify-pin', adminPinLimiter, requireKiosk, async (req, res)
  * and the dashboard's own close route asks for no PIN either.
  */
 router.get('/day-close/summary', requireKioskOrAdmin, async (req, res) => {
+  // The till of the day is for the staff: from the kiosk it needs the PIN (header X-Staff-Pin), as the close itself does.
+  if (req.userModel?.role === 'KIOSK') { req.body = { ...(req.body || {}), pin: String(req.headers['x-staff-pin'] || '') }; if (!(await requireStaffPin(req, res))) return }
   const { getDayCloseSummary } = await import('../services/dayClose.js')
   res.json(await getDayCloseSummary(req))
 })
@@ -272,10 +275,10 @@ router.post('/day-close', requireKioskOrAdmin, async (req, res) => {
   res.status(status).json(body)
 })
 
-// POST /day-close/:id/email — email a Z-report summary of one close. No PIN:
-// this only sends a copy of a record already readable via the summary above,
-// it can't change any figures.
+// POST /day-close/:id/email — email a Z-report summary of one close. From the kiosk it needs the staff PIN: the report
+// shows the shop's takings and goes to whatever address is typed.
 router.post('/day-close/:id/email', requireKioskOrAdmin, async (req, res) => {
+  if (req.userModel?.role === 'KIOSK' && !(await requireStaffPin(req, res))) return
   const { emailDayCloseReceipt } = await import('../services/dayClose.js')
   const { status, body } = await emailDayCloseReceipt(req, req.params.id, req.body?.email)
   res.status(status).json(body)
@@ -337,7 +340,7 @@ router.post('/client-error', requireKiosk, async (req, res) => {
 
 // Card recharge / top-up (kiosk) — stored as a transaction without a machine reference
 // Card recharge / top-up (kiosk) — stored as a transaction and optionally attached to a loyalty card
-router.post('/recharge', requireKiosk, flowRoute('Pedido de carregamento de cartão', { type: 'recharge_requested', method: 'cash' }), async (req, res) => {
+router.post('/recharge', requireKiosk, shopOnly, flowRoute('Pedido de carregamento de cartão', { type: 'recharge_requested', method: 'cash' }), async (req, res) => {
   const { amount, items, method, inserted, cardCode, cardId, batchId, localId } = req.body
 
   // Recharges are always card-based in this system
@@ -525,7 +528,7 @@ router.post('/central-key', requireKiosk, async (req, res) => {
 })
 
 // POST /pos/card/gift — hand a card to a customer for free (staff PIN on every call). Default credit is zero.
-router.post('/card/gift', requireKiosk, async (req, res) => {
+router.post('/card/gift', requireKiosk, shopOnly, async (req, res) => {
   if (!(await requireStaffPin(req, res))) return
   try {
     const { issueGiftCard } = await import('../services/giftCard.js')
@@ -559,7 +562,7 @@ for (const kind of ['start', 'end']) {
   })
 }
 
-router.post('/card/purchase', requireKiosk, flowRoute('Pedido de compra de cartão', { type: 'card_purchase_requested', method: 'cash' }), async (req, res) => {
+router.post('/card/purchase', requireKiosk, shopOnly, flowRoute('Pedido de compra de cartão', { type: 'card_purchase_requested', method: 'cash' }), async (req, res) => {
   const { inserted, customerName, customerEmail, customerPhone, customerContribuinte, customerMarketingOptIn, customerPrivacyConsent, batchId, localId } = req.body
 
   const parsedInserted = parseAmount(inserted)
@@ -801,7 +804,7 @@ router.post('/cards/:code/profile', cardLookupLimiter, requireKiosk, async (req,
 })
 
 // Mark card as written after RFID write
-router.post('/card/mark-written/:code', requireKiosk, async (req, res) => {
+router.post('/card/mark-written/:code', requireKiosk, shopOnly, async (req, res) => {
   const code = req.params.code
   
   try {
@@ -836,7 +839,7 @@ router.post('/card/mark-written/:code', requireKiosk, async (req, res) => {
  * so the guard `if (!rfidReader || !middleware)` returned 503 every single time —
  * a purchased card could never be activated and stayed blank forever.
  */
-router.post('/card/write/:code', requireKiosk, async (req, res) => {
+router.post('/card/write/:code', requireKiosk, shopOnly, async (req, res) => {
   const code = req.params.code
 
   try {
@@ -1032,7 +1035,7 @@ router.get('/settings/:key', async (req, res) => {
 })
 
 // Spending using card: deduct amount from card balance and create Sale
-router.post('/cards/:code/spend', requireKiosk, async (req, res) => {
+router.post('/cards/:code/spend', requireKiosk, shopOnly, async (req, res) => {
   const code = req.params.code
   const { machineId, amount, items, method, batchId } = req.body
   if (!code) return res.status(400).json({ error: 'Missing parameters' })

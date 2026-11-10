@@ -34,7 +34,7 @@ export default function KioskDayCloseModal({ open, onClose, pin }) {
   const loadSummary = useCallback(async () => {
     setSummaryLoading(true)
     try {
-      setSummary(await api.getKioskDayCloseSummary({ apiKey: getKioskApiKey() }))
+      setSummary(await api.getKioskDayCloseSummary({ apiKey: getKioskApiKey(), pin }))
     } catch (e) {
       console.error(e)
       toast({ title: 'Erro ao carregar resumo — verifique a ligação', variant: 'destructive' })
@@ -73,7 +73,7 @@ export default function KioskDayCloseModal({ open, onClose, pin }) {
         summaryLoading={summaryLoading}
         onSubmit={(payload) => api.createKioskDayClose({ ...payload, pin }, { apiKey: getKioskApiKey() })}
         onClosed={() => { loadSummary() }}
-        onEmail={(id, email) => api.emailKioskDayCloseReceipt(id, email, { apiKey: getKioskApiKey() })}
+        onEmail={(id, email) => api.emailKioskDayCloseReceipt(id, email, { apiKey: getKioskApiKey(), pin })}
         onDone={onClose}
       />
     </Modal>

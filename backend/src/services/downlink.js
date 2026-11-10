@@ -173,7 +173,21 @@ export class Downlink extends EventEmitter {
     if (prune) {
       // Drop local rows central no longer has FIRST, so a different local row can
       // never block an insert through a unique index (price type+weight, ...).
-      await Model.deleteMany({ tenantId: tenant, _id: { $nin: docs.map((d) => d._id) } })
+      const gone = { tenantId: tenant, _id: { $nin: docs.map((d) => d._id) } }
+      // A snapshot that would delete most of what is here is more likely a half answer than a real clean-up: nothing is deleted
+      // this round (it is asked again in 30 s; a real clean-up of that size is done one shop row at a time or by hand).
+      const [doomed, total] = await Promise.all([Model.countDocuments(gone), Model.countDocuments({ tenantId: tenant })])
+      if (doomed >= 3 && doomed > total / 2) {
+        if (Date.now() - (this.pruneWarned?.[name] || 0) > 3600_000) {
+          this.pruneWarned = { ...(this.pruneWarned || {}), [name]: Date.now() }
+          console.warn(`[Downlink] ${name}: the central list would delete ${doomed} of ${total} rows here: nothing deleted`)
+          AuditLog.create({ tenantId: tenant, actorUsername: 'downlink', action: 'sync.prune.refused', targetType: name, targetId: '', details: { wouldDelete: doomed, of: total, received: docs.length } }).catch(() => {})
+        }
+      } else {
+        // a machine that is running (or reserved by a payment in progress) is never deleted under the customer: it goes when it is free
+        if (name === 'machines') gone.status = { $nin: ['working', 'reserved'] }
+        await Model.deleteMany(gone)
+      }
     }
     const ops = docs.map((d) => {
       if (name === 'settings') {

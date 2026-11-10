@@ -650,14 +650,16 @@ describe('WashBubbles backend', function () {
         )
       })
 
-      it('lets a kiosk token read the live summary with no PIN required', async () => {
-        const res = await request(app).get('/api/pos/day-close/summary').set('Authorization', `Bearer ${dcKioskToken}`)
+      it('a kiosk token reads the live summary only with the staff PIN', async () => {
+        const none = await request(app).get('/api/pos/day-close/summary').set('Authorization', `Bearer ${dcKioskToken}`)
+        expect(none.status).to.equal(400)
+        const res = await request(app).get('/api/pos/day-close/summary').set('Authorization', `Bearer ${dcKioskToken}`).set('X-Staff-Pin', '7391')
         expect(res.status).to.equal(200)
         expect(res.body).to.have.property('expectedCash')
       })
 
       it('refuses a kiosk-submitted close with no PIN', async () => {
-        const summary = await request(app).get('/api/pos/day-close/summary').set('Authorization', `Bearer ${dcKioskToken}`)
+        const summary = await request(app).get('/api/pos/day-close/summary').set('Authorization', `Bearer ${dcKioskToken}`).set('X-Staff-Pin', '7391')
         const cash = summary.body.expectedCash
         const res = await request(app).post('/api/pos/day-close')
           .set('Authorization', `Bearer ${dcKioskToken}`)
@@ -666,7 +668,7 @@ describe('WashBubbles backend', function () {
       })
 
       it('refuses a kiosk-submitted close with the wrong PIN', async () => {
-        const summary = await request(app).get('/api/pos/day-close/summary').set('Authorization', `Bearer ${dcKioskToken}`)
+        const summary = await request(app).get('/api/pos/day-close/summary').set('Authorization', `Bearer ${dcKioskToken}`).set('X-Staff-Pin', '7391')
         const cash = summary.body.expectedCash
         const res = await request(app).post('/api/pos/day-close')
           .set('Authorization', `Bearer ${dcKioskToken}`)
@@ -675,7 +677,7 @@ describe('WashBubbles backend', function () {
       })
 
       it('accepts a kiosk-submitted close with the right PIN, recorded exactly like a dashboard close', async () => {
-        const summary = await request(app).get('/api/pos/day-close/summary').set('Authorization', `Bearer ${dcKioskToken}`)
+        const summary = await request(app).get('/api/pos/day-close/summary').set('Authorization', `Bearer ${dcKioskToken}`).set('X-Staff-Pin', '7391')
         const cash = summary.body.expectedCash
         const res = await request(app).post('/api/pos/day-close')
           .set('Authorization', `Bearer ${dcKioskToken}`)

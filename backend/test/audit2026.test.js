@@ -149,6 +149,29 @@ describe('Audit 2026-11', function () {
       expect((await refund(sale._id, {})).status).to.equal(400)
     })
   })
+  describe('a top-up paid with a note', () => {
+    it('the sale says what went in and what came back as change, and a repeated request says the truth about the change', async () => {
+      const AuditLog = (await import('../src/models/auditLog.js')).default
+      coinMachine.running = true; coinMachine.tenantId = tenant._id
+      const card = await Card.create({ tenantId: tenant._id, code: 'C-NOTE', balance: 1.6, status: 'active' })
+      Object.assign(coinMachine.client.client, { balance: 10, hasCard: true, cardNumber: 'C-NOTE', balanceCard: 1.6 })
+      const body = { items: [{ id: 'recharge-1', type: 'Recarga de Cartão', price: 5, amount: 5 }], inserted: 10, batchId: 'note-1', cardCode: card.code }
+      const r = await request(app).post('/api/gateways/cash/pay').set(kioskAuth()).send(body)
+      expect(r.status, JSON.stringify(r.body)).to.equal(200)
+      const sale = await Sale.findOne({ batchId: 'note-1', type: 'recharge' })
+      expect(sale.amount).to.equal(5)
+      expect(sale.inserted).to.equal(10)
+      expect(sale.change).to.equal(5)
+      // no hopper in this test: the change was not paid, it is owed and written down
+      expect(r.body.changeDispensed).to.equal(false)
+      for (let i = 0; i < 20 && !(await AuditLog.exists({ action: 'cash.change.owed' })); i++) await new Promise((res) => setTimeout(res, 25))
+      const again = await request(app).post('/api/gateways/cash/pay').set(kioskAuth()).send(body)
+      expect(again.body.replayed).to.equal(true)
+      expect(again.body.changeDispensed).to.equal(false)
+      expect((await Card.findById(card._id)).balance).to.equal(6.6)
+    })
+  })
+
   describe('card top-up at the kiosk', () => {
     const topup = (code, body) => request(app).post(`/api/gateways/cards/${code}/topup`).set(kioskAuth()).send(body)
     beforeEach(() => { coinMachine.running = true; coinMachine.tenantId = tenant._id })
@@ -317,6 +340,43 @@ describe('Audit 2026-11', function () {
   })
 
   describe('what the central server accepts from a shop', () => {
+    it('a remote command is handed out once, reported only by the post it was given to, and closed if never reported', async () => {
+      const SyncCommand = (await import('../src/models/syncCommand.js')).default
+      const cmd = await SyncCommand.create({ tenantId: tenant._id, kioskId: kiosk._id, type: 'sync_now' })
+      const notSent = await request(app).post(`/api/sync/commands/${cmd._id}/done`).set(kioskAuth()).send({})
+      expect(notSent.status).to.equal(409) // never handed out: cannot be reported as done
+      const [a, b] = await Promise.all([request(app).get('/api/sync/commands').set(kioskAuth()), request(app).get('/api/sync/commands').set(kioskAuth())])
+      expect(a.body.length + b.body.length).to.equal(1)
+      // ten minutes with no report: closed, saying nobody knows whether it ran
+      await SyncCommand.updateOne({ _id: cmd._id }, { $set: { claimedAt: new Date(Date.now() - 11 * 60e3) } })
+      await request(app).get('/api/sync/commands').set(kioskAuth())
+      const closed = await SyncCommand.findById(cmd._id)
+      expect(closed.status).to.equal('failed')
+      expect(closed.error).to.match(/não respondeu/)
+      // the report arrives late after all: it counts
+      expect((await request(app).post(`/api/sync/commands/${cmd._id}/done`).set(kioskAuth()).send({})).status).to.equal(200)
+      expect((await SyncCommand.findById(cmd._id)).status).to.equal('done')
+      expect((await request(app).post(`/api/sync/commands/${cmd._id}/fail`).set(kioskAuth()).send({ error: 'x' })).status).to.equal(409)
+    })
+
+    it('a card cannot be created from a shop with an absurd balance', async () => {
+      const r = await request(app).post('/api/sync/push/card').set(kioskAuth()).send({ create: true, code: 'BIG', balance: 50000 })
+      expect(r.status).to.equal(400)
+      expect(await Card.countDocuments({ code: 'BIG' })).to.equal(0)
+    })
+
+    it('the money routes of the kiosk do not exist on the central server', async () => {
+      const saved = process.env.ENABLE_COIN_MACHINE
+      process.env.ENABLE_COIN_MACHINE = 'false'
+      try {
+        for (const [path, body] of [['/api/gateways/cash/pay', { items: [], inserted: 50 }], ['/api/gateways/card/pay', {}], ['/api/pos/card/purchase', { inserted: 50 }], ['/api/pos/recharge', {}], ['/api/pos/cards/X/spend', {}], ['/api/gateways/cards/X/topup', { amount: 5 }]]) {
+          const r = await request(app).post(path).set(kioskAuth()).send(body)
+          expect(r.status, path).to.equal(403)
+          expect(r.body.code).to.equal('shop-only')
+        }
+      } finally { if (saved === undefined) delete process.env.ENABLE_COIN_MACHINE; else process.env.ENABLE_COIN_MACHINE = saved }
+    })
+
     it('a machine status outside the known ones is refused', async () => {
       const m = await Machine.create({ tenantId: tenant._id, name: 'L1', type: 'wash', status: 'free' })
       const push = (status) => request(app).post('/api/sync/push/machine').set(kioskAuth()).send({ id: String(m._id), status })

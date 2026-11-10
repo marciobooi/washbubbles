@@ -35,6 +35,8 @@ router.use(requireKiosk)
 
 // ─── Daily copy of the data, kept on both sides (services/dailyBackup.js) ───
 // The shop PC sends its own copy here in parts, and fetches the copy of what this server holds FOR THAT SHOP (never another shop's rows).
+const COMMAND_REPORT_MS = 10 * 60 * 1000
+export const COMMAND_NO_REPORT = 'A loja recebeu o comando mas não respondeu: não se sabe se foi executado.'
 const stampOf = (req) => (/^\d{8}$/.test(String(req.query.stamp || '')) ? String(req.query.stamp) : null)
 
 router.post('/backup/shop', async (req, res) => {
@@ -206,7 +208,9 @@ router.post('/push/card', async (req, res) => {
       // sale alone never creates one. Idempotent on code: a retried push
       // (popup reopened, a timeout) must not mint a second card for the same
       // physical card that was already dispensed.
-      if (!data.code) return res.status(400).json({ success: false, error: 'code is required to create a card' })
+      if (!data.code || typeof data.code !== 'string' || data.code.length > 64) return res.status(400).json({ success: false, error: 'code is required to create a card' })
+      // a card is born with what was paid for it at the shop: never more than any card may hold
+      if (!(Number(data.balance || 0) <= 1000)) return res.status(400).json({ success: false, error: 'balance out of range' })
       // The kiosk generates this id itself and asks the DOCUMENT to be
       // created there, so the local and server copies are the SAME row from
       // the moment it exists — no reconciliation needed on a later pull.
@@ -520,15 +524,18 @@ router.get('/commands', async (req, res) => {
     // `req.user` is the decoded token ({sub, role}) and has no `_id`; Mongoose
     // strips the undefined key, so this used to match EVERY pending command in
     // the tenant and each kiosk executed every other kiosk's reboots.
-    const commands = await SyncCommandT.find({
-      kioskId: req.userModel._id,
-      status: 'pending'
-    }).lean()
-
-    // Mark as "executing" so they aren't pulled twice
-    if (commands.length > 0) {
-      const ids = commands.map(c => c._id)
-      await SyncCommandT.updateMany({ _id: { $in: ids } }, { status: 'executing' })
+    // A command the shop took and never reported (its answer was lost, or the PC stopped) used to stay "executing" for ever.
+    // After 10 minutes it is closed as failed, saying that nobody knows whether it ran.
+    await SyncCommandT.updateMany(
+      { kioskId: req.userModel._id, status: 'executing', $or: [{ claimedAt: { $lt: new Date(Date.now() - COMMAND_REPORT_MS) } }, { claimedAt: null, createdAt: { $lt: new Date(Date.now() - COMMAND_REPORT_MS) } }] },
+      { status: 'failed', error: COMMAND_NO_REPORT, executedAt: new Date() },
+    )
+    // Each command is taken one at a time, in one step: two requests at the same moment can never both get it.
+    const commands = []
+    for (let i = 0; i < 50; i++) {
+      const c = await SyncCommandT.findOneAndUpdate({ kioskId: req.userModel._id, status: 'pending' }, { status: 'executing', claimedAt: new Date() }, { sort: { createdAt: 1 }, new: true }).lean()
+      if (!c) break
+      commands.push(c)
     }
 
     res.json(commands.map(c => ({ id: c._id, type: c.type, payload: c.payload, createdAt: c.createdAt })))
@@ -545,11 +552,16 @@ router.get('/commands', async (req, res) => {
 router.post('/commands/:id/done', async (req, res) => {
   try {
     const SyncCommandT = withTenant(SyncCommand, req)
-    const cmd = await SyncCommandT.findByIdAndUpdate(req.params.id, {
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Not found' })
+    // Only this kiosk's own command, and only one it was given (or one closed for lack of this very report): a kiosk key cannot
+    // mark another post's command, or one that was never sent, as done.
+    const cmd = await SyncCommandT.findOneAndUpdate({ _id: req.params.id, kioskId: req.userModel._id, $or: [{ status: 'executing' }, { status: 'failed', error: COMMAND_NO_REPORT }] }, {
       status: 'done',
+      error: null,
       executedAt: new Date(),
       ...(req.body?.result !== undefined ? { result: req.body.result } : {})
     }, { new: true })
+    if (!cmd) return res.status(409).json({ error: 'Command is not waiting for a report' })
     // A card wiped at the shop: forget it here too (its sales stay).
     if (cmd && cmd.type === 'blank_card' && req.body?.result?.code) {
       const { forgetCard } = await import('../services/cardForget.js')
@@ -581,11 +593,13 @@ router.post('/commands/:id/fail', async (req, res) => {
   try {
     const { error } = req.body
     const SyncCommandT = withTenant(SyncCommand, req)
-    await SyncCommandT.findByIdAndUpdate(req.params.id, { 
-      status: 'failed', 
-      error,
-      executedAt: new Date() 
+    if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Not found' })
+    const cmd = await SyncCommandT.findOneAndUpdate({ _id: req.params.id, kioskId: req.userModel._id, $or: [{ status: 'executing' }, { status: 'failed', error: COMMAND_NO_REPORT }] }, {
+      status: 'failed',
+      error: String(error || 'failed').slice(0, 500),
+      executedAt: new Date()
     })
+    if (!cmd) return res.status(409).json({ error: 'Command is not waiting for a report' })
     res.json({ success: true })
   } catch (err) {
     res.status(500).json({ error: err.message })

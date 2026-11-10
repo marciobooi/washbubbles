@@ -519,7 +519,13 @@ class Middleware extends EventEmitter {
     this.lowLevel.on('package', (pkg) => {
       // LOWLEVEL_TRACE=true logs every inbound message — the way to learn what a
       // real controller actually sends (coin codes, standby/keep-alive replies).
-      if (process.env.LOWLEVEL_TRACE === 'true') console.log('[HW] <- controller:', JSON.stringify(redactPkg(pkg)))
+      // The status poll comes back every 10 s and is almost always the same: it is logged only when it CHANGES (it used to be
+      // most of the 9.5 MB a day of backend.log). Everything else is logged as before.
+      if (process.env.LOWLEVEL_TRACE === 'true') {
+        const line = JSON.stringify(redactPkg(pkg))
+        if (pkg?.op !== 'status_int') console.log('[HW] <- controller:', line)
+        else if (line !== this.lastStatusTrace) { this.lastStatusTrace = line; console.log('[HW] <- controller:', line) }
+      }
       this.handlePackage(pkg)
     })
     this.lowLevel.on('link-error', (err) => {
@@ -2476,7 +2482,8 @@ class Middleware extends EventEmitter {
     // value is the truth: `false` means nothing left this process.
     const sent = this.lowLevel ? this.lowLevel.send(pkg) : false
 
-    console.log(sent ? 'Package sent:' : 'Package NOT sent (no controller link):', JSON.stringify(redactPkg(newPkg)))
+    // the 10 s status poll is not logged when it goes out (its answer is, when it changes); one that could NOT be sent still is
+    if (!sent || newPkg?.c?.op !== 'status_int') console.log(sent ? 'Package sent:' : 'Package NOT sent (no controller link):', JSON.stringify(redactPkg(newPkg)))
     return sent
   }
 

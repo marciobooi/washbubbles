@@ -1,4 +1,5 @@
 import express from 'express'
+import { shopOnly } from '../middleware/shopOnly.js'
 import mongoose from 'mongoose'
 import Machine from '../models/machine.js'
 import Sale from '../models/sale.js'
@@ -115,7 +116,7 @@ router.get('/cards/:code', cardLookupLimiter, requireKiosk, async (req, res) => 
 })
 
 // POST /api/gateways/cards/:code/topup - topup card and create recharge sale
-router.post('/cards/:code/topup', requireKiosk, async (req, res) => {
+router.post('/cards/:code/topup', requireKiosk, shopOnly, async (req, res) => {
   const { code } = req.params
   const { amount, batchId } = req.body
   if (!code) return res.status(400).json({ error: 'Missing parameters' })
@@ -212,7 +213,7 @@ export function cardNotInReader(code) {
   return !(st.hasCard && String(st.cardNumber) === String(code))
 }
 
-router.post('/card/pay', requireKiosk, flowRoute('Pedido de pagamento com cartão', { method: 'card' }), async (req, res) => {
+router.post('/card/pay', requireKiosk, shopOnly, flowRoute('Pedido de pagamento com cartão', { method: 'card' }), async (req, res) => {
   const { items = [], cardCode, batchId, couponCode } = req.body
   if (!Array.isArray(items) || !cardCode) return res.status(400).json({ error: 'Missing parameters' })
 
@@ -311,7 +312,7 @@ router.post('/card/pay', requireKiosk, flowRoute('Pedido de pagamento com cartã
 })
 
 // POST /api/gateways/cash/pay - charge by cash (inserted/change) and create sales
-router.post('/cash/pay', requireKiosk, flowRoute('Pedido de pagamento em dinheiro', { method: 'cash' }), async (req, res) => {
+router.post('/cash/pay', requireKiosk, shopOnly, flowRoute('Pedido de pagamento em dinheiro', { method: 'cash' }), async (req, res) => {
   const { items = [], inserted, batchId, couponCode } = req.body
   if (!Array.isArray(items)) return res.status(400).json({ error: 'Missing parameters' })
   const coupon = couponCode ? await findUsableCoupon(req.tenantId, couponCode) : null
@@ -324,18 +325,24 @@ router.post('/cash/pay', requireKiosk, flowRoute('Pedido de pagamento em dinheir
   if (!parsedInserted.ok) return res.status(400).json({ error: `inserted: ${parsedInserted.error}` })
   const insertedNum = parsedInserted.value
 
-  // On the shop PC the cash really inserted is known: the screen's 'inserted' can never be more than that.
-  if (coinMachine.running) {
-    const have = roundMoney(coinMachine.client?.getState?.().balance || 0)
-    if (insertedNum > have + 0.005) return res.status(409).json({ error: 'Cash inserted does not cover this', code: 'cash-not-inserted', inserted: have })
-  }
-
   const SaleT = withTenant(Sale, req)
   const MachineT = withTenant(Machine, req)
 
   // The same batch is paid ONCE (see batchGuard).
   const prior = await batchGuard(req, res, SaleT, batchId)
-  if (prior) return res.json({ success: true, replayed: true, sales: prior, total: sumOf(prior, 'amount'), inserted: roundMoney(Math.max(...prior.map((x) => Number(x.inserted) || 0))), change: sumOf(prior, 'change'), changeDispensed: true, changeError: null, failed: [] })
+  if (prior) {
+    // what really happened to the change the first time: an unpaid one was written down (cash.change.owed) and left as credit
+    const AuditLog = (await import('../models/auditLog.js')).default
+    const owed = await AuditLog.findOne({ tenantId: req.tenantId, action: 'cash.change.owed', 'details.batchId': String(batchId) }).lean()
+    return res.json({ success: true, replayed: true, sales: prior, total: sumOf(prior, 'amount'), inserted: roundMoney(Math.max(...prior.map((x) => Number(x.inserted) || 0))), change: sumOf(prior, 'change'), changeDispensed: !owed, changeError: owed ? (owed.details?.error || 'Change not paid') : null, failed: [] })
+  }
+
+  // (After the batch guard: a request sent again once the money was spent must get the first answer, not "insert the cash".)
+  // On the shop PC the cash really inserted is known: the screen's 'inserted' can never be more than that.
+  if (coinMachine.running) {
+    const have = roundMoney(coinMachine.client?.getState?.().balance || 0)
+    if (insertedNum > have + 0.005) return res.status(409).json({ error: 'Cash inserted does not cover this', code: 'cash-not-inserted', inserted: have })
+  }
 
   // Validate the whole cart before recording anything.
   const rechargeLines = []
@@ -383,11 +390,16 @@ router.post('/cash/pay', requireKiosk, flowRoute('Pedido de pagamento em dinheir
   const change = roundMoney(insertedNum - chargedTotal)
 
   const sales = []
+  let rechargeNoted = false
   for (const line of rechargeLines) {
     // cash/pay handler — recharge method must be 'cash', not 'card'
     const credited = await creditCard(CardT, { _id: rechargeCard._id }, line.amount)
     if (!credited) return res.status(409).json({ error: 'Card disappeared during the recharge', cardCode: rechargeCard.code })
-    sales.push(await SaleT.create({ amount: line.amount, items: line.item, method: 'cash', batchId, inserted: line.amount, change: 0, type: 'recharge', cardId: rechargeCard._id, cardCode: rechargeCard.code }))
+    // A top-up alone (no machine in the batch): this sale is the one that says what went in and what came back as change. It used
+    // to say "inserted = the top-up, change 0" for a 10 EUR note on a 5 EUR top-up, and the day close's change given came out short.
+    const whole = !rechargeNoted && resolved.lines.length === 0
+    rechargeNoted = true
+    sales.push(await SaleT.create({ amount: line.amount, items: line.item, method: 'cash', batchId, inserted: whole ? insertedNum : line.amount, change: whole ? change : 0, type: 'recharge', cardId: rechargeCard._id, cardCode: rechargeCard.code }))
   }
   if (rechargeCard) {
     // The card in the reader must show the new balance, and the chip must follow the database.

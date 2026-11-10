@@ -324,7 +324,7 @@ export function createApi(config) {
   // with the kiosk's own apiKey. The POST additionally carries the staff PIN,
   // verified again server-side — see routes/pos.js.
   function getKioskDayCloseSummary(opts) {
-    const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
+    const headers = { ...(opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : {}), ...(opts?.pin ? { 'X-Staff-Pin': String(opts.pin) } : {}) }
     return request('/pos/day-close/summary', { method: 'GET', headers, skipAuth: true, expect: 'json' })
   }
 
@@ -335,7 +335,7 @@ export function createApi(config) {
 
   function emailKioskDayCloseReceipt(id, email, opts) {
     const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
-    return request(`/pos/day-close/${id}/email`, { method: 'POST', json: { email }, headers, skipAuth: true, expect: 'json' })
+    return request(`/pos/day-close/${id}/email`, { method: 'POST', json: { email, pin: opts?.pin }, headers, skipAuth: true, expect: 'json' })
   }
 
   function gatewayTopupCard(code, payload, opts) {

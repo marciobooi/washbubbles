@@ -26,6 +26,7 @@ const syncCommandSchema = new Schema({
   error: { type: String },
   result: { type: Schema.Types.Mixed },
   executedAt: { type: Date },
+  claimedAt: { type: Date }, // when the shop took it (status 'executing'): one that is never reported is closed after a while
   createdAt: { type: Date, default: Date.now }
 })
 
