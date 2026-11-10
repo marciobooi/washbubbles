@@ -196,15 +196,32 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
           <p className="text-sm text-neutral-600">
             Tudo isto é <strong>desde o último fecho</strong>{summary.periodFrom ? <>: {shopDateTime(summary.periodFrom)}</> : ''}. Depois de um fecho, recomeça do fundo que ficou.
           </p>
+          {/* The one number that matters: the takings in cash to bank. Only what was SOLD for cash: not card top-ups (customers' money
+              on their cards), not what is later spent from cards, not MB WAY (it goes straight to the bank). */}
+          {(() => {
+            const sold = Number(summary.cashSales ?? summary.totalCash ?? 0)
+            const toBank = Math.max(0, Math.round((sold - Number(summary.floatWithdrawn || 0)) * 100) / 100)
+            return (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4">
+                <div className="text-sm font-semibold text-emerald-700">Dinheiro a levar ao banco</div>
+                <div className="text-4xl font-extrabold text-emerald-800 leading-tight">{fmt(toBank)}€</div>
+                <div className="text-sm text-emerald-700/80 mt-1">
+                  Só o dinheiro das vendas desde o último fecho{Number(summary.floatWithdrawn) > 0 ? `, menos ${fmt(summary.floatWithdrawn)}€ já levantados` : ''}.
+                  Não conta: recargas de cartões ({fmt(summary.totalRecharges || 0)}€), consumo de cartões ({fmt(summary.totalCard)}€) nem MB WAY ({fmt(summary.totalMbway || 0)}€).
+                </div>
+              </div>
+            )
+          })()}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <StatCard label="Fundo inicial"     value={`${fmt(summary.openingFloat)}€`} color="neutral" />
-            {Number(summary.floatAdded) > 0 && <StatCard label="Fundo adicionado" value={`${fmt(summary.floatAdded)}€`} color="neutral" sub="reforços do hopper desde o último fecho" />}
-            {Number(summary.floatWithdrawn) > 0 && <StatCard label="Levantamentos" value={`-${fmt(summary.floatWithdrawn)}€`} color="neutral" sub="retirado da máquina desde o último fecho" />}
-            <StatCard label="Vendas dinheiro"   value={`${fmt(summary.cashSales ?? summary.totalCash)}€`}    color="green" sub={`desde o último fecho${summary.totalRecharges ? ` · + ${fmt(summary.totalRecharges)}€ em recargas` : ''}`} />
-            {Number(summary.totalMbway) > 0 && <StatCard label="MB WAY" value={`${fmt(summary.totalMbway)}€`} color="green" sub="pago no banco: não está na caixa" />}
-            <StatCard label="Consumo de cartões" value={`${fmt(summary.totalCard)}€`}    color="blue" sub="desde o último fecho · só informativo, não entra na contabilidade" />
-            <StatCard label="Esperado em caixa" value={`${fmt(summary.expectedCash)}€`} color="orange" bold
-              sub={`${summary.salesCount} transaccoes`} />
+            <StatCard label="Vendas em dinheiro" value={`${fmt(summary.cashSales ?? summary.totalCash)}€`} color="green" sub="desde o último fecho" />
+            <StatCard label="Recargas de cartões (dinheiro)" value={`${fmt(summary.totalRecharges || 0)}€`} color="neutral" sub="não é venda: dinheiro dos clientes, mas está fisicamente na máquina" />
+            {Number(summary.floatWithdrawn) > 0 && <StatCard label="Levantamentos" value={`-${fmt(summary.floatWithdrawn)}€`} color="neutral" sub="já retirado da máquina desde o último fecho" />}
+            <StatCard label="Esperado na máquina" value={`${fmt(summary.expectedCash)}€`} color="orange" bold
+              sub={`o que deve estar lá dentro para a contagem: fundo ${fmt(Number(summary.openingFloat || 0) + Number(summary.floatAdded || 0))}€ + vendas + recargas${Number(summary.floatWithdrawn) > 0 ? ' - levantamentos' : ''}`} />
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <StatCard label="Consumo de cartões" value={`${fmt(summary.totalCard)}€`} color="blue" sub="NÃO entra: já foi contado quando o cartão foi recarregado" />
+            <StatCard label="MB WAY" value={`${fmt(summary.totalMbway || 0)}€`} color="neutral" sub="NÃO entra: vai direto para o banco, não passa pela máquina" />
           </div>
           {summary.totalChangeDispensed > 0 && (
             <div className="flex items-center gap-2 rounded-xl bg-neutral-50 border border-neutral-100 px-4 py-2 text-xs text-neutral-600">
