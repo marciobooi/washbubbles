@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
 import DayCloseReceiptModal from './DayCloseReceiptModal'
+import { shopDateTime } from '@/lib/shopTime'
 import {
   COIN_DENOMS, ALL_CASH_DENOMS,
   fmt, denomSum, buildDenomState, fmtDenomLabel, buildDenomFromSaved, computeGap,
@@ -39,7 +40,7 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
   const mechanismTotal    = denomSum(mechanismDenoms)
   const hopperActualTotal = denomSum(hopperActualDenoms)
   const hopperTargetTotal = denomSum(hopperTargetDenoms)
-  const expectedCash      = summary ? Number(summary.openingFloat || 0) + Number(summary.totalCash || 0) + Number(summary.floatAdded || 0) : 0
+  const expectedCash      = summary ? Number(summary.openingFloat || 0) + Number(summary.totalCash || 0) + Number(summary.floatAdded || 0) - Number(summary.floatWithdrawn || 0) : 0
   const discrepancy       = countedCash - expectedCash
   const hopperGap         = computeGap(hopperTargetDenoms, hopperActualDenoms)
   const hopperGapTotal    = hopperGap.reduce((s, d) => s + d.toAdd * d.value, 0)
@@ -192,12 +193,16 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
         </div>
       ) : summary ? (
         <div className="bg-white rounded-2xl border border-neutral-200 shadow-sm p-5 space-y-4">
+          <p className="text-sm text-neutral-600">
+            Tudo isto é <strong>desde o último fecho</strong>{summary.periodFrom ? <>: {shopDateTime(summary.periodFrom)}</> : ''}. Depois de um fecho, recomeça do fundo que ficou.
+          </p>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <StatCard label="Fundo inicial"     value={`${fmt(summary.openingFloat)}€`} color="neutral" />
             {Number(summary.floatAdded) > 0 && <StatCard label="Fundo adicionado" value={`${fmt(summary.floatAdded)}€`} color="neutral" sub="reforços do hopper desde o último fecho" />}
-            <StatCard label="Vendas dinheiro"   value={`${fmt(summary.cashSales ?? summary.totalCash)}€`}    color="green" sub={summary.totalRecharges ? `+ ${fmt(summary.totalRecharges)}€ em recargas` : undefined} />
+            {Number(summary.floatWithdrawn) > 0 && <StatCard label="Levantamentos" value={`-${fmt(summary.floatWithdrawn)}€`} color="neutral" sub="retirado da máquina desde o último fecho" />}
+            <StatCard label="Vendas dinheiro"   value={`${fmt(summary.cashSales ?? summary.totalCash)}€`}    color="green" sub={`desde o último fecho${summary.totalRecharges ? ` · + ${fmt(summary.totalRecharges)}€ em recargas` : ''}`} />
             {Number(summary.totalMbway) > 0 && <StatCard label="MB WAY" value={`${fmt(summary.totalMbway)}€`} color="green" sub="pago no banco: não está na caixa" />}
-            <StatCard label="Consumo de cartões" value={`${fmt(summary.totalCard)}€`}    color="blue" sub="só informativo, não entra na contabilidade" />
+            <StatCard label="Consumo de cartões" value={`${fmt(summary.totalCard)}€`}    color="blue" sub="desde o último fecho · só informativo, não entra na contabilidade" />
             <StatCard label="Esperado em caixa" value={`${fmt(summary.expectedCash)}€`} color="orange" bold
               sub={`${summary.salesCount} transaccoes`} />
           </div>

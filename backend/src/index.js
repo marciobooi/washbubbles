@@ -287,6 +287,12 @@ async function start() {
       const d = await datePins(SettingModel)
       if (d) console.log(`[Settings] ${d} staff PIN(s) dated today: they expire in a week`)
     } catch (err) { console.warn('[Settings] could not migrate the staff PIN:', err.message) }
+    // Sales that reached the central server without their machine get it back from their own line (see services/saleMachines.js).
+    try {
+      const { backfillSaleMachines } = await import('./services/saleMachines.js')
+      const n = await backfillSaleMachines()
+      if (n) console.log(`[Sales] ${n} sale(s) got their machine back`)
+    } catch (err) { console.warn('[Sales] could not recover the machines of old sales:', err.message) }
     // Card balances are whole cents: round away any float dust left by older updates (a no-op when all are exact).
     try {
       const { normalizeBalances } = await import('./services/cardBalance.js')

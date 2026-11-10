@@ -4,6 +4,7 @@ import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
 import DayCloseForm from '@/components/dayClose/DayCloseForm'
 import HopperRefillModal from '@/components/dayClose/HopperRefillModal'
+import CashWithdrawModal from '@/components/dayClose/CashWithdrawModal'
 
 function getKioskApiKey() {
   const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
@@ -30,6 +31,7 @@ export default function KioskDayCloseModal({ open, onClose, pin }) {
   const [summaryLoading, setSummaryLoading] = useState(true)
   const [tab, setTab] = useState('fecho') // 'fecho' | 'hopper'
   const [refillOpen, setRefillOpen] = useState(false)
+  const [withdrawOpen, setWithdrawOpen] = useState(false)
 
   const loadSummary = useCallback(async () => {
     setSummaryLoading(true)
@@ -61,11 +63,17 @@ export default function KioskDayCloseModal({ open, onClose, pin }) {
           </button>
         ))}
       </div>
+      {tab === 'fecho' && (
+        <button type="button" onClick={() => setWithdrawOpen(true)} className="w-full h-12 mb-4 rounded-xl bg-white border border-slate-200 text-slate-700 font-semibold text-base active:scale-[0.99]">
+          Registar levantamento de dinheiro
+        </button>
+      )}
       {tab === 'hopper' && (
         <button type="button" onClick={() => setRefillOpen(true)} className="w-full h-14 mb-4 rounded-xl bg-emerald-600 text-white font-bold text-lg shadow-sm active:scale-[0.99]">
           Fazer reforço do hopper
         </button>
       )}
+      <CashWithdrawModal open={withdrawOpen} onClose={() => setWithdrawOpen(false)} expectedCash={summary?.expectedCash} onSubmit={(p) => api.withdrawKioskCash({ ...p, pin }, { apiKey: getKioskApiKey() })} onDone={() => { setWithdrawOpen(false); loadSummary() }} />
       <HopperRefillModal open={refillOpen} onClose={() => setRefillOpen(false)} onSubmit={(p) => api.refillKioskHopper({ ...p, pin }, { apiKey: getKioskApiKey() })} onDone={() => { setRefillOpen(false); loadSummary() }} />
       <DayCloseForm
         view={tab}

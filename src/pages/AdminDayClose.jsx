@@ -6,6 +6,7 @@ import Modal from '@/components/ui/Modal'
 import { PiggyBank, Trash2 } from 'lucide-react'
 import DayCloseForm from '@/components/dayClose/DayCloseForm'
 import HopperRefillModal from '@/components/dayClose/HopperRefillModal'
+import CashWithdrawModal from '@/components/dayClose/CashWithdrawModal'
 import { fmt, fmtDenomLabel, DiscrepancyPill, ALL_CASH_DENOMS, CoinChipGrid, buildDenomState, denomSum } from '@/components/dayClose/shared'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -18,6 +19,7 @@ export default function AdminDayClose() {
   const [floatModalOpen, setFloatModalOpen] = useState(false)
   const [tab, setTab] = useState('fecho') // 'fecho' | 'hopper' | 'historico'
   const [refillOpen, setRefillOpen] = useState(false)
+  const [withdrawOpen, setWithdrawOpen] = useState(false)
   const [emptying, setEmptying] = useState(false)
   async function emptyHopper() {
     if (!window.confirm('Vão cair TODAS as moedas do hopper para a bandeja do troco. Já tem um recipiente por baixo? Pode demorar alguns minutos.')) return
@@ -81,6 +83,13 @@ export default function AdminDayClose() {
             <PiggyBank className="w-3.5 h-3.5" strokeWidth={1.8} />
             Adicionar fundo inicial
           </button>
+          <button
+            type="button"
+            onClick={() => setWithdrawOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-700 text-xs font-semibold px-3 py-1.5 transition"
+          >
+            Levantamento
+          </button>
           {summary && (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold px-3 py-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -91,6 +100,8 @@ export default function AdminDayClose() {
       </div>
 
       <HopperRefillModal open={refillOpen} onClose={() => setRefillOpen(false)} onSubmit={(p) => api.refillHopper(p)} onDone={() => { setRefillOpen(false); loadSummary(); loadHistory() }} />
+
+      <CashWithdrawModal open={withdrawOpen} onClose={() => setWithdrawOpen(false)} expectedCash={summary?.expectedCash} onSubmit={(p) => api.withdrawCash(p)} onDone={() => { setWithdrawOpen(false); loadSummary(); loadHistory() }} />
 
       <AddFloatModal
         open={floatModalOpen}
@@ -168,7 +179,9 @@ export default function AdminDayClose() {
                       {dc.source === 'kiosk' ? (
                         <span className="rounded-full bg-blue-50 text-blue-600 font-semibold px-2 py-0.5">Quiosque (auto)</span>
                       ) : dc.source === 'adjustment' ? (
-                        <span className="rounded-full bg-violet-50 text-violet-600 font-semibold px-2 py-0.5">Fundo adicionado</span>
+                        dc.metadata?.withdrawalAmount > 0
+                          ? <span className="rounded-full bg-amber-50 text-amber-700 font-semibold px-2 py-0.5">Levantamento -{fmt(dc.metadata.withdrawalAmount)}&euro;</span>
+                          : <span className="rounded-full bg-violet-50 text-violet-600 font-semibold px-2 py-0.5">Fundo adicionado</span>
                       ) : null}
                       <span className={`text-primary-500 transition-transform ${isOpen ? 'rotate-180' : ''}`}>&#9660;</span>
                     </div>
@@ -183,10 +196,11 @@ export default function AdminDayClose() {
                           <InfoRow label="Vendas" value={`${fmt(dc.totalSales)}€ (${fmt(dc.totalCash)} din${Number(dc.totalMbway) > 0 ? ` + ${fmt(dc.totalMbway)} MB WAY` : ''} + ${fmt(dc.totalCard)} cart)`} />
                           <InfoRow label="Fundo inicial" value={`${fmt(dc.openingFloat)}€`} />
                           {Number(dc.floatAdded) > 0 && <InfoRow label="Fundo adicionado" value={`${fmt(dc.floatAdded)}€`} />}
+                          {Number(dc.floatWithdrawn) > 0 && <InfoRow label="Levantamentos" value={`-${fmt(dc.floatWithdrawn)}€`} />}
                           {dc.totalChangeDispensed > 0 && <InfoRow label="Troco dispensado" value={`${fmt(dc.totalChangeDispensed)}€`} />}
                         </DetailBlock>
                         <DetailBlock title="Reconciliacao">
-                          <InfoRow label="Esperado" value={`${fmt(dc.expectedCash ?? (Number(dc.openingFloat||0)+Number(dc.totalCash||0)+Number(dc.floatAdded||0)))}€`} />
+                          <InfoRow label="Esperado" value={`${fmt(dc.expectedCash ?? (Number(dc.openingFloat||0)+Number(dc.totalCash||0)+Number(dc.floatAdded||0)-Number(dc.floatWithdrawn||0)))}€`} />
                           <InfoRow label="Contado" value={`${fmt(dc.countedCash)}€`} />
                           <div className="flex justify-between pt-0.5">
                             <span className="text-neutral-500">Diferenca</span><DiscrepancyPill value={disc} />

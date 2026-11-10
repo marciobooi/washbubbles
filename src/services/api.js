@@ -380,6 +380,11 @@ export function createApi(config) {
     return request('/admin/day-close', { method: 'POST', json: payload, expect: 'json' });
   }
 
+  // Cash taken out of the machine between closes: { amount, notes? }
+  function withdrawCash(payload) {
+    return request('/admin/day-close/withdraw', { method: 'POST', json: payload, expect: 'json' })
+  }
+
   function refillHopper(payload) {
     // payload: { coins: [{value, count}], notes? } — coins brought from outside into the hopper
     return request('/admin/hopper/refill', { method: 'POST', json: payload, expect: 'json' })
@@ -437,6 +442,11 @@ export function createApi(config) {
   }
   function emptyHopper() {
     return request('/admin/hopper/empty', { method: 'POST', json: { confirm: true }, expect: 'json' })
+  }
+
+  function withdrawKioskCash(payload, opts) {
+    const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
+    return request('/pos/day-close/withdraw', { method: 'POST', json: payload, headers, skipAuth: true, expect: 'json' })
   }
 
   function refillKioskHopper(payload, opts) {
@@ -743,6 +753,8 @@ export function createApi(config) {
     createDayClose,
     addDayCloseFloat,
     refillHopper,
+    withdrawCash,
+    withdrawKioskCash,
     emptyHopper,
     reinitHardware,
     resetControllerLink,

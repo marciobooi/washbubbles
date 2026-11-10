@@ -41,11 +41,15 @@ export async function findLastDashboardClose(DayCloseT) {
   return arr[0] || null
 }
 
-/** Cash put into the till (a hopper reinforcement, a float top-up) since the last real close: expected in the count, never a sale. */
-export async function floatAddedSince(DayCloseT, lastClose) {
+/**
+ * Cash put into the till (a hopper reinforcement, a float top-up) and cash taken out (a withdrawal) since the last real close:
+ * the count expects the first and not the second, and neither is a sale.
+ */
+export async function floatMovementsSince(DayCloseT, lastClose) {
   const since = lastClose ? (lastClose.periodTo || lastClose.createdAt) : new Date(0)
   const rows = await DayCloseT.find({ source: 'adjustment', createdAt: { $gt: since } }).select('metadata').lean()
-  return Number(rows.reduce((s, r) => s + (Number(r.metadata?.adjustmentAmount) || 0), 0).toFixed(2))
+  const sum = (k) => Number(rows.reduce((s, r) => s + (Number(r.metadata?.[k]) || 0), 0).toFixed(2))
+  return { added: sum('adjustmentAmount'), withdrawn: sum('withdrawalAmount') }
 }
 
 /**
@@ -102,8 +106,8 @@ export async function getDayCloseSummary(req) {
   const sales = await SaleT.find({ createdAt: { $gt: periodFrom } }).lean()
   const tally = tallySales(sales)
   const tc = tally.totalCash
-  const floatAdded = await floatAddedSince(DayCloseT, lastClose)
-  const expectedCash = Number((openingFloat + tc + floatAdded).toFixed(2))
+  const { added: floatAdded, withdrawn: floatWithdrawn } = await floatMovementsSince(DayCloseT, lastClose)
+  const expectedCash = Number((openingFloat + tc + floatAdded - floatWithdrawn).toFixed(2))
 
   // Coins/bills the hardware has actually accepted since the last close — see
   // services/cashDrawer.js. Lets Step 1 start from what's already known
@@ -116,6 +120,7 @@ export async function getDayCloseSummary(req) {
     periodTo: new Date(),
     openingFloat,
     floatAdded,
+    floatWithdrawn,
     totalCash: tc,
     cashSales: tally.cashSales,
     totalRecharges: tally.totalRecharges,
@@ -201,8 +206,8 @@ export async function createDayClose(req, {
     const tally = tallySales(sales)
     const tc = tally.totalCash
     const tk = tally.totalCard
-    const floatAdded = await floatAddedSince(DayCloseT, lastClose)
-    const expectedCash = Number((openingFloat + tc + floatAdded).toFixed(2))
+    const { added: floatAdded, withdrawn: floatWithdrawn } = await floatMovementsSince(DayCloseT, lastClose)
+    const expectedCash = Number((openingFloat + tc + floatAdded - floatWithdrawn).toFixed(2))
     const totalChangeDispensed = tally.totalChangeDispensed
 
     // If countedCash wasn't provided, derive it from denomination sum
@@ -232,6 +237,7 @@ export async function createDayClose(req, {
       source: 'dashboard',
       openingFloat,
       floatAdded,
+      floatWithdrawn,
       expectedCash,
       countedCash: actualCountedCash,
       discrepancy,
@@ -313,7 +319,8 @@ export async function createFloatAdjustment(req, { amount, denominations = [], n
     const roundedAmt = Number(amt.toFixed(2))
     // Only the float: what was in the till at the last real close plus what has been put in since (this top-up included). The sales
     // since then are NOT swept in and NOT closed: they stay open for the next real count.
-    const floatNow = Number((openingFloat + await floatAddedSince(DayCloseT, lastClose) + roundedAmt).toFixed(2))
+    const moved = await floatMovementsSince(DayCloseT, lastClose)
+    const floatNow = Number((openingFloat + moved.added - moved.withdrawn + roundedAmt).toFixed(2))
 
     const dc = await DayCloseT.create({
       source: 'adjustment',
@@ -338,6 +345,55 @@ export async function createFloatAdjustment(req, { amount, denominations = [], n
       metadata: { adjustmentAmount: roundedAmt }
     })
 
+    return { status: 200, body: dc }
+  } finally {
+    await releaseLock(req.tenantId, 'day-close')
+  }
+}
+
+/**
+ * Cash taken out of the machine between closes (to the bank, to the owner). It is not a close: it counts nothing and sweeps no sale,
+ * it only lowers what the next real count expects, so the expected cash follows what is really in the machine. Refused when it is
+ * more than the machine is expected to hold. A real close starts again from its own float: what was withdrawn before it is already
+ * in that close's figures and never carries over.
+ */
+export async function createCashWithdrawal(req, { amount, denominations = [], notes }) {
+  const denomsClean = cleanDenoms(denominations)
+  const amt = denomsClean.length ? denomsClean.reduce((s, d) => s + d.total, 0) : Number(amount)
+  if (!Number.isFinite(amt) || amt <= 0) return { status: 400, body: { error: 'amount must be a positive number' } }
+  const gotLock = await acquireLock(req.tenantId, 'day-close')
+  if (!gotLock) return { status: 409, body: { error: 'A cash session close is already in progress for this site. Please try again in a few seconds.' } }
+  try {
+    const DayCloseT = withTenant(DayClose, req)
+    const SaleT = withTenant(Sale, req)
+    const lastClose = await findLastDashboardClose(DayCloseT)
+    const periodFrom = lastClose ? (lastClose.periodTo || lastClose.createdAt) : new Date(0)
+    const openingFloat = lastClose ? Number(lastClose.floatLeft || 0) : 0
+    const tally = tallySales(await SaleT.find({ createdAt: { $gt: periodFrom } }).lean())
+    const moved = await floatMovementsSince(DayCloseT, lastClose)
+    const before = Number((openingFloat + tally.totalCash + moved.added - moved.withdrawn).toFixed(2))
+    const rounded = Number(amt.toFixed(2))
+    if (rounded > before + 0.005) {
+      return { status: 409, body: { error: `Não pode levantar ${rounded.toFixed(2)}€: a máquina deve ter ${before.toFixed(2)}€`, expectedCash: before } }
+    }
+    const after = Number((before - rounded).toFixed(2))
+    const now = new Date()
+    const dc = await DayCloseT.create({
+      source: 'adjustment',
+      openingFloat,
+      expectedCash: after,
+      countedCash: after,
+      discrepancy: 0,
+      countedDenominations: denomsClean,
+      amountToBank: 0,
+      floatLeft: after,
+      notes: `Levantamento: -${rounded.toFixed(2)}€${notes ? ` — ${String(notes).slice(0, 400)}` : ''}`,
+      closedBy: req.userModel?._id,
+      closedByUsername: req.userModel?.username || '',
+      periodFrom: now,
+      periodTo: now,
+      metadata: { withdrawalAmount: rounded, expectedBefore: before },
+    })
     return { status: 200, body: dc }
   } finally {
     await releaseLock(req.tenantId, 'day-close')

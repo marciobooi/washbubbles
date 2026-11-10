@@ -265,6 +265,17 @@ router.post('/hopper/refill', requireKioskOrAdmin, async (req, res) => {
   res.status(status).json(body)
 })
 
+// Cash taken out of the machine between closes: from the kiosk with the staff PIN, like the close itself.
+router.post('/day-close/withdraw', requireKioskOrAdmin, async (req, res) => {
+  if (req.userModel?.role === 'KIOSK') {
+    const pinCheck = await checkAdminPin(req, req.body.pin)
+    if (!pinCheck.ok) return res.status(pinCheck.status).json({ error: pinCheck.error, ...(pinCheck.code ? { code: pinCheck.code } : {}) })
+  }
+  const { createCashWithdrawal } = await import('../services/dayClose.js')
+  const { status, body } = await createCashWithdrawal(req, req.body || {})
+  res.status(status).json(body)
+})
+
 router.post('/day-close', requireKioskOrAdmin, async (req, res) => {
   if (req.userModel?.role === 'KIOSK') {
     const pinCheck = await checkAdminPin(req, req.body.pin)

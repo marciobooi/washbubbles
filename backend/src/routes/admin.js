@@ -1760,6 +1760,14 @@ router.post('/day-close/adjust-float', requireAdmin, async (req, res) => {
   res.status(status).json(body)
 })
 
+// POST /admin/day-close/withdraw — cash taken out of the machine between closes (see createCashWithdrawal).
+router.post('/day-close/withdraw', requireAdmin, async (req, res) => {
+  const { createCashWithdrawal } = await import('../services/dayClose.js')
+  const { status, body } = await createCashWithdrawal(req, req.body || {})
+  if (status === 200) logAction(req, 'dayclose.withdrawal', 'DayClose', body._id, { amount: body.metadata?.withdrawalAmount })
+  res.status(status).json(body)
+})
+
 // POST /admin/day-close/:id/email — email a Z-report summary of one close.
 router.post('/day-close/:id/email', requireStaffRead, async (req, res) => {
   const { emailDayCloseReceipt } = await import('../services/dayClose.js')
@@ -1829,9 +1837,9 @@ router.get('/analytics/revenue.csv', requireStaffRead, async (req, res) => {
  * Returns usage stats per machine
  */
 router.get('/analytics/machines', requireStaffRead, async (req, res) => {
-  const SaleT = withTenant(Sale, req)
   const stats = await withTenant(Sale, req).aggregate([
-    { $match: { tenantId: new mongoose.Types.ObjectId(req.tenantId), machineId: { $ne: null } } },
+    // Payments for a machine only: not the staff's own starts (no money), not refunds, and not a payment that was refunded.
+    { $match: { tenantId: new mongoose.Types.ObjectId(req.tenantId), machineId: { $ne: null }, type: 'payment', status: { $ne: 'refunded' } } },
     { $group: {
         _id: "$machineId",
         totalRevenue: { $sum: "$amount" },
@@ -1846,7 +1854,12 @@ router.get('/analytics/machines', requireStaffRead, async (req, res) => {
     { $unwind: "$machineInfo" },
     { $sort: { totalRevenue: -1 } }
   ])
-  res.json(stats)
+  // Every machine of the shop is listed, also one that was never used (it used to be left out, so the table looked incomplete).
+  const seen = new Set(stats.map((s) => String(s._id)))
+  const idle = (await withTenant(Machine, req).find({}).lean()).filter((m) => !seen.has(String(m._id)))
+    .sort((a, b) => String(a.name).localeCompare(String(b.name), 'pt', { numeric: true }))
+    .map((m) => ({ _id: m._id, totalRevenue: 0, usageCount: 0, machineInfo: m }))
+  res.json([...stats, ...idle])
 })
 
 // =====================
