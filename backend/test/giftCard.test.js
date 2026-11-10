@@ -309,6 +309,21 @@ describe('A blank card put in the reader with no purchase waiting is registered 
     expect(written[0]).to.include({ code: 'CHIP-77', balance: 5 })
   })
 
+  it('a purchase left unwritten for more than 10 minutes is NOT given to whoever presents a blank card later', async () => {
+    const old = await Card.create({ tenantId: tenant._id, code: 'PURCHASE-OLD', balance: 5, status: 'pending_write', createdAt: new Date(Date.now() - 12 * 60_000) })
+    await coin.activatePendingCard('STRANGER-1')
+    expect((await Card.findById(old._id)).code).to.equal('PURCHASE-OLD') // still waiting for its buyer (or the staff)
+    expect((await Card.findById(old._id)).status).to.equal('pending_write')
+    expect(await Card.findOne({ tenantId: tenant._id, code: 'STRANGER-1' })).to.include({ balance: 0 }) // registered empty
+  })
+
+  it('a card that registered itself and failed to be written is never taken for a purchase by another chip', async () => {
+    await Card.create({ tenantId: tenant._id, code: 'SELF-1', balance: 0, status: 'pending_write', metadata: { autoRegistered: { at: new Date(), from: 'blank-card-at-reader' } } })
+    await coin.activatePendingCard('OTHER-CHIP')
+    expect(await Card.countDocuments({ tenantId: tenant._id, code: 'SELF-1' })).to.equal(1) // not renamed to the other chip
+    expect(await Card.countDocuments({ tenantId: tenant._id, code: 'OTHER-CHIP' })).to.equal(1)
+  })
+
   it('can be switched off (AUTO_REGISTER_BLANK_CARDS=false): nothing is created', async () => {
     process.env.AUTO_REGISTER_BLANK_CARDS = 'false'
     try {

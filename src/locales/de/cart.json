@@ -91,6 +91,8 @@
   "refunded": "Guthaben zurückgegeben: {{amount}}",
   "takeCoins": "Bitte die Münzen aus der Schale nehmen.",
   "refundFailed": "Das Guthaben konnte nicht vollständig zurückgegeben werden",
+  "creditHeld": "Ihr Geld konnte nicht zurückgegeben werden",
+  "creditHeldHint": "Bitte kontaktieren Sie den Waschsalon: Sie erhalten noch {{amount}}.",
   "shutdownTitle": "Der Kiosk schaltet sich gleich aus",
   "shutdownBody": "Bitte schließen Sie Ihren Vorgang ab. Wenn Sie gerade bezahlen, wartet die Maschine auf Sie.",
   "shutdownTap": "Bildschirm berühren, um fortzufahren",

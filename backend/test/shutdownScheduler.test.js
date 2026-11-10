@@ -34,6 +34,22 @@ describe('Scheduled shutdown of the shop PC', function () {
     expect(await AuditLog.countDocuments({ action: 'system.shutdown' })).to.equal(1)
   })
 
+  it('credit still there when it switches off is held for the customer (written down, staff told), not left for the morning', async () => {
+    await set({ enabled: true, time: '23:30' })
+    const held = []
+    const c = mk(4.5)
+    c.holdCredit = async (d) => { held.push(d) }
+    expect(await tick(c, { now: at(23, 41), flush: async () => {}, exec: async () => {} })).to.equal('shutdown')
+    expect(held).to.have.length(1)
+    expect(held[0]).to.include({ amount: 4.5, reason: 'shutdown' })
+    // nothing to hold when the machine is empty
+    _reset()
+    const empty = mk(0)
+    empty.holdCredit = async (d) => { held.push(d) }
+    await tick(empty, { now: at(23, 30, 25), flush: async () => {}, exec: async () => {} })
+    expect(held).to.have.length(1)
+  })
+
   it('waits while a customer has credit, but not forever (10 minutes)', async () => {
     await set({ enabled: true, time: '23:30' })
     const calls = []

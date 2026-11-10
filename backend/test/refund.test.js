@@ -44,6 +44,24 @@ describe('Unspent cash is paid back after the kiosk is left alone', function () 
     expect(await AuditLog.countDocuments({ tenantId: tenant._id, action: 'cash.refund' })).to.equal(1)
   })
 
+  it('a payout the hopper never answers is NOT tried again: the money stays in the machine, written down as owed, and the credit is gone', async () => {
+    await hopperRow()
+    next = async (h, amt) => ({ success: false, dispensed: 0, remaining: amt, unconfirmed: true, error: 'No reply from low-level controller for no-change within 30000ms' })
+    cm.client.addToBalance(3)
+    const held = []
+    cm.on('credit-held', (d) => held.push(d))
+    const r = await cm.refundCredit({ reason: 'idle' })
+    expect(r).to.include({ success: false, unconfirmed: true, held: 3, remaining: 0 })
+    expect(calls).to.deep.equal([3]) // asked once
+    expect(cm.client.getState().balance).to.equal(0) // nothing left to be paid out a second time, or to the next customer
+    expect(held).to.deep.equal([{ amount: 3, reason: 'refund-unconfirmed' }])
+    const row = await AuditLog.findOne({ tenantId: tenant._id, action: 'cash.held' })
+    expect(row.details).to.include({ amount: 3, reason: 'refund-unconfirmed' })
+    // the next idle period has nothing to pay
+    expect((await cm.refundCredit({ reason: 'idle' })).refunded).to.equal(0)
+    expect(calls).to.deep.equal([3])
+  })
+
   it('keeps what the hopper could not pay as credit, and tells the operator the exact amount', async () => {
     await hopperRow()
     // 1 EUR comes out, then the hopper cannot pay the other 2 (also not when asked again for just that rest)

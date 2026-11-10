@@ -54,6 +54,9 @@ export async function tick(coin, deps = {}) {
   const late = -minsToGo
   if (credit > 0 && late < WAIT_MAX_MIN) return 'waiting-for-customer'
   state.doneFor = today
+  // Credit still in the machine when it switches off is not left to be found (or lost) in the morning: it stays in the machine, is
+  // written down as owed to the customer and the staff is e-mailed (the same rule as a payout nobody can confirm).
+  if (credit > 0 && coin.holdCredit) await coin.holdCredit({ amount: credit, reason: 'shutdown', why: `o computador desligou-se à hora marcada (${cfg.time}) com ${credit.toFixed(2)} € de crédito por gastar` }).catch((e) => console.warn('[Shutdown] could not hold the credit:', e.message))
   try { await (deps.flush ? deps.flush() : Promise.race([coin.uplink?.flush?.(), new Promise((r) => setTimeout(r, 30000))])) } catch { /* the sales stay queued and go out after the next start */ }
   await AuditLog.create({ tenantId: coin.tenantId, actorUsername: 'system', action: 'system.shutdown', targetType: 'CashSession', targetId: '', details: { scheduledFor: cfg.time, creditLeft: credit } }).catch(() => {})
   console.log(`[Shutdown] scheduled shutdown at ${cfg.time}: closing the kiosk, stopping the programs and the database, then switching off`)

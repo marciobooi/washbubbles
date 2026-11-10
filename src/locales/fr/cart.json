@@ -91,6 +91,8 @@
   "refunded": "Crédit rendu : {{amount}}",
   "takeCoins": "Veuillez récupérer les pièces dans le bac.",
   "refundFailed": "Impossible de rendre tout le crédit",
+  "creditHeld": "Impossible de vous rendre votre argent",
+  "creditHeldHint": "Contactez la laverie : {{amount}} vous sont dus.",
   "shutdownTitle": "La borne va s'éteindre",
   "shutdownBody": "Terminez votre opération. Si vous êtes en train de payer, la machine vous attend.",
   "shutdownTap": "Touchez l'écran pour continuer",

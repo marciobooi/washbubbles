@@ -213,6 +213,7 @@ class CoinMachine extends EventEmitter {
       this.startHardwareRefresh()
       this.startControllerWatch()
       this.startImpulseScheduler()
+      await this.resumeSpacedImpulses().catch((e) => console.error('[Cycle] could not resume the pending impulses:', e.message))
       this.running = true
       this.emit('started')
       
@@ -764,7 +765,13 @@ class CoinMachine extends EventEmitter {
 
   /** A blank card was read: write the most recent purchase that is still waiting for its card. */
   async activatePendingCard(chipId = null) {
-    const pending = await Card.findOne(this.scoped({ status: 'pending_write', createdAt: { $gte: new Date(Date.now() - 30 * 60_000) } })).sort({ createdAt: -1 })
+    // Only a PURCHASE (or a gift) made in the last few minutes can be waiting for this card: the buyer is told to put the card in the
+    // reader straight away. It used to be 30 minutes, so a blank card presented by somebody else long after the buyer had left took
+    // the purchase; and a card registered by itself (balance 0) whose write had failed was taken for a purchase too.
+    const windowMin = Number(process.env.PENDING_CARD_WINDOW_MIN) > 0 ? Number(process.env.PENDING_CARD_WINDOW_MIN) : 10
+    const waiting = await Card.find(this.scoped({ status: 'pending_write', 'metadata.autoRegistered': { $exists: false }, createdAt: { $gte: new Date(Date.now() - windowMin * 60_000) } })).sort({ createdAt: -1 }).limit(5)
+    const pending = waiting[0] || null // the newest: the customer standing at the kiosk now
+    if (waiting.length > 1) await this.auditSystem('card.activate.ambiguous', { chipId: chipId ? String(chipId) : null, chosen: pending.code, waiting: waiting.map((c) => c.code) })
     if (!pending) {
       // No purchase is waiting for this card. A customer's own card that has no id yet is registered now (see registerBlankCard).
       if (chipId && this.autoRegisterBlankCards) {
@@ -1019,6 +1026,8 @@ class CoinMachine extends EventEmitter {
     machine.pendingImpulses = staggered ? n - 1 : 0
     machine.nextImpulseAt = staggered ? new Date(Date.now() + this.gapMinutes(machine) * 60_000) : null
     machine.startedAt = new Date()
+    machine.spacedPending = spaced ? n - 1 : 0
+    machine.spacedSince = spaced ? new Date() : null
     await machine.save()
     flows.step(this.tenantId, 'impulse_sent', spaced ? `Impulso 1 de ${n} enviado à ${machine.name}` : `${n > 1 ? `${n} impulsos` : 'Impulso'} enviado${n > 1 ? 's' : ''} à ${machine.name}`, { machine: machine.name, blocks: n, interface: iface.name || null, port: machine.port }, { machine: machine.name })
     if (spaced) {
@@ -1049,6 +1058,8 @@ class CoinMachine extends EventEmitter {
       if (!ok) {
         machine.pendingImpulses = left
         machine.nextImpulseAt = new Date(Date.now() + 30_000)
+        machine.spacedPending = 0 // from here the scheduler owns them
+        machine.spacedSince = null
         await machine.save()
         await this.auditSystem('machine.block.late', { machine: machine.name, pending: left, error: lastErr?.message })
         flows.step(this.tenantId, 'impulse_failed', `Não foi possível enviar o impulso seguinte à ${machine.name} (${lastErr?.message || 'erro'})`, { pending: left }, { ok: false, machine: machine.name })
@@ -1056,9 +1067,40 @@ class CoinMachine extends EventEmitter {
         return
       }
       left--
+      await Machine.updateOne(this.scoped({ _id: machineId }), { $set: { spacedPending: left, ...(left ? {} : { spacedSince: null }) } }).catch(() => {})
       flows.step(this.tenantId, 'impulse_sent', `Impulso ${count - left + 1} enviado à ${machine.name}`, { machine: machine.name }, { machine: machine.name })
       console.log(`[Cycle] ${machine.name}: impulse sent as its own command, ${left} to go`)
     }
+  }
+
+  /**
+   * After a restart: impulses that were still to be sent a few seconds apart when the backend stopped. Stopped a moment ago (an
+   * update, a crash): the scheduler sends them now, the customer gets the blocks they paid for. Stopped long ago (the PC was off):
+   * the customer has gone, so nothing is sent to whoever is at the dryer now; it is written down and the staff is told.
+   */
+  async resumeSpacedImpulses(now = new Date()) {
+    const left = await Machine.find(this.scoped({ spacedPending: { $gt: 0 } }))
+    let resumed = 0
+    for (const m of left) {
+      const n = m.spacedPending
+      const agoMin = m.spacedSince ? (now.getTime() - new Date(m.spacedSince).getTime()) / 60_000 : Infinity
+      m.spacedPending = 0
+      m.spacedSince = null
+      if (agoMin <= 10) {
+        m.pendingImpulses = (m.pendingImpulses || 0) + n
+        m.nextImpulseAt = now
+        await m.save()
+        resumed += n
+        await this.auditSystem('machine.block.resumed', { machine: m.name, pending: n, minutesAgo: Math.round(agoMin * 10) / 10 })
+        console.warn(`[Cycle] ${m.name}: ${n} paid impulse(s) were not sent before the restart: sending them now`)
+      } else {
+        await m.save()
+        await this.auditSystem('machine.block.lost', { machine: m.name, pending: n, minutesAgo: Number.isFinite(agoMin) ? Math.round(agoMin) : null })
+        console.error(`[Cycle] ${m.name}: ${n} paid impulse(s) were never sent (the backend stopped ${Math.round(agoMin)} min ago): NOT sent now, the staff is told`)
+        import('./alerts.js').then(({ sendAlertForTenant }) => sendAlertForTenant(this.tenantId, `Blocos pagos e não entregues: ${m.name}`, `O sistema parou antes de enviar ${n} bloco(s) já pago(s) à ${m.name} e só voltou a arrancar ${Math.round(agoMin)} minutos depois. Não foram enviados agora (o cliente já não está). Se o cliente reclamar, são ${n} bloco(s) em dívida.`)).catch(() => {})
+      }
+    }
+    return resumed
   }
 
   /** How long a paid cycle lasts: dryers n x tImp; washers the price row's duration, else a default. */
@@ -1298,12 +1340,14 @@ class CoinMachine extends EventEmitter {
 
       let dispensed = 0
       let error = ''
+      let unconfirmed = false
       try {
         const hopper = await Peripheral.findOne(this.scoped({ type: 'hopper', enabled: true }))
         if (!hopper) {
           error = 'No hopper configured'
         } else {
-          const result = await this.dispenseChange(hopper._id, amount, { noFlow: true })
+          const result = await this.dispenseChange(hopper._id, amount, { noFlow: true, unconfirmedHandled: true })
+          unconfirmed = !!result?.unconfirmed
           dispensed = roundMoney(Math.min(amount, Math.max(0, Number(result?.dispensed ?? (result?.success === false ? 0 : amount)))))
           if (result?.success === false) error = result.error || 'The hopper could not pay out the full amount'
         }
@@ -1311,6 +1355,13 @@ class CoinMachine extends EventEmitter {
         error = err.message || 'Refund failed'
       }
 
+      // The hopper never answered: nobody knows whether the coins came out. Keeping the credit would pay it AGAIN after the next idle
+      // period (a possible double payout), so it is not tried again: the money stays in the machine, the customer is told to contact
+      // the shop and the staff is e-mailed (owner's rule, 2026-11-10).
+      if (unconfirmed) {
+        await this.holdCredit({ amount, balanceCard: state.balanceCard, reason: 'refund-unconfirmed', why: `a devolução de ${amount.toFixed(2)} € não foi confirmada pelo hopper (${error || 'sem resposta'})` })
+        return { success: false, refunded: 0, remaining: 0, held: amount, unconfirmed: true, error }
+      }
       const remaining = roundMoney(amount - dispensed)
       // Take back only what was really paid out; the rest stays as the customer's credit.
       this.client.restoreBalances({ balance: remaining, balanceCard: state.balanceCard })
@@ -1328,6 +1379,28 @@ class CoinMachine extends EventEmitter {
       return { success: remaining <= 0, refunded: dispensed, remaining, error }
     })().finally(() => { this.refunding = null })
     return this.refunding
+  }
+
+  /**
+   * Unspent cash that cannot be given back safely (a payout nobody can confirm, or the PC switching off with credit in it) STAYS in
+   * the machine and stops being credit: nothing is paid twice and nothing is handed to the next customer. It is owed to the customer:
+   * written down (cash.held), shown on the screen ("contact the shop") and e-mailed to the staff, who settle it by hand.
+   */
+  async holdCredit({ amount, balanceCard, reason, why }) {
+    const st = this.client.getState()
+    const held = roundMoney(amount ?? st.balance)
+    if (!(held > 0)) return { held: 0 }
+    this.client.restoreBalances({ balance: 0, balanceCard: balanceCard ?? st.balanceCard })
+    await this.auditSystem('cash.held', { amount: held, reason, why })
+    flows.step(this.tenantId, 'credit_held', `${held.toFixed(2).replace('.', ',')} € ficaram na máquina e são devidos ao cliente: ${why}`, { amount: held, reason }, { ok: false })
+    broadcastHardwareEvent(this.tenantId, 'credit:held', { amount: held, reason })
+    this.emit('credit-held', { amount: held, reason })
+    console.error(`[Refund] EUR ${held.toFixed(2)} kept in the machine and owed to the customer (${reason})`)
+    try {
+      const { sendAlertForTenant } = await import('./alerts.js')
+      await sendAlertForTenant(this.tenantId, 'Dinheiro de cliente retido na máquina', `Ficaram ${held.toFixed(2)} € de um cliente na máquina: ${why}. O valor NÃO foi devolvido outra vez nem ficou como crédito para o cliente seguinte. No ecrã foi pedido ao cliente que contacte a loja. Confirme no hopper/caixa se as moedas saíram; se não saíram, devolva-lhe ${held.toFixed(2)} € em mão.`)
+    } catch (e) { console.error('[Refund] could not send the held-credit alert:', e.message) }
+    return { held }
   }
 
   /**
@@ -1445,7 +1518,7 @@ class CoinMachine extends EventEmitter {
       
       // Pass the controller's real answer on. This used to return { success: true } whatever
       // happened, so a hopper that came up short looked like a completed payout.
-      if (result && result.success === false && amount < 9000) this.reportChangeShortfall(amount, result).catch(() => {}) // 9999 = emptying the hopper on purpose
+      if (result && result.success === false && amount < 9000 && !(opts.unconfirmedHandled && result.unconfirmed)) this.reportChangeShortfall(amount, result).catch(() => {}) // 9999 = emptying the hopper on purpose
       return { ...(result || {}), success: result?.success !== false }
     } catch (err) {
       console.error('Failed to dispense change:', err)

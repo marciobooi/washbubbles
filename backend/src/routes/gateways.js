@@ -372,6 +372,18 @@ router.post('/cash/pay', requireKiosk, shopOnly, flowRoute('Pedido de pagamento 
   const total = roundMoney(resolved.total + rechargeLines.reduce((s, l) => s + l.amount, 0))
   if (insertedNum < total) return res.status(400).json({ error: 'Insufficient cash', total, inserted: insertedNum })
 
+  // The top-up goes on the card BEFORE any machine starts: a card that vanished in the meantime (deleted, blocked) used to be found
+  // out only after the machines were running, and the answer was an error with no sale recorded. Now nothing has started yet.
+  let creditedSoFar = 0
+  for (const line of rechargeLines) {
+    const credited = await creditCard(CardT, { _id: rechargeCard._id }, line.amount)
+    if (!credited) {
+      if (creditedSoFar > 0) await applyCardDelta(CardT, { _id: rechargeCard._id }, -creditedSoFar).catch(() => {})
+      return res.status(409).json({ error: 'Card disappeared during the recharge', code: 'card-gone', cardCode: rechargeCard.code })
+    }
+    creditedSoFar = roundMoney(creditedSoFar + line.amount)
+  }
+
   // Start the machine(s) FIRST. If the controller cannot start one, that one is not charged and
   // the customer is told; the cash they inserted stays as their credit. (Nothing is recorded yet.)
   const startedLines = []
@@ -392,9 +404,7 @@ router.post('/cash/pay', requireKiosk, shopOnly, flowRoute('Pedido de pagamento 
   const sales = []
   let rechargeNoted = false
   for (const line of rechargeLines) {
-    // cash/pay handler — recharge method must be 'cash', not 'card'
-    const credited = await creditCard(CardT, { _id: rechargeCard._id }, line.amount)
-    if (!credited) return res.status(409).json({ error: 'Card disappeared during the recharge', cardCode: rechargeCard.code })
+    // cash/pay handler — recharge method must be 'cash', not 'card' (the card was credited above, before the machines started)
     // A top-up alone (no machine in the batch): this sale is the one that says what went in and what came back as change. It used
     // to say "inserted = the top-up, change 0" for a 10 EUR note on a 5 EUR top-up, and the day close's change given came out short.
     const whole = !rechargeNoted && resolved.lines.length === 0

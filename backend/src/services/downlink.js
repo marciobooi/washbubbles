@@ -35,7 +35,7 @@ import AuditLog from '../models/auditLog.js'
 export const MACHINE_RUNTIME_FIELDS = [
   'status', 'statusText', 'cycle', 'reserved', 'reservedBy', 'reservedAt',
   'reservationDuration', 'currentProgram', 'startedAt', 'estimatedEndTime',
-  'runningDuration', 'lastServicedAt', 'pendingImpulses', 'nextImpulseAt', 'busyUntil', 'sawBusy',
+  'runningDuration', 'lastServicedAt', 'pendingImpulses', 'nextImpulseAt', 'busyUntil', 'sawBusy', 'spacedPending', 'spacedSince',
 ]
 
 /** Peripheral fields owned by this site: live status from the controller, and the hopper's coin stock. */

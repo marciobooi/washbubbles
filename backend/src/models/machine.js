@@ -22,6 +22,10 @@ const machineSchema = new Schema({
   sawBusy: { type: Boolean, default: false },
   pendingImpulses: { type: Number, default: 0 },
   nextImpulseAt: { type: Date, default: null },
+  // Impulses of a multi-block purchase still to be sent a few seconds apart (spaced mode). Written down so a backend restart in
+  // those seconds does not lose paid blocks: they are picked up again at start-up (coinMachine.resumeSpacedImpulses).
+  spacedPending: { type: Number, default: 0 },
+  spacedSince: { type: Date, default: null },
   serviceStatus: { type: String, enum: ['offline', 'fault', null], default: null }, // which one: "Offline" or "Avariada"
   cycle: { type: Number, default: 0 },
   weight: { type: Number, default: 0 }, // kg - used to lookup price from Price collection

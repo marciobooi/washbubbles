@@ -939,12 +939,16 @@ class Middleware extends EventEmitter {
       if (prev && prev.addr === addr) await prev.started // same interface: let it finish the previous machine first
       const started = this.waitMachineStarted(addr, machine.port, this.activationConfirmMs())
       const ackMs = this.activationAckMs()
-      const ack = ackMs > 0 ? this.waitForReply('activate-machine', { timeoutMs: ackMs }).then(() => true, () => false) : Promise.resolve(true)
+      // The answer is the controller saying it TOOK the order (code 200, the only one ever seen: 182 of 182 in the shop's log on
+      // 2026-11-10); it cannot say whether the machine really ran. Any other code is treated like no answer at all.
+      const ack = ackMs > 0 ? this.waitForReply('activate-machine', { timeoutMs: ackMs }).then((pkg) => (pkg?.code === undefined || String(pkg.code) === '200' ? true : pkg), () => false) : Promise.resolve(true)
       try {
         const item = await this.sendActivation(machine, iface, impulses)
         this.lastActivation = { addr, started }
-        if (!(await ack)) {
-          console.warn(`[HW] the controller did not confirm the start of ${machine.name || item.id + '/' + item.chn} within ${ackMs} ms (the order was sent; NOT repeated): waiting for a late answer or the machine's own start message`)
+        const answer = await ack
+        if (answer !== true) {
+          if (answer) console.warn(`[HW] the controller REFUSED the start of ${machine.name || item.id + '/' + item.chn}: code ${answer.code} ${answer.msg || ''} (NOT repeated): waiting for the machine's own start message`)
+          else console.warn(`[HW] the controller did not confirm the start of ${machine.name || item.id + '/' + item.chn} within ${ackMs} ms (the order was sent; NOT repeated): waiting for a late answer or the machine's own start message`)
           this.reconcileStart(machine, item, started) // not waited for: the payment goes on
         }
         return item

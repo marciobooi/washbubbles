@@ -64,7 +64,34 @@ describe('Dryer blocks: one impulse now, one more every block', function () {
     expect(sent).to.deep.equal(['Secar 7', 'Secar 7', 'Secar 7'])
     const after = await Machine.findById(m._id)
     expect(after.pendingImpulses).to.equal(0)
+    expect(after.spacedPending).to.equal(0) // nothing left written down once they are all sent
     expect(after.busyUntil).to.be.instanceOf(Date)
+  })
+
+  it('impulses not yet sent when the backend stops are sent after the restart, if it was a moment ago', async () => {
+    const m = await dryer()
+    await Machine.updateOne({ _id: m._id }, { $set: { status: 'working', spacedPending: 2, spacedSince: new Date(Date.now() - 60_000) } }) // stopped a minute ago with 2 to go
+    expect(await coinMachine.resumeSpacedImpulses()).to.equal(2)
+    let row = await Machine.findById(m._id)
+    expect(row.spacedPending).to.equal(0)
+    expect(row.pendingImpulses).to.equal(2)
+    await coinMachine.tickImpulses()
+    expect(sent).to.deep.equal(['Secar 7'])
+    row = await Machine.findById(m._id)
+    expect(row.pendingImpulses).to.equal(1) // the other one follows a block later
+  })
+
+  it('...but not hours later: the customer has gone, nothing is sent to whoever is at the dryer now', async () => {
+    const m = await dryer()
+    const AuditLog = (await import('../src/models/auditLog.js')).default
+    await Machine.updateOne({ _id: m._id }, { $set: { spacedPending: 2, spacedSince: new Date(Date.now() - 9 * 3600_000) } })
+    expect(await coinMachine.resumeSpacedImpulses()).to.equal(0)
+    const row = await Machine.findById(m._id)
+    expect(row.spacedPending).to.equal(0)
+    expect(row.pendingImpulses).to.equal(0)
+    await coinMachine.tickImpulses()
+    expect(sent).to.deep.equal([])
+    expect(await AuditLog.countDocuments({ tenantId: tenant._id, action: 'machine.block.lost' })).to.equal(1)
   })
 
   it('the same batch is paid once: a repeated request is answered, with no new sale, impulse or change', async () => {

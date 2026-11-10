@@ -384,6 +384,21 @@ describe('Middleware over the low-level gateway', () => {
     expect(late.map((d) => d.how)).to.deep.equal(['machine started'])
   })
 
+  it('an answer with a code other than 200 is not a confirmation', async () => {
+    const mw = gatewayMiddleware()
+    mw.activationAck = 500
+    mw.activationLate = 60
+    const seen = []
+    mw.on('activation-unconfirmed', (d) => seen.push(d))
+    const p = mw.sendMachineActivation({ _id: 'a', name: 'Lavar 2', port: 2 }, { _id: 'i1', name: 'Int 1', address: 11 })
+    await tick(10)
+    mw.handlePackage({ op: 'activate-machine', code: '500', msg: 'Nope' })
+    await p
+    await tick(150)
+    expect(seen).to.have.length(1)
+    expect(mw.sent.filter((x) => x.op === 'activate-machine')).to.have.length(1)
+  })
+
   it('a confirmed start order raises nothing and does not wait', async () => {
     const mw = gatewayMiddleware()
     mw.activationAck = 2000

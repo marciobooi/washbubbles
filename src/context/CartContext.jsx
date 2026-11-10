@@ -74,6 +74,11 @@ export const CartProvider = ({ children }) => {
         // The machine could not pay all the change: the customer is owed money; the staff has been e-mailed.
         const owed = Number(data.payload?.remaining || 0)
         toast({ title: i18n.t('changeShortfall', { ns: 'cart' }), description: i18n.t('changeShortfallHint', { ns: 'cart', amount: `${owed.toFixed(2)}€` }), variant: 'destructive' })
+      } else if (data.type === 'credit:held') {
+        // The money could not be given back safely: it stays in the machine and the shop settles it by hand.
+        setCredit(0)
+        setRefundAt(null)
+        toast({ title: i18n.t('creditHeld', { ns: 'cart' }), description: i18n.t('creditHeldHint', { ns: 'cart', amount: `${Number(data.payload?.amount || 0).toFixed(2)}€` }), variant: 'destructive', duration: 60000 })
       } else if (data.type === 'credit:refund-failed') {
         const left = Number(data.payload?.remaining || 0)
         setCredit(Math.round(left * 100) / 100)

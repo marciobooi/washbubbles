@@ -91,6 +91,8 @@
   "refunded": "Crédito devuelto: {{amount}}",
   "takeCoins": "Recoja las monedas de la bandeja.",
   "refundFailed": "No se pudo devolver todo el crédito",
+  "creditHeld": "No ha sido posible devolverle su dinero",
+  "creditHeldHint": "Contacte con la tienda: tiene {{amount}} por recibir.",
   "shutdownTitle": "El quiosco se va a apagar",
   "shutdownBody": "Termine su operación. Si está pagando, la máquina le espera.",
   "shutdownTap": "Toque la pantalla para continuar",

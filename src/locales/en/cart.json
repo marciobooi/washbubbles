@@ -91,6 +91,8 @@
   "refunded": "Credit returned: {{amount}}",
   "takeCoins": "Please take the coins from the tray.",
   "refundFailed": "Could not return all of the credit",
+  "creditHeld": "We could not give your money back",
+  "creditHeldHint": "Please contact the shop: you are owed {{amount}}.",
   "shutdownTitle": "The kiosk is about to switch off",
   "shutdownBody": "Please finish what you are doing. If you are in the middle of a payment, the machine will wait for you.",
   "shutdownTap": "Touch the screen to continue",
