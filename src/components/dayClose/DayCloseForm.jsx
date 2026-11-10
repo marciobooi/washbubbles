@@ -23,6 +23,63 @@ import {
  */
 // `view` picks what is on screen while the SAME state stays mounted (the hopper counts are submitted with the close):
 // 'fecho' = summary, cash count, what to take out, split, notes; 'hopper' = mechanism + hopper stock/target/refill.
+/** The summary of the open period: what to take to the bank, how the expected count is made up, and what is NOT counted. */
+function SummaryPanel({ summary }) {
+  const sold = Number(summary.cashSales ?? summary.totalCash ?? 0)
+  const recharges = Number(summary.totalRecharges || 0)
+  const withdrawn = Number(summary.floatWithdrawn || 0)
+  const added = Number(summary.floatAdded || 0)
+  const opening = Number(summary.openingFloat || 0)
+  const toBank = Math.max(0, Math.round((sold - withdrawn) * 100) / 100)
+  const Row = ({ label, hint, value, sign, strong, muted }) => (
+    <div className={`flex items-baseline justify-between gap-4 py-2 border-b border-neutral-100 last:border-0 ${strong ? 'font-bold text-neutral-900' : muted ? 'text-neutral-500' : 'text-neutral-700'}`}>
+      <div className="min-w-0">
+        <div className={strong ? 'text-base' : 'text-sm'}>{label}</div>
+        {hint && <div className="text-xs text-neutral-400 font-normal">{hint}</div>}
+      </div>
+      <div className={`shrink-0 tabular-nums ${strong ? 'text-xl' : 'text-base font-semibold'}`}>{sign}{fmt(value)}€</div>
+    </div>
+  )
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-neutral-500">
+        <span>Tudo isto é <strong className="text-neutral-700">desde o último fecho</strong>{summary.periodFrom ? <>: {shopDateTime(summary.periodFrom)}</> : ''} · {summary.salesCount} transações</span>
+        <span>Depois de um fecho, recomeça do fundo que ficou.</span>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-3">
+        {/* what to bank */}
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 flex flex-col">
+          <div className="text-sm font-semibold text-emerald-700">Dinheiro a levar ao banco</div>
+          <div className="text-5xl font-black text-emerald-800 leading-tight mt-1">{fmt(toBank)}€</div>
+          <p className="text-sm text-emerald-800/80 mt-2">
+            Só o dinheiro das vendas{withdrawn > 0 ? `, menos ${fmt(withdrawn)}€ que já levantou` : ''}. Não inclui recargas de cartões, consumo de cartões nem MB WAY.
+          </p>
+          <div className="mt-auto pt-4 text-xs text-emerald-800/70">
+            Na máquina deve ficar o fundo para troco: <strong>{fmt(opening + added)}€</strong> ({fmt(opening)}€ do último fecho + {fmt(added)}€ de reforços do hopper).
+          </div>
+        </div>
+        {/* expected count */}
+        <div className="rounded-2xl border border-neutral-200 bg-white p-5">
+          <div className="text-sm font-semibold text-neutral-500 mb-1">Esperado na máquina (para a contagem)</div>
+          <Row label="Fundo inicial" hint="o que ficou no último fecho" value={opening} />
+          {added > 0 && <Row label="Reforços do hopper" hint="moedas postas na máquina desde o último fecho" value={added} sign="+" />}
+          <Row label="Vendas em dinheiro" hint="máquinas e venda de cartões" value={sold} sign="+" />
+          <Row label="Recargas de cartões" hint="dinheiro dos clientes: está na máquina mas não é venda" value={recharges} sign="+" />
+          {withdrawn > 0 && <Row label="Levantamentos" hint="já retirado da máquina" value={withdrawn} sign="-" />}
+          <Row label="Esperado em caixa" value={Number(summary.expectedCash)} strong />
+        </div>
+        {/* not counted */}
+        <div className="rounded-2xl border border-blue-100 bg-blue-50/50 p-5">
+          <div className="text-sm font-semibold text-blue-700 mb-1">Não entra na conta</div>
+          <Row label="Consumo de cartões" hint="gasto do saldo dos cartões: já foi contado quando o cartão foi recarregado" value={Number(summary.totalCard || 0)} muted />
+          <Row label="MB WAY" hint="pago direto ao banco: não passa pela máquina" value={Number(summary.totalMbway || 0)} muted />
+          {Number(summary.totalChangeDispensed) > 0 && <Row label="Troco dado" hint="já descontado nas vendas em dinheiro" value={Number(summary.totalChangeDispensed)} muted />}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClosed, onEmail, onDone, view = 'fecho', hidden = false }) {
   const [countedDenoms, setCountedDenoms]   = useState(buildDenomState(ALL_CASH_DENOMS))
   const [mechanismDenoms, setMechanismDenoms]     = useState(buildDenomState(COIN_DENOMS))
@@ -193,42 +250,7 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
         </div>
       ) : summary ? (
         <div className="bg-white rounded-2xl border border-neutral-200 shadow-sm p-5 space-y-4">
-          <p className="text-sm text-neutral-600">
-            Tudo isto é <strong>desde o último fecho</strong>{summary.periodFrom ? <>: {shopDateTime(summary.periodFrom)}</> : ''}. Depois de um fecho, recomeça do fundo que ficou.
-          </p>
-          {/* The one number that matters: the takings in cash to bank. Only what was SOLD for cash: not card top-ups (customers' money
-              on their cards), not what is later spent from cards, not MB WAY (it goes straight to the bank). */}
-          {(() => {
-            const sold = Number(summary.cashSales ?? summary.totalCash ?? 0)
-            const toBank = Math.max(0, Math.round((sold - Number(summary.floatWithdrawn || 0)) * 100) / 100)
-            return (
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4">
-                <div className="text-sm font-semibold text-emerald-700">Dinheiro a levar ao banco</div>
-                <div className="text-4xl font-extrabold text-emerald-800 leading-tight">{fmt(toBank)}€</div>
-                <div className="text-sm text-emerald-700/80 mt-1">
-                  Só o dinheiro das vendas desde o último fecho{Number(summary.floatWithdrawn) > 0 ? `, menos ${fmt(summary.floatWithdrawn)}€ já levantados` : ''}.
-                  Não conta: recargas de cartões ({fmt(summary.totalRecharges || 0)}€), consumo de cartões ({fmt(summary.totalCard)}€) nem MB WAY ({fmt(summary.totalMbway || 0)}€).
-                </div>
-              </div>
-            )
-          })()}
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <StatCard label="Vendas em dinheiro" value={`${fmt(summary.cashSales ?? summary.totalCash)}€`} color="green" sub="desde o último fecho" />
-            <StatCard label="Recargas de cartões (dinheiro)" value={`${fmt(summary.totalRecharges || 0)}€`} color="neutral" sub="não é venda: dinheiro dos clientes, mas está fisicamente na máquina" />
-            {Number(summary.floatWithdrawn) > 0 && <StatCard label="Levantamentos" value={`-${fmt(summary.floatWithdrawn)}€`} color="neutral" sub="já retirado da máquina desde o último fecho" />}
-            <StatCard label="Esperado na máquina" value={`${fmt(summary.expectedCash)}€`} color="orange" bold
-              sub={`o que deve estar lá dentro para a contagem: fundo ${fmt(Number(summary.openingFloat || 0) + Number(summary.floatAdded || 0))}€ + vendas + recargas${Number(summary.floatWithdrawn) > 0 ? ' - levantamentos' : ''}`} />
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <StatCard label="Consumo de cartões" value={`${fmt(summary.totalCard)}€`} color="blue" sub="NÃO entra: já foi contado quando o cartão foi recarregado" />
-            <StatCard label="MB WAY" value={`${fmt(summary.totalMbway || 0)}€`} color="neutral" sub="NÃO entra: vai direto para o banco, não passa pela máquina" />
-          </div>
-          {summary.totalChangeDispensed > 0 && (
-            <div className="flex items-center gap-2 rounded-xl bg-neutral-50 border border-neutral-100 px-4 py-2 text-xs text-neutral-600">
-              <span className="text-primary-500">&#8635;</span>
-              Troco dispensado neste periodo: <strong className="text-neutral-800">{fmt(summary.totalChangeDispensed)}&euro;</strong>
-            </div>
-          )}
+          <SummaryPanel summary={summary} />
           {(summary.openingHopperCoins?.length > 0 || summary.openingMechanismCoins?.length > 0) && (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {summary.openingHopperCoins?.length > 0 && (

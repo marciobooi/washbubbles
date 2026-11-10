@@ -64,7 +64,7 @@ export default function AdminDayClose() {
   useEffect(() => { loadSummary(); loadHistory() }, [loadSummary, loadHistory])
 
   return (
-    <div className="p-4 md:p-6 space-y-5 max-w-3xl mx-auto">
+    <div className="p-4 md:p-6 space-y-5 max-w-6xl mx-auto">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-heading font-bold text-neutral-800">Fecho de Caixa</h1>
