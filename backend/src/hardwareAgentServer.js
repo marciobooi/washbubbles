@@ -4,7 +4,7 @@
  */
 
 import { WebSocketServer } from 'ws'
-import User from './models/user.js'
+import { findUserByApiKey } from './services/apiKeys.js'
 import EventEmitter from 'events'
 
 class HardwareAgentServer extends EventEmitter {
@@ -28,7 +28,7 @@ class HardwareAgentServer extends EventEmitter {
         console.log('[HardwareAgentServer] Handling upgrade for /hardware-agent')
         console.log('[HardwareAgentServer] Upgrade headers:', {
           'x-api-key': request.headers['x-api-key'] ? '***' : 'missing',
-          'authorization': request.headers['authorization'] ? request.headers['authorization'].substring(0, 20) + '...' : 'missing'
+          'authorization': request.headers['authorization'] ? 'present' : 'missing' // never log any part of a key
         })
         
         this.wss.handleUpgrade(request, socket, head, (ws) => {
@@ -52,7 +52,7 @@ class HardwareAgentServer extends EventEmitter {
             : null)
         
         console.log('[HardwareAgentServer] Connection established, authenticating...')
-        console.log('[HardwareAgentServer] API Key received:', apiKeyHeader ? apiKeyHeader.substring(0, 20) + '...' : 'NONE')
+        console.log('[HardwareAgentServer] API Key received:', apiKeyHeader ? `yes (${String(apiKeyHeader).length} characters)` : 'NONE')
         
         if (!apiKeyHeader) {
           console.warn('[HardwareAgentServer] No API key provided')
@@ -61,7 +61,7 @@ class HardwareAgentServer extends EventEmitter {
         }
         
         console.log('[HardwareAgentServer] Looking up user in database...')
-        const userModel = await User.findOne({ apiKey: apiKeyHeader })
+        const userModel = await findUserByApiKey(apiKeyHeader) // same lookup as the HTTP routes: the key is normalized first
         console.log('[HardwareAgentServer] User lookup result:', userModel ? `Found: ${userModel.username}` : 'NOT FOUND')
         
         if (!userModel) {

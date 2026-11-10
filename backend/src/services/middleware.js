@@ -900,6 +900,38 @@ class Middleware extends EventEmitter {
     })
   }
 
+  /** How long a start with no answer is given to prove itself (a late answer, or the machine saying it started) before anybody is told. */
+  activationLateMs() {
+    if (Number.isFinite(this.activationLate)) return this.activationLate
+    const env = Number(process.env.ACTIVATION_LATE_MS)
+    return Number.isFinite(env) && env >= 0 ? env : 30000
+  }
+
+  /**
+   * A start the controller did not answer in time is very often just a SLOW answer (2026-11-10: Secar 10 answered after 3.04 s, Secar 8
+   * after 4.2 s, both ran) and three e-mails went out for machines that were working. So before anybody is told, the start gets a little
+   * time to prove itself: the answer arriving late, or the controller's own "machine started" message. Only when neither comes is it
+   * reported ('activation-unconfirmed'). The order is still never sent again.
+   */
+  reconcileStart(machine, item, started) {
+    const info = { machine: machine.name, machineId: machine._id, interface: item.id, channel: item.chn }
+    const name = machine.name || item.id + '/' + item.chn
+    let done = false
+    const finish = (how) => {
+      if (done) return
+      done = true
+      clearTimeout(timer)
+      this.off('late-reply', onLate)
+      if (how) { console.log(`[HW] the start of ${name} was confirmed after all (${how})`); this.emit('activation-confirmed-late', { ...info, how }) }
+      else { console.warn(`[HW] still no sign that ${name} started: reporting it`); this.emit('activation-unconfirmed', info) }
+    }
+    const onLate = (pkg) => { if (pkg?.op === 'activate-machine' && String(pkg.code) === '200') finish('late answer') }
+    const timer = setTimeout(() => finish(null), this.activationLateMs())
+    timer.unref?.()
+    this.on('late-reply', onLate)
+    Promise.resolve(started).then((ok) => { if (ok) finish('machine started') })
+  }
+
   activateViaGateway(machine, iface, impulses = null) {
     const run = async () => {
       const addr = String(iface.address)
@@ -912,8 +944,8 @@ class Middleware extends EventEmitter {
         const item = await this.sendActivation(machine, iface, impulses)
         this.lastActivation = { addr, started }
         if (!(await ack)) {
-          console.warn(`[HW] the controller did not confirm the start of ${machine.name || item.id + '/' + item.chn} within ${ackMs} ms (the order was sent; NOT repeated)`)
-          this.emit('activation-unconfirmed', { machine: machine.name, machineId: machine._id, interface: item.id, channel: item.chn })
+          console.warn(`[HW] the controller did not confirm the start of ${machine.name || item.id + '/' + item.chn} within ${ackMs} ms (the order was sent; NOT repeated): waiting for a late answer or the machine's own start message`)
+          this.reconcileStart(machine, item, started) // not waited for: the payment goes on
         }
         return item
       } catch (err) { this._cancelStartWait?.(false); throw err }
@@ -2501,6 +2533,8 @@ class Middleware extends EventEmitter {
     // else is an unsolicited event from the controller.
     const isReply = Object.prototype.hasOwnProperty.call(pkg, 'code')
     const settled = this.settlePending(pkg)
+    // an answer nobody is waiting for any more (it came after its time): a start that looked unconfirmed is waiting for exactly this
+    if (isReply && !settled) this.emit('late-reply', pkg)
 
     switch (pkg.op) {
       // --- money -----------------------------------------------------------

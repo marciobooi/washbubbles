@@ -40,6 +40,9 @@ import AuditLog from '../models/auditLog.js'
 
 const router = express.Router()
 
+// A free-text query filter is used only when it is one plain string (?x=a&x=b arrives as an array and would break the Mongo filter).
+const strParam = (v) => (typeof v === 'string' && v.trim() && v.trim().length <= 64 ? v.trim() : undefined)
+
 // An :id that is not a database id is simply "not found" (it used to reach the database and come back as a 500).
 // /flows/:id also takes a flow's own id, so it is left alone.
 router.param('id', (req, res, next, id) => {
@@ -220,8 +223,8 @@ router.post('/users/:id/rotate', requireAdmin, async (req, res) => {
 
 // Admin search endpoint: search users and machines by query (admin only)
 router.get('/search', async (req, res) => {
-  const q = (req.query.q || '').trim()
-  if (!q || q.length < 1) return res.json({ users: [], machines: [] })
+  const q = strParam(req.query.q)
+  if (!q) return res.json({ users: [], machines: [] })
   const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
   const UserT = withTenant(User, req)
   const MachineT = withTenant(Machine, req)
@@ -382,7 +385,7 @@ router.post('/machines/:id/service', requireTechnician, async (req, res) => {
 // =====================
 
 router.get('/maintenance', requireTechnician, async (req, res) => {
-  const { status } = req.query
+  const status = strParam(req.query.status)
   const TicketT = withTenant(MaintenanceTicket, req)
   const query = status ? { status } : { status: 'open' }
   const list = await TicketT.find(query).populate('machineId', 'name number').sort({ createdAt: -1 }).lean()
@@ -486,7 +489,8 @@ function csvCell(v) {
 }
 
 router.get('/transactions/export.csv', requireStaffRead, async (req, res) => {
-  const { from, to, type } = req.query
+  const { from, to } = req.query
+  const type = strParam(req.query.type)
   const query = {}
   if (type) query.type = type
   if (from || to) {
@@ -1343,7 +1347,8 @@ router.get('/prices', requireAdmin, async (req, res) => {
 
 // Get price by type and weight (for machine lookup)
 router.get('/prices/lookup', requireAdmin, async (req, res) => {
-  const { type, weight } = req.query
+  const type = strParam(req.query.type)
+  const weight = strParam(req.query.weight)
   if (!type || !weight) return res.status(400).json({ error: 'Missing type or weight' })
   const price = await withTenant(Price, req).findOne({ type, weight: Number(weight) })
   if (!price) return res.status(404).json({ error: 'Price not found for this type/weight' })
@@ -1908,7 +1913,7 @@ router.post('/kiosks/:id/command', requireAdmin, async (req, res) => {
 
 // GET /admin/audit-log — recent admin actions, newest first.
 router.get('/audit-log', requireAdmin, async (req, res) => {
-  const { action } = req.query
+  const action = strParam(req.query.action)
   const AuditLogT = withTenant(AuditLog, req)
   const query = action ? { action } : {}
   const list = await AuditLogT.find(query).sort({ createdAt: -1 }).limit(200).lean()

@@ -25,12 +25,24 @@ router.get('/client/balance', requireKioskOrAdmin, (req, res) => {
   res.json({ ...summary, refundInSeconds: coinMachine.creditRefundCountdown(), refundAfterSeconds: coinMachine.creditRefundSeconds })
 })
 
+// A keepalive may postpone the refund of unspent cash for at most this long since the balance last changed; without a limit a
+// script holding the kiosk key could keep a customer's cash in the machine for ever.
+const KEEPALIVE_MAX_MS = 15 * 60 * 1000
+let keepaliveSeen = { balance: null, since: 0 }
+let keepaliveNow = () => Date.now()
+export function _resetKeepalive() { keepaliveSeen = { balance: null, since: 0 } }
+export function _setKeepaliveClock(fn) { keepaliveNow = fn || (() => Date.now()) }
+
 /**
- * The customer is still here (screen touched): restart the refund countdown.
+ * The customer is still here (screen touched): restart the refund countdown (up to 15 minutes since the balance last changed).
  */
 router.post('/client/keepalive', requireKioskOrAdmin, (req, res) => {
-  coinMachine.touchCredit()
-  res.json({ refundInSeconds: coinMachine.creditRefundCountdown(), refundAfterSeconds: coinMachine.creditRefundSeconds })
+  const now = keepaliveNow()
+  const balance = coinMachine.client.getState().balance
+  if (balance !== keepaliveSeen.balance) keepaliveSeen = { balance, since: now } // any change of balance restarts the clock
+  const extended = now - keepaliveSeen.since <= KEEPALIVE_MAX_MS
+  if (extended) coinMachine.touchCredit()
+  res.json({ ok: true, extended, refundInSeconds: coinMachine.creditRefundCountdown(), refundAfterSeconds: coinMachine.creditRefundSeconds })
 })
 
 /**

@@ -158,11 +158,13 @@ router.post('/push/sale', async (req, res) => {
       }
     }
 
+    // The machine is kept only if this shop really has it (same _id as the shop's copy); anything else is ignored, never an error.
+    const machineRef = String(data.machine_id || data.machineId || '')
+    const machineId = /^[0-9a-f]{24}$/i.test(machineRef) && await withTenant(Machine, req).findOne({ _id: machineRef }).select('_id').lean() ?machineRef : undefined
+
     // Create sale on server
     const sale = await SaleT.create({
-      machineId: mongoose.Types.ObjectId.isValid(data.machine_id || data.machineId)
-        ? (data.machine_id || data.machineId)
-        : undefined,
+      machineId,
       amount: roundMoney(amount),
       items: parseItems(data.items),
       type: data.type || 'payment',

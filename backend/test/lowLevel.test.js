@@ -340,12 +340,48 @@ describe('Middleware over the low-level gateway', () => {
   it('a start order the controller never confirms is reported once and NOT sent again (2026-11-06: Secar 10 ran although its answer was lost)', async () => {
     const mw = gatewayMiddleware()
     mw.activationAck = 60
+    mw.activationLate = 80 // the time it is given to prove itself before anybody is told
     const seen = []
     mw.on('activation-unconfirmed', (d) => seen.push(d))
     await mw.sendMachineActivation({ _id: 'a', name: 'Secar 10', port: 2 }, { _id: 'i5', name: 'Int 5', address: 15 })
+    expect(seen).to.have.length(0) // not yet: it may still answer
+    await tick(150)
     expect(seen).to.have.length(1)
     expect(seen[0]).to.include({ machine: 'Secar 10', interface: '15', channel: '2' })
     expect(mw.sent.filter((x) => x.op === 'activate-machine')).to.have.length(1) // never repeated: it may already be running
+  })
+
+  it('a SLOW answer is not an alarm: the start is confirmed late and nobody is told (2026-11-10: three e-mails for machines that were running)', async () => {
+    const mw = gatewayMiddleware()
+    mw.activationAck = 40
+    mw.activationLate = 400
+    const seen = []
+    const late = []
+    mw.on('activation-unconfirmed', (d) => seen.push(d))
+    mw.on('activation-confirmed-late', (d) => late.push(d))
+    await mw.sendMachineActivation({ _id: 'a', name: 'Secar 8', port: 2 }, { _id: 'i4', name: 'Int 4', address: 14 })
+    await tick(30)
+    mw.handlePackage({ op: 'activate-machine', code: '200', msg: 'YeahAc!' }) // after its time
+    await tick(500)
+    expect(seen).to.have.length(0)
+    expect(late).to.have.length(1)
+    expect(late[0]).to.include({ machine: 'Secar 8', how: 'late answer' })
+    expect(mw.sent.filter((x) => x.op === 'activate-machine')).to.have.length(1)
+  })
+
+  it('the machine saying it started also settles it, without any answer to the order', async () => {
+    const mw = gatewayMiddleware()
+    mw.activationAck = 40
+    mw.activationLate = 400
+    const seen = []
+    const late = []
+    mw.on('activation-unconfirmed', (d) => seen.push(d))
+    mw.on('activation-confirmed-late', (d) => late.push(d))
+    await mw.sendMachineActivation({ _id: 'a', name: 'Lavar 1', port: 1 }, { _id: 'i1', name: 'Int 1', address: 11 })
+    mw.handlePackage({ op: 'machine-started', data: { id: '11', chn: '1' } })
+    await tick(500)
+    expect(seen).to.have.length(0)
+    expect(late.map((d) => d.how)).to.deep.equal(['machine started'])
   })
 
   it('a confirmed start order raises nothing and does not wait', async () => {

@@ -75,8 +75,9 @@ describe('Uplink — offline-first queue to the central server', function () {
       const [q] = await outbox()
       expect(q).to.include({ entityType: 'sale', entityId: String(sale._id), status: 'pending' })
       expect(q.payload).to.include({ local_id: String(sale._id), type: 'payment', amount: 2.5, method: 'cash', inserted: 5, change_amount: 2.5 })
-      // local ids that mean nothing centrally are never sent
-      expect(q.payload).to.not.have.any.keys('machine_id', 'card_id', 'machineId', 'cardId')
+      // the card id means nothing centrally and is never sent; a sale with no machine carries no machine id (see audit2026b for one with)
+      expect(q.payload).to.not.have.any.keys('card_id', 'machineId', 'cardId')
+      expect(q.payload.machine_id).to.not.exist
     })
 
     it('OFFLINE: payments made with no connection are kept, then all sent in order when it returns', async () => {

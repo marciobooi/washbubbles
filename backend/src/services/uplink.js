@@ -47,8 +47,9 @@ export function salePayload(sale) {
     status: o.status || 'completed',
     refund_of: o.refundOf ? String(o.refundOf) : undefined,
     refund_reason: o.refundReason || undefined,
-    // NOT sent: machine_id / card_id — they are this site's local ids and mean
-    // nothing (or the wrong thing) on the server.
+    // The shop's machines are copies of the server's rows with the SAME _id, so the machine id means the same on both sides.
+    // card_id is NOT sent: it is this site's local id and means nothing (or the wrong thing) on the server.
+    machine_id: o.machineId ? String(o.machineId) : undefined,
   }
 }
 

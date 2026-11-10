@@ -342,6 +342,10 @@ class CoinMachine extends EventEmitter {
     // A start order the controller never confirmed: it is NOT repeated (it may well have run, 2026-11-06 Secar 10), staff are told to look.
     const onUnconfirmed = (d) => this.reportUnconfirmedStart(d).catch(() => {})
     this.middleware.on('activation-unconfirmed', onUnconfirmed)
+    // ...and one that proved itself a little later (a slow answer, or the machine saying it started): written down, nobody is disturbed
+    const onLate = (d) => this.auditSystem('machine.start.confirmed.late', { machine: d.machine, interface: d.interface, channel: d.channel, how: d.how }).catch(() => {})
+    this.middleware.on('activation-confirmed-late', onLate)
+    this.subscriptions.push({ unsubscribe: () => this.middleware.off('activation-confirmed-late', onLate) })
     this.subscriptions.push({ unsubscribe: () => this.middleware.off('activation-unconfirmed', onUnconfirmed) })
 
     // Bill inserted
@@ -1159,14 +1163,41 @@ class CoinMachine extends EventEmitter {
     this.hardwareRefreshTimer.unref?.()
   }
 
+  /**
+   * Machines whose missing start answers are only written down (audit and log), never e-mailed: their link to the controller is known
+   * to be poor (Secar 10). Setting `alerts.startUnconfirmed.logOnly` (a list of machine names) replaces this default.
+   */
+  async startLogOnly(name) {
+    let list = ['Secar 10']
+    try {
+      const row = await Setting.findOne({ tenantId: this.tenantId, key: 'alerts.startUnconfirmed.logOnly' }).lean()
+      if (Array.isArray(row?.value)) list = row.value
+    } catch { /* the default applies */ }
+    return list.map((s) => String(s).trim().toLowerCase()).includes(String(name).trim().toLowerCase())
+  }
+
   async reportUnconfirmedStart({ machine, interface: iface, channel }) {
     const name = machine || `interface ${iface} canal ${channel}`
+    // Last check before anybody is told: the controller's own status reading says the machine is running.
+    try {
+      const last = this.lastStatusLogged?.get?.(name)
+      if (last && JSON.parse(last).occupied) {
+        console.log(`[HW] ${name}: no start answer, but the controller reports it running: nothing to report`)
+        await this.auditSystem('machine.start.confirmed.late', { machine: name, interface: iface, channel, how: 'status' })
+        return 'running'
+      }
+    } catch { /* report it */ }
     await this.auditSystem('machine.start.unconfirmed', { machine: name, interface: iface, channel })
+    if (await this.startLogOnly(name)) {
+      console.warn(`[HW] ${name}: start not confirmed (written down only: this machine is on the log-only list, no e-mail)`)
+      return 'log-only'
+    }
     flows.step(this.tenantId, 'start_unconfirmed', `O controlador não confirmou o arranque: ${name}. A ordem foi enviada e não foi repetida; verificar se a máquina arrancou`, { machine: name }, { ok: false })
     try {
       const { sendAlertForTenant } = await import('./alerts.js')
       await sendAlertForTenant(this.tenantId, `Arranque sem confirmação: ${name}`, `O controlador não confirmou o arranque de ${name}. A ordem foi enviada e NÃO foi repetida (se a máquina já estiver a trabalhar, repetir daria um segundo arranque). Confirme se a máquina está a trabalhar; se não estiver, arranque-a pelo menu de Staff (sem pagamento).`)
     } catch (e) { console.error('[HW] could not send the unconfirmed-start alert:', e.message) }
+    return 'alerted'
   }
 
   // ---------------------------------------------------------------- controller watchdog

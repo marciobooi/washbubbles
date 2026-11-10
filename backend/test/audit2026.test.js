@@ -269,6 +269,33 @@ describe('Audit 2026-11', function () {
     })
   })
 
+  describe('a start the controller did not answer', () => {
+    let AuditLog, Setting
+    before(async () => { AuditLog = (await import('../src/models/auditLog.js')).default; Setting = (await import('../src/models/setting.js')).default })
+    const actions = async () => (await AuditLog.find({ tenantId: tenant._id }).lean()).map((r) => r.action)
+    let savedStatus
+    beforeEach(() => { coinMachine.tenantId = tenant._id; savedStatus = coinMachine.lastStatusLogged; coinMachine.lastStatusLogged = new Map() })
+    afterEach(() => { coinMachine.lastStatusLogged = savedStatus })
+
+    it('is e-mailed only when nothing says the machine is running; Secar 10 is only written down', async () => {
+      expect(await coinMachine.reportUnconfirmedStart({ machine: 'Secar 8', interface: '14', channel: '2' })).to.equal('alerted')
+      expect(await coinMachine.reportUnconfirmedStart({ machine: 'Secar 10', interface: '15', channel: '2' })).to.equal('log-only')
+      expect((await actions()).filter((x) => x === 'machine.start.unconfirmed')).to.have.length(2) // both are in the audit trail
+    })
+
+    it('the controller reporting the machine running settles it: nothing is reported', async () => {
+      coinMachine.lastStatusLogged.set('Secar 8', JSON.stringify({ fault: false, occupied: true, doorLocked: false, doorClosed: true }))
+      expect(await coinMachine.reportUnconfirmedStart({ machine: 'Secar 8', interface: '14', channel: '2' })).to.equal('running')
+      expect(await actions()).to.include('machine.start.confirmed.late').and.to.not.include('machine.start.unconfirmed')
+    })
+
+    it('the list of log-only machines can be changed in the settings', async () => {
+      await Setting.create({ tenantId: tenant._id, key: 'alerts.startUnconfirmed.logOnly', value: ['Secar 7'] })
+      expect(await coinMachine.reportUnconfirmedStart({ machine: 'secar 7', interface: '16', channel: '1' })).to.equal('log-only')
+      expect(await coinMachine.reportUnconfirmedStart({ machine: 'Secar 10', interface: '15', channel: '2' })).to.equal('alerted')
+    })
+  })
+
   describe('the staff PIN lasts a week', () => {
     let Setting
     const setPin = (value) => request(app).post('/api/admin/settings').set(adminAuth()).send({ key: 'adminPin', value })

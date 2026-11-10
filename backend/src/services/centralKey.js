@@ -58,13 +58,17 @@ export async function applyCentralKey(rawKey, { serverUrl, coin, fetchImpl = glo
   // A PC installed for one shop is locked to it (SHOP_TENANT_ID, written by the installer): another shop's key is refused, so a
   // PC that already holds a shop's data can never start mixing in another shop's.
   if (process.env.SHOP_TENANT_ID) {
+    // Fail closed: a check that cannot be done (offline, server error) is not a pass.
+    let w
     try {
-      const w = await fetchImpl(`${url}/installer/whoami`, { headers: { Authorization: `ApiKey ${key}` }, signal: AbortSignal.timeout?.(10_000) })
-      if (w.ok) {
-        const { tenantId } = await w.json()
-        if (tenantId && tenantId !== process.env.SHOP_TENANT_ID) return { ok: false, code: 'rejected', message: 'Esta chave é de OUTRA loja. Este posto está bloqueado à sua loja; para o mudar de loja é preciso reinstalá-lo.' }
-      }
-    } catch { /* offline: the check below reports it */ }
+      w = await fetchImpl(`${url}/installer/whoami`, { headers: { Authorization: `ApiKey ${key}` }, signal: AbortSignal.timeout?.(10_000) })
+    } catch {
+      return { ok: false, code: 'offline', message: 'Sem ligação ao servidor: a chave não foi guardada. Tente de novo quando houver internet.' }
+    }
+    if (w.status === 401 || w.status === 403) return { ok: false, code: 'rejected', message: 'O servidor não aceitou esta chave. Confirme-a (sem espaços) ou gere outra no admin.' }
+    if (!w.ok) return { ok: false, code: 'server-error', message: `O servidor respondeu ${w.status}. Tente de novo.` }
+    const { tenantId } = await w.json().catch(() => ({}))
+    if (!tenantId || tenantId !== process.env.SHOP_TENANT_ID) return { ok: false, code: 'rejected', message: 'Esta chave é de OUTRA loja. Este posto está bloqueado à sua loja; para o mudar de loja é preciso reinstalá-lo.' }
   }
 
   let res
