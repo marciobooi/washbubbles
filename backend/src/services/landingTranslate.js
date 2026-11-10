@@ -85,7 +85,19 @@ export async function getTranslations(tenantId) {
 
 export async function getStatus(tenantId) {
   const doc = await Setting.findOne({ tenantId, key: STATUS_KEY }).lean()
-  return (doc && doc.value) || { state: 'never' }
+  const v = (doc && doc.value) || { state: 'never' }
+  // "running" with nobody running it: the server restarted in the middle (see legalTranslate.settleStale)
+  if (v.state === 'running' && !inFlight.has(String(tenantId)) && Date.now() - new Date(v.startedAt).getTime() >= 30_000) {
+    return { state: 'error', interrupted: true, startedAt: v.startedAt, error: 'A tradução foi interrompida (o servidor reiniciou). Carregue outra vez em Guardar e traduzir.' }
+  }
+  return v
+}
+
+/** After a restart: translations that were running when the server stopped are started again. */
+export async function resumeInterrupted() {
+  const rows = await Setting.find({ key: STATUS_KEY, 'value.state': 'running' }).select('tenantId').lean()
+  for (const r of rows) { console.warn('[landing-translate] a translation was interrupted by the restart: starting it again'); translateLandingSoon(r.tenantId) }
+  return rows.length
 }
 
 const setStatus = (tenantId, value) =>

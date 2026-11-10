@@ -308,6 +308,13 @@ async function start() {
     }
     startFlowTimer() // customer actions (flows) are closed when idle and sent to the central server
     if (hasRole('worker')) kioskWatchdog.start()
+    // translations that the last restart cut off (an update restarts the server) are started again, a little after the translator is up
+    if (hasRole('worker')) setTimeout(async () => {
+      try {
+        await (await import('./services/legalTranslate.js')).resumeInterrupted()
+        await (await import('./services/landingTranslate.js')).resumeInterrupted()
+      } catch (e) { console.warn('[translate] could not resume interrupted translations:', e.message) }
+    }, 20_000).unref?.()
     // central server only: moves new shops' site addresses along (DNS -> certificate -> "your site is live" e-mail)
     if (process.env.PUBLIC_LANDING_PAGE === 'true' && hasRole('worker')) startDomainWatcher()
   } catch (err) {

@@ -103,8 +103,25 @@ export function translateLegalSoon(tenantId) {
   return true
 }
 
+/**
+ * A status of "running" that nobody is running: the server restarted in the middle of the translation (every update does that), so
+ * the status was never closed and the button stayed on "A traduzir…" for ever (2026-11-10). It is shown as interrupted instead.
+ */
+export function settleStale(tenantId, v) {
+  if (!v || v.state !== 'running' || inFlight.has(String(tenantId))) return v
+  if (Date.now() - new Date(v.startedAt).getTime() < 30_000) return v
+  return { state: 'error', interrupted: true, startedAt: v.startedAt, error: 'A tradução foi interrompida (o servidor reiniciou). Carregue outra vez em Guardar e traduzir.' }
+}
+
+/** After a restart: translations that were running when the server stopped are started again. */
+export async function resumeInterrupted() {
+  const rows = await Setting.find({ key: STATUS_KEY, 'value.state': 'running' }).select('tenantId').lean()
+  for (const r of rows) { console.warn('[legal-translate] a translation was interrupted by the restart: starting it again'); translateLegalSoon(r.tenantId) }
+  return rows.length
+}
+
 export async function getLegalStatus(tenantId) {
   const doc = await Setting.findOne({ tenantId, key: STATUS_KEY }).lean()
   const tr = await Setting.findOne({ tenantId, key: TRANSLATIONS_KEY }).lean()
-  return { status: (doc && doc.value) || { state: 'never' }, translations: (tr && tr.value) || {}, translatorEnabled: translatorEnabled() }
+  return { status: settleStale(tenantId, (doc && doc.value) || { state: 'never' }), translations: (tr && tr.value) || {}, translatorEnabled: translatorEnabled() }
 }
