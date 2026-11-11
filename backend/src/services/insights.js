@@ -103,7 +103,8 @@ export async function computeInsights(tenantId, { days = 30, now = new Date() } 
   // the staff's own starts (no money) also keep a machine busy: they count in its occupancy, apart from its paid cycles
   const idByName = new Map()
   for (const m of machines) { const k = String(m.name).trim().toLowerCase(); idByName.set(k, idByName.has(k) ? null : String(m._id)) }
-  const starts = (await staffStarts(tid, { from: windowStart }))
+  const dryNames = new Set(machines.filter((m) => m.type === 'dry').map((m) => String(m.name).trim().toLowerCase()))
+  const starts = (await staffStarts(tid, { from: windowStart, dryNames }))
     .map((x) => ({ type: 'admin_start', machineId: idByName.get(x.name.trim().toLowerCase()), createdAt: x.at, items: [{ quantity: x.blocks }] }))
     .filter((s) => s.machineId)
   const hourCycles = Array(24).fill(0)

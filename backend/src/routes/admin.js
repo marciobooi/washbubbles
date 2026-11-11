@@ -1909,11 +1909,12 @@ router.get('/analytics/machines', requireStaffRead, async (req, res) => {
   // The staff's own starts (no money), counted apart as cycles the machine really did: from the flows, which have them all (the sales
   // only have some). By machine name; a name two machines share is not guessed.
   const { staffStarts } = await import('../services/staffStarts.js')
-  const allMachines = await withTenant(Machine, req).find({}).select('name').lean()
+  const allMachines = await withTenant(Machine, req).find({}).select('name type').lean()
+  const dryNames = new Set(allMachines.filter((m) => m.type === 'dry').map((m) => String(m.name).trim().toLowerCase()))
   const idByName = new Map()
   for (const m of allMachines) { const k = String(m.name).trim().toLowerCase(); idByName.set(k, idByName.has(k) ? null : String(m._id)) }
   const adminBy = new Map()
-  for (const s of await staffStarts(new mongoose.Types.ObjectId(req.tenantId))) {
+  for (const s of await staffStarts(new mongoose.Types.ObjectId(req.tenantId), { dryNames })) {
     if (month && !monthMatches(s.at, month)) continue
     const id = idByName.get(s.name.trim().toLowerCase())
     if (id) adminBy.set(id, (adminBy.get(id) || 0) + 1)

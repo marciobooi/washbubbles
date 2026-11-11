@@ -105,6 +105,7 @@ describe('Staff starts per machine, and the shop sending the machine of old sale
 
   it('the usage table counts the staff\'s own starts (from the flows, which have them all) apart from the paid cycles', async () => {
     const Flow = (await import('../src/models/flow.js')).default
+    await Machine.create({ tenantId: tenant._id, name: 'Secar 9', type: 'dry' })
     await Sale.create({ tenantId: tenant._id, machineId: l1._id, amount: 5, method: 'cash', type: 'payment', items: [{}] })
     const step = (type, machine, at) => ({ at: new Date(at), type, text: type, ok: true, data: { machine, blocks: 1 } })
     const flow = (id, at, steps) => Flow.create({ tenantId: tenant._id, flowId: id, kind: 'admin', startedAt: new Date(at), lastAt: new Date(at), steps })
@@ -112,9 +113,13 @@ describe('Staff starts per machine, and the shop sending the machine of old sale
     // one start that the controller took, one flow starting two machines (only Lavar 1 is ours here), one start that never reached the machine
     await flow('f1', now, [step('admin_start', 'Lavar 1', now), step('impulse_sent', 'Lavar 1', now)])
     await flow('f2', now, [step('admin_start', 'Lavar 1', now), step('impulse_sent', 'Lavar 1', now), step('admin_start', 'Secar 9', now), step('impulse_sent', 'Secar 9', now)])
-    await flow('f3', now, [step('admin_start', 'Lavar 1', now)]) // the controller was away: it did not happen
+    await flow('f3', now, [step('admin_start', 'Lavar 1', now), { at: new Date(now), type: 'start_unconfirmed', text: 'x', ok: false, data: null }]) // a washer that did not start
+    await flow('f4', now, [step('admin_start', 'Lavar 1', now)]) // a washer writes nothing after its start: counted
+    await flow('f5', now, [step('admin_start', 'Secar 9', now)]) // a dryer with no impulse: the controller never took it
     const rows = (await request(app).get('/api/admin/analytics/machines').set({ Authorization: `Bearer ${signToken(admin)}` })).body
-    expect(rows[0]).to.include({ usageCount: 1, adminStarts: 2, totalRevenue: 5 })
+    const by = Object.fromEntries(rows.map((r) => [r.machineInfo.name, r]))
+    expect(by['Lavar 1']).to.include({ usageCount: 1, adminStarts: 3, totalRevenue: 5 })
+    expect(by['Secar 9'].adminStarts).to.equal(1)
   })
 
   it('the shop sends the machine of sales the central server holds without it: only for its own machines, only where missing', async () => {
