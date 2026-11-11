@@ -11,6 +11,7 @@ import Machine from '../models/machine.js'
 import Card from '../models/card.js'
 import Price from '../models/price.js'
 import Setting from '../models/setting.js'
+import { staffStarts } from './staffStarts.js'
 
 const TZ = 'Europe/Lisbon'
 const DAY = 24 * 3600e3
@@ -100,7 +101,11 @@ export async function computeInsights(tenantId, { days = 30, now = new Date() } 
   // ── machines, wash/dry, hours ──
   const per = new Map(machines.map((m) => [String(m._id), { id: String(m._id), name: m.name, type: m.type, cycles: 0, adminStarts: 0, revenue: 0, minutes: 0, lastUsedAt: null }]))
   // the staff's own starts (no money) also keep a machine busy: they count in its occupancy, apart from its paid cycles
-  const starts = inWin.filter((s) => s.type === 'admin_start' && s.machineId && mById.has(String(s.machineId)))
+  const idByName = new Map()
+  for (const m of machines) { const k = String(m.name).trim().toLowerCase(); idByName.set(k, idByName.has(k) ? null : String(m._id)) }
+  const starts = (await staffStarts(tid, { from: windowStart }))
+    .map((x) => ({ type: 'admin_start', machineId: idByName.get(x.name.trim().toLowerCase()), createdAt: x.at, items: [{ quantity: x.blocks }] }))
+    .filter((s) => s.machineId)
   const hourCycles = Array(24).fill(0)
   const hourMinutes = Array(24).fill(0)
   const firstLast = new Map() // day -> [first hour, last hour]

@@ -1873,6 +1873,8 @@ router.get('/analytics/rhythm', requireStaffRead, async (req, res) => {
   })
 })
 
+const monthMatches = (d, month) => new Date(d).toLocaleString('sv-SE', { timeZone: 'Europe/Lisbon' }).slice(0, 7) === month
+
 // The months (the shop's own, Lisbon) that have machine payments, newest first: for the month picker of the usage table.
 router.get('/analytics/machines/months', requireStaffRead, async (req, res) => {
   const rows = await withTenant(Sale, req).aggregate([
@@ -1904,13 +1906,18 @@ router.get('/analytics/machines', requireStaffRead, async (req, res) => {
     { $unwind: "$machineInfo" },
     { $sort: { totalRevenue: -1 } }
   ])
-  // The staff's own starts (no money): counted apart, as cycles the machine really did
-  const adminRows = await withTenant(Sale, req).aggregate([
-    { $match: { tenantId: new mongoose.Types.ObjectId(req.tenantId), machineId: { $ne: null }, type: 'admin_start', status: { $ne: 'refunded' },
-      ...(month ? { $expr: { $eq: [{ $dateToString: { format: '%Y-%m', date: '$createdAt', timezone: 'Europe/Lisbon' } }, month] } } : {}) } },
-    { $group: { _id: '$machineId', n: { $sum: 1 } } },
-  ])
-  const adminBy = new Map(adminRows.map((x) => [String(x._id), x.n]))
+  // The staff's own starts (no money), counted apart as cycles the machine really did: from the flows, which have them all (the sales
+  // only have some). By machine name; a name two machines share is not guessed.
+  const { staffStarts } = await import('../services/staffStarts.js')
+  const allMachines = await withTenant(Machine, req).find({}).select('name').lean()
+  const idByName = new Map()
+  for (const m of allMachines) { const k = String(m.name).trim().toLowerCase(); idByName.set(k, idByName.has(k) ? null : String(m._id)) }
+  const adminBy = new Map()
+  for (const s of await staffStarts(new mongoose.Types.ObjectId(req.tenantId))) {
+    if (month && !monthMatches(s.at, month)) continue
+    const id = idByName.get(s.name.trim().toLowerCase())
+    if (id) adminBy.set(id, (adminBy.get(id) || 0) + 1)
+  }
   stats.forEach((s) => { s.adminStarts = adminBy.get(String(s._id)) || 0 })
   // Every machine of the shop is listed, also one that was never used (it used to be left out, so the table looked incomplete).
   const seen = new Set(stats.map((s) => String(s._id)))

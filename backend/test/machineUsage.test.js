@@ -103,10 +103,16 @@ describe('Staff starts per machine, and the shop sending the machine of old sale
     l1 = await Machine.create({ tenantId: tenant._id, name: 'Lavar 1', type: 'wash' })
   })
 
-  it('the usage table counts the staff\'s own starts apart from the paid cycles', async () => {
+  it('the usage table counts the staff\'s own starts (from the flows, which have them all) apart from the paid cycles', async () => {
+    const Flow = (await import('../src/models/flow.js')).default
     await Sale.create({ tenantId: tenant._id, machineId: l1._id, amount: 5, method: 'cash', type: 'payment', items: [{}] })
-    await Sale.create({ tenantId: tenant._id, machineId: l1._id, amount: 0, method: 'cash', type: 'admin_start' })
-    await Sale.create({ tenantId: tenant._id, machineId: l1._id, amount: 0, method: 'cash', type: 'admin_start' })
+    const step = (type, machine, at) => ({ at: new Date(at), type, text: type, ok: true, data: { machine, blocks: 1 } })
+    const flow = (id, at, steps) => Flow.create({ tenantId: tenant._id, flowId: id, kind: 'admin', startedAt: new Date(at), lastAt: new Date(at), steps })
+    const now = new Date().toISOString()
+    // one start that the controller took, one flow starting two machines (only Lavar 1 is ours here), one start that never reached the machine
+    await flow('f1', now, [step('admin_start', 'Lavar 1', now), step('impulse_sent', 'Lavar 1', now)])
+    await flow('f2', now, [step('admin_start', 'Lavar 1', now), step('impulse_sent', 'Lavar 1', now), step('admin_start', 'Secar 9', now), step('impulse_sent', 'Secar 9', now)])
+    await flow('f3', now, [step('admin_start', 'Lavar 1', now)]) // the controller was away: it did not happen
     const rows = (await request(app).get('/api/admin/analytics/machines').set({ Authorization: `Bearer ${signToken(admin)}` })).body
     expect(rows[0]).to.include({ usageCount: 1, adminStarts: 2, totalRevenue: 5 })
   })
