@@ -3,6 +3,10 @@ import { shopDateTime, shopDayKey } from '@/lib/shopTime'
 import api from '@/services/api'
 import { toast } from '@/components/ui/Toast'
 import DonutChart from '@/components/charts/DonutChart'
+import ControlKpis from '@/components/insights/ControlKpis'
+import OccupancyHours from '@/components/insights/OccupancyHours'
+import WashVsDry from '@/components/insights/WashVsDry'
+import ClientsPanel from '@/components/insights/ClientsPanel'
 
 function fmtEuro(n) {
   return `${(Number(n) || 0).toFixed(2)}€`
@@ -20,6 +24,13 @@ function minutesSince(iso) {
 }
 
 // Shared white surface used by every panel on this page.
+function lastUseLabel(d) {
+  if (d == null) return 'nunca'
+  if (d === 0) return 'hoje'
+  if (d === 1) return 'ontem'
+  return `há ${d} dias`
+}
+
 function Panel({ className = '', children }) {
   return (
     <div className={`bg-card rounded-[20px] p-6 shadow-[0_1px_2px_rgba(20,25,30,0.04),0_8px_20px_-12px_rgba(20,25,30,0.08)] ${className}`}>
@@ -37,6 +48,15 @@ export default function AdminOverview() {
   const [rhythmMonth, setRhythmMonth] = useState('') // '' = the whole history
   const [kiosks, setKiosks] = useState([])
   const [loading, setLoading] = useState(true)
+  const [insights, setInsights] = useState(null) // owner's control cards; null = not loaded / failed
+
+  const loadInsights = React.useCallback(() => {
+    return api.getAnalyticsInsights()
+      .then((r) => setInsights(r && typeof r === 'object' ? r : null))
+      .catch(() => setInsights(null))
+  }, [])
+
+  useEffect(() => { loadInsights() }, [loadInsights])
 
   useEffect(() => {
     let mounted = true
@@ -124,7 +144,7 @@ export default function AdminOverview() {
     <div className="flex flex-col gap-[18px] max-w-[1180px] print:max-w-full">
       <h1 className="m-0 text-[28px] font-extrabold tracking-tight">Dashboard</h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-[1.1fr_1fr_0.85fr] gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-[minmax(240px,0.8fr)_2.6fr] gap-4">
         <div className="relative overflow-hidden bg-linear-to-br from-[#e4f4ef] to-[#cdece2] rounded-[20px] p-6 flex flex-col gap-2.5 min-h-[170px]">
           <div className="absolute -right-[30px] -bottom-10 w-40 h-40 rounded-full bg-[radial-gradient(circle,rgba(13,148,136,0.16),transparent_70%)]" />
           <div className="absolute right-2.5 -bottom-2.5 w-[100px] h-[100px] rounded-[40%] bg-[radial-gradient(circle,rgba(245,158,11,0.14),transparent_70%)]" />
@@ -177,7 +197,7 @@ export default function AdminOverview() {
                   const vs = avgDaily > 0 ? Math.round((d.total / avgDaily - 1) * 100) : null
                   return (
                     <div key={d.key} className="group relative flex-1 min-w-0 flex flex-col items-center gap-1">
-                      <div className="flex flex-col justify-end h-20 w-full max-w-[16px] rounded overflow-hidden bg-[#eee9df] group-hover:ring-2 ring-[#6366f1]/40">
+                      <div className="flex flex-col justify-end h-20 w-full max-w-[30px] rounded overflow-hidden bg-[#eee9df] group-hover:ring-2 ring-[#6366f1]/40">
                         <div className="bg-amber-400" style={{ height: h(d.card) }} />
                         <div className="bg-[#6366f1]" style={{ height: h(d.mbway) }} />
                         <div className="bg-primary-500" style={{ height: h(d.cash) }} />
@@ -199,27 +219,17 @@ export default function AdminOverview() {
               </div>
             </div>
           )}
-          <div className="flex items-center gap-3.5 text-xs">
-            <span className="flex items-center gap-1.5"><span className="w-[9px] h-[9px] rounded-[3px] bg-primary-500 inline-block" />Dinheiro</span>
-            <span className="flex items-center gap-1.5"><span className="w-[9px] h-[9px] rounded-[3px] bg-[#6366f1] inline-block" />MB WAY</span>
-            <span className="flex items-center gap-1.5"><span className="w-[9px] h-[9px] rounded-[3px] bg-amber-400 inline-block" />Cartão</span>
-            {avgDaily > 0 && <span className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-[#6366f1] inline-block" />Média diária ({days.length} dias)</span>}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
+            <span className="flex items-center gap-1.5 whitespace-nowrap"><span className="w-[9px] h-[9px] rounded-[3px] bg-primary-500 inline-block" />Dinheiro</span>
+            <span className="flex items-center gap-1.5 whitespace-nowrap"><span className="w-[9px] h-[9px] rounded-[3px] bg-[#6366f1] inline-block" />MB WAY</span>
+            <span className="flex items-center gap-1.5 whitespace-nowrap"><span className="w-[9px] h-[9px] rounded-[3px] bg-amber-400 inline-block" />Cartão</span>
+            {avgDaily > 0 && <span className="flex items-center gap-1.5 whitespace-nowrap"><span className="w-4 border-t-2 border-dashed border-[#6366f1] inline-block" />Média diária ({days.length} dias)</span>}
           </div>
         </Panel>
 
-        <Panel className="flex flex-col items-center gap-2.5">
-          <h3 className="m-0 text-[15px] font-extrabold self-start">Quiosques ativos</h3>
-          <div
-            className="w-28 h-28 rounded-full flex items-center justify-center mt-1"
-            style={{ background: `conic-gradient(#14b8a6 ${kioskPct}%, var(--donut-track, #eee9df) ${kioskPct}% 100%)` }}
-          >
-            <div className="w-[86px] h-[86px] rounded-full bg-card flex flex-col items-center justify-center">
-              <span className="font-extrabold text-xl tracking-tight">{activeKiosks} / {kiosks.length}</span>
-            </div>
-          </div>
-          <span className="text-xs text-[#8a8478]">{activeKiosks === 0 ? 'nenhum ativo agora' : `${kioskPct}% da frota`}</span>
-        </Panel>
       </div>
+
+      <ControlKpis data={insights} />
 
       <Panel>
         <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
@@ -265,6 +275,13 @@ export default function AdminOverview() {
         )}
       </Panel>
 
+      {insights && (
+        <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-4">
+          <OccupancyHours data={insights} onSaved={loadInsights} />
+          <WashVsDry data={insights} />
+        </div>
+      )}
+
       <Panel>
         <div className="flex flex-wrap items-start justify-between gap-3 mb-3.5">
           <div>
@@ -291,28 +308,52 @@ export default function AdminOverview() {
                   <th className="py-2 px-2.5 font-semibold">Ciclos</th>
                   <th className="py-2 px-2.5 font-semibold">Receita</th>
                   <th className="py-2 px-2.5 font-semibold">% da receita</th>
+                  {insights && <th className="py-2 px-2.5 font-semibold">Ocupação (30 dias)</th>}
+                  {insights && <th className="py-2 px-2.5 font-semibold">Último uso</th>}
                 </tr>
               </thead>
               <tbody>
-                {machines.map((m) => (
+                {machines.map((m) => {
+                  const ins = insights?.machines?.find((x) => String(x.id) === String(m._id))
+                  const occ = Math.max(0, Math.min(100, Number(ins?.occupancyPct) || 0))
+                  const stale = ins && ins.daysSinceUse != null && ins.daysSinceUse >= 7
+                  return (
                   <tr key={m._id} className="border-t border-black/[0.07]">
                     <td className="py-2.5 px-2.5">{m.machineInfo?.name || m._id}</td>
                     <td className="py-2.5 px-2.5">{m.usageCount}</td>
                     <td className="py-2.5 px-2.5 font-semibold">{fmtEuro(m.totalRevenue)}</td>
                     <td className="py-2.5 px-2.5 text-[#8a8478]">{totalMachineRevenue > 0 ? `${Math.round((m.totalRevenue / totalMachineRevenue) * 100)}%` : '-'}</td>
+                    {insights && (
+                      <td className="py-2.5 px-2.5">
+                        {ins ? (
+                          <div className="flex items-center gap-2 min-w-[110px]">
+                            <div className="flex-1 h-1.5 rounded-full bg-[#eee9df] overflow-hidden"><div className="h-full rounded-full bg-primary-500" style={{ width: `${occ}%` }} /></div>
+                            <span className="w-9 text-right text-xs tabular-nums text-[#8a8478]">{Math.round(occ)}%</span>
+                          </div>
+                        ) : <span className="text-[#8a8478]">-</span>}
+                      </td>
+                    )}
+                    {insights && (
+                      <td className={`py-2.5 px-2.5 whitespace-nowrap ${stale ? 'text-[#b91c1c] font-bold' : 'text-[#8a8478]'}`}>{ins ? lastUseLabel(ins.daysSinceUse) : '-'}</td>
+                    )}
                   </tr>
-                ))}
+                  )
+                })}
                 <tr className="border-t-2 border-black/15 font-extrabold">
                   <td className="py-2.5 px-2.5">Total</td>
                   <td className="py-2.5 px-2.5">{totalCycles}</td>
                   <td className="py-2.5 px-2.5">{fmtEuro(totalMachineRevenue)}</td>
                   <td className="py-2.5 px-2.5"></td>
+                  {insights && <td className="py-2.5 px-2.5"></td>}
+                  {insights && <td className="py-2.5 px-2.5"></td>}
                 </tr>
               </tbody>
             </table>
           </div>
         )}
       </Panel>
+
+      <ClientsPanel data={insights} />
 
       {/* one slim card: the fleet is usually a single kiosk */}
       <Panel className="!p-4">
