@@ -472,6 +472,9 @@ export function createApi(config) {
   function getAnalyticsMachines(month) {
     return request(`/admin/analytics/machines${month ? `?month=${encodeURIComponent(month)}` : ''}`, { method: 'GET', expect: 'json' });
   }
+  function getAnalyticsInsights(days) {
+    return request(`/admin/analytics/insights${days ? `?days=${encodeURIComponent(days)}` : ''}`, { method: 'GET', expect: 'json' });
+  }
   function getAnalyticsRhythm(month) {
     return request(`/admin/analytics/rhythm${month ? `?month=${encodeURIComponent(month)}` : ''}`, { method: 'GET', expect: 'json' });
   }
@@ -692,6 +695,7 @@ export function createApi(config) {
     getAnalyticsMachines,
     getAnalyticsMachineMonths,
     getAnalyticsRhythm,
+    getAnalyticsInsights,
     getKioskHealth,
     getSettings,
     getSetting,

@@ -78,7 +78,7 @@ export default function AdminOverview() {
     return () => { mounted = false }
   }, [rhythmMonth])
 
-  const monthLabel = (m) => { const [y, mo] = m.split('-'); return new Date(Number(y), Number(mo) - 1, 1).toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' }) }
+  const monthLabel = (m) => { const [y, mo] = m.split('-'); const s = new Date(Number(y), Number(mo) - 1, 1).toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' }); return s.charAt(0).toUpperCase() + s.slice(1) }
   const idx = months.indexOf(month)
   const totalCycles = machines.reduce((s, m) => s + (m.usageCount || 0), 0)
   const totalMachineRevenue = machines.reduce((s, m) => s + (m.totalRevenue || 0), 0)
@@ -227,7 +227,7 @@ export default function AdminOverview() {
             <h3 className="m-0 mb-[3px] text-[17px] font-extrabold">Quando trabalha mais</h3>
             <p className="m-0 text-[13px] text-[#8a8478]">Ciclos pagos nas máquinas ({rhythmMonth ? monthLabel(rhythmMonth) : 'todo o histórico'}), na hora da loja</p>
           </div>
-          <select value={rhythmMonth} onChange={(e) => setRhythmMonth(e.target.value)} className="h-9 rounded-lg border border-black/10 bg-white px-3 text-sm capitalize">
+          <select value={rhythmMonth} onChange={(e) => setRhythmMonth(e.target.value)} className="h-9 rounded-lg border border-black/10 bg-white px-3 text-sm">
             <option value="">Todo o histórico</option>
             {months.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}
           </select>
@@ -239,11 +239,11 @@ export default function AdminOverview() {
             {[
               { title: 'Parte do dia', list: rhythm.parts, colors: ['#f6c026', '#43b8a8', '#6366f1'], unit: 'ciclos' },
               { title: 'Dia da semana', list: rhythm.days, colors: ['#43b8a8', '#2f9e8f', '#7cd0c3', '#f6c026', '#f59e0b', '#6366f1', '#a78bfa'], unit: 'ciclos' },
-            ].map(({ title, list, colors }) => {
+            ].map(({ title, list, colors }, chartIdx) => {
               const total = list.reduce((s, x) => s + x.cycles, 0)
               const best = list.reduce((b, x) => (x.cycles > (b?.cycles ?? -1) ? x : b), null)
               return (
-                <div key={title} className="flex flex-wrap items-center gap-5">
+                <div key={title} className={`flex flex-wrap items-center gap-5 ${chartIdx > 0 ? 'border-t border-black/10 pt-6 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-8' : ''}`}>
                   <DonutChart size={190} slices={list.map((x, i) => ({ key: x.key, label: x.label, value: x.cycles, color: colors[i % colors.length] }))}
                     centre={{ big: total, small: 'ciclos' }} />
                   <div className="flex-1 min-w-[220px]">
@@ -273,7 +273,7 @@ export default function AdminOverview() {
           </div>
           <div className="flex items-center gap-1.5">
             <button type="button" disabled={!month || idx >= months.length - 1} onClick={() => setMonth(months[idx + 1])} className="h-9 w-9 rounded-lg border border-black/10 bg-white text-lg disabled:opacity-30" aria-label="Mês anterior">&lsaquo;</button>
-            <select value={month} onChange={(e) => setMonth(e.target.value)} className="h-9 rounded-lg border border-black/10 bg-white px-3 text-sm capitalize">
+            <select value={month} onChange={(e) => setMonth(e.target.value)} className="h-9 rounded-lg border border-black/10 bg-white px-3 text-sm">
               {months.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}
               <option value="">Todo o histórico</option>
             </select>

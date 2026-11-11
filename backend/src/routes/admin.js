@@ -1836,6 +1836,13 @@ router.get('/analytics/revenue.csv', requireStaffRead, async (req, res) => {
  * GET /admin/analytics/machines
  * Returns usage stats per machine
  */
+// The owner's numbers (services/insights.js): cards' money, week/month against the one before, ticket, occupancy, wash/dry, customers, hours.
+router.get('/analytics/insights', requireStaffRead, async (req, res) => {
+  const days = Math.min(90, Math.max(7, Number(req.query.days) || 30))
+  const { computeInsights } = await import('../services/insights.js')
+  res.json(await computeInsights(req.tenantId, { days }))
+})
+
 // When the shop works: payments by part of the day and by day of the week, in the shop's own time (Lisbon). Morning 06-12, afternoon
 // 12-18, night 18-06. ?month=YYYY-MM limits it to a month. Payments for machines only (not refunded, not the staff's own starts).
 router.get('/analytics/rhythm', requireStaffRead, async (req, res) => {
