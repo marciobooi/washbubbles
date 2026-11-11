@@ -54,4 +54,40 @@ describe('Machine usage: every machine, and sales that lost their machine get it
     expect(by['Lavar 2']).to.include({ usageCount: 0, totalRevenue: 0 })
     expect(rows[0].machineInfo.name).to.equal('Lavar 1') // used ones first, by revenue
   })
+
+  it('can be limited to one month of the shop\'s own calendar, and lists the months that have sales', async () => {
+    // 2026-09-30 23:30 UTC is already 1 October in Lisbon (summer time): it belongs to October
+    await sale({ machineId: l1._id, amount: 5, createdAt: new Date('2026-09-30T23:30:00Z') })
+    await sale({ machineId: l1._id, amount: 7, createdAt: new Date('2026-10-15T12:00:00Z') })
+    await sale({ machineId: l2._id, amount: 4, createdAt: new Date('2026-11-02T12:00:00Z') })
+    const auth = { Authorization: `Bearer ${signToken(admin)}` }
+    const q = async (m) => (await request(app).get('/api/admin/analytics/machines' + (m ? `?month=${m}` : '')).set(auth)).body
+    const oct = Object.fromEntries((await q('2026-10')).map((r) => [r.machineInfo.name, r]))
+    expect(oct['Lavar 1']).to.include({ usageCount: 2, totalRevenue: 12 })
+    expect(oct['Lavar 2']).to.include({ usageCount: 0 })
+    const nov = Object.fromEntries((await q('2026-11')).map((r) => [r.machineInfo.name, r]))
+    expect(nov['Lavar 2']).to.include({ usageCount: 1, totalRevenue: 4 })
+    expect(nov['Lavar 1']).to.include({ usageCount: 0 })
+    const all = Object.fromEntries((await q()).map((r) => [r.machineInfo.name, r]))
+    expect(all['Lavar 1'].usageCount).to.equal(2)
+    expect((await q('garbage')).length).to.equal(3) // a bad month is ignored: the whole history
+    const months = (await request(app).get('/api/admin/analytics/machines/months').set(auth)).body
+    expect(months).to.deep.equal(['2026-11', '2026-10'])
+  })
+
+  it('shows when the shop works: parts of the day and days of the week, in Lisbon time', async () => {
+    // summer time (UTC+1): 08:30 UTC is 09:30 morning; 13:00 UTC is 14:00 afternoon; 22:30 UTC is 23:30 night; 23:30 UTC on a Sunday is Monday 00:30 night
+    await sale({ machineId: l1._id, amount: 4, createdAt: new Date('2026-09-02T08:30:00Z') })  // Wednesday morning
+    await sale({ machineId: l1._id, amount: 6, createdAt: new Date('2026-09-02T13:00:00Z') })  // Wednesday afternoon
+    await sale({ machineId: l2._id, amount: 2, createdAt: new Date('2026-09-02T22:30:00Z') })  // Wednesday night
+    await sale({ machineId: l2._id, amount: 3, createdAt: new Date('2026-09-06T23:30:00Z') })  // Monday 00:30 Lisbon: night
+    await sale({ machineId: l2._id, amount: 9, status: 'refunded', createdAt: new Date('2026-09-02T08:30:00Z') }) // never counted
+    const r = (await request(app).get('/api/admin/analytics/rhythm').set({ Authorization: `Bearer ${signToken(admin)}` })).body
+    expect(r.parts.map((p) => [p.key, p.cycles, p.revenue])).to.deep.equal([['morning', 1, 4], ['afternoon', 1, 6], ['night', 2, 5]])
+    const by = Object.fromEntries(r.days.map((d) => [d.label, d]))
+    expect(by['Quarta']).to.include({ cycles: 3, revenue: 12 })
+    expect(by['Segunda']).to.include({ cycles: 1, revenue: 3 })
+    expect(by['Domingo'].cycles).to.equal(0)
+    expect(r.days).to.have.length(7)
+  })
 })

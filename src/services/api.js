@@ -469,8 +469,14 @@ export function createApi(config) {
   function getAnalyticsRevenue() {
     return request('/admin/analytics/revenue', { method: 'GET', expect: 'json' });
   }
-  function getAnalyticsMachines() {
-    return request('/admin/analytics/machines', { method: 'GET', expect: 'json' });
+  function getAnalyticsMachines(month) {
+    return request(`/admin/analytics/machines${month ? `?month=${encodeURIComponent(month)}` : ''}`, { method: 'GET', expect: 'json' });
+  }
+  function getAnalyticsRhythm(month) {
+    return request(`/admin/analytics/rhythm${month ? `?month=${encodeURIComponent(month)}` : ''}`, { method: 'GET', expect: 'json' });
+  }
+  function getAnalyticsMachineMonths() {
+    return request('/admin/analytics/machines/months', { method: 'GET', expect: 'json' });
   }
   function getKioskHealth() {
     return request('/admin/kiosks/health', { method: 'GET', expect: 'json' });
@@ -684,6 +690,8 @@ export function createApi(config) {
     // Settings
     getAnalyticsRevenue,
     getAnalyticsMachines,
+    getAnalyticsMachineMonths,
+    getAnalyticsRhythm,
     getKioskHealth,
     getSettings,
     getSetting,

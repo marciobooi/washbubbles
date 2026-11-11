@@ -345,6 +345,12 @@ class CoinMachine extends EventEmitter {
     const onUnconfirmed = (d) => this.reportUnconfirmedStart(d).catch(() => {})
     this.middleware.on('activation-unconfirmed', onUnconfirmed)
     // ...and one that proved itself a little later (a slow answer, or the machine saying it started): written down, nobody is disturbed
+    // A peripheral that did not answer its configuration (the bill acceptor, "-1"): try again soon instead of waiting for the next automatic round
+    const onPeriphErr = (d) => this.handlePeripheralConfigError(d).catch(() => {})
+    const onPeriphOk = () => this.handlePeripheralConfigOk().catch(() => {})
+    this.middleware.on?.('peripheral-config-error', onPeriphErr)
+    this.middleware.on?.('peripheral-config-ok', onPeriphOk)
+    this.subscriptions.push({ unsubscribe: () => { this.middleware.off?.('peripheral-config-error', onPeriphErr); this.middleware.off?.('peripheral-config-ok', onPeriphOk) } })
     const onLate = (d) => this.auditSystem('machine.start.confirmed.late', { machine: d.machine, interface: d.interface, channel: d.channel, how: d.how }).catch(() => {})
     this.middleware.on('activation-confirmed-late', onLate)
     this.subscriptions.push({ unsubscribe: () => this.middleware.off('activation-confirmed-late', onLate) })
@@ -1180,6 +1186,51 @@ class CoinMachine extends EventEmitter {
   hardwareIdle() {
     const s = this.client?.getState?.() || {}
     return !(s.balance > 0) && !s.hasCard && Date.now() - this.lastCreditActivity > 120_000 && !this.refunding && !this.impulseBusy
+  }
+
+  /**
+   * The controller answered its peripheral configuration with an error for a device (2026-11: the bill acceptor, 3 times in 3 days, and
+   * it then took no notes until the automatic round three hours later, with nobody told). The configuration is sent again every
+   * 30 s, only while nobody is using the kiosk, up to 3 times; if the device still does not answer the staff is e-mailed once.
+   */
+  peripheralRetryMs() { return Number(process.env.PERIPHERAL_RETRY_MS) >= 0 && process.env.PERIPHERAL_RETRY_MS !== undefined ? Number(process.env.PERIPHERAL_RETRY_MS) : 30_000 }
+
+  async handlePeripheralConfigError({ errors }) {
+    const names = errors.map((e) => `${e.type}@${e.addr} (${e.error})`).join(', ')
+    const ep = this.periphEpisode || (this.periphEpisode = { since: Date.now(), attempts: 0, mailed: false, timer: null })
+    await this.auditSystem('hardware.peripheral.error', { errors, attempt: ep.attempts })
+    console.warn(`[HW] no answer from ${names} to the configuration (attempt ${ep.attempts})`)
+    clearTimeout(ep.timer)
+    if (ep.attempts >= 3) {
+      if (!ep.mailed) {
+        ep.mailed = true
+        try {
+          const { sendAlertForTenant } = await import('./alerts.js')
+          await sendAlertForTenant(this.tenantId, 'Periférico sem resposta: ' + errors.map((e) => e.type).join(', '), `O controlador não conseguiu falar com: ${names}, mesmo depois de 3 tentativas em 90 segundos. Se for o noteiro, o quiosque pode não estar a aceitar notas. O sistema volta a tentar de 3 em 3 horas; se for urgente, reinicie o controlador ou use "Reiniciar periféricos" no admin.`)
+        } catch (e) { console.error('[HW] could not send the peripheral alert:', e.message) }
+      }
+      return
+    }
+    const step = async (waited = 0) => {
+      if (!this.hardwareIdle()) { // somebody is using it: not now, up to 30 minutes
+        const poll = Math.min(15_000, Math.max(5, this.peripheralRetryMs()))
+        if (waited < 30 * 60_000) { ep.timer = setTimeout(() => step(waited + poll), poll); ep.timer.unref?.() }
+        return
+      }
+      ep.attempts++
+      await this.reinitHardware('retry').catch((e) => console.warn('[HW] retry of the peripheral configuration failed:', e.message))
+    }
+    ep.timer = setTimeout(() => step(), this.peripheralRetryMs())
+    ep.timer.unref?.()
+  }
+
+  async handlePeripheralConfigOk() {
+    const ep = this.periphEpisode
+    if (!ep) return
+    clearTimeout(ep.timer)
+    this.periphEpisode = null
+    await this.auditSystem('hardware.peripheral.recovered', { minutes: Math.round((Date.now() - ep.since) / 600) / 100, attempts: ep.attempts })
+    console.log(`[HW] the peripheral answers again (after ${ep.attempts} retries)`)
   }
 
   async reinitHardware(reason = 'manual') {

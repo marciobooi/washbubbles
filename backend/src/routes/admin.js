@@ -1836,10 +1836,53 @@ router.get('/analytics/revenue.csv', requireStaffRead, async (req, res) => {
  * GET /admin/analytics/machines
  * Returns usage stats per machine
  */
+// When the shop works: payments by part of the day and by day of the week, in the shop's own time (Lisbon). Morning 06-12, afternoon
+// 12-18, night 18-06. ?month=YYYY-MM limits it to a month. Payments for machines only (not refunded, not the staff's own starts).
+router.get('/analytics/rhythm', requireStaffRead, async (req, res) => {
+  const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(req.query.month || '')) ? String(req.query.month) : null
+  const tz = 'Europe/Lisbon'
+  const rows = await withTenant(Sale, req).aggregate([
+    { $match: { tenantId: new mongoose.Types.ObjectId(req.tenantId), machineId: { $ne: null }, type: 'payment', status: { $ne: 'refunded' },
+      ...(month ? { $expr: { $eq: [{ $dateToString: { format: '%Y-%m', date: '$createdAt', timezone: tz } }, month] } } : {}) } },
+    { $project: { amount: 1, hour: { $hour: { date: '$createdAt', timezone: tz } }, dow: { $isoDayOfWeek: { date: '$createdAt', timezone: tz } } } },
+    { $project: { amount: 1, dow: 1, part: { $switch: { branches: [
+      { case: { $and: [{ $gte: ['$hour', 6] }, { $lt: ['$hour', 12] }] }, then: 'morning' },
+      { case: { $and: [{ $gte: ['$hour', 12] }, { $lt: ['$hour', 18] }] }, then: 'afternoon' },
+    ], default: 'night' } } } },
+    { $facet: {
+      parts: [{ $group: { _id: '$part', cycles: { $sum: 1 }, revenue: { $sum: '$amount' } } }],
+      days: [{ $group: { _id: '$dow', cycles: { $sum: 1 }, revenue: { $sum: '$amount' } } }],
+    } },
+  ])
+  const f = rows[0] || { parts: [], days: [] }
+  const pick = (list, id) => list.find((x) => x._id === id) || { cycles: 0, revenue: 0 }
+  const r2 = (n) => Math.round(n * 100) / 100
+  const PARTS = [['morning', 'Manhã', '06h-12h'], ['afternoon', 'Tarde', '12h-18h'], ['night', 'Noite', '18h-06h']]
+  const DAYS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+  res.json({
+    month,
+    parts: PARTS.map(([key, label, hours]) => ({ key, label, hours, cycles: pick(f.parts, key).cycles, revenue: r2(pick(f.parts, key).revenue) })),
+    days: DAYS.map((label, i) => ({ key: i + 1, label, cycles: pick(f.days, i + 1).cycles, revenue: r2(pick(f.days, i + 1).revenue) })),
+  })
+})
+
+// The months (the shop's own, Lisbon) that have machine payments, newest first: for the month picker of the usage table.
+router.get('/analytics/machines/months', requireStaffRead, async (req, res) => {
+  const rows = await withTenant(Sale, req).aggregate([
+    { $match: { tenantId: new mongoose.Types.ObjectId(req.tenantId), machineId: { $ne: null }, type: 'payment', status: { $ne: 'refunded' } } },
+    { $group: { _id: { $dateToString: { format: '%Y-%m', date: '$createdAt', timezone: 'Europe/Lisbon' } } } },
+    { $sort: { _id: -1 } },
+  ])
+  res.json(rows.map((r) => r._id))
+})
+
+// ?month=YYYY-MM limits it to that month (the shop's own calendar); without it, the whole history.
 router.get('/analytics/machines', requireStaffRead, async (req, res) => {
+  const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(req.query.month || '')) ? String(req.query.month) : null
   const stats = await withTenant(Sale, req).aggregate([
     // Payments for a machine only: not the staff's own starts (no money), not refunds, and not a payment that was refunded.
-    { $match: { tenantId: new mongoose.Types.ObjectId(req.tenantId), machineId: { $ne: null }, type: 'payment', status: { $ne: 'refunded' } } },
+    { $match: { tenantId: new mongoose.Types.ObjectId(req.tenantId), machineId: { $ne: null }, type: 'payment', status: { $ne: 'refunded' },
+      ...(month ? { $expr: { $eq: [{ $dateToString: { format: '%Y-%m', date: '$createdAt', timezone: 'Europe/Lisbon' } }, month] } } : {}) } },
     { $group: {
         _id: "$machineId",
         totalRevenue: { $sum: "$amount" },

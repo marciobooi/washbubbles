@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { shopDateTime, shopDayKey } from '@/lib/shopTime'
 import api from '@/services/api'
 import { toast } from '@/components/ui/Toast'
+import DonutChart from '@/components/charts/DonutChart'
 
 function fmtEuro(n) {
   return `${(Number(n) || 0).toFixed(2)}€`
@@ -30,6 +31,10 @@ function Panel({ className = '', children }) {
 export default function AdminOverview() {
   const [revenue, setRevenue] = useState([])
   const [machines, setMachines] = useState([])
+  const [months, setMonths] = useState([]) // 'YYYY-MM', newest first
+  const [month, setMonth] = useState('') // '' = the whole history
+  const [rhythm, setRhythm] = useState(null)
+  const [rhythmMonth, setRhythmMonth] = useState('') // '' = the whole history
   const [kiosks, setKiosks] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -39,12 +44,14 @@ export default function AdminOverview() {
       try {
         const [rev, mach, kiosk] = await Promise.all([
           api.getAnalyticsRevenue(),
-          api.getAnalyticsMachines(),
+          api.getAnalyticsMachineMonths().catch(() => []),
           api.getKioskHealth().catch(() => []), // legacy-only fleet check; absent is fine
         ])
         if (!mounted) return
         setRevenue(Array.isArray(rev) ? rev : [])
-        setMachines(Array.isArray(mach) ? mach : [])
+        const list = Array.isArray(mach) ? mach : []
+        setMonths(list)
+        setMonth(list[0] || '') // opens on the latest month with sales
         setKiosks(Array.isArray(kiosk) ? kiosk : [])
       } catch (e) {
         console.error('Failed to load overview analytics', e)
@@ -57,10 +64,46 @@ export default function AdminOverview() {
     return () => { mounted = false }
   }, [])
 
+  useEffect(() => {
+    let mounted = true
+    api.getAnalyticsMachines(month || undefined)
+      .then((m) => { if (mounted) setMachines(Array.isArray(m) ? m : []) })
+      .catch(() => { if (mounted) setMachines([]) })
+    return () => { mounted = false }
+  }, [month])
+
+  useEffect(() => {
+    let mounted = true
+    api.getAnalyticsRhythm(rhythmMonth || undefined).then((r) => { if (mounted) setRhythm(r) }).catch(() => { if (mounted) setRhythm(null) })
+    return () => { mounted = false }
+  }, [rhythmMonth])
+
+  const monthLabel = (m) => { const [y, mo] = m.split('-'); return new Date(Number(y), Number(mo) - 1, 1).toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' }) }
+  const idx = months.indexOf(month)
+  const totalCycles = machines.reduce((s, m) => s + (m.usageCount || 0), 0)
+  const totalMachineRevenue = machines.reduce((s, m) => s + (m.totalRevenue || 0), 0)
+
   const totalRevenue30d = revenue.reduce((s, r) => s + (r.total || 0), 0)
   const todayKey = shopDayKey()
   const todayRevenue = revenue.find((r) => r._id === todayKey)?.total || 0
-  const maxDay = Math.max(1, ...revenue.map((r) => r.total || 0))
+
+  // Every day from the first one with sales up to today (a day with no sales counts as 0), so the average is an honest daily average and
+  // moves as the shop gets more days of history. "Receita" = cash + MB WAY: what is spent from a card was counted when it was loaded.
+  const days = (() => {
+    if (revenue.length === 0) return []
+    const byKey = new Map(revenue.map((r) => [r._id, r]))
+    const out = []
+    const end = new Date(todayKey + 'T12:00:00')
+    for (let d = new Date(revenue[0]._id + 'T12:00:00'); d <= end; d.setDate(d.getDate() + 1)) {
+      const k = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
+      const r = byKey.get(k) || {}
+      out.push({ key: k, cash: r.cash || 0, card: r.card || 0, mbway: r.mbway || 0, total: r.total || 0, count: r.count || 0 })
+    }
+    return out
+  })()
+  const avgDaily = days.length ? days.reduce((s, d) => s + d.total, 0) / days.length : 0
+  const maxDay = Math.max(1, ...days.map((d) => d.cash + d.card + d.mbway))
+  const weekdayShort = (k) => new Date(k + 'T12:00:00').toLocaleDateString('pt-PT', { weekday: 'short' })
 
   async function exportRevenueCsv() {
     try {
@@ -88,13 +131,18 @@ export default function AdminOverview() {
           <span className="text-[13px] font-bold text-[#0d6b60] relative">Hoje</span>
           <span className="font-extrabold text-[38px] tracking-tight text-[#0c2b26] relative">{fmtEuro(todayRevenue)}</span>
           <span className="text-[13px] text-[#3d5f57] relative">Últimos 30 dias: {fmtEuro(totalRevenue30d)}</span>
+          {days.length > 0 && (
+            <span className="text-[13px] text-[#3d5f57] relative" title={`Média de ${days.length} dias, do primeiro com vendas até hoje (os dias sem vendas contam como 0). Atualiza sozinha à medida que há mais dias.`}>
+              Média diária: <strong>{fmtEuro(avgDaily)}</strong>{avgDaily > 0 ? <> · hoje {todayRevenue >= avgDaily ? '+' : '-'}{Math.round(Math.abs(todayRevenue / avgDaily - 1) * 100)}%</> : null}
+            </span>
+          )}
         </div>
 
         <Panel className="flex flex-col gap-3.5">
           <div className="flex items-start justify-between gap-3">
             <div>
               <h3 className="m-0 mb-0.5 text-[16px] font-extrabold">Receita — últimos 30 dias</h3>
-              <p className="m-0 text-xs text-[#8a8478]">Dinheiro vs. cartão, por dia</p>
+              <p className="m-0 text-xs text-[#8a8478]">Dinheiro, MB WAY e cartão, por dia · passe o rato por cima de um dia</p>
             </div>
             <button
               type="button"
@@ -114,27 +162,48 @@ export default function AdminOverview() {
               <p className="m-0 text-[12.5px] text-[#8a8478]">Sem vendas nos últimos 30 dias.</p>
             </>
           ) : (
-            <div className="flex items-end gap-1 h-[100px] overflow-x-auto pb-1">
-              {revenue.map((r) => {
-                const cash = r.cash || 0
-                const card = r.card || 0
-                const cashPct = Math.round((cash / maxDay) * 100)
-                const cardPct = Math.round((card / maxDay) * 100)
-                return (
-                  <div key={r._id} className="flex flex-col items-center gap-1 shrink-0 w-[22px]" title={`${fmtDay(r._id)}: ${fmtEuro(r.total)} (${r.count} vendas)`}>
-                    <div className="flex flex-col justify-end h-20 w-3 rounded overflow-hidden bg-[#eee9df]">
-                      <div className="bg-amber-400" style={{ height: `${cardPct}%` }} />
-                      <div className="bg-primary-500" style={{ height: `${cashPct}%` }} />
-                    </div>
-                    <div className="text-[10px] text-[#8a8478]">{fmtDay(r._id)}</div>
+            <div className="relative pt-1">
+              <div className="relative flex items-end gap-[3px] h-[104px]">
+                {/* the average: a dashed line across the bars */}
+                {avgDaily > 0 && (
+                  <div className="absolute left-0 right-0 border-t-2 border-dashed border-[#6366f1]/70 pointer-events-none z-[1]" style={{ bottom: `calc(20px + ${(avgDaily / maxDay) * 80}px)` }}>
+                    <span className="absolute right-0 -top-4 text-[10px] font-bold text-[#6366f1] bg-white/80 px-1 rounded">média {fmtEuro(avgDaily)}</span>
                   </div>
-                )
-              })}
+                )}
+                {days.map((d, i) => {
+                  const vol = d.cash + d.card + d.mbway
+                  const h = (n) => `${Math.round((n / maxDay) * 100)}%`
+                  const side = i < 6 ? 'left-0' : i > days.length - 7 ? 'right-0' : 'left-1/2 -translate-x-1/2'
+                  const vs = avgDaily > 0 ? Math.round((d.total / avgDaily - 1) * 100) : null
+                  return (
+                    <div key={d.key} className="group relative flex-1 min-w-0 flex flex-col items-center gap-1">
+                      <div className="flex flex-col justify-end h-20 w-full max-w-[16px] rounded overflow-hidden bg-[#eee9df] group-hover:ring-2 ring-[#6366f1]/40">
+                        <div className="bg-amber-400" style={{ height: h(d.card) }} />
+                        <div className="bg-[#6366f1]" style={{ height: h(d.mbway) }} />
+                        <div className="bg-primary-500" style={{ height: h(d.cash) }} />
+                      </div>
+                      <div className="h-4 text-[10px] text-[#8a8478] whitespace-nowrap">{i % 5 === 0 || i === days.length - 1 ? fmtDay(d.key) : ''}</div>
+                      {/* tooltip */}
+                      <div className={`hidden group-hover:block absolute bottom-full mb-1 z-20 w-[210px] ${side} rounded-xl bg-[#1c2530] text-white text-xs p-3 shadow-lg pointer-events-none`}>
+                        <div className="font-bold mb-1.5 capitalize">{weekdayShort(d.key)}, {fmtDay(d.key)} <span className="font-normal opacity-70">· {d.count} vendas</span></div>
+                        <div className="flex justify-between"><span><span className="inline-block w-2 h-2 rounded-sm bg-primary-500 mr-1.5" />Dinheiro</span><b>{fmtEuro(d.cash)}</b></div>
+                        <div className="flex justify-between"><span><span className="inline-block w-2 h-2 rounded-sm bg-[#6366f1] mr-1.5" />MB WAY</span><b>{fmtEuro(d.mbway)}</b></div>
+                        <div className="flex justify-between"><span><span className="inline-block w-2 h-2 rounded-sm bg-amber-400 mr-1.5" />Cartão (consumo)</span><b>{fmtEuro(d.card)}</b></div>
+                        <div className="flex justify-between border-t border-white/20 mt-1.5 pt-1.5"><span>Receita (dinheiro + MB WAY)</span><b>{fmtEuro(d.total)}</b></div>
+                        {vs !== null && <div className="mt-1 opacity-80">{vs >= 0 ? '+' : ''}{vs}% face à média diária ({fmtEuro(avgDaily)})</div>}
+                        <div className="mt-1 opacity-60">O consumo de cartão já foi contado quando o cartão foi recarregado.</div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           )}
           <div className="flex items-center gap-3.5 text-xs">
             <span className="flex items-center gap-1.5"><span className="w-[9px] h-[9px] rounded-[3px] bg-primary-500 inline-block" />Dinheiro</span>
+            <span className="flex items-center gap-1.5"><span className="w-[9px] h-[9px] rounded-[3px] bg-[#6366f1] inline-block" />MB WAY</span>
             <span className="flex items-center gap-1.5"><span className="w-[9px] h-[9px] rounded-[3px] bg-amber-400 inline-block" />Cartão</span>
+            {avgDaily > 0 && <span className="flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-[#6366f1] inline-block" />Média diária ({days.length} dias)</span>}
           </div>
         </Panel>
 
@@ -153,8 +222,64 @@ export default function AdminOverview() {
       </div>
 
       <Panel>
-        <h3 className="m-0 mb-[3px] text-[17px] font-extrabold">Utilização das máquinas</h3>
-        <p className="m-0 mb-3.5 text-[13px] text-[#8a8478]">Receita e nº de ciclos por máquina (todo o histórico)</p>
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+          <div>
+            <h3 className="m-0 mb-[3px] text-[17px] font-extrabold">Quando trabalha mais</h3>
+            <p className="m-0 text-[13px] text-[#8a8478]">Ciclos pagos nas máquinas ({rhythmMonth ? monthLabel(rhythmMonth) : 'todo o histórico'}), na hora da loja</p>
+          </div>
+          <select value={rhythmMonth} onChange={(e) => setRhythmMonth(e.target.value)} className="h-9 rounded-lg border border-black/10 bg-white px-3 text-sm capitalize">
+            <option value="">Todo o histórico</option>
+            {months.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}
+          </select>
+        </div>
+        {!rhythm || rhythm.parts.every((p) => !p.cycles) ? (
+          <p className="m-0 text-sm text-[#8a8478]">Sem dados de utilização ainda.</p>
+        ) : (
+          <div className="grid gap-8 lg:grid-cols-2">
+            {[
+              { title: 'Parte do dia', list: rhythm.parts, colors: ['#f6c026', '#43b8a8', '#6366f1'], unit: 'ciclos' },
+              { title: 'Dia da semana', list: rhythm.days, colors: ['#43b8a8', '#2f9e8f', '#7cd0c3', '#f6c026', '#f59e0b', '#6366f1', '#a78bfa'], unit: 'ciclos' },
+            ].map(({ title, list, colors }) => {
+              const total = list.reduce((s, x) => s + x.cycles, 0)
+              const best = list.reduce((b, x) => (x.cycles > (b?.cycles ?? -1) ? x : b), null)
+              return (
+                <div key={title} className="flex flex-wrap items-center gap-5">
+                  <DonutChart size={190} slices={list.map((x, i) => ({ key: x.key, label: x.label, value: x.cycles, color: colors[i % colors.length] }))}
+                    centre={{ big: total, small: 'ciclos' }} />
+                  <div className="flex-1 min-w-[220px]">
+                    <div className="text-xs font-semibold text-[#8a8478] mb-1.5">{title}{best && best.cycles > 0 ? <> · mais forte: <span className="text-emerald-700">{best.label}</span></> : null}</div>
+                    {list.map((x, i) => (
+                      <div key={x.key} className={`flex items-center gap-2.5 py-1.5 text-sm border-t border-black/[0.06] first:border-0 ${best && x.key === best.key ? 'font-bold' : ''}`}>
+                        <span className="w-3 h-3 rounded-sm shrink-0" style={{ background: colors[i % colors.length] }} />
+                        <span className="flex-1">{x.label}{x.hours ? <span className="text-[#8a8478] font-normal"> {x.hours}</span> : null}</span>
+                        <span className="tabular-nums">{x.cycles}</span>
+                        <span className="w-10 text-right text-[#8a8478] tabular-nums">{total > 0 ? Math.round((x.cycles / total) * 100) : 0}%</span>
+                        <span className="w-20 text-right tabular-nums">{fmtEuro(x.revenue)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </Panel>
+
+      <Panel>
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-3.5">
+          <div>
+            <h3 className="m-0 mb-[3px] text-[17px] font-extrabold">Utilização das máquinas</h3>
+            <p className="m-0 text-[13px] text-[#8a8478]">Receita e nº de ciclos por máquina ({month ? monthLabel(month) : 'todo o histórico'})</p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button type="button" disabled={!month || idx >= months.length - 1} onClick={() => setMonth(months[idx + 1])} className="h-9 w-9 rounded-lg border border-black/10 bg-white text-lg disabled:opacity-30" aria-label="Mês anterior">&lsaquo;</button>
+            <select value={month} onChange={(e) => setMonth(e.target.value)} className="h-9 rounded-lg border border-black/10 bg-white px-3 text-sm capitalize">
+              {months.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}
+              <option value="">Todo o histórico</option>
+            </select>
+            <button type="button" disabled={!month || idx <= 0} onClick={() => setMonth(months[idx - 1])} className="h-9 w-9 rounded-lg border border-black/10 bg-white text-lg disabled:opacity-30" aria-label="Mês seguinte">&rsaquo;</button>
+          </div>
+        </div>
         {machines.length === 0 ? (
           <p className="m-0 text-sm text-[#8a8478]">Sem dados de utilização ainda.</p>
         ) : (
@@ -165,6 +290,7 @@ export default function AdminOverview() {
                   <th className="py-2 px-2.5 font-semibold">Máquina</th>
                   <th className="py-2 px-2.5 font-semibold">Ciclos</th>
                   <th className="py-2 px-2.5 font-semibold">Receita</th>
+                  <th className="py-2 px-2.5 font-semibold">% da receita</th>
                 </tr>
               </thead>
               <tbody>
@@ -173,55 +299,46 @@ export default function AdminOverview() {
                     <td className="py-2.5 px-2.5">{m.machineInfo?.name || m._id}</td>
                     <td className="py-2.5 px-2.5">{m.usageCount}</td>
                     <td className="py-2.5 px-2.5 font-semibold">{fmtEuro(m.totalRevenue)}</td>
+                    <td className="py-2.5 px-2.5 text-[#8a8478]">{totalMachineRevenue > 0 ? `${Math.round((m.totalRevenue / totalMachineRevenue) * 100)}%` : '-'}</td>
                   </tr>
                 ))}
+                <tr className="border-t-2 border-black/15 font-extrabold">
+                  <td className="py-2.5 px-2.5">Total</td>
+                  <td className="py-2.5 px-2.5">{totalCycles}</td>
+                  <td className="py-2.5 px-2.5">{fmtEuro(totalMachineRevenue)}</td>
+                  <td className="py-2.5 px-2.5"></td>
+                </tr>
               </tbody>
             </table>
           </div>
         )}
       </Panel>
 
-      <Panel>
-        <h3 className="m-0 mb-[3px] text-[17px] font-extrabold">Frota de quiosques</h3>
-        <p className="m-0 mb-4 text-[13px] text-[#8a8478] max-w-[760px]">
-          "Online" aqui é a ligação em tempo real (agente legado) — um quiosque
-          offline-first pode estar a funcionar normalmente sem ela. Veja a
-          última atividade para o sinal real de que ainda está vivo.
-        </p>
-        {kiosks.length === 0 ? (
-          <p className="m-0 text-sm text-[#8a8478]">Nenhum quiosque registado.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr className="text-left text-[#8a8478] text-xs">
-                  <th className="py-2 px-2.5 font-semibold">Quiosque</th>
-                  <th className="py-2 px-2.5 font-semibold">Última atividade</th>
-                  <th className="py-2 px-2.5 font-semibold">Estado</th>
-                </tr>
-              </thead>
-              <tbody>
-                {kiosks.map((k) => {
-                  const mins = minutesSince(k.lastSeen)
-                  const stale = mins > 15
-                  return (
-                    <tr key={k.id} className="border-t border-black/[0.07]">
-                      <td className="py-2.5 px-2.5">{k.name}</td>
-                      <td className="py-2.5 px-2.5">
-                        {k.lastSeen ? shopDateTime(k.lastSeen) : 'Nunca'}
-                      </td>
-                      <td className="py-2.5 px-2.5">
-                        <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${stale ? 'bg-[#fef2f2] text-[#b91c1c]' : 'bg-[#ecfdf5] text-[#047857]'}`}>
-                          {stale ? 'Sem atividade recente' : 'Ativo'}
-                        </span>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+      {/* one slim card: the fleet is usually a single kiosk */}
+      <Panel className="!p-4">
+        <div className="flex flex-wrap items-center gap-x-8 gap-y-2">
+          <h3
+            className="m-0 text-[15px] font-extrabold"
+            title={'"Online" é a ligação em tempo real (agente legado): um quiosque offline-first pode funcionar normalmente sem ela. A última atividade é o sinal real de que está vivo.'}
+          >
+            Quiosques
+          </h3>
+          {kiosks.length === 0 ? (
+            <span className="text-sm text-[#8a8478]">Nenhum quiosque registado.</span>
+          ) : kiosks.map((k) => {
+            const stale = minutesSince(k.lastSeen) > 15
+            return (
+              <div key={k.id} className="flex items-center gap-2.5 text-sm">
+                <span className={`w-2 h-2 rounded-full ${stale ? 'bg-[#b91c1c]' : 'bg-[#10b981]'}`} />
+                <span className="font-semibold">{k.name}</span>
+                <span className="text-[#8a8478]">{k.lastSeen ? shopDateTime(k.lastSeen) : 'Nunca'}</span>
+                <span className={`px-2 py-0.5 rounded-full text-xs font-bold ${stale ? 'bg-[#fef2f2] text-[#b91c1c]' : 'bg-[#ecfdf5] text-[#047857]'}`}>
+                  {stale ? 'Sem atividade recente' : 'Ativo'}
+                </span>
+              </div>
+            )
+          })}
+        </div>
       </Panel>
     </div>
   )

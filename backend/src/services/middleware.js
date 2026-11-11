@@ -2595,8 +2595,16 @@ class Middleware extends EventEmitter {
           this.emit('hardware-version', { version: pkg.data })
         }
         break
-      case 'config_int':
       case 'config_per':
+        // The answer to a peripheral configuration lists each device it found; one that did not answer carries an `error` (the bill
+        // acceptor answered "-1" on 08/11 21:33, 10/11 06:40 and 11/11 12:39 and was silent until the next automatic re-init).
+        if (Array.isArray(pkg.per)) {
+          const errors = pkg.per.filter((d) => d && d.error !== undefined && String(d.error) !== '0').map((d) => ({ type: d.type, addr: d.addr, error: String(d.error) }))
+          if (errors.length) this.emit('peripheral-config-error', { errors })
+          else this.emit('peripheral-config-ok', { found: pkg.per.length })
+        }
+        break
+      case 'config_int':
       case 'print-receipt':
       case 'card-release':
       case 'get-change':
