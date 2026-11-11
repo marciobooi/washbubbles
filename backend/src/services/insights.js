@@ -31,7 +31,7 @@ const monthOf = (day) => day.slice(0, 7)
 const median = (a) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)] }
 
 /** Compare "so far this week/month" with the same stretch of the previous one. `byDay` is day -> revenue. */
-export function periodComparison(byDay, today) {
+export function periodComparison(byDay, today, firstDay = null) {
   const sum = (from, to) => { let t = 0; for (let d = from; d <= to; d = shiftDay(d, 1)) t += byDay.get(d) || 0; return r2(t) }
   const dow = lisbon(today + 'T12:00:00Z').dow
   const weekStart = shiftDay(today, -(dow - 1))
@@ -41,10 +41,12 @@ export function periodComparison(byDay, today) {
   const dayN = Number(today.slice(8))
   const prevMonthLast = shiftDay(monthStart, -1)
   const prevMonthTo = Number(prevMonthLast.slice(8)) >= dayN ? prevMonthLast.slice(0, 8) + String(dayN).padStart(2, '0') : prevMonthLast
-  const mk = (cur, prev, prevFull) => ({ current: cur, previous: prev, previousFull: prevFull, deltaPct: prev > 0 ? Math.round((cur / prev - 1) * 100) : null })
+  // The shop only started on `firstDay`: a previous period that began before it was never complete, so comparing with it would show
+  // a huge, meaningless rise (month 1 against 11 days of the month before the first sale). Then there is no percentage.
+  const mk = (cur, prev, prevFull, prevStart) => ({ current: cur, previous: prev, previousFull: prevFull, partial: Boolean(firstDay && firstDay > prevStart), deltaPct: prev > 0 && !(firstDay && firstDay > prevStart) ? Math.round((cur / prev - 1) * 100) : null })
   return {
-    week: mk(sum(weekStart, today), sum(prevWeekStart, shiftDay(prevWeekStart, dow - 1)), sum(prevWeekStart, shiftDay(prevWeekStart, 6))),
-    month: mk(sum(monthStart, today), sum(prevMonthStart, prevMonthTo), sum(prevMonthStart, prevMonthLast)),
+    week: mk(sum(weekStart, today), sum(prevWeekStart, shiftDay(prevWeekStart, dow - 1)), sum(prevWeekStart, shiftDay(prevWeekStart, 6)), prevWeekStart),
+    month: mk(sum(monthStart, today), sum(prevMonthStart, prevMonthTo), sum(prevMonthStart, prevMonthLast), prevMonthStart),
     weekStart, monthStart,
   }
 }
@@ -80,7 +82,8 @@ export async function computeInsights(tenantId, { days = 30, now = new Date() } 
     const d = lisbon(s.createdAt).day
     byDay.set(d, (byDay.get(d) || 0) + (Number(s.amount) || 0))
   }
-  const revenue = periodComparison(byDay, today)
+  const first = await Sale.findOne({ tenantId: tid, method: { $in: ['cash', 'mbway'] } }).sort({ createdAt: 1 }).select('createdAt').lean()
+  const revenue = periodComparison(byDay, today, first ? lisbon(first.createdAt).day : null)
 
   // ── what the window holds: machine payments = cycles ──
   const inWin = recent.filter((s) => s.createdAt >= windowStart)
@@ -95,22 +98,28 @@ export async function computeInsights(tenantId, { days = 30, now = new Date() } 
   const ticket = { perCycle: pays.length ? r2(total / pays.length) : 0, perVisit: visits.size ? r2(total / visits.size) : 0, visits: visits.size, cycles: pays.length }
 
   // ── machines, wash/dry, hours ──
-  const per = new Map(machines.map((m) => [String(m._id), { id: String(m._id), name: m.name, type: m.type, cycles: 0, revenue: 0, minutes: 0, lastUsedAt: null }]))
+  const per = new Map(machines.map((m) => [String(m._id), { id: String(m._id), name: m.name, type: m.type, cycles: 0, adminStarts: 0, revenue: 0, minutes: 0, lastUsedAt: null }]))
+  // the staff's own starts (no money) also keep a machine busy: they count in its occupancy, apart from its paid cycles
+  const starts = inWin.filter((s) => s.type === 'admin_start' && s.machineId && mById.has(String(s.machineId)))
   const hourCycles = Array(24).fill(0)
   const hourMinutes = Array(24).fill(0)
   const firstLast = new Map() // day -> [first hour, last hour]
-  for (const s of pays) {
+  for (const s of [...pays, ...starts]) {
     const m = mById.get(String(s.machineId))
     const row = per.get(String(s.machineId))
     const mins = minutesOf(s, m)
-    row.cycles++; row.revenue += Number(s.amount) || 0; row.minutes += mins
+    const paid = s.type === 'payment'
+    if (paid) { row.cycles++; row.revenue += Number(s.amount) || 0 } else row.adminStarts++
+    row.minutes += mins
     const L = lisbon(s.createdAt)
-    hourCycles[L.hour]++
+    if (paid) hourCycles[L.hour]++
     let left = mins
     let at = L.hour * 60 + L.minute
     while (left > 0) { const inHour = Math.min(left, 60 - (at % 60)); hourMinutes[Math.floor(at / 60) % 24] += inHour; left -= inHour; at += inHour }
-    const fl = firstLast.get(L.day) || [24, -1]
-    firstLast.set(L.day, [Math.min(fl[0], L.hour), Math.max(fl[1], L.hour)])
+    if (paid) {
+      const fl = firstLast.get(L.day) || [24, -1]
+      firstLast.set(L.day, [Math.min(fl[0], L.hour), Math.max(fl[1], L.hour)])
+    }
   }
   // last use ever (not only the window): a machine nobody uses stands out
   const lastUse = await Sale.aggregate([
@@ -120,7 +129,7 @@ export async function computeInsights(tenantId, { days = 30, now = new Date() } 
   for (const x of lastUse) { const row = per.get(String(x._id)); if (row) row.lastUsedAt = x.last }
   const availMin = openHours * 60 * windowDays
   const machineRows = [...per.values()].map((r) => ({
-    id: r.id, name: r.name, type: r.type, cycles: r.cycles, revenue: r2(r.revenue),
+    id: r.id, name: r.name, type: r.type, cycles: r.cycles, adminStarts: r.adminStarts, revenue: r2(r.revenue),
     occupancyPct: availMin > 0 ? Math.min(100, Math.round((r.minutes / availMin) * 100)) : 0,
     lastUsedAt: r.lastUsedAt, daysSinceUse: r.lastUsedAt ? Math.floor((now - new Date(r.lastUsedAt)) / DAY) : null,
   })).sort((a, b) => b.revenue - a.revenue || String(a.name).localeCompare(String(b.name), 'pt', { numeric: true }))

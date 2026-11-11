@@ -91,3 +91,37 @@ describe('Machine usage: every machine, and sales that lost their machine get it
     expect(r.days).to.have.length(7)
   })
 })
+
+describe('Staff starts per machine, and the shop sending the machine of old sales', function () {
+  this.timeout(20000)
+  let app, tenant, admin, kiosk, Machine, Sale, l1
+  before(async () => { await startTestDb(); app = await buildTestApp(); Machine = (await import('../src/models/machine.js')).default; Sale = (await import('../src/models/sale.js')).default })
+  after(async () => { await stopTestDb() })
+  beforeEach(async () => {
+    await clearTestDb()
+    ;({ tenant, admin, kiosk } = await seedTenantAndUsers())
+    l1 = await Machine.create({ tenantId: tenant._id, name: 'Lavar 1', type: 'wash' })
+  })
+
+  it('the usage table counts the staff\'s own starts apart from the paid cycles', async () => {
+    await Sale.create({ tenantId: tenant._id, machineId: l1._id, amount: 5, method: 'cash', type: 'payment', items: [{}] })
+    await Sale.create({ tenantId: tenant._id, machineId: l1._id, amount: 0, method: 'cash', type: 'admin_start' })
+    await Sale.create({ tenantId: tenant._id, machineId: l1._id, amount: 0, method: 'cash', type: 'admin_start' })
+    const rows = (await request(app).get('/api/admin/analytics/machines').set({ Authorization: `Bearer ${signToken(admin)}` })).body
+    expect(rows[0]).to.include({ usageCount: 1, adminStarts: 2, totalRevenue: 5 })
+  })
+
+  it('the shop sends the machine of sales the central server holds without it: only for its own machines, only where missing', async () => {
+    const mine = await Sale.create({ tenantId: tenant._id, amount: 0, type: 'admin_start', method: 'cash', metadata: { localId: 'shop-sale-1' } })
+    const has = await Sale.create({ tenantId: tenant._id, machineId: l1._id, amount: 0, type: 'admin_start', metadata: { localId: 'shop-sale-2' } })
+    const other = await Machine.create({ tenantId: (await (await import('../src/models/tenant.js')).default.create({ name: 'Other', slug: 'other-x' }))._id, name: 'Foreign', type: 'wash' })
+    const post = (items) => request(app).post('/api/sync/push/sale-machines').set({ Authorization: `ApiKey ${kiosk.apiKey}` }).send({ items })
+    const r = await post([{ local_id: 'shop-sale-1', machine_id: String(l1._id) }, { local_id: 'shop-sale-2', machine_id: String(l1._id) }, { local_id: 'nope', machine_id: String(l1._id) }, { local_id: 'x', machine_id: 'garbage' }])
+    expect(r.status).to.equal(200)
+    expect(r.body.updated).to.equal(1)
+    expect(String((await Sale.findById(mine._id)).machineId)).to.equal(String(l1._id))
+    expect(String((await Sale.findById(has._id)).machineId)).to.equal(String(l1._id))
+    const foreign = await post([{ local_id: 'shop-sale-1', machine_id: String(other._id) }])
+    expect(foreign.body.updated).to.equal(0) // another shop's machine is never accepted
+  })
+})

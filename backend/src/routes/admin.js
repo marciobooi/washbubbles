@@ -1904,11 +1904,19 @@ router.get('/analytics/machines', requireStaffRead, async (req, res) => {
     { $unwind: "$machineInfo" },
     { $sort: { totalRevenue: -1 } }
   ])
+  // The staff's own starts (no money): counted apart, as cycles the machine really did
+  const adminRows = await withTenant(Sale, req).aggregate([
+    { $match: { tenantId: new mongoose.Types.ObjectId(req.tenantId), machineId: { $ne: null }, type: 'admin_start', status: { $ne: 'refunded' },
+      ...(month ? { $expr: { $eq: [{ $dateToString: { format: '%Y-%m', date: '$createdAt', timezone: 'Europe/Lisbon' } }, month] } } : {}) } },
+    { $group: { _id: '$machineId', n: { $sum: 1 } } },
+  ])
+  const adminBy = new Map(adminRows.map((x) => [String(x._id), x.n]))
+  stats.forEach((s) => { s.adminStarts = adminBy.get(String(s._id)) || 0 })
   // Every machine of the shop is listed, also one that was never used (it used to be left out, so the table looked incomplete).
   const seen = new Set(stats.map((s) => String(s._id)))
   const idle = (await withTenant(Machine, req).find({}).lean()).filter((m) => !seen.has(String(m._id)))
     .sort((a, b) => String(a.name).localeCompare(String(b.name), 'pt', { numeric: true }))
-    .map((m) => ({ _id: m._id, totalRevenue: 0, usageCount: 0, machineInfo: m }))
+    .map((m) => ({ _id: m._id, totalRevenue: 0, usageCount: 0, adminStarts: adminBy.get(String(m._id)) || 0, machineInfo: m }))
   res.json([...stats, ...idle])
 })
 

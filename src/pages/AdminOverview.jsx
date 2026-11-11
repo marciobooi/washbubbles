@@ -101,6 +101,7 @@ export default function AdminOverview() {
   const monthLabel = (m) => { const [y, mo] = m.split('-'); const s = new Date(Number(y), Number(mo) - 1, 1).toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' }); return s.charAt(0).toUpperCase() + s.slice(1) }
   const idx = months.indexOf(month)
   const totalCycles = machines.reduce((s, m) => s + (m.usageCount || 0), 0)
+  const totalAdmin = machines.reduce((s, m) => s + (m.adminStarts || 0), 0)
   const totalMachineRevenue = machines.reduce((s, m) => s + (m.totalRevenue || 0), 0)
 
   const totalRevenue30d = revenue.reduce((s, r) => s + (r.total || 0), 0)
@@ -305,7 +306,9 @@ export default function AdminOverview() {
               <thead>
                 <tr className="text-left text-[#8a8478] text-xs">
                   <th className="py-2 px-2.5 font-semibold">Máquina</th>
-                  <th className="py-2 px-2.5 font-semibold">Ciclos</th>
+                  <th className="py-2 px-2.5 font-semibold" title="Ciclos pagos pelos clientes (dinheiro, cartão ou MB WAY)">Ciclos pagos</th>
+                  <th className="py-2 px-2.5 font-semibold" title="Arranques feitos pelo staff ou pelo admin, sem pagamento">Admin</th>
+                  <th className="py-2 px-2.5 font-semibold" title="Ciclos pagos + arranques do admin: quantas vezes a máquina trabalhou">Total ciclos</th>
                   <th className="py-2 px-2.5 font-semibold">Receita</th>
                   <th className="py-2 px-2.5 font-semibold">% da receita</th>
                   {insights && <th className="py-2 px-2.5 font-semibold">Ocupação (30 dias)</th>}
@@ -321,6 +324,8 @@ export default function AdminOverview() {
                   <tr key={m._id} className="border-t border-black/[0.07]">
                     <td className="py-2.5 px-2.5">{m.machineInfo?.name || m._id}</td>
                     <td className="py-2.5 px-2.5">{m.usageCount}</td>
+                    <td className="py-2.5 px-2.5 text-[#8a8478]">{m.adminStarts || 0}</td>
+                    <td className="py-2.5 px-2.5 font-semibold">{(m.usageCount || 0) + (m.adminStarts || 0)}</td>
                     <td className="py-2.5 px-2.5 font-semibold">{fmtEuro(m.totalRevenue)}</td>
                     <td className="py-2.5 px-2.5 text-[#8a8478]">{totalMachineRevenue > 0 ? `${Math.round((m.totalRevenue / totalMachineRevenue) * 100)}%` : '-'}</td>
                     {insights && (
@@ -342,6 +347,8 @@ export default function AdminOverview() {
                 <tr className="border-t-2 border-black/15 font-extrabold">
                   <td className="py-2.5 px-2.5">Total</td>
                   <td className="py-2.5 px-2.5">{totalCycles}</td>
+                  <td className="py-2.5 px-2.5">{totalAdmin}</td>
+                  <td className="py-2.5 px-2.5">{totalCycles + totalAdmin}</td>
                   <td className="py-2.5 px-2.5">{fmtEuro(totalMachineRevenue)}</td>
                   <td className="py-2.5 px-2.5"></td>
                   {insights && <td className="py-2.5 px-2.5"></td>}

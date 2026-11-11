@@ -1,8 +1,10 @@
 import React from 'react'
 import { fmtEuro, CARD_CLASS } from './fmt'
 
-function DeltaChip({ pct, previous, unit }) {
-  const tip = `Compara com os mesmos dias da ${unit} anterior (${fmtEuro(previous)}), para ser justo a meio do período.`
+function DeltaChip({ pct, previous, unit, partial }) {
+  const tip = partial
+    ? `A loja ainda não tinha vendas durante todo o ${unit} anterior, por isso não há uma comparação justa. Aparece quando houver um ${unit} anterior completo.`
+    : `Compara com os mesmos dias da ${unit} anterior (${fmtEuro(previous)}), para ser justo a meio do período.`
   if (pct == null) {
     return <span title={tip} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-[#f1efe9] text-[#8a8478]">sem comparação</span>
   }
@@ -43,12 +45,12 @@ export default function ControlKpis({ data }) {
       </Kpi>
       <Kpi label="Esta semana">
         <span className={BIG}>{fmtEuro(revenue?.week?.current)}</span>
-        <div><DeltaChip pct={revenue?.week?.deltaPct} previous={revenue?.week?.previous} unit="semana" /></div>
+        <div><DeltaChip pct={revenue?.week?.deltaPct} previous={revenue?.week?.previous} partial={revenue?.week?.partial} unit="semana" /></div>
         <span className={SMALL}>mesmo período da semana anterior: {fmtEuro(revenue?.week?.previous)}</span>
       </Kpi>
       <Kpi label="Este mês">
         <span className={BIG}>{fmtEuro(revenue?.month?.current)}</span>
-        <div><DeltaChip pct={revenue?.month?.deltaPct} previous={revenue?.month?.previous} unit="mês" /></div>
+        <div><DeltaChip pct={revenue?.month?.deltaPct} previous={revenue?.month?.previous} partial={revenue?.month?.partial} unit="mês" /></div>
         <span className={SMALL}>mesmo período do mês anterior: {fmtEuro(revenue?.month?.previous)}</span>
       </Kpi>
       <Kpi label="Ticket médio">

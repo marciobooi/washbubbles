@@ -28,6 +28,10 @@ describe('Owner insights', function () {
     expect(c.week).to.include({ current: 60, previous: 15, previousFull: 65, deltaPct: 300 }) // Mon-Wed against last Mon-Wed
     expect(c.month).to.include({ current: 60 + 65, previous: 7 + 0, deltaPct: null === 0 ? 0 : Math.round(((125) / 7 - 1) * 100) })
     expect(c.weekStart).to.equal('2026-11-09')
+    // a shop that started on 19 October has no complete October: no percentage for the month, but the week still compares
+    const young = periodComparison(byDay, '2026-11-11', '2026-10-19')
+    expect(young.month).to.include({ partial: true, deltaPct: null })
+    expect(young.week).to.include({ partial: false, deltaPct: 300 })
   })
 
   it('knows the shop clock (summer time) and the ISO weekday', () => {

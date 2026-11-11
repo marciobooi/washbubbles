@@ -97,6 +97,20 @@ router.post('/mail', async (req, res) => {
   }
 })
 
+// ─── The machine of sales that reached this server without it (once, from the shop: see Uplink.backfillSaleMachines) ───
+// { items: [{ local_id, machine_id }] }: sets machineId on the sale this shop pushed with that local id, only where it has none and only
+// for a machine of this shop. Never fails the shop because of one bad row.
+router.post('/push/sale-machines', async (req, res) => {
+  const rows = Array.isArray(req.body?.items) ? req.body.items.slice(0, 500) : []
+  const MachineT = withTenant(Machine, req)
+  const mine = new Set((await MachineT.find({ _id: { $in: rows.map((r) => r?.machine_id).filter((v) => mongoose.isValidObjectId(v)) } }).select('_id').lean()).map((m) => String(m._id)))
+  const ops = rows
+    .filter((r) => r && typeof r.local_id === 'string' && r.local_id.length <= 64 && mine.has(String(r.machine_id)))
+    .map((r) => ({ updateOne: { filter: { tenantId: req.tenantId, 'metadata.localId': r.local_id, machineId: { $in: [null, undefined] } }, update: { $set: { machineId: new mongoose.Types.ObjectId(String(r.machine_id)) } } } }))
+  const done = ops.length ? await Sale.bulkWrite(ops, { ordered: false }) : { modifiedCount: 0 }
+  res.json({ success: true, updated: done.modifiedCount || 0 })
+})
+
 // ─── Push: POS → Server ───
 
 // A sale whose items are not valid JSON is still a sale: keep the money, drop the unreadable detail (a 500 here was retried for ever).

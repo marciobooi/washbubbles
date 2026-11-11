@@ -23,6 +23,7 @@ import Card, { onCardChanged } from '../models/card.js'
 import Peripheral from '../models/peripheral.js'
 import Flow from '../models/flow.js'
 import Machine from '../models/machine.js'
+import Sale from '../models/sale.js'
 import AuditLog from '../models/auditLog.js'
 import Setting from '../models/setting.js'
 import modelEvents from './modelEvents.js'
@@ -179,6 +180,7 @@ export class Uplink extends EventEmitter {
     this.timer.unref?.()
     this.flush().catch(() => {}) // drain anything left from before a restart
     this.backfillAudit().catch((e) => console.warn('[Uplink] audit backfill skipped:', e.message))
+    setTimeout(() => this.backfillSaleMachines().catch((e) => console.warn('[Uplink] machines of old sales skipped:', e.message)), 30_000).unref?.()
     // Live peripheral health is a state, not an event: it is sent as-is, never queued.
     this.statusTimer = setInterval(() => this.pushPeripheralStatus().catch(() => {}), this.statusIntervalMs)
     this.statusTimer.unref?.()
@@ -224,6 +226,25 @@ export class Uplink extends EventEmitter {
     await Setting.updateOne({ tenantId: this.tenantId, key }, { $set: { value: new Date().toISOString() } }, { upsert: true })
     if (rows.length) console.log(`[Uplink] ${rows.length} earlier audit entries queued for the central server`)
     return rows.length
+  }
+
+  /**
+   * ONCE: the machine of the shop's earlier sales goes up to the central server, which received them without it (the staff's own starts
+   * carry no machine in their line, so only this shop knows it). Sent in chunks; the flag is a setting, set only when everything went.
+   */
+  async backfillSaleMachines() {
+    const key = 'sync.saleMachinesBackfilled'
+    if (!this.enabled || await Setting.findOne({ tenantId: this.tenantId, key }).lean()) return 0
+    const rows = await Sale.find({ tenantId: this.tenantId, machineId: { $ne: null } }).select('machineId').lean()
+    let updated = 0
+    for (let i = 0; i < rows.length; i += 400) {
+      const chunk = rows.slice(i, i + 400).map((s) => ({ local_id: String(s._id), machine_id: String(s.machineId) }))
+      const res = await this.post('/sync/push/sale-machines', { items: chunk })
+      updated += Number((await res.json().catch(() => ({}))).updated) || 0
+    }
+    await Setting.updateOne({ tenantId: this.tenantId, key }, { $set: { value: new Date().toISOString() } }, { upsert: true })
+    if (rows.length) console.log(`[Uplink] the machine of ${rows.length} earlier sale(s) sent to the central server (${updated} updated there)`)
+    return updated
   }
 
   /** Queue one record. Idempotent: an already-pending record is refreshed, not duplicated. */
