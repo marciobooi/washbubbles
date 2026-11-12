@@ -32,11 +32,15 @@ export function _setFetch(f) { fetchImpl = f || ((...a) => globalThis.fetch(...a
 const err = (status, code, message) => Object.assign(new Error(message || code), { status, code })
 
 export async function mbwaySettings(tenantId) {
-  const rows = await Setting.find({ tenantId, key: { $in: ['payments.mbway.enabled', 'payments.mbway.apiKey', 'payments.mbway.env'] } }).lean()
+  const rows = await Setting.find({ tenantId, key: { $in: ['payments.mbway.enabled', 'payments.mbway.apiKey', 'payments.mbway.env', 'payments.mbway.qr', 'payments.mbway.typed'] } }).lean()
   const m = Object.fromEntries(rows.map((r) => [r.key, r.value]))
   const on = m['payments.mbway.enabled']
+  // The two ways to give the number: the QR (phone camera) and the box at the kiosk. Both are on unless the admin switched one off.
+  const way = (v) => !(v === false || v === 'false' || v === 0 || v === '0')
   return {
     enabled: on === true || on === 'true' || on === 1 || on === '1',
+    qr: way(m['payments.mbway.qr']),
+    typed: way(m['payments.mbway.typed']),
     apiKey: String(m['payments.mbway.apiKey'] || '').trim(),
     env: m['payments.mbway.env'] === 'production' ? 'production' : 'sandbox',
   }

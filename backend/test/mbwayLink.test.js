@@ -197,4 +197,33 @@ describe('MB WAY by QR (shop side, central simulated)', function () {
     expect(createCalls).to.equal(0)
   })
 
+
+  it('the admin chooses how the number is given: the QR, the box at the kiosk, or both (both by default)', async () => {
+    const setWay = (key, value) => Setting.findOneAndUpdate({ tenantId: tenant._id, key }, { $set: { value } }, { upsert: true })
+    const cfg = async () => (await request(app).get('/api/gateways/mbway/config').set(auth())).body
+    const typed = async () => (await request(app).post('/api/gateways/mbway/start').set(auth()).send({ items: await items(), phone: '912345678', batchId: 'b-t' })).status
+
+    // a payment started from the box reserves the machine: free it between the steps
+    const reset = async () => { const m = (await import('mongoose')).default; await m.connection.db.collection('mbwaypayments').deleteMany({}); await Machine.updateOne({ name: 'Lavar 1' }, { $set: { status: 'free' } }) }
+    expect(await cfg()).to.include({ enabled: true, qr: true, typed: true })
+    expect((await mkLink()).status).to.equal(201)
+    expect(await typed()).to.equal(201)
+    await reset()
+
+    await setWay('payments.mbway.qr', false)                       // only the box
+    expect(await cfg()).to.include({ enabled: true, qr: false, typed: true })
+    const noQr = await mkLink()
+    expect(noQr.status).to.equal(409); expect(noQr.body.code).to.equal('mbway-off')
+    expect(await typed()).to.equal(201)
+    await reset()
+
+    await setWay('payments.mbway.qr', true); await setWay('payments.mbway.typed', false)   // only the QR
+    expect(await cfg()).to.include({ enabled: true, qr: true, typed: false })
+    expect((await mkLink()).status).to.equal(201)
+    const noBox = await typed()
+    expect(noBox).to.equal(409)
+
+    await setWay('payments.mbway.qr', false)                       // neither: MB WAY is not offered at all
+    expect((await cfg()).enabled).to.equal(false)
+  })
 })

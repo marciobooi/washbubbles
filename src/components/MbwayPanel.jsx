@@ -21,7 +21,8 @@ const mmss = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)); return `${Ma
 // The server prices all of them itself; the screen only says WHAT is being bought.
 export default function MbwayPanel({ items, total, couponCode, batchId, kind = 'machines', extra = null, onPaid, onClose, onAbandon }) {
   const { t } = useTranslation('cart')
-  const [step, setStep] = React.useState('choose') // choose (type the number here, or scan a QR with the phone CAMERA) | phone | sending | qr | waiting | problem
+  const [modes, setModes] = React.useState(null) // { qr, typed }: which ways to give the number the admin switched on
+  const [step, setStep] = React.useState('sending') // choose (type the number here, or scan a QR with the phone CAMERA) | phone | sending | qr | waiting | problem
   // ONE QR = ONE session: a new code every time, and giving the screen up (back, cancel, error, retry, close) ends the code for good
   const [link, setLink] = React.useState(null) // { token, url, qr }
   const linkRef = React.useRef(null)
@@ -54,7 +55,27 @@ export default function MbwayPanel({ items, total, couponCode, batchId, kind = '
   }
   // Back, retry and a payment cancelled by the shop go back to the choice. A QR is only made when the customer asks for it, and always a NEW one:
   // the bank apps' own QR scanner cannot read it (it is a page for the phone camera), so typing the number here is the first and main way.
-  function backToChoose() { dropLink(); setLink(null); setPay(null); setPhone(''); setStep('choose') }
+  // With both ways on the customer chooses; with one on, that one opens straight away (and "back" leaves the panel).
+  function backToChoose() {
+    dropLink(); setLink(null); setPay(null); setPhone('')
+    if (modes?.qr && modes?.typed) setStep('choose')
+    else if (modes?.qr) chooseQr()
+    else setStep('phone')
+  }
+  const both = Boolean(modes?.qr && modes?.typed)
+  React.useEffect(() => {
+    let off = false
+    call('/config').then((c) => {
+      if (off) return
+      const m = { qr: c?.qr !== false, typed: c?.typed !== false }
+      if (!m.qr && !m.typed) { setProblem(t('mbwayOff')); setStep('problem'); return }
+      setModes(m)
+      if (m.qr && m.typed) setStep('choose')
+      else if (m.qr) chooseQr()
+      else setStep('phone')
+    }).catch(() => { if (!off) { setModes({ qr: true, typed: true }); setStep('choose') } })
+    return () => { off = true }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // QR on screen: ask the shop every 2 s whether the customer has typed the number on their phone
   React.useEffect(() => {
@@ -150,7 +171,7 @@ export default function MbwayPanel({ items, total, couponCode, batchId, kind = '
             <img src={link.qr} alt="QR" className="mx-auto w-[360px] h-[360px] rounded-2xl border-2 border-slate-200" />
             <div className="text-xl text-slate-600 text-center">{t('mbwayScanHint')}</div>
             <div className="text-center text-slate-500 text-lg tabular-nums">{t('mbwayQrValid', { time: mmss(new Date(link.expiresAt).getTime() - now) })}</div>
-            <button type="button" onClick={backToChoose} className="h-[72px] rounded-2xl bg-slate-100 text-slate-600 font-bold text-2xl active:scale-[0.98]">{t('mbwayBack')}</button>
+            <button type="button" onClick={both ? backToChoose : cancel} className="h-[72px] rounded-2xl bg-slate-100 text-slate-600 font-bold text-2xl active:scale-[0.98]">{t('mbwayBack')}</button>
           </>
         )}
 
@@ -168,7 +189,7 @@ export default function MbwayPanel({ items, total, couponCode, batchId, kind = '
               ))}
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <button type="button" onClick={backToChoose} className="h-[72px] rounded-2xl bg-slate-100 text-slate-600 font-bold text-2xl active:scale-[0.98]">{t('mbwayBack')}</button>
+              <button type="button" onClick={both ? backToChoose : cancel} className="h-[72px] rounded-2xl bg-slate-100 text-slate-600 font-bold text-2xl active:scale-[0.98]">{t('mbwayBack')}</button>
               <button type="button" disabled={step === 'sending' || phone.length < 9} onClick={send} className="h-[72px] rounded-2xl bg-[#d3101c] text-white font-bold text-2xl disabled:opacity-40 active:scale-[0.98]">{step === 'sending' ? t('mbwaySending') : t('mbwaySend')}</button>
             </div>
           </>

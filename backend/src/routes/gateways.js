@@ -516,7 +516,7 @@ const mbwayFail = (res, e) => {
 
 router.get('/mbway/config', requireKiosk, async (req, res) => {
   const cfg = await mbwaySettings(req.tenantId)
-  res.json({ enabled: Boolean(cfg.enabled && cfg.apiKey && coinMachine.running), minAmount: MBWAY_MIN })
+  res.json({ enabled: Boolean(cfg.enabled && cfg.apiKey && coinMachine.running && (cfg.qr || cfg.typed)), qr: cfg.qr, typed: cfg.typed, minAmount: MBWAY_MIN })
 })
 
 // What MB WAY needs from this shop PC: how to price machines, and which card is in the reader right now (the shop's own reading).
@@ -526,6 +526,7 @@ const KINDS = ['machines', 'card_purchase', 'recharge']
 router.post('/mbway/start', requireKiosk, async (req, res) => {
   try {
     if (!coinMachine.running) return res.status(409).json({ error: 'MB WAY is only available at the shop', code: 'mbway-off' })
+    if (!(await mbwaySettings(req.tenantId)).typed) return res.status(409).json({ error: 'Typing the number at the kiosk is switched off', code: 'mbway-off' })
     const { items, phone, batchId, couponCode, expectedAmount, kind, customer, amount, cardCode } = req.body || {}
     res.status(201).json(await startPayment({ tenantId: req.tenantId, items, phone, batchId, couponCode, kind: KINDS.includes(kind) ? kind : 'machines', customer, amount, cardCode, expectedAmount: Number.isFinite(Number(expectedAmount)) ? Number(expectedAmount) : undefined }, mbwayDeps()))
   } catch (e) { mbwayFail(res, e) }
@@ -539,6 +540,7 @@ const dropOldLinks = () => { const now = Date.now(); for (const [k, v] of mbwayL
 router.post('/mbway/link', requireKiosk, async (req, res) => {
   try {
     if (!coinMachine.running) return res.status(409).json({ error: 'MB WAY is only available at the shop', code: 'mbway-off' })
+    if (!(await mbwaySettings(req.tenantId)).qr) return res.status(409).json({ error: 'The QR code is switched off', code: 'mbway-off' })
     const { items, batchId, couponCode, kind: rawKind, customer, amount, cardCode } = req.body || {}
     const kind = KINDS.includes(rawKind) ? rawKind : 'machines'
     const { resolved } = await priceCart({ tenantId: req.tenantId, items, couponCode, kind, amount, cardCode }, mbwayDeps())
