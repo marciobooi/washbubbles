@@ -34,11 +34,14 @@ function SummaryPanel({ summary }) {
   // and the admin's own float top-ups are the shop's money, not the customers': they do not count, they are shown for information.
   const fromCustomers = Number(summary.totalCash ?? sold + recharges)
   const toBank = Math.max(0, Math.round((fromCustomers - withdrawn) * 100) / 100)
-  // The notes are all known (the acceptor says which note went in) and are never given back: they all go to the bank. The rest of the
-  // amount is coins; when the notes are MORE than the amount (change was paid out of the hopper in coins) the difference is coins to put
-  // back in the hopper instead.
-  const noteRows = (summary.acceptedDenominations || []).filter((d) => Number(d.value) >= 5 && Number(d.count) > 0)
-  const notesTotal = Math.round(noteRows.reduce((s, d) => s + Number(d.value) * Number(d.count), 0) * 100) / 100
+  // What goes to the bank is made of WHOLE NOTES (never given back, and the acceptor says which note went in) as many as fit in the amount,
+  // and the rest in coins that the hopper pays out like change. The notes that do not fit stay in the cash box as part of the float.
+  const noteRows = (summary.acceptedDenominations || []).filter((d) => Number(d.value) >= 5 && Number(d.count) > 0).sort((x, y) => y.value - x.value)
+  let room = toBank
+  const takeNotes = noteRows.map((d) => { const n = Math.min(Number(d.count), Math.floor((room + 0.0001) / Number(d.value))); room = Math.round((room - n * Number(d.value)) * 100) / 100; return { value: Number(d.value), take: n, left: Number(d.count) - n } })
+  const notesToBank = takeNotes.filter((d) => d.take > 0)
+  const notesStay = takeNotes.filter((d) => d.left > 0)
+  const notesTotal = Math.round(notesToBank.reduce((s, d) => s + d.value * d.take, 0) * 100) / 100
   const coinsPart = Math.round((toBank - notesTotal) * 100) / 100
   const hasNoteRecord = noteRows.length > 0
   const Row = ({ label, hint, value, sign, strong, muted }) => (
@@ -64,14 +67,17 @@ function SummaryPanel({ summary }) {
           <p className="text-sm text-emerald-800/80 mt-2">
             Todo o dinheiro que os clientes puseram desde o último fecho: vendas ({fmt(sold)}€) e recargas de cartões ({fmt(recharges)}€){withdrawn > 0 ? `, menos ${fmt(withdrawn)}€ que já levantou` : ''}. Não conta o dinheiro do hopper e do admin, o consumo de cartões nem o MB WAY.
           </p>
-          {hasNoteRecord && (
+          {hasNoteRecord && toBank > 0 && (
             <div className="mt-4 rounded-xl bg-white/70 border border-emerald-200 p-3 text-sm text-emerald-900">
               <div className="font-semibold mb-1">Em que notas e moedas</div>
-              <div>Notas: {noteRows.map((d, i) => <span key={d.value}>{i ? ' + ' : ''}<strong>{d.count} × {fmt(d.value).replace('.00', '')}€</strong></span>)} = <strong>{fmt(notesTotal)}€</strong></div>
-              {coinsPart >= 0
-                ? <div>Moedas: <strong>{fmt(coinsPart)}€</strong>{coinsPart > 0 ? ' (a tirar do hopper)' : ''}</div>
-                : <div className="text-amber-800">As notas passam o valor em <strong>{fmt(-coinsPart)}€</strong>: o troco saiu em moedas do hopper, por isso repõe {fmt(-coinsPart)}€ em moedas no hopper.</div>}
-              <div className="text-xs text-emerald-800/70 mt-1">Registo das notas e moedas aceites desde o último fecho.</div>
+              <div>Notas: {notesToBank.length ? notesToBank.map((d, i) => <span key={d.value}>{i ? ' + ' : ''}<strong>{d.take} × {fmt(d.value).replace('.00', '')}€</strong></span>) : <strong>nenhuma</strong>}{notesTotal > 0 && <> = <strong>{fmt(notesTotal)}€</strong></>}</div>
+              <div>Moedas: <strong>{fmt(coinsPart)}€</strong>{coinsPart > 0 ? ' (a tirar do hopper, como um troco)' : ''}</div>
+              {notesStay.length > 0 && (
+                <div className="text-xs text-emerald-800/80 mt-1">
+                  Ficam na caixa, como parte do fundo: {notesStay.map((d, i) => <span key={d.value}>{i ? ' + ' : ''}{d.left} × {fmt(d.value).replace('.00', '')}€</span>)}.
+                </div>
+              )}
+              <div className="text-xs text-emerald-800/70 mt-1">Notas e moedas aceites desde o último fecho. A soma é sempre os {fmt(toBank)}€.</div>
             </div>
           )}
           <div className="mt-auto pt-4 text-xs text-emerald-800/70">
