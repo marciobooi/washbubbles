@@ -37,6 +37,35 @@ describe('Flows: every customer action as one log with its steps', function () {
     expect(f.steps.map((s) => s.type)).to.deep.equal(['cash_in', 'pay_requested', 'impulse_sent', 'sale_recorded', 'change_paid'])
   })
 
+  // what happened on 2026-11-12 10:51: 2 EUR in, the same payment asked for twice, and a dryer impulse the staff had started earlier arrived meanwhile
+  it('a payment asked for twice is counted once, and the impulse of a machine the customer did not ask for stays out of the header', async () => {
+    // two requests in flight at once (the second sent while the first was still waiting), answered one after the other
+    const ask = () => {
+      const req = { tenantId: t(), body: { items: [{ name: 'Secar 7' }], inserted: 2 } }
+      const res = { statusCode: 200, json() { return res } }
+      flows.flowRoute('Pedido de pagamento em dinheiro', { method: 'cash' })(req, res, () => {})
+      return res
+    }
+    flows.step(t(), 'cash_in', 'Moeda de 2,00 € inserida (total 2,00 €)', { value: 2 }, { inserted: 2 })
+    const sale = [{ _id: 'S1', amount: 2, method: 'cash' }]
+    const first = ask()
+    flows.step(t(), 'impulse_sent', 'Impulso 2 enviado à Secar 8', { machine: 'Secar 8' }, { machine: 'Secar 8' }) // the staff's earlier start
+    const second = ask()
+    flows.step(t(), 'impulse_sent', 'Impulso enviado à Secar 7', { machine: 'Secar 7' }, { machine: 'Secar 7' })
+    first.json({ sales: sale })
+    second.json({ sales: sale }) // the same sale again
+    await wait()
+    const f = (await Flow.find({ tenantId: t() }).lean())[0]
+    expect(f.amount).to.equal(2) // not 4
+    expect(f.machines).to.deep.equal(['Secar 7'])
+    expect(f.title).to.contain('Secar 7').and.to.not.contain('Secar 8')
+    const types = f.steps.map((s) => s.type)
+    expect(types.filter((x) => x === 'sale_recorded')).to.have.length(1)
+    expect(types).to.include('sale_replayed')
+    const foreign = f.steps.find((s) => s.data?.foreign)
+    expect(foreign.text).to.contain('Secar 8')
+  })
+
   it('a new customer after a paid flow starts a NEW flow; an idle flow is closed and announced for the uplink', async () => {
     flows.step(t(), 'cash_in', 'Nota', null, { inserted: 5 })
     flows.step(t(), 'sale_recorded', 'Venda', null, { amount: 5, method: 'cash' })

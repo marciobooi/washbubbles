@@ -98,7 +98,12 @@ export function step(tenantId, type, text, data = null, opts = {}) {
     f.lastAt = at
     const ok = opts.ok !== false
     if (!ok) f.problems += 1
-    f.steps.push({ at, type, text, ok, data })
+    // A staff start (or any impulse) of a machine this customer did not ask for lands in whatever flow is open at that moment (2026-11-12:
+    // the second impulse of a dryer the staff had started two minutes before showed up in a customer's payment, and its machine in the title).
+    // When the flow knows what the customer asked for, such an impulse is kept as a step but marked foreign, and never joins the header.
+    const foreign = type === 'impulse_sent' && f.requested?.size > 0 && opts.machine && !f.requested.has(String(opts.machine))
+    if (foreign) { data = { ...(data || {}), foreign: true }; opts = { ...opts, machine: undefined } }
+    f.steps.push({ at, type, text: foreign ? `${text} (arranque de outra ação, não deste cliente)` : text, ok, data })
     if (Array.isArray(data?.items) && data.items.some((i) => /recarga/i.test(String(i)))) f.recharge = true
     f.kind = kindOf(type, f.kind, f.recharge)
     if (opts.machine && !f.machines.includes(opts.machine)) f.machines.push(opts.machine)
@@ -137,6 +142,13 @@ export function startFlowTimer() {
 export function _reset() { open.clear() }
 export function _peek(tenantId) { return open.get(String(tenantId)) }
 
+/** Has this flow already recorded one of these sales? */
+function alreadyRecorded(f, sales) {
+  if (!f) return false
+  const ids = new Set(sales.map((x) => String(x._id)))
+  return f.steps.some((s) => s.type === 'sale_recorded' && Array.isArray(s.data?.saleIds) && s.data.saleIds.some((id) => ids.has(id)))
+}
+
 const names = (items) => (Array.isArray(items) ? items.map((i) => i && (i.name || i.type)).filter(Boolean).slice(0, 8) : [])
 
 /**
@@ -153,11 +165,15 @@ export function flowRoute(label, { type = 'pay_requested', method } = {}) {
       step(tenantId, type, `${label}${list.length ? `: ${list.join(', ')}` : ''}${insertedNote}`, { items: list, inserted: b.inserted ?? null }, { method: method || (b.method === 'cash' ? 'cash' : undefined) })
       const f = open.get(String(tenantId))
       if (f) { for (const n of list) if (!f.machines.includes(n) && !/recarga/i.test(n)) f.machines.push(n); f.title = titleOf(f) }
+      if (f) { f.requested = f.requested || new Set(); for (const n of list) f.requested.add(String(n)) }
       const origJson = res.json.bind(res)
       res.json = (body) => {
         try {
           if (res.statusCode >= 400) {
             step(tenantId, 'pay_refused', `Recusado: ${body?.error || `erro ${res.statusCode}`}`, { status: res.statusCode, code: body?.code || null }, { ok: false })
+          } else if (Array.isArray(body?.sales) && body.sales.length && alreadyRecorded(open.get(String(tenantId)), body.sales)) {
+            // the same payment asked for twice (the screen gave up waiting and sent it again): answered with what was recorded, counted once
+            step(tenantId, 'sale_replayed', 'Pedido repetido: a venda já estava registada, não foi cobrada outra vez', { saleIds: body.sales.map((x) => String(x._id)) })
           } else if (Array.isArray(body?.sales) && body.sales.length) {
             const amount = body.sales.reduce((sum, x) => sum + (Number(x.amount) || 0), 0)
             const m = body.sales[0].method
