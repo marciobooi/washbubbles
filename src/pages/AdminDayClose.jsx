@@ -194,8 +194,8 @@ export default function AdminDayClose() {
                           <InfoRow label="Inicio" value={dc.periodFrom ? shopDateTime(dc.periodFrom) : '-'} />
                           <InfoRow label="Fim" value={shopDateTime(dc.periodTo || dc.createdAt)} />
                           <InfoRow label="Vendas" value={`${fmt(dc.totalSales)}€ (${fmt(dc.totalCash)} din${Number(dc.totalMbway) > 0 ? ` + ${fmt(dc.totalMbway)} MB WAY` : ''} + ${fmt(dc.totalCard)} cart)`} />
-                          <InfoRow label="Fundo de caixa" value={`${fmt(dc.openingFloat)}€`} />
-                          {Number(dc.floatAdded) > 0 && <InfoRow label="Fundo adicionado" value={`${fmt(dc.floatAdded)}€`} />}
+                          <InfoRow label="Fundo de caixa" value={`${fmt(Number(dc.openingFloat || 0) + Number(dc.floatAdded || 0))}€`} />
+                          {Number(dc.floatAdded) > 0 && <InfoRow label="dos quais reforços do hopper" value={`${fmt(dc.floatAdded)}€`} />}
                           {Number(dc.floatWithdrawn) > 0 && <InfoRow label="Levantamentos" value={`-${fmt(dc.floatWithdrawn)}€`} />}
                           {dc.totalChangeDispensed > 0 && <InfoRow label="Troco dispensado" value={`${fmt(dc.totalChangeDispensed)}€`} />}
                         </DetailBlock>

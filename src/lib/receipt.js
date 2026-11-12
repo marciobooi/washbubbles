@@ -21,7 +21,7 @@ export function formatDayCloseReceiptText(dc) {
   const f = (n) => Number(n || 0).toFixed(2)
   const lines = [
     'Fecho de Caixa', '',
-    `Fundo de caixa: €${f(dc.openingFloat)}`,
+    `Fundo de caixa: €${f(Number(dc.openingFloat || 0) + Number(dc.floatAdded || 0))}`,
     `Vendas dinheiro: €${f(dc.totalCash)}`,
     `Vendas cartão: €${f(dc.totalCard)}`,
     `Esperado em caixa: €${f(dc.expectedCash)}`,
