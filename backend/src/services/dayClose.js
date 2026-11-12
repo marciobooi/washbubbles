@@ -132,11 +132,32 @@ export async function getDayCloseSummary(req) {
     totalChangeDispensed: tally.totalChangeDispensed,
     acceptedDenominations,
     acceptedTotal,
+    lastHopperCount: await lastHopperCount(DayCloseT, SaleT).catch(() => null),
     openingMechanismCoins: lastClose?.coinMechanismInventory || [],
     openingMechanismTotal: lastClose?.coinMechanismTotal || 0,
     openingHopperCoins: lastClose?.hopperCoins || [],
     openingHopperTotal: lastClose?.hopperTotal || 0
   }
+}
+
+/**
+ * The last time somebody COUNTED coins that are in the hopper: a close's explicit hopper count, or the coins put in with a float top-up /
+ * hopper reinforcement. The hopper has no sensor (only the euros of change are known, not which coins), so this is the best starting
+ * point for "coins left now"; the screen shows it with the date and the change given since, and the admin corrects it. Before, those
+ * counts were saved but never shown again, so the hopper screen always opened empty (2026-11-12).
+ */
+export async function lastHopperCount(DayCloseT, SaleT) {
+  const recent = await DayCloseT.find({ source: { $in: ['dashboard', 'adjustment'] } }).sort({ createdAt: -1 }).limit(40).lean()
+  const coinsOf = (arr) => (arr || []).filter((d) => Number(d.value) > 0 && Number(d.value) < 3 && Number(d.count) > 0).map((d) => ({ value: Number(d.value), count: Number(d.count) }))
+  for (const d of recent) {
+    const isTopUp = d.source === 'adjustment' && Number(d.metadata?.adjustmentAmount) > 0
+    const coins = d.source === 'dashboard' ? coinsOf(d.hopperActualBefore) : isTopUp ? coinsOf(d.countedDenominations) : []
+    if (!coins.length) continue
+    const total = Number(coins.reduce((s, c) => s + c.value * c.count, 0).toFixed(2))
+    const given = await SaleT.aggregate([{ $match: { createdAt: { $gt: d.createdAt }, change: { $gt: 0 } } }, { $group: { _id: null, t: { $sum: '$change' } } }])
+    return { at: d.createdAt, source: d.source === 'dashboard' ? 'close' : 'topup', coins, total, changeGivenSince: Number((given[0]?.t || 0).toFixed(2)) }
+  }
+  return null
 }
 
 /** Sanitise a denomination array (recompute totals server-side, never trust the client's). */

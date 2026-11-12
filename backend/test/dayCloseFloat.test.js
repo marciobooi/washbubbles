@@ -104,3 +104,29 @@ describe('A float top-up is not a close', function () {
     })
   })
 })
+
+describe('The last count of coins in the hopper comes back on the hopper screen', function () {
+  this.timeout(20000)
+  let app, tenant, admin, DayClose
+  const auth = () => ({ Authorization: `Bearer ${signToken(admin)}` })
+  before(async () => { await startTestDb(); app = await buildTestApp(); DayClose = (await import('../src/models/dayClose.js')).default })
+  after(async () => { await stopTestDb() })
+  beforeEach(async () => { await clearTestDb(); ;({ tenant, admin } = await seedTenantAndUsers()) })
+
+  it('is the coins put in with the last float top-up (or the hopper count of a close), with the change given since', async () => {
+    expect((await request(app).get('/api/admin/day-close/summary').set(auth())).body.lastHopperCount).to.equal(null)
+    const add = await request(app).post('/api/admin/day-close/adjust-float').set(auth()).send({ denominations: [{ value: 0.1, count: 67 }, { value: 2, count: 13 }, { value: 10, count: 1 }] })
+    expect(add.status).to.equal(200)
+    const Sale = (await import('../src/models/sale.js')).default
+    await Sale.create({ tenantId: tenant._id, amount: 4, method: 'cash', type: 'payment', change: 6, items: [{}] })
+    const h = (await request(app).get('/api/admin/day-close/summary').set(auth())).body.lastHopperCount
+    expect(h.source).to.equal('topup')
+    expect(h.coins).to.deep.equal([{ value: 0.1, count: 67 }, { value: 2, count: 13 }]) // coins only: the note is not in the hopper
+    expect(h.total).to.equal(32.7)
+    expect(h.changeGivenSince).to.equal(6)
+    // a close that counted the hopper takes over
+    await request(app).post('/api/admin/day-close').set(auth()).send({ amountToBank: 0, floatLeft: 0, countedCash: 0, hopperActualBefore: [{ value: 1, count: 20 }] })
+    const after = (await request(app).get('/api/admin/day-close/summary').set(auth())).body.lastHopperCount
+    expect(after).to.include({ source: 'close', total: 20 })
+  })
+})
