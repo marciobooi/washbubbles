@@ -426,7 +426,7 @@ function formatDayCloseReceiptText(dc) {
   const f = (n) => Number(n || 0).toFixed(2)
   const lines = [
     'Fecho de Caixa', '',
-    `Fundo inicial: €${f(dc.openingFloat)}`,
+    `Fundo de caixa: €${f(dc.openingFloat)}`,
     `Vendas dinheiro: €${f(dc.totalCash)}`,
     `Vendas cartão: €${f(dc.totalCard)}`,
     `Esperado em caixa: €${f(dc.expectedCash)}`,
@@ -454,7 +454,7 @@ function formatDayCloseReceiptHtml(dc) {
   const f = (n) => Number(n || 0).toFixed(2)
   const row = (label, value, bold) => `<tr><td style="padding:5px 0; ${bold ? 'font-weight:bold;' : ''}">${escapeHtml(label)}</td><td style="padding:5px 0; text-align:right; ${bold ? 'font-weight:bold;' : ''}">€${value}</td></tr>`
   const rows = [
-    row('Fundo inicial', f(dc.openingFloat)),
+    row('Fundo de caixa', f(dc.openingFloat)),
     row('Vendas dinheiro', f(dc.totalCash)),
     row('Vendas cartão', f(dc.totalCard)),
     row('Esperado em caixa', f(dc.expectedCash)),

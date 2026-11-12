@@ -81,7 +81,7 @@ function SummaryPanel({ summary }) {
         {/* expected count */}
         <div className="rounded-2xl border border-neutral-200 bg-white p-5">
           <div className="text-sm font-semibold text-neutral-500 mb-1">Esperado na máquina (para a contagem)</div>
-          <Row label="Fundo inicial" hint="o que ficou no último fecho" value={opening} />
+          <Row label="Fundo de caixa" hint="o que ficou na caixa no último fecho" value={opening} />
           {added > 0 && <Row label="Reforços do hopper" hint="dinheiro do admin, para a contagem física; não vai para o banco" value={added} sign="+" />}
           <Row label="Vendas em dinheiro" hint="máquinas e venda de cartões" value={sold} sign="+" />
           <Row label="Recargas de cartões" hint="dinheiro dos clientes" value={recharges} sign="+" />
@@ -302,7 +302,7 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
           {summary?.acceptedTotal > 0 && (
             <div className="text-xs text-neutral-400 -mt-1">
               Pré-preenchido com o aceite desde o último fecho ({fmt(summary.acceptedTotal)}&euro;).
-              {summary.openingFloat > 0 && <> Se o fundo inicial de {fmt(summary.openingFloat)}&euro; ainda lá estiver, adicione-o também.</>}
+              {summary.openingFloat > 0 && <> Se o fundo de caixa de {fmt(summary.openingFloat)}&euro; ainda lá estiver, adicione-o também.</>}
               {' '}Corrija o que não bater certo.
             </div>
           )}

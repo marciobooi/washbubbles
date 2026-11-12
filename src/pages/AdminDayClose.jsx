@@ -81,7 +81,7 @@ export default function AdminDayClose() {
             className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-700 text-xs font-semibold px-3 py-1.5 transition"
           >
             <PiggyBank className="w-3.5 h-3.5" strokeWidth={1.8} />
-            Adicionar fundo inicial
+            Adicionar fundo de caixa
           </button>
           <button
             type="button"
@@ -194,7 +194,7 @@ export default function AdminDayClose() {
                           <InfoRow label="Inicio" value={dc.periodFrom ? shopDateTime(dc.periodFrom) : '-'} />
                           <InfoRow label="Fim" value={shopDateTime(dc.periodTo || dc.createdAt)} />
                           <InfoRow label="Vendas" value={`${fmt(dc.totalSales)}€ (${fmt(dc.totalCash)} din${Number(dc.totalMbway) > 0 ? ` + ${fmt(dc.totalMbway)} MB WAY` : ''} + ${fmt(dc.totalCard)} cart)`} />
-                          <InfoRow label="Fundo inicial" value={`${fmt(dc.openingFloat)}€`} />
+                          <InfoRow label="Fundo de caixa" value={`${fmt(dc.openingFloat)}€`} />
                           {Number(dc.floatAdded) > 0 && <InfoRow label="Fundo adicionado" value={`${fmt(dc.floatAdded)}€`} />}
                           {Number(dc.floatWithdrawn) > 0 && <InfoRow label="Levantamentos" value={`-${fmt(dc.floatWithdrawn)}€`} />}
                           {dc.totalChangeDispensed > 0 && <InfoRow label="Troco dispensado" value={`${fmt(dc.totalChangeDispensed)}€`} />}
