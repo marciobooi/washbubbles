@@ -72,6 +72,35 @@ describe('MB WAY by QR: one code = one session (central side)', function () {
     const page = await request(app).get(`/pagar/${token}`)
     expect(page.text).to.not.contain('<script>alert(1)</script>')
   })
+
+  it('every step of a code leaves a trail in the audit log, and never the phone number', async () => {
+    const AuditLog = (await import('../src/models/auditLog.js')).default
+    const trail = async () => (await AuditLog.find({ action: /^mbway\.qr_/ }).sort({ createdAt: 1 }).lean())
+    const a = await make(4)
+    await request(app).get(`/pagar/${a.token}`).set('User-Agent', 'Mozilla/5.0 (iPhone)')
+    await request(app).post(`/api/public/mbway-link/${a.token}`).send({ phone: '12345' })
+    await request(app).post(`/api/public/mbway-link/${a.token}`).send({ phone: '912345678' })
+    await request(app).get(`/api/mbway-link/${a.token}/phone`).set(auth())
+    const b = await make(4)
+    await request(app).post(`/api/mbway-link/${b.token}/cancel`).set(auth()).send({})
+    await request(app).post(`/api/mbway-link/${b.token}/cancel`).set(auth()).send({}) // twice: one entry only
+    const c = await make(4)
+    await MbwayLink.updateOne({ token: c.token }, { $set: { expiresAt: new Date(Date.now() - 1000) } })
+    await request(app).get(`/api/mbway-link/${c.token}/phone`).set(auth())
+    await request(app).get(`/api/mbway-link/${c.token}/phone`).set(auth()) // twice: one entry only
+
+    const t = await trail()
+    expect(t.map((x) => x.action)).to.deep.equal([
+      'mbway.qr_created', 'mbway.qr_opened', 'mbway.qr_number_refused', 'mbway.qr_number_sent', 'mbway.qr_number_taken',
+      'mbway.qr_created', 'mbway.qr_cancelled', 'mbway.qr_created', 'mbway.qr_expired',
+    ])
+    expect(t[1].details.phoneType).to.contain('iPhone')
+    expect(t[1].details.live).to.equal(true)
+    expect(t[0].targetId).to.equal(a.token.slice(0, 8))
+    const everything = JSON.stringify(t)
+    expect(everything).to.not.contain('912345678')
+    expect(everything).to.not.contain(a.token)
+  })
 })
 
 describe('MB WAY by QR (shop side, central simulated)', function () {
@@ -167,4 +196,5 @@ describe('MB WAY by QR (shop side, central simulated)', function () {
     expect(central.cancelled).to.include(l.body.token)
     expect(createCalls).to.equal(0)
   })
+
 })
