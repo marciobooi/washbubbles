@@ -80,3 +80,19 @@ describe('Owner insights', function () {
     expect((await request(app).get('/api/admin/analytics/insights')).status).to.equal(401)
   })
 })
+
+describe('Owner insights: hardware warnings', function () {
+  this.timeout(20000)
+  let tenant
+  before(async () => { await startTestDb(); await clearTestDb(); ;({ tenant } = await seedTenantAndUsers()) })
+  after(async () => { await stopTestDb() })
+  it('a coin acceptor reported silent shows until it is heard from again', async () => {
+    const AuditLog = (await import('../src/models/auditLog.js')).default
+    const NOW = new Date('2026-11-12T12:00:00Z')
+    const log = (action, iso, details = {}) => AuditLog.create({ tenantId: tenant._id, actorUsername: 'system', action, targetType: 'CashSession', targetId: '', details, createdAt: new Date(iso) })
+    await log('hardware.coin.silent', '2026-11-12T11:00:00Z', { lastCoinMinutesAgo: 210 })
+    expect((await computeInsights(tenant._id, { now: NOW })).alerts.coinSilent).to.deep.include({ lastCoinMinutesAgo: 210 })
+    await log('hardware.coin.resumed', '2026-11-12T11:30:00Z')
+    expect((await computeInsights(tenant._id, { now: NOW })).alerts.coinSilent).to.equal(null)
+  })
+})

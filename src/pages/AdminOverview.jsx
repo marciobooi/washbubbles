@@ -230,6 +230,13 @@ export default function AdminOverview() {
 
       </div>
 
+      {insights?.alerts?.coinSilent && (
+        <div className="rounded-2xl border border-[#fecaca] bg-[#fef2f2] text-[#991b1b] px-5 py-3.5 text-sm" role="alert">
+          <strong>O moedeiro pode estar mudo.</strong> Não chega nenhuma moeda desde {shopDateTime(insights.alerts.coinSilent.since)}
+          {insights.alerts.coinSilent.lastCoinMinutesAgo != null ? ` (a última moeda foi há ${Math.round(insights.alerts.coinSilent.lastCoinMinutesAgo / 60 * 10) / 10} h)` : ''}, com a loja a trabalhar.
+          Ponha uma moeda de teste; se não for contada, veja o moedeiro e reinicie os periféricos.
+        </div>
+      )}
       <ControlKpis data={insights} />
 
       <Panel>

@@ -11,6 +11,7 @@ import Machine from '../models/machine.js'
 import Card from '../models/card.js'
 import Price from '../models/price.js'
 import Setting from '../models/setting.js'
+import AuditLog from '../models/auditLog.js'
 import { staffStarts } from './staffStarts.js'
 
 const TZ = 'Europe/Lisbon'
@@ -202,5 +203,15 @@ export async function computeInsights(tenantId, { days = 30, now = new Date() } 
     paymentMix: Object.fromEntries(Object.entries(mixRows).map(([k, v]) => [k, { cycles: v.cycles, amount: r2(v.amount), cyclesPct: pct(v.cycles, pays.length) }])),
   }
 
-  return { generatedAt: now, days, today, revenue, ticket, cardsLiability, machines: machineRows, washDry, hours: hoursInfo, clients }
+  // hardware warnings the shop PC wrote down (and sent here): a coin acceptor reported as silent and not heard from since
+  const hw = await AuditLog.find({ tenantId: tid, action: { $in: ['hardware.coin.silent', 'hardware.coin.resumed', 'hardware.coin.rejected'] }, createdAt: { $gte: new Date(now.getTime() - 3 * DAY) } }).sort({ createdAt: -1 }).select('action createdAt details').lean()
+  const lastSilent = hw.find((x) => x.action === 'hardware.coin.silent')
+  const lastResumed = hw.find((x) => x.action === 'hardware.coin.resumed')
+  const lastRejected = hw.find((x) => x.action === 'hardware.coin.rejected')
+  const alerts = {
+    coinSilent: lastSilent && (!lastResumed || lastResumed.createdAt < lastSilent.createdAt) ? { since: lastSilent.createdAt, lastCoinMinutesAgo: lastSilent.details?.lastCoinMinutesAgo ?? null } : null,
+    lastRejectedCoin: lastRejected ? lastRejected.createdAt : null,
+  }
+
+  return { generatedAt: now, days, today, alerts, revenue, ticket, cardsLiability, machines: machineRows, washDry, hours: hoursInfo, clients }
 }

@@ -214,6 +214,7 @@ class CoinMachine extends EventEmitter {
       this.startHardwareRefresh()
       this.startControllerWatch()
       this.startImpulseScheduler()
+      this.startCoinWatch()
       await this.resumeSpacedImpulses().catch((e) => console.error('[Cycle] could not resume the pending impulses:', e.message))
       this.running = true
       this.emit('started')
@@ -275,6 +276,7 @@ class CoinMachine extends EventEmitter {
     
     this.cardSync?.stop()
     this.uplink?.stop()
+    clearInterval(this.coinWatchTimer)
     this.downlink?.stop()
     this.remoteCommands?.stop()
     this.stopCreditRefundWatch()
@@ -509,6 +511,8 @@ class CoinMachine extends EventEmitter {
    */
   handleCoinRejected(data) {
     const { peripheral, reason, code, exact } = data
+    this.noteCoinSeen()
+    this.alertCoinRejected({ reason, code }).catch(() => {})
     this.emit('coin-rejected', { peripheral, reason, code, exact })
     flows.step(this.tenantId, 'cash_rejected', `Moeda recusada (${reason || 'motivo desconhecido'})`, { reason: reason || null }, { ok: false })
     console.warn(`Coin rejected: ${reason || 'unknown reason'}`)
@@ -553,6 +557,7 @@ class CoinMachine extends EventEmitter {
    */
   handleCoinInserted(data) {
     const { value, code, exact } = data
+    this.noteCoinSeen() // the coin acceptor is talking
 
     // The middleware has already turned the device code into euros (`code` is
     // present). Only a bare value with no code still needs the table — mapping an
@@ -1118,6 +1123,69 @@ class CoinMachine extends EventEmitter {
       if (Number(row?.duration) > 0) return Number(row.duration)
     } catch { /* fall through to the default */ }
     return Number(process.env.WASH_DEFAULT_MINUTES) || 60
+  }
+
+  // ---------------------------------------------------------------- coin acceptor watch
+  // 2026-11-12: after a coin it did not recognise (code 0, 10:53) the coin acceptor swallowed coins and told the controller nothing, for
+  // at least an hour, and only a customer's complaint showed it: nothing in the system could tell. Now (1) a coin the acceptor does not
+  // recognise is e-mailed at once, and (2) a coin acceptor that stays silent for hours while the shop is busy is reported.
+
+  /** The staff is told about a coin the acceptor refused or did not know, at most once every 30 minutes. */
+  async alertCoinRejected({ reason, code }) {
+    const now = Date.now()
+    await this.auditSystem('hardware.coin.rejected', { reason: reason || null, code: code ?? null })
+    if (this.lastCoinRejectAlert && now - this.lastCoinRejectAlert < 30 * 60_000) return
+    this.lastCoinRejectAlert = now
+    try {
+      const { sendAlertForTenant } = await import('./alerts.js')
+      await sendAlertForTenant(this.tenantId, 'Moeda não reconhecida pelo moedeiro', `O moedeiro recebeu uma moeda que não reconheceu (${reason || 'código ' + code}) e não deu crédito. Pode ser uma moeda estrangeira ou danificada, ou ter ficado presa: veja o moedeiro. Se o moedeiro deixar de contar moedas depois disto, avise-nos.`)
+    } catch (e) { console.error('[HW] could not send the coin alert:', e.message) }
+  }
+
+  noteCoinSeen() {
+    this.lastCoinAt = Date.now()
+    if (this.coinSilent) {
+      this.coinSilent = false
+      this.auditSystem('hardware.coin.resumed', { silentMinutes: Math.round((Date.now() - this.coinSilent0) / 60000) }).catch(() => {})
+    }
+  }
+
+  /**
+   * One look at the coin acceptor: silent for `silentHours` (3) during the shop's open hours while the shop is working (at least 3 payments
+   * of any kind in that time) = it is probably not reporting. Reported once per silence, and again as resumed when a coin arrives.
+   */
+  async checkCoinAcceptor({ now = Date.now(), silentHours = 3, hours = { open: 7, close: 23 }, countPayments } = {}) {
+    if (!this.running || this.coinSilent) return 'already'
+    const since = this.lastCoinAt || this.startedAt || now
+    const lisbonHour = Number(new Date(now).toLocaleString('sv-SE', { timeZone: 'Europe/Lisbon' }).slice(11, 13))
+    if (lisbonHour < hours.open || lisbonHour >= hours.close) return 'closed'
+    const silentMs = silentHours * 3600_000
+    if (now - since < silentMs) return 'recent'
+    const from = new Date(Math.max(since, now - silentMs))
+    const n = await (countPayments ? countPayments(from) : Sale.countDocuments({ tenantId: this.tenantId, createdAt: { $gte: from }, type: { $in: ['payment', 'recharge', 'card_purchase'] } }))
+    if (n < 3) return 'quiet-shop'
+    this.coinSilent = true
+    this.coinSilent0 = now
+    const mins = Math.round((now - since) / 60000)
+    await this.auditSystem('hardware.coin.silent', { lastCoinMinutesAgo: mins, paymentsSince: n })
+    console.error(`[HW] the coin acceptor has reported no coin for ${mins} min while the shop had ${n} payments`)
+    try {
+      const { sendAlertForTenant } = await import('./alerts.js')
+      await sendAlertForTenant(this.tenantId, 'O moedeiro pode estar mudo', `Não chega nenhuma moeda do moedeiro há ${Math.round(mins / 60 * 10) / 10} horas, e a loja teve ${n} pagamentos nesse tempo. Ponha uma moeda de teste: se não for contada, o moedeiro está a aceitar moedas sem as registar. Veja o moedeiro (moeda presa?) e, se for preciso, reinicie os periféricos no admin.`)
+    } catch (e) { console.error('[HW] could not send the coin-silence alert:', e.message) }
+    return 'silent'
+  }
+
+  startCoinWatch(everyMs = 10 * 60_000) {
+    clearInterval(this.coinWatchTimer)
+    this.startedAt = Date.now()
+    this.coinWatchTimer = setInterval(async () => {
+      try {
+        const row = await Setting.findOne({ tenantId: this.tenantId, key: 'shop.hours' }).lean()
+        await this.checkCoinAcceptor({ hours: { open: Number(row?.value?.open ?? 7), close: Number(row?.value?.close ?? 23) } })
+      } catch (e) { console.error('[HW] coin watch failed:', e.message) }
+    }, everyMs)
+    this.coinWatchTimer.unref?.()
   }
 
   startImpulseScheduler(everyMs = 10_000) {
