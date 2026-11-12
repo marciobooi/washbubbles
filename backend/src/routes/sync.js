@@ -97,6 +97,20 @@ router.post('/mail', async (req, res) => {
   }
 })
 
+// ─── The coins and notes the shop's hardware accepted since the last real close (the shop hears them, the central day close needs them) ───
+// { since, counts: [{ value, count }] }. Ignored when it starts before the last real close announced here: it is the shop's old count.
+router.post('/push/cash-ledger', async (req, res) => {
+  const { CASH_DRAWER_DENOMS, RESET_KEY } = await import('../services/cashDrawer.js')
+  const body = req.body || {}
+  const since = new Date(body.since)
+  if (Number.isNaN(since.getTime()) || !Array.isArray(body.counts) || body.counts.length > 20) return res.status(400).json({ error: 'Bad ledger' })
+  const resetRow = await withTenant(Setting, req).findOne({ key: RESET_KEY }).lean()
+  if (resetRow?.value && since < new Date(resetRow.value)) return res.json({ success: true, ignored: 'older than the last close' })
+  const value = CASH_DRAWER_DENOMS.map((v) => ({ value: v, count: Math.max(0, Math.min(100000, Math.floor(Number(body.counts.find((c) => Math.abs(Number(c?.value) - v) < 0.001)?.count) || 0))) }))
+  await withTenant(Setting, req).findOneAndUpdate({ key: 'cashDrawerLedger' }, { $set: { value } }, { upsert: true })
+  res.json({ success: true })
+})
+
 // ─── The machine of sales that reached this server without it (once, from the shop: see Uplink.backfillSaleMachines) ───
 // { items: [{ local_id, machine_id }] }: sets machineId on the sale this shop pushed with that local id, only where it has none and only
 // for a machine of this shop. Never fails the shop because of one bad row.

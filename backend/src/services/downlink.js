@@ -20,6 +20,7 @@
  * Reference: docs/SHOP-HARDWARE-AND-COMMUNICATIONS.md §14
  */
 import EventEmitter from 'events'
+import { applicableSettings } from './cashDrawer.js'
 import mongoose from 'mongoose'
 import Machine from '../models/machine.js'
 import Price from '../models/price.js'
@@ -189,7 +190,7 @@ export class Downlink extends EventEmitter {
         await Model.deleteMany(gone)
       }
     }
-    const ops = docs.map((d) => {
+    const ops = (name === 'settings' ? applicableSettings(docs) : docs).map((d) => {
       if (name === 'settings') {
         const { _id, ...rest } = d
         return { updateOne: { filter: { tenantId: tenant, key: d.key }, update: { $set: rest }, upsert: true } }

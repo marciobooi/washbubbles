@@ -293,6 +293,13 @@ async function start() {
       const n = await backfillSaleMachines()
       if (n) console.log(`[Sales] ${n} sale(s) got their machine back`)
     } catch (err) { console.warn('[Sales] could not recover the machines of old sales:', err.message) }
+    // The last real close, as the point the shop's coin and note count starts from (see services/cashDrawer.js)
+    try {
+      const { ensureResetMarker } = await import('./services/cashDrawer.js')
+      const DayCloseModel = (await import('./models/dayClose.js')).default
+      const n = await ensureResetMarker(DayCloseModel)
+      if (n) console.log(`[CashDrawer] the last real close was marked as the start of the coin and note count (${n} shop(s))`)
+    } catch (err) { console.warn('[CashDrawer] could not mark the last close:', err.message) }
     // Card balances are whole cents: round away any float dust left by older updates (a no-op when all are exact).
     try {
       const { normalizeBalances } = await import('./services/cardBalance.js')

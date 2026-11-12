@@ -189,6 +189,10 @@ export class Uplink extends EventEmitter {
     // Occupied / free / fault of each machine, so the central admin sees what the shop sees.
     this.machineTimer = setInterval(() => this.pushMachineStatus().catch(() => {}), this.machineStatusIntervalMs)
     this.machineTimer.unref?.()
+    // The coins and notes accepted since the last close, for the central day close (a state, like the peripheral health)
+    this.ledgerTimer = setInterval(() => this.pushCashLedger().catch(() => {}), 60_000)
+    this.ledgerTimer.unref?.()
+    setTimeout(() => this.pushCashLedger().catch((e) => console.warn('[Uplink] cash ledger skipped:', e.message)), 40_000).unref?.()
     console.log(`[Uplink] enabled -> ${this.url}`)
   }
 
@@ -196,6 +200,7 @@ export class Uplink extends EventEmitter {
     clearInterval(this.timer)
     clearInterval(this.statusTimer)
     clearInterval(this.machineTimer)
+    clearInterval(this.ledgerTimer)
     this.machineTimer = null
     clearTimeout(this.statusSoon)
     this.statusTimer = null
@@ -245,6 +250,19 @@ export class Uplink extends EventEmitter {
     await Setting.updateOne({ tenantId: this.tenantId, key }, { $set: { value: new Date().toISOString() } }, { upsert: true })
     if (rows.length) console.log(`[Uplink] the machine of ${rows.length} earlier sale(s) sent to the central server (${updated} updated there)`)
     return updated
+  }
+
+  /** Keep the ledger of coins and notes in step with the last close and send it up when it changed. */
+  async pushCashLedger() {
+    const { reconcileShopLedger, readLedgerPayload } = await import('./cashDrawer.js')
+    await reconcileShopLedger(this.tenantId, Flow)
+    const p = await readLedgerPayload(this.tenantId)
+    if (!p.since) return false
+    const sig = JSON.stringify(p)
+    if (sig === this.lastLedgerSig) return false
+    await this.post('/sync/push/cash-ledger', p)
+    this.lastLedgerSig = sig
+    return true
   }
 
   /** Queue one record. Idempotent: an already-pending record is refreshed, not duplicated. */
