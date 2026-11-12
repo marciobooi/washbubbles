@@ -57,7 +57,19 @@ export function CoinChipGrid({ denoms, onChange, readOnly = false, className = '
             : active ? 'bg-emerald-500 text-white' : 'bg-neutral-100 text-neutral-600'}`}>
           {fmtDenomLabel(d.value)}
         </div>
-        <div className={`text-xl font-extrabold leading-none ${active ? 'text-primary-700' : 'text-neutral-400'}`}>{d.count || 0}</div>
+        {readOnly ? (
+          <div className={`text-xl font-extrabold leading-none ${active ? 'text-primary-700' : 'text-neutral-400'}`}>{d.count || 0}</div>
+        ) : (
+          // the quantity can be typed (a handful of coins at once) as well as stepped with − and +; tapping the card still adds one
+          <input
+            type="text" inputMode="numeric" pattern="[0-9]*" aria-label={`Quantidade de ${fmtDenomLabel(d.value)}`}
+            value={d.count || 0}
+            onClick={(e) => { e.stopPropagation(); e.target.select() }}
+            onFocus={(e) => e.target.select()}
+            onChange={(e) => set(i, parseInt(e.target.value.replace(/\D/g, '').slice(0, 5), 10) || 0)}
+            className={`w-16 text-center text-xl font-extrabold leading-none bg-transparent rounded-md border border-transparent focus:border-primary-400 focus:bg-white focus:outline-none ${active ? 'text-primary-700' : 'text-neutral-400'}`}
+          />
+        )}
         {readOnly ? (
           <div className="h-7 text-[11px] text-primary-600 font-medium">{active ? `${fmt(d.value * d.count)}€` : ''}</div>
         ) : (
