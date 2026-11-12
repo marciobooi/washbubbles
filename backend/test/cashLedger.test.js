@@ -33,8 +33,11 @@ describe('Coins and notes accepted since the last close', function () {
     expect((await readLedgerPayload(tenant._id)).counts).to.deep.equal([{ value: 0.5, count: 1 }, { value: 10, count: 2 }])
     expect(await reconcileShopLedger(tenant._id, Flow)).to.equal('ok')
     await Setting.updateOne({ tenantId: tenant._id, key: RESET_KEY }, { $set: { value: '2026-11-10T00:00:00.000Z' } }) // a real close happened
-    expect(await reconcileShopLedger(tenant._id, Flow)).to.equal('reset')
-    expect((await readLedgerPayload(tenant._id)).counts).to.deep.equal([])
+    expect(await reconcileShopLedger(tenant._id, Flow)).to.equal('reseeded')
+    expect((await readLedgerPayload(tenant._id)).counts).to.deep.equal([]) // nothing went in since that close
+    await Setting.updateOne({ tenantId: tenant._id, key: RESET_KEY }, { $set: { value: '2026-11-01T00:00:00.000Z' } }) // the close is annulled: the start moves back
+    expect(await reconcileShopLedger(tenant._id, Flow)).to.equal('reseeded')
+    expect((await readLedgerPayload(tenant._id)).counts).to.deep.equal([{ value: 0.5, count: 1 }, { value: 10, count: 2 }])
   })
 
   it('the central server keeps the shop\'s count, ignores one that starts before the last close, and the day close shows it', async () => {

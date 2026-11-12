@@ -35,6 +35,9 @@ const dayCloseSchema = new Schema({
   // required field here rejected every offline close.
   amountToBank: { type: Number, default: 0 }, // cash removed for bank deposit
   floatLeft:    { type: Number, default: 0 },  // cash left to start next session
+  // A record the owner annulled (a test, a count made by mistake): kept in the history, struck through, and never a baseline, a top-up or a withdrawal.
+  voided:       { type: Boolean, default: false },
+  voidedReason: { type: String, default: '' },
   floatWithdrawn: { type: Number, default: 0 }, // cash taken out of the machine since the previous close (withdrawals), already off the expected count
   floatAdded:   { type: Number, default: 0 },  // cash put in the till (hopper reinforcements) since the previous close, expected in this count
 

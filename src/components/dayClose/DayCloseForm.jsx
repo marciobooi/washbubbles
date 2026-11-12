@@ -103,7 +103,6 @@ function SummaryPanel({ summary }) {
 
 export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClosed, onEmail, onDone, view = 'fecho', hidden = false }) {
   const [countedDenoms, setCountedDenoms]   = useState(buildDenomState(ALL_CASH_DENOMS))
-  const [mechanismDenoms, setMechanismDenoms]     = useState(buildDenomState(COIN_DENOMS))
   const [hopperActualDenoms, setHopperActualDenoms] = useState(buildDenomState(COIN_DENOMS))
   const [hopperTargetDenoms, setHopperTargetDenoms] = useState(buildDenomState(COIN_DENOMS))
   const targetLoadedRef = useRef(false)
@@ -115,7 +114,6 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
   const [closedRecord, setClosedRecord] = useState(null)
 
   const countedCash       = denomSum(countedDenoms)
-  const mechanismTotal    = denomSum(mechanismDenoms)
   const hopperActualTotal = denomSum(hopperActualDenoms)
   const hopperTargetTotal = denomSum(hopperTargetDenoms)
   const expectedCash      = summary ? Number(summary.openingFloat || 0) + Number(summary.totalCash || 0) + Number(summary.floatAdded || 0) - Number(summary.floatWithdrawn || 0) : 0
@@ -148,9 +146,15 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
   const hopperTotalIn = withdrawPlan.reduce((s, d) => s + d.toHopper * d.value, 0)
   const splitOk           = amountToBank !== '' && floatLeft !== '' && Math.abs(splitSum - countedCash) <= 0.005
 
+  // The coins somebody last counted in the hopper (a close's hopper count, or the coins put in with a float top-up / reinforcement) come
+  // back here, with the date and the change given since: they were saved before but never shown again. Only once, so nothing already typed
+  // is overwritten; the admin corrects it.
+  const hopperLoadedRef = useRef(false)
   useEffect(() => {
-    if (summary?.openingMechanismCoins?.length) {
-      setMechanismDenoms(buildDenomFromSaved(COIN_DENOMS, summary.openingMechanismCoins))
+    if (hopperLoadedRef.current) return
+    if (summary?.lastHopperCount?.coins?.length) {
+      setHopperActualDenoms(buildDenomFromSaved(COIN_DENOMS, summary.lastHopperCount.coins))
+      hopperLoadedRef.current = true
     }
   }, [summary])
 
@@ -234,7 +238,6 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
       const dc = await onSubmit({
         amountToBank: atb, floatLeft: fl, countedCash,
         countedDenominations: countedDenoms.filter(d => d.count > 0).map(d => ({ value: d.value, count: d.count })),
-        coinMechanismInventory: mechanismDenoms.filter(d => d.count > 0).map(d => ({ value: d.value, count: d.count })),
         hopperActualBefore: hopperActualDenoms.filter(d => d.count > 0).map(d => ({ value: d.value, count: d.count })),
         hopperCoins: hopperTargetDenoms.filter(d => d.count > 0).map(d => ({ value: d.value, count: d.count })),
         notes
@@ -242,7 +245,7 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
       toast({ title: 'Sessao fechada com sucesso!' })
       setAmountToBank(''); setFloatLeft(''); setNotes('')
       setCountedDenoms(buildDenomState(ALL_CASH_DENOMS))
-      setMechanismDenoms(buildDenomState(COIN_DENOMS))
+      hopperLoadedRef.current = false
       setHopperActualDenoms(buildDenomState(COIN_DENOMS))
       countedLoadedRef.current = false
       splitLoadedRef.current = false
@@ -272,20 +275,13 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
       ) : summary ? (
         <div className="bg-white rounded-2xl border border-neutral-200 shadow-sm p-5 space-y-4">
           <SummaryPanel summary={summary} />
-          {(summary.openingHopperCoins?.length > 0 || summary.openingMechanismCoins?.length > 0) && (
+          {summary.openingHopperCoins?.length > 0 && (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {summary.openingHopperCoins?.length > 0 && (
                 <div className="rounded-xl bg-primary-50 border border-primary-100 p-3">
                   <div className="text-xs font-semibold text-primary-700 mb-2">Hopper no inicio</div>
                   <CoinChipGrid denoms={buildDenomFromSaved(COIN_DENOMS, summary.openingHopperCoins)} readOnly />
                   <div className="text-xs text-primary-600 font-semibold mt-2">Total: {fmt(summary.openingHopperTotal)}&euro;</div>
-                </div>
-              )}
-              {summary.openingMechanismCoins?.length > 0 && (
-                <div className="rounded-xl bg-amber-50 border border-amber-100 p-3">
-                  <div className="text-xs font-semibold text-amber-700 mb-2">Mecanismo no inicio</div>
-                  <CoinChipGrid denoms={buildDenomFromSaved(COIN_DENOMS, summary.openingMechanismCoins)} readOnly />
-                  <div className="text-xs text-amber-600 font-semibold mt-2">Total: {fmt(summary.openingMechanismTotal)}&euro;</div>
                 </div>
               )}
             </div>
@@ -356,23 +352,17 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
 
         {view === 'hopper' && (
           <>
-            <Step title="Mecanismo aceitador" subtitle="Moedas presentes no aceitador no momento do fecho" accent="amber">
-              {summary?.openingMechanismCoins?.length > 0 && (
-                <div className="text-xs text-neutral-400 -mt-1">
-                  Inicio: {summary.openingMechanismCoins.map(d => `${fmtDenomLabel(d.value)}×${d.count}`).join('  ')}{' '}
-                  &mdash; {fmt(summary.openingMechanismTotal)}&euro;
-                </div>
-              )}
-              <CoinChipGrid denoms={mechanismDenoms} onChange={makeUpdater(setMechanismDenoms)} />
-              {mechanismTotal > 0 && (
-                <div className="text-xs font-semibold text-amber-700">Total no mecanismo: {fmt(mechanismTotal)}&euro;</div>
-              )}
-            </Step>
-
-            <Step title="Hopper (dispensador de troco)" subtitle="Registe o estado atual, defina o objetivo e veja o que repor" accent="blue">
+            <Step title="Hopper (dispensador de troco)" subtitle="As moedas que entram caem logo no hopper: é aqui que se contam. Registe o estado atual, defina o objetivo e veja o que repor" accent="blue">
           <div>
             <div className="text-xs font-semibold text-neutral-600 mb-1 uppercase tracking-wide">Moedas restantes agora</div>
             <div className="text-xs text-neutral-400 mb-2">Conte as moedas que estão no hopper agora. O sistema sabe o que entra, mas não que moedas saem no troco (só o valor em euros).</div>
+            {summary?.lastHopperCount && (
+              <div className="text-xs text-primary-700 bg-primary-50 border border-primary-100 rounded-lg px-3 py-2 mb-2">
+                Pré-preenchido com a última contagem: {shopDateTime(summary.lastHopperCount.at)} ({summary.lastHopperCount.source === 'close' ? 'fecho' : 'moedas postas no hopper'}, {fmt(summary.lastHopperCount.total)}&euro;).
+                {summary.lastHopperCount.changeGivenSince > 0 ? <> Desde então o troco dado foi {fmt(summary.lastHopperCount.changeGivenSince)}&euro;. </> : ' '}
+                Corrija para o que está lá agora.
+              </div>
+            )}
             {summary?.openingHopperCoins?.length > 0 && summary.totalChangeDispensed > 0 && (
               <div className="text-xs text-neutral-400 mb-2">
                 No início: {fmt(summary.openingHopperTotal)}&euro; &mdash; troco dado desde então: {fmt(summary.totalChangeDispensed)}&euro; (em euros; as moedas exatas não são registadas)

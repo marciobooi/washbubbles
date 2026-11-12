@@ -130,3 +130,27 @@ describe('The last count of coins in the hopper comes back on the hopper screen'
     expect(after).to.include({ source: 'close', total: 20 })
   })
 })
+
+describe('An annulled record is left out of every calculation', function () {
+  this.timeout(20000)
+  let app, tenant, admin, DayClose
+  const auth = () => ({ Authorization: `Bearer ${signToken(admin)}` })
+  before(async () => { await startTestDb(); app = await buildTestApp(); DayClose = (await import('../src/models/dayClose.js')).default })
+  after(async () => { await stopTestDb() })
+  beforeEach(async () => { await clearTestDb(); ;({ tenant, admin } = await seedTenantAndUsers()) })
+
+  it('an annulled close is not the baseline, an annulled top-up is not expected in the count, and both stay in the history', async () => {
+    const mk = (extra) => DayClose.create({ tenantId: tenant._id, periodFrom: new Date(), periodTo: new Date(), ...extra })
+    const real = await mk({ source: 'dashboard', openingFloat: 0, expectedCash: 120, countedCash: 120, floatLeft: 120, createdAt: new Date(Date.now() - 3 * 3600e3), periodTo: new Date(Date.now() - 3 * 3600e3) })
+    const test = await mk({ source: 'dashboard', openingFloat: 120, expectedCash: 500, countedCash: 6.7, floatLeft: 0, discrepancy: -493.3, createdAt: new Date(Date.now() - 2 * 3600e3), periodTo: new Date(Date.now() - 2 * 3600e3) })
+    const topUp = await mk({ source: 'adjustment', metadata: { adjustmentAmount: 93.7 }, createdAt: new Date(Date.now() - 3600e3) })
+    let s = (await request(app).get('/api/admin/day-close/summary').set(auth())).body
+    expect(s).to.include({ openingFloat: 0, floatAdded: 93.7 }) // the test close is the baseline now
+    await DayClose.updateMany({ _id: { $in: [test._id, topUp._id] } }, { $set: { voided: true, voidedReason: 'teste' } })
+    s = (await request(app).get('/api/admin/day-close/summary').set(auth())).body
+    expect(s).to.include({ openingFloat: 120, floatAdded: 0 }) // back to the real close
+    const history = (await request(app).get('/api/admin/day-close').set(auth())).body
+    expect(history.filter((d) => d.voided)).to.have.length(2) // still listed
+    expect(real.voided).to.equal(false)
+  })
+})

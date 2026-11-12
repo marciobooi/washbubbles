@@ -160,7 +160,7 @@ export default function AdminDayClose() {
                   {/* Row */}
                   <button
                     type="button"
-                    className="w-full text-left px-5 py-4 hover:bg-neutral-50 transition flex flex-wrap items-center gap-x-5 gap-y-1"
+                    className={`w-full text-left px-5 py-4 hover:bg-neutral-50 transition flex flex-wrap items-center gap-x-5 gap-y-1 ${dc.voided ? 'opacity-50 line-through' : ''}`}
                     onClick={() => setExpandedId(prev => prev === dc._id ? null : dc._id)}
                   >
                     <div className="text-xs text-neutral-400 w-32 shrink-0">
@@ -169,7 +169,7 @@ export default function AdminDayClose() {
                     <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
                       <span className="text-xs text-neutral-500">Esperado <strong className="text-neutral-700">{fmt(dc.expectedCash ?? (Number(dc.openingFloat||0)+Number(dc.totalCash||0)))}&euro;</strong></span>
                       <span className="text-xs text-neutral-500">Contado <strong className="text-neutral-700">{fmt(dc.countedCash)}&euro;</strong></span>
-                      <DiscrepancyPill value={disc} />
+                      {dc.voided ? <span className="rounded-full bg-neutral-200 text-neutral-600 font-semibold px-2 py-0.5 text-xs" title={dc.voidedReason || ''}>Anulado</span> : <DiscrepancyPill value={disc} />}
                     </div>
                     <div className="flex items-center gap-3 shrink-0 text-xs">
                       <span className="rounded-full bg-emerald-50 text-emerald-700 font-semibold px-2.5 py-0.5">

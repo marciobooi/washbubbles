@@ -99,7 +99,7 @@ export async function ledgerFromFlows(tenantId, FlowModel, since) {
 
 /**
  * Shop PC: make the ledger match the last real close the central server announced. A ledger with no start date is built once from the
- * flows since that close (what went in before this fix is not lost); one older than the close is zeroed (a close counted the cash).
+ * flows since that close (what went in before this fix is not lost); one that starts from another close is rebuilt from that close.
  */
 export async function reconcileShopLedger(tenantId, FlowModel) {
   const resetRow = await Setting.findOne({ tenantId, key: RESET_KEY }).lean()
@@ -112,10 +112,13 @@ export async function reconcileShopLedger(tenantId, FlowModel) {
     await Setting.updateOne({ tenantId, key: SINCE_KEY }, { $set: { value: (resetAt || new Date()).toISOString() } }, { upsert: true })
     return 'seeded'
   }
-  if (resetAt && resetAt > since) {
-    await Setting.updateOne({ tenantId, key: LEDGER_KEY }, { $set: { value: emptyLedger() } }, { upsert: true })
+  // The close the count starts from changed (a new close, or one annulled and the start moved back): rebuild it from the flows since the
+  // new start, which is exact both ways (after a close there is little to count; moved back, what went in since is counted again).
+  if (resetAt && resetAt.getTime() !== since.getTime()) {
+    const led = FlowModel ? await ledgerFromFlows(tenantId, FlowModel, resetAt) : emptyLedger()
+    await Setting.updateOne({ tenantId, key: LEDGER_KEY }, { $set: { value: led } }, { upsert: true })
     await Setting.updateOne({ tenantId, key: SINCE_KEY }, { $set: { value: resetAt.toISOString() } }, { upsert: true })
-    return 'reset'
+    return 'reseeded'
   }
   return 'ok'
 }

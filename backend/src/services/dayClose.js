@@ -37,7 +37,7 @@ import { getCashDrawerLedger, resetCashDrawerLedger } from './cashDrawer.js'
  * close instead (see floatAddedSince).
  */
 export async function findLastDashboardClose(DayCloseT) {
-  const arr = await DayCloseT.find({ source: 'dashboard' }).sort({ createdAt: -1 }).limit(1).lean()
+  const arr = await DayCloseT.find({ source: 'dashboard', voided: { $ne: true } }).sort({ createdAt: -1 }).limit(1).lean()
   return arr[0] || null
 }
 
@@ -47,7 +47,7 @@ export async function findLastDashboardClose(DayCloseT) {
  */
 export async function floatMovementsSince(DayCloseT, lastClose) {
   const since = lastClose ? (lastClose.periodTo || lastClose.createdAt) : new Date(0)
-  const rows = await DayCloseT.find({ source: 'adjustment', createdAt: { $gt: since } }).select('metadata').lean()
+  const rows = await DayCloseT.find({ source: 'adjustment', voided: { $ne: true }, createdAt: { $gt: since } }).select('metadata').lean()
   const sum = (k) => Number(rows.reduce((s, r) => s + (Number(r.metadata?.[k]) || 0), 0).toFixed(2))
   return { added: sum('adjustmentAmount'), withdrawn: sum('withdrawalAmount') }
 }
@@ -147,7 +147,7 @@ export async function getDayCloseSummary(req) {
  * counts were saved but never shown again, so the hopper screen always opened empty (2026-11-12).
  */
 export async function lastHopperCount(DayCloseT, SaleT) {
-  const recent = await DayCloseT.find({ source: { $in: ['dashboard', 'adjustment'] } }).sort({ createdAt: -1 }).limit(40).lean()
+  const recent = await DayCloseT.find({ source: { $in: ['dashboard', 'adjustment'] }, voided: { $ne: true } }).sort({ createdAt: -1 }).limit(40).lean()
   const coinsOf = (arr) => (arr || []).filter((d) => Number(d.value) > 0 && Number(d.value) < 3 && Number(d.count) > 0).map((d) => ({ value: Number(d.value), count: Number(d.count) }))
   for (const d of recent) {
     const isTopUp = d.source === 'adjustment' && Number(d.metadata?.adjustmentAmount) > 0
