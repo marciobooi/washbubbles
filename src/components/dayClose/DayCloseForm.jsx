@@ -200,16 +200,21 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
   }
 
   const refillTotal = countedDenoms.filter((d) => d.value < 3).reduce((s, d) => s + Math.min(d.count, hopperGap.find((g) => Math.abs(g.value - d.value) < 0.001)?.toAdd || 0) * d.value, 0)
+  // AUTOMATIC: what goes to the bank is everything the customers put in as cash since the last close (sales and card top-ups), minus what
+  // was already taken out; it does not depend on counting anything first. What stays is the rest of what is in the machine (the hopper's
+  // float): what was counted, or what the machine is expected to hold while nothing has been counted yet. Both can still be edited.
+  const autoBank = summary ? Math.max(0, Math.round((Number(summary.totalCash || 0) - Number(summary.floatWithdrawn || 0)) * 100) / 100) : 0
+  const expectedNow = summary ? Number(summary.expectedCash || 0) : 0
   useEffect(() => {
     if (bankEditedRef.current) return
-    const bank = Math.max(0, countedCash - refillTotal)
-    setAmountToBank(countedCash > 0 ? bank.toFixed(2) : '')
-  }, [countedCash, refillTotal])
+    setAmountToBank(autoBank > 0 ? autoBank.toFixed(2) : '')
+  }, [autoBank])
   // the float is always the rest, so bank + float is exactly what was counted
   useEffect(() => {
     const atb = parseFloat(amountToBank)
-    setFloatLeft(isNaN(atb) ? '' : Math.max(0, countedCash - atb).toFixed(2))
-  }, [amountToBank, countedCash])
+    const base = countedCash > 0 ? countedCash : expectedNow
+    setFloatLeft(isNaN(atb) ? '' : Math.max(0, base - atb).toFixed(2))
+  }, [amountToBank, countedCash, expectedNow])
 
   function makeUpdater(setter) {
     return (i, rawVal) => {
@@ -224,6 +229,7 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
     const fl  = parseFloat(floatLeft)
     if (isNaN(atb) || isNaN(fl)) return toast({ title: 'Indique o valor para o banco', variant: 'destructive' })
     if (atb < 0 || fl < 0) return toast({ title: 'Os valores nao podem ser negativos', variant: 'destructive' })
+    if (!(countedCash > 0)) return toast({ title: 'Conte o dinheiro que está na máquina (a contagem vem pré-preenchida com as notas e moedas aceites)', variant: 'destructive' })
     if (Math.abs(atb + fl - countedCash) > 0.005) return toast({
       title: `Banco + Fundo (${fmt(atb + fl)}€) ≠ Total contado (${fmt(countedCash)}€)`,
       variant: 'destructive'
@@ -414,7 +420,7 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
               value={amountToBank}
               onChange={handleAmountToBank}
               required
-              hint="Sugerido: tudo o que contou, menos as moedas que repõem o hopper"
+              hint="Automático: todo o dinheiro que os clientes puseram desde o último fecho (vendas e recargas), menos o que já levantou. Pode alterar."
             />
             <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm self-end">
               <div className="text-neutral-500">Fica na caixa</div>
