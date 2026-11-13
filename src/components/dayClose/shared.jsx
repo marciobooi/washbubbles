@@ -6,11 +6,12 @@ import React from 'react'
 // totalled, mirroring how `services/dayClose.js` is the one place the actual
 // reconciliation math lives on the backend.
 
-export const COIN_DENOMS = [0.05, 0.10, 0.20, 0.50, 1.00, 2.00]
+// Largest first on every counting screen. 5c coins are not counted here (taken out at the owner's request, 2026-11-13).
+export const COIN_DENOMS = [2.00, 1.00, 0.50, 0.20, 0.10]
 // The shop's bill acceptor takes 5, 10 and 20 euro notes only (50 and above are rejected), so those are the
 // only notes there can be in the till from sales. Counting grids offer exactly these.
-export const BILL_DENOMS = [5, 10, 20]
-export const ALL_CASH_DENOMS = [...COIN_DENOMS, ...BILL_DENOMS]
+export const BILL_DENOMS = [20, 10, 5]
+export const ALL_CASH_DENOMS = [...BILL_DENOMS, ...COIN_DENOMS]
 
 export function fmt(n) { return Number(n || 0).toFixed(2) }
 /**
