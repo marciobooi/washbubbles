@@ -3,7 +3,7 @@ import request from 'supertest'
 import bcrypt from 'bcryptjs'
 import { startTestDb, stopTestDb, clearTestDb, buildTestApp, seedTenantAndUsers, signToken } from './setup.test-helper.js'
 
-describe('OPERATOR role: a shop assistant can only start or release a machine', function () {
+describe('OPERATOR role: a shop assistant runs the machines, the till and the hopper, and nothing else', function () {
   this.timeout(20000)
   let app, tenant, opToken, machine, Machine
   before(async () => {
@@ -33,14 +33,46 @@ describe('OPERATOR role: a shop assistant can only start or release a machine', 
     const e = await as('post', `/api/admin/machines/${machine._id}/end`).send({})
     expect(e.status).to.not.be.oneOf([401, 403])
   })
-  it('cannot reach anything else: users, settings, prices, cards, day close, audit, service state', async () => {
+  it('cannot reach anything else: users, settings, cards, audit, service state', async () => {
     for (const [m, url] of [
       ['get', '/api/admin/users'], ['post', '/api/admin/users'], ['get', '/api/admin/cards'], ['get', '/api/admin/audit-log'],
-      ['post', '/api/admin/hopper/empty'], ['post', '/api/admin/hopper/restore'], ['post', '/api/admin/cards/blank-reader'], ['get', '/api/admin/day-close/summary'],
+      ['post', '/api/admin/cards/blank-reader'], ['get', '/api/admin/settings/adminPin'],
       ['put', `/api/admin/machines/${machine._id}`], ['delete', `/api/admin/machines/${machine._id}`], ['post', `/api/admin/machines/${machine._id}/service`],
     ]) {
       const r = await as(m, url).send({})
       expect(r.status, `${m} ${url}`).to.equal(403)
+    }
+  })
+})
+
+describe('OPERATOR role: the till and the hopper are hers (2026-11-13)', function () {
+  this.timeout(20000)
+  let app, tenant, opToken
+  before(async () => { await startTestDb(); app = await buildTestApp() })
+  after(async () => { await stopTestDb() })
+  beforeEach(async () => {
+    await clearTestDb()
+    ;({ tenant } = await seedTenantAndUsers())
+    const User = (await import('../src/models/user.js')).default
+    const op = await User.create({ username: 'tatiana-caixa', email: 'op2@test.local', password: await bcrypt.hash('x-pass-123', 10), role: 'OPERATOR', tenantId: tenant._id })
+    opToken = signToken(op)
+  })
+  const as = (m, url) => request(app)[m](url).set('Authorization', `Bearer ${opToken}`)
+
+  it('reads the day close, its history, and does the cash and hopper actions (the guard lets her through: not 401/403)', async () => {
+    expect((await as('get', '/api/admin/day-close/summary')).status).to.equal(200)
+    expect((await as('get', '/api/admin/day-close')).status).to.equal(200)
+    for (const [m, url, body] of [
+      ['post', '/api/admin/day-close/adjust-float', { amount: 10 }],
+      ['post', '/api/admin/day-close/withdraw', { amount: 1 }],
+      ['post', '/api/admin/day-close/exchange', { notesOut: [{ value: 10, count: 1 }], coinsIn: [{ value: 1, count: 10 }] }],
+      ['post', '/api/admin/hopper/restore', { coins: [{ value: 2, count: 5 }] }],
+      ['post', '/api/admin/hopper/refill', { coins: [{ value: 2, count: 5 }] }],
+      ['post', '/api/admin/hopper/empty', {}],            // refused for lack of the confirmation, not for the role
+      ['post', '/api/admin/day-close/payout-coins', { amount: 5 }],
+    ]) {
+      const r = await as(m, url).send(body)
+      expect(r.status, `${m} ${url}`).to.not.be.oneOf([401, 403])
     }
   })
 })

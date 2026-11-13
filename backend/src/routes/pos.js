@@ -265,6 +265,37 @@ router.post('/hopper/refill', requireKioskOrAdmin, async (req, res) => {
   res.status(status).json(body)
 })
 
+// The same cash and hopper actions as the admin's, for the person at the kiosk: staff PIN, like the close itself.
+const kioskPin = async (req, res) => {
+  if (req.userModel?.role !== 'KIOSK') return true
+  const pinCheck = await checkAdminPin(req, req.body?.pin)
+  if (!pinCheck.ok) { res.status(pinCheck.status).json({ error: pinCheck.error, ...(pinCheck.code ? { code: pinCheck.code } : {}) }); return false }
+  return true
+}
+router.post('/day-close/exchange', requireKioskOrAdmin, async (req, res) => {
+  if (!(await kioskPin(req, res))) return
+  const { createCashExchange } = await import('../services/dayClose.js')
+  const { status, body } = await createCashExchange(req, req.body || {})
+  res.status(status).json(body)
+})
+router.post('/hopper/restore', requireKioskOrAdmin, async (req, res) => {
+  if (!(await kioskPin(req, res))) return
+  const { restoreHopper } = await import('../services/hopperRefill.js')
+  const { status, body } = await restoreHopper(req, req.body || {})
+  res.status(status).json(body)
+})
+// Empty the hopper into the tray (a container under it): on the shop PC it runs right here.
+router.post('/hopper/empty', requireKioskOrAdmin, async (req, res) => {
+  if (!(await kioskPin(req, res))) return
+  if (req.body?.confirm !== true) return res.status(400).json({ error: 'Confirme o esvaziamento' })
+  const { default: coinMachine } = await import('../services/coinMachine.js')
+  if (!coinMachine.running) return res.status(409).json({ error: 'O hopper só se esvazia na loja' })
+  const r = await coinMachine.emptyHopper()
+  const { logAction } = await import('../services/auditLog.js')
+  logAction(req, 'hopper.empty', 'Peripheral', null, { dispensed: r.dispensed, error: r.error, by: 'staff PIN (kiosk)' })
+  res.json({ queued: false, ...r })
+})
+
 // The coins of the bank deposit paid out by the hopper: from the kiosk with the staff PIN, like the close itself.
 router.post('/day-close/payout-coins', requireKioskOrAdmin, async (req, res) => {
   if (req.userModel?.role === 'KIOSK') {

@@ -102,6 +102,24 @@ describe('A float top-up is not a close', function () {
       expect((await post({ amount: 10, pin: '4821' })).status).to.equal(200)
       expect((await summary()).floatWithdrawn).to.equal(10)
     })
+
+    it('exchange, put-back and empty from the kiosk also need the staff PIN', async () => {
+      const { hashPin } = await import('../src/services/staffPin.js')
+      const Setting = (await import('../src/models/setting.js')).default
+      await Setting.create({ tenantId: tenant._id, key: 'adminPin', value: await hashPin('4821') })
+      await Setting.create({ tenantId: tenant._id, key: 'adminPin.setAt', value: new Date().toISOString() })
+      const User = (await import('../src/models/user.js')).default
+      const k = await User.findOne({ tenantId: tenant._id, role: 'KIOSK' })
+      const post = (path, body) => request(app).post(`/api/pos${path}`).set({ Authorization: `ApiKey ${k.apiKey}` }).send(body)
+      const ex = { notesOut: [{ value: 10, count: 1 }], coinsIn: [{ value: 1, count: 10 }] }
+      expect((await post('/day-close/exchange', ex)).status).to.equal(400)                       // no PIN
+      expect((await post('/day-close/exchange', { ...ex, pin: '0000' })).status).to.equal(401)   // wrong PIN
+      expect((await post('/day-close/exchange', { ...ex, pin: '4821' })).status).to.equal(200)
+      expect((await post('/hopper/restore', { coins: [{ value: 2, count: 3 }] })).status).to.equal(400)
+      expect((await post('/hopper/restore', { coins: [{ value: 2, count: 3 }], pin: '4821' })).status).to.equal(200)
+      expect((await post('/hopper/empty', { confirm: true })).status).to.equal(400)              // no PIN: nothing comes out
+      expect((await post('/hopper/empty', { pin: '4821' })).status).to.equal(400)                // PIN but no confirmation
+    })
   })
 })
 

@@ -251,7 +251,7 @@ export default function AdminUsers(){
                 <option value="KIOSK">kiosk</option>
                 <option value="STAFF">staff (só leitura)</option>
                 <option value="TECHNICIAN">técnico (máquinas/manutenção)</option>
-                <option value="OPERATOR">operador (só iniciar / parar máquinas)</option>
+                <option value="OPERATOR">operador (máquinas, fecho de caixa e hopper)</option>
                 {myRole === 'SUPERADMIN' && <option value="SUPERADMIN">superadmin</option>}
               </select>
             </div>

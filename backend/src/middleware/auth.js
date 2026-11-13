@@ -100,6 +100,10 @@ export function requireRole(...allowed) {
 export const requireAdmin = requireRole('ADMIN', 'SUPERADMIN')
 // OPERATOR (a shop assistant): may only start or release a machine by hand, nothing else in the dashboard.
 export const requireMachineOperator = requireRole('ADMIN', 'SUPERADMIN', 'OPERATOR')
+// The shop assistant who runs the till (OPERATOR) also does the cash: day close, float, withdrawals, bank coins and the hopper
+// (empty, put back, top up). Not users, settings, prices, cards or the audit trail.
+export const requireCashStaff = requireRole('ADMIN', 'SUPERADMIN', 'OPERATOR')
+export const requireCashRead = requireRole('ADMIN', 'SUPERADMIN', 'STAFF', 'OPERATOR')
 export const requireDashboardUser = requireRole('ADMIN', 'SUPERADMIN', 'STAFF', 'TECHNICIAN', 'OPERATOR')
 export const requireSuperAdmin = requireRole('SUPERADMIN')
 export const requireKiosk = requireRole('KIOSK')

@@ -5,6 +5,7 @@ import api from '@/services/api'
 import DayCloseForm from '@/components/dayClose/DayCloseForm'
 import HopperRefillModal from '@/components/dayClose/HopperRefillModal'
 import CashWithdrawModal from '@/components/dayClose/CashWithdrawModal'
+import CashExchangeModal from '@/components/dayClose/CashExchangeModal'
 
 function getKioskApiKey() {
   const electronKey = typeof window !== 'undefined' && window.electronAPI?.kioskKey ? window.electronAPI.kioskKey() : null
@@ -32,6 +33,9 @@ export default function KioskDayCloseModal({ open, onClose, pin }) {
   const [tab, setTab] = useState('fecho') // 'fecho' | 'hopper'
   const [refillOpen, setRefillOpen] = useState(false)
   const [withdrawOpen, setWithdrawOpen] = useState(false)
+  const [exchangeOpen, setExchangeOpen] = useState(false)
+  const [restoreOpen, setRestoreOpen] = useState(false)
+  const [emptying, setEmptying] = useState(false)
 
   const loadSummary = useCallback(async () => {
     setSummaryLoading(true)
@@ -51,6 +55,19 @@ export default function KioskDayCloseModal({ open, onClose, pin }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
+  async function emptyHopper() {
+    if (!window.confirm('Vão cair TODAS as moedas do hopper para o tabuleiro do troco, à frente do quiosque. Já tem um recipiente por baixo? Pode demorar alguns minutos.')) return
+    setEmptying(true)
+    try {
+      const r = await api.emptyKioskHopper({ pin }, { apiKey: getKioskApiKey() })
+      const out = Number(r?.dispensed || 0)
+      toast({ title: out > 0 ? `Hopper esvaziado: saíram ${out.toFixed(2)}€` : 'Não saiu nenhuma moeda', description: r?.error || (out > 0 ? 'Conte as moedas que caíram. Depois de as pôr no hopper, use «Repor».' : undefined), variant: out > 0 ? 'success' : 'destructive' })
+      loadSummary()
+    } catch (err) {
+      toast({ title: err?.body?.error || 'Erro ao esvaziar o hopper', variant: 'destructive' })
+    } finally { setEmptying(false) }
+  }
+
   if (!open) return null
 
   return (
@@ -64,16 +81,34 @@ export default function KioskDayCloseModal({ open, onClose, pin }) {
         ))}
       </div>
       {tab === 'fecho' && (
-        <button type="button" onClick={() => setWithdrawOpen(true)} className="w-full h-12 mb-4 rounded-xl bg-white border border-slate-200 text-slate-700 font-semibold text-base active:scale-[0.99]">
-          Registar levantamento de dinheiro
-        </button>
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <button type="button" onClick={() => setWithdrawOpen(true)} className="h-12 rounded-xl bg-white border border-slate-200 text-slate-700 font-semibold text-base active:scale-[0.99]">
+            Registar levantamento de dinheiro
+          </button>
+          <button type="button" onClick={() => setExchangeOpen(true)} className="h-12 rounded-xl bg-white border border-slate-200 text-slate-700 font-semibold text-base active:scale-[0.99]">
+            Troca de notas por moedas
+          </button>
+        </div>
       )}
       {tab === 'hopper' && (
-        <button type="button" onClick={() => setRefillOpen(true)} className="w-full h-14 mb-4 rounded-xl bg-emerald-600 text-white font-bold text-lg shadow-sm active:scale-[0.99]">
-          Adicionar fundo de caixa (moedas)
-        </button>
+        <div className="grid gap-3 mb-4">
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3">
+            <p className="text-sm text-emerald-900 mb-2"><b>Adicionar fundo de caixa</b>: moedas novas que traz de fora. O fundo de caixa sobe esse valor.</p>
+            <button type="button" onClick={() => setRefillOpen(true)} className="w-full h-12 rounded-xl bg-emerald-600 text-white font-bold text-base shadow-sm active:scale-[0.99]">Adicionar fundo de caixa (moedas)</button>
+          </div>
+          <div className="rounded-xl border border-sky-200 bg-sky-50/60 p-3">
+            <p className="text-sm text-sky-900 mb-2"><b>Repor</b>: volta a pôr no hopper as mesmas moedas que tirou para contar. O dinheiro não muda, só fica registado o que o hopper tem.</p>
+            <button type="button" onClick={() => setRestoreOpen(true)} className="w-full h-12 rounded-xl bg-sky-600 text-white font-bold text-base shadow-sm active:scale-[0.99]">Repor (moedas de volta)</button>
+          </div>
+          <div className="rounded-xl border border-rose-200 bg-rose-50/60 p-3">
+            <p className="text-sm text-rose-900 mb-2"><b>Esvaziar</b>: o hopper larga todas as moedas no tabuleiro, para as contar. Ponha um recipiente por baixo. Mostra quantas saíram.</p>
+            <button type="button" disabled={emptying} onClick={emptyHopper} className="w-full h-12 rounded-xl bg-white border border-rose-300 text-rose-700 font-bold text-base active:scale-[0.99] disabled:opacity-50">{emptying ? 'A esvaziar…' : 'Esvaziar hopper'}</button>
+          </div>
+        </div>
       )}
       <CashWithdrawModal open={withdrawOpen} onClose={() => setWithdrawOpen(false)} expectedCash={summary?.expectedCash} onSubmit={(p) => api.withdrawKioskCash({ ...p, pin }, { apiKey: getKioskApiKey() })} onDone={() => { setWithdrawOpen(false); loadSummary() }} />
+      <CashExchangeModal open={exchangeOpen} onClose={() => setExchangeOpen(false)} onSubmit={(p) => api.exchangeKioskCash({ ...p, pin }, { apiKey: getKioskApiKey() })} onDone={() => { setExchangeOpen(false); loadSummary() }} />
+      <HopperRefillModal mode="restore" open={restoreOpen} onClose={() => setRestoreOpen(false)} onSubmit={(p) => api.restoreKioskHopper({ ...p, pin }, { apiKey: getKioskApiKey() })} onDone={() => { setRestoreOpen(false); loadSummary() }} />
       <HopperRefillModal open={refillOpen} onClose={() => setRefillOpen(false)} onSubmit={(p) => api.refillKioskHopper({ ...p, pin }, { apiKey: getKioskApiKey() })} onDone={() => { setRefillOpen(false); loadSummary() }} />
       <DayCloseForm
         view={tab}

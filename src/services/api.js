@@ -466,6 +466,20 @@ export function createApi(config) {
     return request('/pos/hopper/refill', { method: 'POST', json: payload, headers, skipAuth: true, expect: 'json' })
   }
 
+  // The same actions as the admin's, for the person at the kiosk (staff PIN in the payload).
+  function exchangeKioskCash(payload, opts) {
+    const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
+    return request('/pos/day-close/exchange', { method: 'POST', json: payload, headers, skipAuth: true, expect: 'json' })
+  }
+  function restoreKioskHopper(payload, opts) {
+    const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
+    return request('/pos/hopper/restore', { method: 'POST', json: payload, headers, skipAuth: true, expect: 'json' })
+  }
+  function emptyKioskHopper(payload, opts) {
+    const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
+    return request('/pos/hopper/empty', { method: 'POST', json: { confirm: true, ...payload }, headers, skipAuth: true, expect: 'json' })
+  }
+
   function addDayCloseFloat(payload) {
     // payload: { denominations: [{value, count}], notes? } — top up the float
     // directly, without it counting as bankable sales money.
@@ -799,6 +813,9 @@ export function createApi(config) {
     staffEndMachine,
     adminGiftCard,
     refillKioskHopper,
+    exchangeKioskCash,
+    restoreKioskHopper,
+    emptyKioskHopper,
     emailDayCloseReceipt,
 
     // Tenants

@@ -55,9 +55,9 @@ export default function AdminDashboard() {
   }
 
   const roleLabel = role === 'SUPERADMIN' ? 'Superadmin' : role === 'OPERATOR' ? 'Operador' : 'Admin'
-  // An operator sees ONE page: whatever address they open, they land on Operações.
+  // An operator sees two pages: Operações (machines) and Fecho de Dia (the till and the hopper); anything else lands on Operações.
   const here = useLocation()
-  if (role === 'OPERATOR' && !here.pathname.startsWith('/admin/operations') && !here.pathname.startsWith('/admin/profile')) return <Navigate to="/admin/operations" replace />
+  if (role === 'OPERATOR' && !here.pathname.startsWith('/admin/operations') && !here.pathname.startsWith('/admin/day-close') && !here.pathname.startsWith('/admin/profile')) return <Navigate to="/admin/operations" replace />
 
   return (
     <SidebarProvider>

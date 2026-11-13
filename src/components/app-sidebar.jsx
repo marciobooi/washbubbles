@@ -35,7 +35,7 @@ const navItems = [
   { title: 'Cartões', url: '/admin/cards', Icon: Wallet, roles: ['ADMIN', 'SUPERADMIN', 'STAFF'] },
   { title: 'Utilizadores', url: '/admin/users', Icon: Users },
   { title: 'Transacções', url: '/admin/transactions', Icon: CreditCard, roles: ['ADMIN', 'SUPERADMIN', 'STAFF'] },
-  { title: 'Fecho de Dia', url: '/admin/day-close', Icon: Banknote, roles: ['ADMIN', 'SUPERADMIN', 'STAFF'] },
+  { title: 'Fecho de Dia', url: '/admin/day-close', Icon: Banknote, roles: ['ADMIN', 'SUPERADMIN', 'STAFF', 'OPERATOR'] },
   { title: 'Definições', url: '/admin/settings', Icon: Settings },
   { title: 'Auditoria', url: '/admin/audit-log', Icon: ScrollText },
   { title: 'Lojas', url: '/admin/tenants', Icon: Users, roles: ['SUPERADMIN'] },

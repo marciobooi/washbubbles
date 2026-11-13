@@ -1,7 +1,7 @@
 import { getEmailBrand } from '../services/emailBrand.js'
 import express from 'express'
 import mongoose from 'mongoose'
-import { requireAdmin, requireSuperAdmin, requireStaffRead, requireAnyStaff, requireTechnician, requireMachineOperator, requireDashboardUser } from '../middleware/auth.js'
+import { requireAdmin, requireSuperAdmin, requireStaffRead, requireAnyStaff, requireTechnician, requireMachineOperator, requireDashboardUser, requireCashStaff, requireCashRead } from '../middleware/auth.js'
 import MaintenanceTicket from '../models/maintenanceTicket.js'
 import Coupon from '../models/coupon.js'
 import { sendMail } from '../services/mailer.js'
@@ -54,8 +54,11 @@ router.param('id', (req, res, next, id) => {
 // router at all; individual routes narrow further with requireAdmin,
 // requireStaffRead or requireTechnician below.
 router.use(requireDashboardUser)
-// ...but an OPERATOR reaches ONLY the machine list and the manual start / release of a machine: every other route answers 403 for them.
-const OPERATOR_ALLOWED = (req) => (req.method === 'GET' && (req.path === '/machines' || req.path === '/shop-status')) || (req.method === 'POST' && /^\/machines\/[^/]+\/(start|end)$/.test(req.path))
+// ...but an OPERATOR reaches ONLY the machines (list, manual start / release) and the till and hopper (day close, float, withdrawals, bank coins,
+// exchange, empty / put back / top up the hopper): every other route answers 403 for them.
+const OPERATOR_ALLOWED = (req) =>
+  (req.method === 'GET' && (req.path === '/machines' || req.path === '/shop-status' || req.path === '/day-close' || req.path === '/day-close/summary' || /^\/(day-close|commands)\/[0-9a-f]{24}$/.test(req.path))) ||
+  (req.method === 'POST' && (/^\/machines\/[^/]+\/(start|end)$/.test(req.path) || req.path === '/day-close' || /^\/day-close\/(adjust-float|withdraw|exchange|payout-coins)$/.test(req.path) || /^\/day-close\/[0-9a-f]{24}\/email$/.test(req.path) || /^\/hopper\/(refill|restore|empty)$/.test(req.path)))
 router.use((req, res, next) => {
   if (req.userModel?.role === 'OPERATOR' && !OPERATOR_ALLOWED(req)) return res.status(403).json({ error: 'Forbidden' })
   next()
@@ -1550,7 +1553,7 @@ router.delete('/peripherals/:id', requireAdmin, async (req, res) => {
 // =====================
 
 // GET /admin/day-close — list previous closes (newest first, limit 90)
-router.get('/day-close', requireStaffRead, async (req, res) => {
+router.get('/day-close', requireCashRead, async (req, res) => {
   const DayClose = (await import('../models/dayClose.js')).default
   const DayCloseT = withTenant(DayClose, req)
   const list = await DayCloseT.find().sort({ createdAt: -1 }).limit(90).lean()
@@ -1558,13 +1561,13 @@ router.get('/day-close', requireStaffRead, async (req, res) => {
 })
 
 // GET /admin/day-close/summary — live sales totals + reconciliation data for the current open session
-router.get('/day-close/summary', requireStaffRead, async (req, res) => {
+router.get('/day-close/summary', requireCashRead, async (req, res) => {
   const { getDayCloseSummary } = await import('../services/dayClose.js')
   res.json(await getDayCloseSummary(req))
 })
 
 // GET /admin/day-close/:id — single record
-router.get('/day-close/:id', requireStaffRead, async (req, res) => {
+router.get('/day-close/:id', requireCashRead, async (req, res) => {
   const DayClose = (await import('../models/dayClose.js')).default
   const DayCloseT = withTenant(DayClose, req)
   const dc = await DayCloseT.findById(req.params.id).lean()
@@ -1575,14 +1578,14 @@ router.get('/day-close/:id', requireStaffRead, async (req, res) => {
 // POST /admin/day-close — close / reconcile the current cash session.
 // Shared with the kiosk's own staff-mode wizard — see routes/pos.js and
 // services/dayClose.js, the single implementation both call into.
-router.post('/day-close', requireAdmin, async (req, res) => {
+router.post('/day-close', requireCashStaff, async (req, res) => {
   const { createDayClose } = await import('../services/dayClose.js')
   const { status, body } = await createDayClose(req, req.body)
   res.status(status).json(body)
 })
 
 // POST /admin/hopper/refill — coins brought from outside into the hopper (stock +, booked as float).
-router.post('/hopper/refill', requireAdmin, async (req, res) => {
+router.post('/hopper/refill', requireCashStaff, async (req, res) => {
   const { refillHopper } = await import('../services/hopperRefill.js')
   const { status, body } = await refillHopper(req, req.body || {})
   if (status === 200) logAction(req, 'hopper.refill', 'Peripheral', null, { coins: req.body?.coins })
@@ -1590,7 +1593,7 @@ router.post('/hopper/refill', requireAdmin, async (req, res) => {
 })
 
 // POST /admin/day-close/exchange — notes taken out and the same amount in coins put in (no money moves; only the box's count follows).
-router.post('/day-close/exchange', requireAdmin, async (req, res) => {
+router.post('/day-close/exchange', requireCashStaff, async (req, res) => {
   const { createCashExchange } = await import('../services/dayClose.js')
   const { status, body } = await createCashExchange(req, req.body || {})
   if (status === 200) logAction(req, 'dayclose.exchange', 'DayClose', body._id, { notesOut: req.body?.notesOut, coinsIn: req.body?.coinsIn })
@@ -1598,7 +1601,7 @@ router.post('/day-close/exchange', requireAdmin, async (req, res) => {
 })
 
 // POST /admin/hopper/restore — the same coins go back into the hopper (money unchanged): only the count is written down.
-router.post('/hopper/restore', requireAdmin, async (req, res) => {
+router.post('/hopper/restore', requireCashStaff, async (req, res) => {
   const { restoreHopper } = await import('../services/hopperRefill.js')
   const { status, body } = await restoreHopper(req, req.body || {})
   if (status === 200) logAction(req, 'hopper.restore', 'Peripheral', null, { coins: req.body?.coins, total: body.restored?.total })
@@ -1608,7 +1611,7 @@ router.post('/hopper/restore', requireAdmin, async (req, res) => {
 // POST /admin/hopper/empty — pay out everything the hopper holds (coins drop into the tray: a container must be under it).
 // On the shop PC it runs right here; on the central server, which has no hardware, it is queued for the shop (picked up within
 // ~5 s, see services/remoteCommands.js) and the page follows it through GET /admin/commands/:id.
-router.post('/hopper/empty', requireAdmin, async (req, res) => {
+router.post('/hopper/empty', requireCashStaff, async (req, res) => {
   if (req.body?.confirm !== true) return res.status(400).json({ error: 'Confirme o esvaziamento' })
   const { default: coinMachine } = await import('../services/coinMachine.js')
   if (coinMachine.running) {
@@ -1738,7 +1741,7 @@ router.post('/cards/blank-reader', requireAdmin, async (req, res) => {
 })
 
 // GET /admin/commands/:id — state and result of a command queued for the shop.
-router.get('/commands/:id', requireAdmin, async (req, res) => {
+router.get('/commands/:id', requireCashStaff, async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'Invalid id' })
   const c = await withTenant(SyncCommand, req).findById(req.params.id).lean()
   if (!c) return res.status(404).json({ error: 'Command not found' })
@@ -1747,7 +1750,7 @@ router.get('/commands/:id', requireAdmin, async (req, res) => {
 
 // POST /admin/day-close/adjust-float — add cash straight to the float (e.g.
 // seeding a starting till), without it counting as bankable sales money.
-router.post('/day-close/adjust-float', requireAdmin, async (req, res) => {
+router.post('/day-close/adjust-float', requireCashStaff, async (req, res) => {
   const { createFloatAdjustment } = await import('../services/dayClose.js')
   const { status, body } = await createFloatAdjustment(req, req.body)
   if (status === 200) logAction(req, 'daycose.float_adjustment', 'DayClose', body._id, { amount: req.body?.amount })
@@ -1755,7 +1758,7 @@ router.post('/day-close/adjust-float', requireAdmin, async (req, res) => {
 })
 
 // POST /admin/day-close/payout-coins — the coins of the bank deposit come out of the hopper like change (see payOutBankCoins).
-router.post('/day-close/payout-coins', requireAdmin, async (req, res) => {
+router.post('/day-close/payout-coins', requireCashStaff, async (req, res) => {
   const { payOutBankCoins } = await import('../services/dayClose.js')
   const { status, body } = await payOutBankCoins(req, req.body?.amount)
   logAction(req, 'dayclose.bank_payout', 'Peripheral', null, { requested: req.body?.amount, status, dispensed: body?.dispensed ?? null, error: body?.error || null })
@@ -1763,7 +1766,7 @@ router.post('/day-close/payout-coins', requireAdmin, async (req, res) => {
 })
 
 // POST /admin/day-close/withdraw — cash taken out of the machine between closes (see createCashWithdrawal).
-router.post('/day-close/withdraw', requireAdmin, async (req, res) => {
+router.post('/day-close/withdraw', requireCashStaff, async (req, res) => {
   const { createCashWithdrawal } = await import('../services/dayClose.js')
   const { status, body } = await createCashWithdrawal(req, req.body || {})
   if (status === 200) logAction(req, 'dayclose.withdrawal', 'DayClose', body._id, { amount: body.metadata?.withdrawalAmount })
@@ -1771,7 +1774,7 @@ router.post('/day-close/withdraw', requireAdmin, async (req, res) => {
 })
 
 // POST /admin/day-close/:id/email — email a Z-report summary of one close.
-router.post('/day-close/:id/email', requireStaffRead, async (req, res) => {
+router.post('/day-close/:id/email', requireCashRead, async (req, res) => {
   const { emailDayCloseReceipt } = await import('../services/dayClose.js')
   const { status, body } = await emailDayCloseReceipt(req, req.params.id, req.body?.email)
   res.status(status).json(body)
