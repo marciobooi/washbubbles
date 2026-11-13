@@ -6,7 +6,7 @@ import { shopDateTime } from '@/lib/shopTime'
 import {
   COIN_DENOMS, ALL_CASH_DENOMS,
   fmt, denomSum, buildDenomState, fmtDenomLabel, buildDenomFromSaved, computeGap,
-  CoinChipGrid, HopperBar, Step, StatCard, MoneyInput, DiscrepancyPill,
+  CoinChipGrid, HopperBar, Step, StatCard, MoneyInput, DiscrepancyPill, planBank,
 } from './shared'
 
 /**
@@ -34,15 +34,7 @@ function SummaryPanel({ summary }) {
   // and the admin's own float top-ups are the shop's money, not the customers': they do not count, they are shown for information.
   const fromCustomers = Number(summary.totalCash ?? sold + recharges)
   const toBank = Math.max(0, Math.round((fromCustomers - withdrawn) * 100) / 100)
-  // What goes to the bank is made of WHOLE NOTES (never given back, and the acceptor says which note went in) as many as fit in the amount,
-  // and the rest in coins that the hopper pays out like change. The notes that do not fit stay in the cash box as part of the float.
-  const noteRows = (summary.acceptedDenominations || []).filter((d) => Number(d.value) >= 5 && Number(d.count) > 0).sort((x, y) => y.value - x.value)
-  let room = toBank
-  const takeNotes = noteRows.map((d) => { const n = Math.min(Number(d.count), Math.floor((room + 0.0001) / Number(d.value))); room = Math.round((room - n * Number(d.value)) * 100) / 100; return { value: Number(d.value), take: n, left: Number(d.count) - n } })
-  const notesToBank = takeNotes.filter((d) => d.take > 0)
-  const notesStay = takeNotes.filter((d) => d.left > 0)
-  const notesTotal = Math.round(notesToBank.reduce((s, d) => s + d.value * d.take, 0) * 100) / 100
-  const coinsPart = Math.round((toBank - notesTotal) * 100) / 100
+  const { noteRows, notesToBank, notesStay, notesTotal, coinsPart } = planBank(summary.acceptedDenominations, toBank)
   const hasNoteRecord = noteRows.length > 0
   const Row = ({ label, hint, value, sign, strong, muted }) => (
     <div className={`flex items-baseline justify-between gap-4 py-2 border-b border-neutral-100 last:border-0 ${strong ? 'font-bold text-neutral-900' : muted ? 'text-neutral-500' : 'text-neutral-700'}`}>
@@ -107,7 +99,7 @@ function SummaryPanel({ summary }) {
   )
 }
 
-export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClosed, onEmail, onDone, view = 'fecho', hidden = false }) {
+export default function DayCloseForm({ summary, summaryLoading, onSubmit, onPayoutCoins, onClosed, onEmail, onDone, view = 'fecho', hidden = false }) {
   const [countedDenoms, setCountedDenoms]   = useState(buildDenomState(ALL_CASH_DENOMS))
   const [hopperActualDenoms, setHopperActualDenoms] = useState(buildDenomState(COIN_DENOMS))
   const [hopperTargetDenoms, setHopperTargetDenoms] = useState(buildDenomState(COIN_DENOMS))
@@ -189,17 +181,6 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
   // The hopper stock is NOT prefilled: the system knows every coin that comes in, but not which coins go out as change
   // (only the euro amount is known), so the stock per coin can only be counted by hand in the Hopper tab.
 
-  useEffect(() => {
-    if (targetLoadedRef.current) return
-    api.getSettings().then((all) => {
-      const s = Array.isArray(all) ? all.find(x => x.key === 'hopperTarget') : null
-      if (s?.value?.length) {
-        setHopperTargetDenoms(buildDenomFromSaved(COIN_DENOMS, s.value))
-        targetLoadedRef.current = true
-      }
-    }).catch(() => { /* target defaults to zero — not fatal, just means nothing to compare against yet */ })
-  }, [])
-
   function handleAmountToBank(val) {
     bankEditedRef.current = true
     setAmountToBank(val)
@@ -242,16 +223,29 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
     })
     setSaving(true)
     try {
-      const targetPayload = COIN_DENOMS.map(v => {
-        const d = hopperTargetDenoms.find(x => Math.abs(x.value - v) < 0.001)
-        return { value: v, count: d?.count || 0 }
-      }).filter(d => d.count > 0)
-      await api.setSetting({ key: 'hopperTarget', value: targetPayload }).catch(() => { /* best-effort — a kiosk token may not have admin rights to write raw settings; the close itself is what matters */ })
+      // The coins of the deposit come out of the hopper by themselves when the close is confirmed, like change: the whole notes that fit go
+      // to the bank by hand. What the hopper really paid is what is recorded; the rest stays in the machine.
+      const plan = planBank(summary?.acceptedDenominations, atb)
+      let finalBank = atb
+      let coinsPaid = plan.coinsPart
+      if (onPayoutCoins && plan.coinsPart > 0) {
+        const ok = window.confirm(`Vão cair ${fmt(plan.coinsPart)}€ em moedas do hopper, no tabuleiro do troco à frente do quiosque. Notas para o banco: ${fmt(plan.notesTotal)}€. Está aí para as apanhar?`)
+        if (!ok) return
+        let paid
+        try { paid = await onPayoutCoins(plan.coinsPart) } catch (err) {
+          return toast({ title: err?.body?.error || 'O hopper não pagou as moedas. Nada foi registado.', variant: 'destructive' })
+        }
+        coinsPaid = Number(paid?.dispensed) || 0
+        if (paid?.unconfirmed && !coinsPaid) coinsPaid = window.confirm('O hopper não confirmou o pagamento. Saíram as moedas no tabuleiro?') ? plan.coinsPart : 0
+        coinsPaid = Math.min(plan.coinsPart, coinsPaid)
+        finalBank = Math.round((atb - (plan.coinsPart - coinsPaid)) * 100) / 100
+        if (coinsPaid < plan.coinsPart) toast({ title: `O hopper só pagou ${fmt(coinsPaid)}€ de ${fmt(plan.coinsPart)}€`, description: 'O resto ficou na caixa.', variant: 'warning' })
+      }
       const dc = await onSubmit({
-        amountToBank: atb, floatLeft: fl, countedCash,
+        amountToBank: finalBank, floatLeft: Math.round((countedCash - finalBank) * 100) / 100, countedCash,
+        bankBreakdown: { notes: plan.notesToBank.map((d) => ({ value: d.value, count: d.take })), coins: coinsPaid, coinsAsked: plan.coinsPart },
         countedDenominations: countedDenoms.filter(d => d.count > 0).map(d => ({ value: d.value, count: d.count })),
         hopperActualBefore: hopperActualDenoms.filter(d => d.count > 0).map(d => ({ value: d.value, count: d.count })),
-        hopperCoins: hopperTargetDenoms.filter(d => d.count > 0).map(d => ({ value: d.value, count: d.count })),
         notes
       })
       toast({ title: 'Sessao fechada com sucesso!' })
@@ -384,36 +378,6 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onClos
             {hopperActualTotal > 0 && <div className="text-xs text-neutral-500 mt-1">Total atual: {fmt(hopperActualTotal)}&euro;</div>}
           </div>
 
-          <div className="border-t border-neutral-100 pt-3">
-            <div className="text-xs font-semibold text-neutral-600 mb-1 uppercase tracking-wide">Objetivo por moeda</div>
-            <div className="text-xs text-neutral-400 mb-2">Guardado automaticamente ao fechar.</div>
-            <CoinChipGrid denoms={hopperTargetDenoms} onChange={makeUpdater(setHopperTargetDenoms)} />
-            {hopperTargetTotal > 0 && <div className="text-xs text-neutral-500 mt-1">Target total: {fmt(hopperTargetTotal)}&euro;</div>}
-          </div>
-
-          {hopperTargetTotal > 0 && (
-            <div className="border-t border-neutral-100 pt-3">
-              <div className="text-xs font-semibold text-neutral-600 mb-3 uppercase tracking-wide">
-                {hopperGap.some(d => d.toAdd > 0) ? `A repor: ${fmt(hopperGapTotal)}€` : '✓ Hopper completo'}
-              </div>
-              <div className="space-y-2">
-                {hopperGap.map(d => (
-                  <HopperBar key={d.value} value={d.value} actual={d.actual} target={d.target} />
-                ))}
-              </div>
-              {hopperGap.some(d => d.toAdd > 0) && (
-                <div className="grid grid-cols-3 gap-1.5 mt-3 sm:grid-cols-6">
-                  {hopperGap.filter(d => d.toAdd > 0).map(d => (
-                    <div key={d.value} className="rounded-lg bg-blue-50 border border-blue-200 py-2 px-1 text-center">
-                      <div className="text-[11px] text-neutral-500">{fmtDenomLabel(d.value)}</div>
-                      <div className="text-lg font-extrabold text-blue-700">+{d.toAdd}</div>
-                      <div className="text-[10px] text-blue-500">{fmt(d.toAdd * d.value)}&euro;</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
             </Step>
           </>
         )}

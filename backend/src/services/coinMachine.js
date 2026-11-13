@@ -175,7 +175,7 @@ class CoinMachine extends EventEmitter {
           reinit_hardware: async () => this.reinitHardware('remote'),
           reset_link: async () => this.resetControllerLink('remote'),
           keep_credit: async () => this.keepCredit({ by: 'admin (remoto)' }),
-          pay_out: async (p) => this.payOutCash(p?.amount, { reason: 'refund (remoto)' }),
+          pay_out: async (p) => this.payOutCash(p?.amount, { reason: p?.reason || 'refund (remoto)' }),
         },
       })
       this.remoteCommands.start()

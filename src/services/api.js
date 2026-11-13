@@ -381,6 +381,11 @@ export function createApi(config) {
   }
 
   // Cash taken out of the machine between closes: { amount, notes? }
+  // The coins of the bank deposit come out of the hopper like change: { amount }
+  function payoutBankCoins(payload) {
+    return request('/admin/day-close/payout-coins', { method: 'POST', json: payload, expect: 'json' })
+  }
+
   function withdrawCash(payload) {
     return request('/admin/day-close/withdraw', { method: 'POST', json: payload, expect: 'json' })
   }
@@ -442,6 +447,11 @@ export function createApi(config) {
   }
   function emptyHopper() {
     return request('/admin/hopper/empty', { method: 'POST', json: { confirm: true }, expect: 'json' })
+  }
+
+  function payoutBankCoinsKiosk(payload, opts) {
+    const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
+    return request('/pos/day-close/payout-coins', { method: 'POST', json: payload, headers, skipAuth: true, expect: 'json' })
   }
 
   function withdrawKioskCash(payload, opts) {
@@ -766,6 +776,8 @@ export function createApi(config) {
     addDayCloseFloat,
     refillHopper,
     withdrawCash,
+    payoutBankCoins,
+    payoutBankCoinsKiosk,
     withdrawKioskCash,
     emptyHopper,
     reinitHardware,

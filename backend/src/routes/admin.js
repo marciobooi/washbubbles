@@ -536,30 +536,8 @@ router.get('/transactions/:id', requireStaffRead, async (req, res) => {
 // (nothing is queued for later: money must not come out when nobody is looking).
 const refundsInFlight = new Set()
 async function payOutForRefund(req, amount, sale) {
-  const { default: coinMachine } = await import('../services/coinMachine.js')
-  if (coinMachine.running) return coinMachine.payOutCash(amount, { reason: 'refund' })
-  const kiosks = await User.find({ tenantId: req.tenantId, role: 'KIOSK' }).select('_id').lean()
-  if (kiosks.length !== 1) { const e = new Error(kiosks.length ? 'Há mais de um quiosque: pague o reembolso no PC da loja' : 'Nenhum quiosque registado para esta loja'); e.status = 409; throw e }
-  const SyncCommandT = withTenant(SyncCommand, req)
-  const cmd = await SyncCommandT.create({ kioskId: kiosks[0]._id, type: 'pay_out', payload: { amount, saleId: String(sale._id) } })
-  const waitMs = Number(process.env.REFUND_PAYOUT_WAIT_MS) >= 0 ? Number(process.env.REFUND_PAYOUT_WAIT_MS) : 30_000
-  const graceMs = Number(process.env.REFUND_PAYOUT_GRACE_MS) >= 0 ? Number(process.env.REFUND_PAYOUT_GRACE_MS) : 15_000
-  const pollMs = Number(process.env.REFUND_PAYOUT_POLL_MS) > 0 ? Number(process.env.REFUND_PAYOUT_POLL_MS) : 1000
-  const until = Date.now() + waitMs
-  let cancelled = false
-  for (;;) {
-    const c = await SyncCommandT.findById(cmd._id).lean()
-    if (c?.status === 'done') return c.result || { success: true, dispensed: amount, remaining: 0 }
-    if (c?.status === 'failed') { const e = new Error(c.error || 'A loja recusou o pagamento'); e.status = 502; e.nothingPaid = true; throw e }
-    if (Date.now() >= until && !cancelled) {
-      // Not picked up in time: withdraw it so it can never run later. If the shop already took it, give it a little more time.
-      const gone = await SyncCommandT.findOneAndUpdate({ _id: cmd._id, status: 'pending' }, { status: 'failed', error: 'Sem resposta da loja' })
-      if (gone) { const e = new Error('O PC da loja não respondeu. Nada foi pago nem registado.'); e.status = 504; e.nothingPaid = true; throw e }
-      cancelled = true
-    }
-    if (cancelled && Date.now() >= until + graceMs) return { success: false, dispensed: 0, remaining: amount, unconfirmed: true, error: 'A loja não confirmou o pagamento' }
-    await new Promise((r) => setTimeout(r, pollMs))
-  }
+  const { payOutViaHopper } = await import('../services/hopperPayout.js')
+  return payOutViaHopper(req, amount, { reason: 'refund (remoto)', saleId: String(sale._id) })
 }
 
 router.post('/transactions/:id/refund', requireAdmin, async (req, res) => {
@@ -1757,6 +1735,14 @@ router.post('/day-close/adjust-float', requireAdmin, async (req, res) => {
   const { createFloatAdjustment } = await import('../services/dayClose.js')
   const { status, body } = await createFloatAdjustment(req, req.body)
   if (status === 200) logAction(req, 'daycose.float_adjustment', 'DayClose', body._id, { amount: req.body?.amount })
+  res.status(status).json(body)
+})
+
+// POST /admin/day-close/payout-coins — the coins of the bank deposit come out of the hopper like change (see payOutBankCoins).
+router.post('/day-close/payout-coins', requireAdmin, async (req, res) => {
+  const { payOutBankCoins } = await import('../services/dayClose.js')
+  const { status, body } = await payOutBankCoins(req, req.body?.amount)
+  logAction(req, 'dayclose.bank_payout', 'Peripheral', null, { requested: req.body?.amount, status, dispensed: body?.dispensed ?? null, error: body?.error || null })
   res.status(status).json(body)
 })
 

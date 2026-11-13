@@ -13,6 +13,23 @@ export const BILL_DENOMS = [5, 10, 20]
 export const ALL_CASH_DENOMS = [...COIN_DENOMS, ...BILL_DENOMS]
 
 export function fmt(n) { return Number(n || 0).toFixed(2) }
+/**
+ * What goes to the bank is made of WHOLE NOTES that fit in the amount (largest first, only the notes the acceptor recorded) and the rest in
+ * coins, which the hopper pays out like change. The notes that do not fit stay in the cash box as part of the float.
+ */
+export function planBank(accepted, toBank) {
+  const noteRows = (accepted || []).filter((d) => Number(d.value) >= 5 && Number(d.count) > 0).sort((x, y) => y.value - x.value)
+  let room = Math.max(0, Number(toBank) || 0)
+  const plan = noteRows.map((d) => {
+    const take = Math.min(Number(d.count), Math.floor((room + 0.0001) / Number(d.value)))
+    room = Math.round((room - take * Number(d.value)) * 100) / 100
+    return { value: Number(d.value), take, left: Number(d.count) - take }
+  })
+  const notesToBank = plan.filter((d) => d.take > 0)
+  const notesStay = plan.filter((d) => d.left > 0)
+  const notesTotal = Math.round(notesToBank.reduce((s, d) => s + d.value * d.take, 0) * 100) / 100
+  return { noteRows, notesToBank, notesStay, notesTotal, coinsPart: Math.round((Math.max(0, Number(toBank) || 0) - notesTotal) * 100) / 100 }
+}
 export function denomSum(arr) { return arr.reduce((s, d) => s + Number(d.value) * Number(d.count || 0), 0) }
 export function buildDenomState(values) { return values.map(v => ({ value: v, count: 0 })) }
 export function fmtDenomLabel(v) {

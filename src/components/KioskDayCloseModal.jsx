@@ -80,6 +80,7 @@ export default function KioskDayCloseModal({ open, onClose, pin }) {
         summary={summary}
         summaryLoading={summaryLoading}
         onSubmit={(payload) => api.createKioskDayClose({ ...payload, pin }, { apiKey: getKioskApiKey() })}
+        onPayoutCoins={(amount) => api.payoutBankCoinsKiosk({ amount, pin }, { apiKey: getKioskApiKey() })}
         onClosed={() => { loadSummary() }}
         onEmail={(id, email) => api.emailKioskDayCloseReceipt(id, email, { apiKey: getKioskApiKey(), pin })}
         onDone={onClose}

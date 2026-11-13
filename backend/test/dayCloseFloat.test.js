@@ -154,3 +154,46 @@ describe('An annulled record is left out of every calculation', function () {
     expect(real.voided).to.equal(false)
   })
 })
+
+describe('The coins of the bank deposit come out of the hopper like change', function () {
+  this.timeout(20000)
+  let app, tenant, admin, Sale, coinMachine, saved
+  const auth = () => ({ Authorization: `Bearer ${signToken(admin)}` })
+  before(async () => { await startTestDb(); app = await buildTestApp(); Sale = (await import('../src/models/sale.js')).default; coinMachine = (await import('../src/services/coinMachine.js')).default })
+  after(async () => { await stopTestDb() })
+  beforeEach(async () => {
+    await clearTestDb(); ;({ tenant, admin } = await seedTenantAndUsers())
+    saved = { running: coinMachine.running, tenantId: coinMachine.tenantId, pay: coinMachine.payOutCash, state: { ...coinMachine.client.client } }
+    coinMachine.running = true; coinMachine.tenantId = tenant._id
+    coinMachine.client.client.balance = 0; coinMachine.client.client.hasCard = false
+    await Sale.create({ tenantId: tenant._id, amount: 68.5, method: 'cash', type: 'payment', items: [{}] })
+  })
+  afterEach(() => { coinMachine.running = saved.running; coinMachine.tenantId = saved.tenantId; coinMachine.payOutCash = saved.pay; Object.assign(coinMachine.client.client, saved.state) })
+  const pay = (amount) => request(app).post('/api/admin/day-close/payout-coins').set(auth()).send({ amount })
+
+  it('pays only what the customers put in, never while somebody uses the kiosk, and answers what the hopper really paid', async () => {
+    const asked = []
+    coinMachine.payOutCash = async (amt, opts) => { asked.push([amt, opts.reason]); return { success: false, dispensed: 6, remaining: amt - 6, error: 'moedas de 2 acabaram' } }
+    const ok = await pay(8.5)
+    expect(ok.status, JSON.stringify(ok.body)).to.equal(200)
+    expect(ok.body).to.include({ dispensed: 6 })
+    expect(asked).to.deep.equal([[8.5, 'bank']])
+    expect((await pay(500)).status).to.equal(400) // more than a payout may be
+    expect((await pay(0)).status).to.equal(400)
+    expect((await pay(70)).status).to.equal(409) // more than the customers' cash (68.50)
+    coinMachine.client.client.balance = 2 // a customer has credit
+    expect((await pay(8.5)).body.code).to.equal('kiosk-in-use')
+    expect(asked).to.have.length(1) // nothing was asked of the hopper in the refused cases
+    coinMachine.client.client.balance = 0; coinMachine.client.client.hasCard = true // a card in the reader
+    expect((await pay(8.5)).status).to.equal(409)
+  })
+
+  it('the close stores how the deposit was made up', async () => {
+    const r = await request(app).post('/api/admin/day-close').set(auth()).send({
+      amountToBank: 68.5, floatLeft: 93.7, countedCash: 162.2, bankBreakdown: { notes: [{ value: 20, count: 1 }, { value: 10, count: 4 }], coins: 8.5, coinsAsked: 8.5 },
+    })
+    expect(r.status, JSON.stringify(r.body)).to.equal(200)
+    expect(r.body.metadata.bank).to.deep.include({ coins: 8.5, coinsAsked: 8.5 })
+    expect(r.body.metadata.bank.notes.map((n) => [n.value, n.count])).to.deep.equal([[20, 1], [10, 4]])
+  })
+})

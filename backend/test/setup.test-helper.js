@@ -89,6 +89,7 @@ export async function buildTestApp() {
   // Mirrors index.js: without this an async throw would kill the test process
   // instead of surfacing as a 500.
   app.use((err, req, res, next) => {
+    if (!err.status || err.status >= 500) console.error('[test-app] unhandled:', err)
     if (res.headersSent) return next(err)
     res.status(err.status || 500).json({ error: 'Internal server error' })
   })

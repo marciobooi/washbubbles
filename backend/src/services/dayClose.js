@@ -15,6 +15,7 @@ import { acquireLock, releaseLock } from '../models/lock.js'
 import { sendMail } from './mailer.js'
 import { renderEmailHtml, escapeHtml } from './emailTemplate.js'
 import { getCashDrawerLedger, resetCashDrawerLedger } from './cashDrawer.js'
+import { roundMoney } from '../utils/money.js'
 
 /**
  * Find the most recent *dashboard* cash-reconciliation close, ignoring any
@@ -160,6 +161,31 @@ export async function lastHopperCount(DayCloseT, SaleT) {
   return null
 }
 
+/**
+ * The coins of the bank deposit: the whole notes that fit go to the bank by hand, the rest is paid out by the hopper like change (the
+ * coins fall in the tray in front of the kiosk). Only what the customers put in can go this way, never more than the machine is expected
+ * to hold, and never while a customer has credit or a card in the kiosk. Pays nothing but the coins: the close itself records the deposit.
+ */
+export async function payOutBankCoins(req, amount) {
+  const amt = roundMoney(Number(amount))
+  if (!Number.isFinite(amt) || amt <= 0 || amt > 200) return { status: 400, body: { error: 'Valor inválido (de 0.01 a 200 €)' } }
+  const summary = await getDayCloseSummary(req)
+  const cashToBank = roundMoney(Number(summary.totalCash || 0) - Number(summary.floatWithdrawn || 0))
+  if (amt > cashToBank + 0.005) return { status: 409, body: { error: `Só há ${cashToBank.toFixed(2)} € de dinheiro dos clientes para levar ao banco`, cashToBank } }
+  const { default: coinMachine } = await import('./coinMachine.js')
+  if (coinMachine.running) {
+    const st = coinMachine.client?.getState?.() || {}
+    if (roundMoney(st.balance || 0) > 0 || st.hasCard) return { status: 409, body: { error: 'Há crédito ou um cartão no quiosque: espere que o cliente termine', code: 'kiosk-in-use' } }
+  }
+  const { payOutViaHopper } = await import('./hopperPayout.js')
+  try {
+    const paid = await payOutViaHopper(req, amt, { reason: 'bank' })
+    return { status: 200, body: paid }
+  } catch (e) {
+    return { status: e.status || 500, body: { error: e.message, nothingPaid: Boolean(e.nothingPaid) } }
+  }
+}
+
 /** Sanitise a denomination array (recompute totals server-side, never trust the client's). */
 function cleanDenoms(arr) {
   return (arr || [])
@@ -181,7 +207,7 @@ function cleanDenoms(arr) {
 export async function createDayClose(req, {
   amountToBank, floatLeft, countedCash,
   countedDenominations = [], coinMechanismInventory = [], hopperActualBefore = [], hopperCoins = [],
-  notes
+  notes, bankBreakdown = null
 }) {
   if (amountToBank == null || floatLeft == null) {
     return { status: 400, body: { error: 'amountToBank and floatLeft are required' } }
@@ -284,7 +310,9 @@ export async function createDayClose(req, {
       closedBy: req.userModel?._id,
       closedByUsername: req.userModel?.username || '',
       periodFrom,
-      periodTo
+      periodTo,
+      // how the deposit was made up: whole notes by hand + coins paid out of the hopper (what it really paid, which can be less than asked)
+      ...(bankBreakdown && typeof bankBreakdown === 'object' ? { metadata: { bank: { notes: cleanDenoms(bankBreakdown.notes), coins: roundMoney(Number(bankBreakdown.coins) || 0), coinsAsked: roundMoney(Number(bankBreakdown.coinsAsked) || 0) } } } : {})
     })
 
     // Tag every sale this close actually covered so the association survives
