@@ -6,6 +6,7 @@ import Modal from '@/components/ui/Modal'
 import { PiggyBank, Trash2, Undo2 } from 'lucide-react'
 import DayCloseForm from '@/components/dayClose/DayCloseForm'
 import HopperRefillModal from '@/components/dayClose/HopperRefillModal'
+import CashExchangeModal from '@/components/dayClose/CashExchangeModal'
 import CashWithdrawModal from '@/components/dayClose/CashWithdrawModal'
 import { fmt, fmtDenomLabel, DiscrepancyPill, ALL_CASH_DENOMS, CoinChipGrid, buildDenomState, denomSum } from '@/components/dayClose/shared'
 
@@ -19,6 +20,7 @@ export default function AdminDayClose() {
   const [floatModalOpen, setFloatModalOpen] = useState(false)
   const [tab, setTab] = useState('fecho') // 'fecho' | 'hopper' | 'historico'
   const [restoreOpen, setRestoreOpen] = useState(false)
+  const [exchangeOpen, setExchangeOpen] = useState(false)
   const [withdrawOpen, setWithdrawOpen] = useState(false)
   const [emptying, setEmptying] = useState(false)
   async function emptyHopper() {
@@ -85,6 +87,13 @@ export default function AdminDayClose() {
           </button>
           <button
             type="button"
+            onClick={() => setExchangeOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-700 text-xs font-semibold px-3 py-1.5 transition"
+          >
+            Troca de notas por moedas
+          </button>
+          <button
+            type="button"
             onClick={() => setWithdrawOpen(true)}
             className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-700 text-xs font-semibold px-3 py-1.5 transition"
           >
@@ -99,6 +108,7 @@ export default function AdminDayClose() {
         </div>
       </div>
 
+      <CashExchangeModal open={exchangeOpen} onClose={() => setExchangeOpen(false)} onSubmit={(p) => api.exchangeCash(p)} onDone={() => { setExchangeOpen(false); loadSummary(); loadHistory() }} />
       <HopperRefillModal mode="restore" open={restoreOpen} onClose={() => setRestoreOpen(false)} onSubmit={(p) => api.restoreHopper(p)} onDone={() => { setRestoreOpen(false); loadSummary() }} />
 
       <CashWithdrawModal open={withdrawOpen} onClose={() => setWithdrawOpen(false)} expectedCash={summary?.expectedCash} onSubmit={(p) => api.withdrawCash(p)} onDone={() => { setWithdrawOpen(false); loadSummary(); loadHistory() }} />
@@ -183,7 +193,9 @@ export default function AdminDayClose() {
                       ) : dc.source === 'adjustment' ? (
                         dc.metadata?.withdrawalAmount > 0
                           ? <span className="rounded-full bg-amber-50 text-amber-700 font-semibold px-2 py-0.5">Levantamento -{fmt(dc.metadata.withdrawalAmount)}&euro;</span>
-                          : <span className="rounded-full bg-violet-50 text-violet-600 font-semibold px-2 py-0.5">Fundo adicionado</span>
+                          : dc.metadata?.exchange
+                            ? <span className="rounded-full bg-sky-50 text-sky-700 font-semibold px-2 py-0.5">Troca de notas por moedas {fmt(dc.metadata.exchange.total)}&euro;</span>
+                            : <span className="rounded-full bg-violet-50 text-violet-600 font-semibold px-2 py-0.5">Fundo adicionado</span>
                       ) : null}
                       <span className={`text-primary-500 transition-transform ${isOpen ? 'rotate-180' : ''}`}>&#9660;</span>
                     </div>

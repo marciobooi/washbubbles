@@ -1589,6 +1589,14 @@ router.post('/hopper/refill', requireAdmin, async (req, res) => {
   res.status(status).json(body)
 })
 
+// POST /admin/day-close/exchange — notes taken out and the same amount in coins put in (no money moves; only the box's count follows).
+router.post('/day-close/exchange', requireAdmin, async (req, res) => {
+  const { createCashExchange } = await import('../services/dayClose.js')
+  const { status, body } = await createCashExchange(req, req.body || {})
+  if (status === 200) logAction(req, 'dayclose.exchange', 'DayClose', body._id, { notesOut: req.body?.notesOut, coinsIn: req.body?.coinsIn })
+  res.status(status).json(body)
+})
+
 // POST /admin/hopper/restore — the same coins go back into the hopper (money unchanged): only the count is written down.
 router.post('/hopper/restore', requireAdmin, async (req, res) => {
   const { restoreHopper } = await import('../services/hopperRefill.js')

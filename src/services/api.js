@@ -386,6 +386,10 @@ export function createApi(config) {
     return request('/admin/day-close/payout-coins', { method: 'POST', json: payload, expect: 'json' })
   }
 
+  function exchangeCash(payload) {
+    return request('/admin/day-close/exchange', { method: 'POST', json: payload, expect: 'json' })
+  }
+
   function withdrawCash(payload) {
     return request('/admin/day-close/withdraw', { method: 'POST', json: payload, expect: 'json' })
   }
@@ -774,6 +778,7 @@ export function createApi(config) {
     addDayCloseFloat,
     restoreHopper,
     withdrawCash,
+    exchangeCash,
     payoutBankCoins,
     payoutBankCoinsKiosk,
     withdrawKioskCash,

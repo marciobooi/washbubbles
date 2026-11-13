@@ -114,7 +114,7 @@ export async function getDayCloseSummary(req) {
   // Coins/bills the hardware has actually accepted since the last close — see
   // services/cashDrawer.js. Lets Step 1 start from what's already known
   // instead of a full recount; the admin still confirms/corrects it.
-  const acceptedDenominations = await getCashDrawerLedger(req).catch(() => [])
+  const acceptedDenominations = applyExchanges(await getCashDrawerLedger(req).catch(() => []), await exchangesSince(DayCloseT, periodFrom))
   const acceptedTotal = Number(acceptedDenominations.reduce((s, d) => s + d.value * d.count, 0).toFixed(2))
 
   return {
@@ -410,6 +410,67 @@ export async function createFloatAdjustment(req, { amount, denominations = [], n
       metadata: { adjustmentAmount: roundedAmt }
     })
 
+    return { status: 200, body: dc }
+  } finally {
+    await releaseLock(req.tenantId, 'day-close')
+  }
+}
+
+const NOTE_VALUES = [5, 10, 20, 50, 100, 200]
+const COIN_VALUES = [0.05, 0.1, 0.2, 0.5, 1, 2]
+const near = (list, v) => list.some((x) => Math.abs(x - v) < 0.001)
+
+/** Exchanges of notes for coins made since `since` (not annulled), oldest first. */
+async function exchangesSince(DayCloseT, since) {
+  const rows = await DayCloseT.find({ source: 'adjustment', voided: { $ne: true }, createdAt: { $gt: since }, 'metadata.exchange': { $exists: true } }).sort({ createdAt: 1 }).select('metadata').lean()
+  return rows.map((r) => r.metadata.exchange)
+}
+
+/** What the box holds by kind: the notes that left in an exchange are no longer there, the coins that came in are. Total unchanged. */
+function applyExchanges(ledger, exchanges) {
+  if (!exchanges.length) return ledger
+  const out = ledger.map((d) => ({ ...d }))
+  const at = (v) => out.find((d) => Math.abs(d.value - v) < 0.001)
+  for (const x of exchanges) {
+    for (const n of x.notesOut || []) { const d = at(n.value); if (d) d.count = Math.max(0, d.count - n.count) }
+    for (const c of x.coinsIn || []) { const d = at(c.value); if (d) d.count += c.count }
+  }
+  return out
+}
+
+/**
+ * Notes taken out of the box and exchanged for the same amount in coins (e.g. 50 EUR of notes for 25 x 2 EUR coins for the hopper).
+ * NOT new money: nothing is added to or taken from the cash float and no sale is touched. It only keeps the "what is in the box"
+ * count (notes accepted / coins) true, so the bank deposit is never planned with notes that are not there any more.
+ */
+export async function createCashExchange(req, { notesOut = [], coinsIn = [], notes = '' } = {}) {
+  const out = cleanDenoms(notesOut).filter((d) => d.count > 0)
+  const into = cleanDenoms(coinsIn).filter((d) => d.count > 0)
+  if (!out.length || !into.length) return { status: 400, body: { error: 'Indique as notas que saíram e as moedas que entraram' } }
+  if (out.some((d) => !near(NOTE_VALUES, d.value) || !Number.isInteger(d.count))) return { status: 400, body: { error: 'Notas inválidas' } }
+  if (into.some((d) => !near(COIN_VALUES, d.value) || !Number.isInteger(d.count))) return { status: 400, body: { error: 'Moedas inválidas' } }
+  const totalOut = roundMoney(out.reduce((s, d) => s + d.total, 0))
+  const totalIn = roundMoney(into.reduce((s, d) => s + d.total, 0))
+  if (Math.abs(totalOut - totalIn) > 0.005) return { status: 400, body: { error: `Uma troca tem de ter o mesmo valor dos dois lados (notas ${totalOut.toFixed(2)}€, moedas ${totalIn.toFixed(2)}€)` } }
+
+  const gotLock = await acquireLock(req.tenantId, 'day-close')
+  if (!gotLock) return { status: 409, body: { error: 'A cash session close is already in progress for this site. Please try again in a few seconds.' } }
+  try {
+    const DayCloseT = withTenant(DayClose, req)
+    const lastClose = await findLastDashboardClose(DayCloseT)
+    const openingFloat = lastClose ? Number(lastClose.floatLeft || 0) : 0
+    const moved = await floatMovementsSince(DayCloseT, lastClose)
+    const floatNow = roundMoney(openingFloat + moved.added - moved.withdrawn)
+    const now = new Date()
+    const label = `${out.map((d) => `${d.count}×${d.value}€`).join(' + ')} por ${into.map((d) => `${d.count}×${d.value}€`).join(' + ')}`
+    const dc = await DayCloseT.create({
+      source: 'adjustment', openingFloat, expectedCash: floatNow, countedCash: floatNow, discrepancy: 0,
+      amountToBank: 0, floatLeft: floatNow, totalCash: 0, totalCard: 0, totalMbway: 0, totalRecharges: 0, totalSales: 0, salesCount: 0,
+      notes: `Troca de notas por moedas: ${totalOut.toFixed(2)}€ (${label})${notes ? ` — ${String(notes).slice(0, 300)}` : ''}`,
+      closedBy: req.userModel?._id, closedByUsername: req.userModel?.username || '',
+      periodFrom: now, periodTo: now,
+      metadata: { exchange: { notesOut: out, coinsIn: into, total: totalOut } },
+    })
     return { status: 200, body: dc }
   } finally {
     await releaseLock(req.tenantId, 'day-close')

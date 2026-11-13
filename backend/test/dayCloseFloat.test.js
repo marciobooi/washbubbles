@@ -217,3 +217,39 @@ describe('The coins of the bank deposit come out of the hopper like change', fun
     expect(r.body.metadata.bank.notes.map((n) => [n.value, n.count])).to.deep.equal([[20, 1], [10, 4]])
   })
 })
+
+describe('Notes exchanged for coins', function () {
+  this.timeout(20000)
+  let app, tenant, admin, Setting, DayClose
+  const auth = () => ({ Authorization: `Bearer ${signToken(admin)}` })
+  before(async () => { await startTestDb(); app = await buildTestApp(); Setting = (await import('../src/models/setting.js')).default; DayClose = (await import('../src/models/dayClose.js')).default })
+  after(async () => { await stopTestDb() })
+  beforeEach(async () => {
+    await clearTestDb(); ;({ tenant, admin } = await seedTenantAndUsers())
+    await Setting.create({ tenantId: tenant._id, key: 'cashDrawerLedger', value: [{ value: 0.1, count: 40 }, { value: 2, count: 5 }, { value: 5, count: 4 }, { value: 10, count: 18 }, { value: 20, count: 3 }] })
+  })
+  const summary = async () => (await request(app).get('/api/admin/day-close/summary').set(auth())).body
+  const count = (sum, v) => sum.acceptedDenominations.find((d) => Math.abs(d.value - v) < 0.001).count
+  const exchange = (b) => request(app).post('/api/admin/day-close/exchange').set(auth()).send(b)
+
+  it('the notes that left are no longer in the box and the coins that came in are; the money does not move', async () => {
+    const before = await summary()
+    const bad = await exchange({ notesOut: [{ value: 20, count: 2 }], coinsIn: [{ value: 2, count: 10 }] }) // 40 vs 20
+    expect(bad.status).to.equal(400)
+    expect((await exchange({ notesOut: [], coinsIn: [{ value: 2, count: 1 }] })).status).to.equal(400)
+    const ok = await exchange({ notesOut: [{ value: 20, count: 2 }, { value: 10, count: 1 }], coinsIn: [{ value: 2, count: 25 }] }) // 50 = 50
+    expect(ok.status, JSON.stringify(ok.body)).to.equal(200)
+
+    const after = await summary()
+    expect(count(after, 20)).to.equal(1); expect(count(after, 10)).to.equal(17); expect(count(after, 2)).to.equal(30)
+    expect(after.acceptedTotal).to.equal(before.acceptedTotal)          // the box holds the same money, in other kinds
+    expect(after.expectedCash).to.equal(before.expectedCash)            // and nothing was added or taken
+    expect(after.floatAdded || 0).to.equal(before.floatAdded || 0)
+    expect(after.floatWithdrawn || 0).to.equal(before.floatWithdrawn || 0)
+
+    // annulled: as if it never happened, still listed
+    await DayClose.updateMany({ 'metadata.exchange': { $exists: true } }, { $set: { voided: true } })
+    const undone = await summary()
+    expect(count(undone, 20)).to.equal(3); expect(count(undone, 2)).to.equal(5)
+  })
+})
