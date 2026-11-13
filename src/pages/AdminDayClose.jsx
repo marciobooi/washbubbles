@@ -18,7 +18,6 @@ export default function AdminDayClose() {
   const [expandedId, setExpandedId]         = useState(null)
   const [floatModalOpen, setFloatModalOpen] = useState(false)
   const [tab, setTab] = useState('fecho') // 'fecho' | 'hopper' | 'historico'
-  const [refillOpen, setRefillOpen] = useState(false)
   const [restoreOpen, setRestoreOpen] = useState(false)
   const [withdrawOpen, setWithdrawOpen] = useState(false)
   const [emptying, setEmptying] = useState(false)
@@ -100,7 +99,6 @@ export default function AdminDayClose() {
         </div>
       </div>
 
-      <HopperRefillModal open={refillOpen} onClose={() => setRefillOpen(false)} onSubmit={(p) => api.refillHopper(p)} onDone={() => { setRefillOpen(false); loadSummary(); loadHistory() }} />
       <HopperRefillModal mode="restore" open={restoreOpen} onClose={() => setRestoreOpen(false)} onSubmit={(p) => api.restoreHopper(p)} onDone={() => { setRestoreOpen(false); loadSummary() }} />
 
       <CashWithdrawModal open={withdrawOpen} onClose={() => setWithdrawOpen(false)} expectedCash={summary?.expectedCash} onSubmit={(p) => api.withdrawCash(p)} onDone={() => { setWithdrawOpen(false); loadSummary(); loadHistory() }} />
@@ -113,7 +111,7 @@ export default function AdminDayClose() {
 
       {/* the three areas of the day close */}
       <div className="flex gap-2 overflow-x-auto pb-1">
-        {[['fecho', 'Fecho'], ['hopper', 'Hopper e reforço'], ['historico', 'Histórico de fechos']].map(([id, label]) => (
+        {[['fecho', 'Fecho'], ['hopper', 'Hopper'], ['historico', 'Histórico de fechos']].map(([id, label]) => (
           <button key={id} type="button" onClick={() => setTab(id)}
             className={`px-4 py-2.5 text-sm font-semibold rounded-full border whitespace-nowrap transition-colors ${tab === id ? 'bg-emerald-50 border-emerald-300 text-emerald-800 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800 hover:border-emerald-200'}`}>
             {label}
@@ -122,13 +120,9 @@ export default function AdminDayClose() {
       </div>
 
       {tab === 'hopper' && (
-        <div className="grid gap-3 md:grid-cols-3">
-          <div className="flex flex-col justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 px-4 py-3">
-            <p className="text-sm text-emerald-900"><b>Reforço</b>: traz moedas novas de fora para o hopper (por exemplo, acabaram as de 1€). O fundo de caixa sobe esse valor.</p>
-            <button type="button" onClick={() => setRefillOpen(true)} className="abtn abtn-primary"><PiggyBank /> Reforço (moedas novas)</button>
-          </div>
+        <div className="grid gap-3 md:grid-cols-2">
           <div className="flex flex-col justify-between gap-3 rounded-2xl border border-sky-200 bg-sky-50/60 px-4 py-3">
-            <p className="text-sm text-sky-900"><b>Repor</b>: volta a pôr no hopper as mesmas moedas que tirou para contar. O dinheiro não muda, só fica registado o que o hopper tem.</p>
+            <p className="text-sm text-sky-900"><b>Repor</b>: volta a pôr no hopper as mesmas moedas que tirou para contar. O dinheiro não muda, só fica registado o que o hopper tem. Para dinheiro novo, use «Adicionar fundo de caixa» (no topo).</p>
             <button type="button" onClick={() => setRestoreOpen(true)} className="abtn abtn-primary"><Undo2 /> Repor (moedas de volta)</button>
           </div>
           <div className="flex flex-col justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50/60 px-4 py-3">
@@ -203,7 +197,7 @@ export default function AdminDayClose() {
                           <InfoRow label="Fim" value={shopDateTime(dc.periodTo || dc.createdAt)} />
                           <InfoRow label="Vendas" value={`${fmt(dc.totalSales)}€ (${fmt(dc.totalCash)} din${Number(dc.totalMbway) > 0 ? ` + ${fmt(dc.totalMbway)} MB WAY` : ''} + ${fmt(dc.totalCard)} cart)`} />
                           <InfoRow label="Fundo de caixa" value={`${fmt(Number(dc.openingFloat || 0) + Number(dc.floatAdded || 0))}€`} />
-                          {Number(dc.floatAdded) > 0 && <InfoRow label="dos quais reforços do hopper" value={`${fmt(dc.floatAdded)}€`} />}
+                          {Number(dc.floatAdded) > 0 && <InfoRow label="dos quais fundo adicionado" value={`${fmt(dc.floatAdded)}€`} />}
                           {Number(dc.floatWithdrawn) > 0 && <InfoRow label="Levantamentos" value={`-${fmt(dc.floatWithdrawn)}€`} />}
                           {dc.totalChangeDispensed > 0 && <InfoRow label="Troco dispensado" value={`${fmt(dc.totalChangeDispensed)}€`} />}
                         </DetailBlock>
@@ -298,12 +292,12 @@ function AddFloatModal({ open, onClose, onAdded }) {
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Reforço / fundo">
+    <Modal open={open} onClose={onClose} title="Adicionar fundo de caixa">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <h3 className="font-semibold text-sm text-neutral-800">Reforço / fundo</h3>
+          <h3 className="font-semibold text-sm text-neutral-800">Adicionar fundo de caixa</h3>
           <p className="text-xs text-neutral-400 mt-0.5">
-            Conte as moedas/notas que vai colocar na caixa. Este valor entra como fundo — nunca como venda a depositar no banco.
+            Dinheiro novo que vai pôr na caixa: conte as moedas e as notas. Entra como fundo de caixa, nunca como venda a depositar no banco. (Se são as mesmas moedas que tirou do hopper para contar, use «Repor» no separador Hopper.)
           </p>
         </div>
         <CoinChipGrid denoms={denoms} onChange={updateCount} />

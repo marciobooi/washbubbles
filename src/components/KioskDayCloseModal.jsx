@@ -70,7 +70,7 @@ export default function KioskDayCloseModal({ open, onClose, pin }) {
       )}
       {tab === 'hopper' && (
         <button type="button" onClick={() => setRefillOpen(true)} className="w-full h-14 mb-4 rounded-xl bg-emerald-600 text-white font-bold text-lg shadow-sm active:scale-[0.99]">
-          Fazer reforço do hopper
+          Adicionar fundo de caixa (moedas)
         </button>
       )}
       <CashWithdrawModal open={withdrawOpen} onClose={() => setWithdrawOpen(false)} expectedCash={summary?.expectedCash} onSubmit={(p) => api.withdrawKioskCash({ ...p, pin }, { apiKey: getKioskApiKey() })} onDone={() => { setWithdrawOpen(false); loadSummary() }} />

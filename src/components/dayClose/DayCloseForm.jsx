@@ -73,14 +73,14 @@ function SummaryPanel({ summary }) {
             </div>
           )}
           <div className="mt-auto pt-4 text-xs text-emerald-800/70">
-            Fica na máquina o fundo de caixa: <strong>{fmt(opening + added)}€</strong> ({fmt(opening)}€ do último fecho + {fmt(added)}€ de reforços do hopper), que não é dos clientes.
+            Fica na máquina o fundo de caixa: <strong>{fmt(opening + added)}€</strong> ({fmt(opening)}€ do último fecho + {fmt(added)}€ de fundo adicionado), que não é dos clientes.
           </div>
         </div>
         {/* expected count */}
         <div className="rounded-2xl border border-neutral-200 bg-white p-5">
           <div className="text-sm font-semibold text-neutral-500 mb-1">Esperado na máquina (para a contagem)</div>
           {/* the float is always the last close's float PLUS the reinforcements put in since */}
-          <Row label="Fundo de caixa" hint={added > 0 ? `${fmt(opening)}€ do último fecho + ${fmt(added)}€ de reforços do hopper` : 'o que ficou na caixa no último fecho'} value={opening + added} />
+          <Row label="Fundo de caixa" hint={added > 0 ? `${fmt(opening)}€ do último fecho + ${fmt(added)}€ de fundo adicionado` : 'o que ficou na caixa no último fecho'} value={opening + added} />
           <Row label="Vendas em dinheiro" hint="máquinas e venda de cartões" value={sold} sign="+" />
           <Row label="Recargas de cartões" hint="dinheiro dos clientes" value={recharges} sign="+" />
           {withdrawn > 0 && <Row label="Levantamentos" hint="já retirado da máquina" value={withdrawn} sign="-" />}
@@ -89,7 +89,7 @@ function SummaryPanel({ summary }) {
         {/* not counted */}
         <div className="rounded-2xl border border-blue-100 bg-blue-50/50 p-5">
           <div className="text-sm font-semibold text-blue-700 mb-1">Não entra na conta</div>
-          <Row label="Reforços do hopper" hint="já incluídos no fundo de caixa: dinheiro da loja, não dos clientes" value={added} />
+          <Row label="Fundo adicionado" hint="já incluído no fundo de caixa: dinheiro da loja, não dos clientes" value={added} />
           <Row label="Consumo de cartões" hint="gasto do saldo dos cartões: já foi contado quando o cartão foi recarregado" value={Number(summary.totalCard || 0)} muted />
           <Row label="MB WAY" hint="pago direto ao banco: não passa pela máquina" value={Number(summary.totalMbway || 0)} muted />
           {Number(summary.totalChangeDispensed) > 0 && <Row label="Troco dado" hint="já descontado nas vendas em dinheiro" value={Number(summary.totalChangeDispensed)} muted />}

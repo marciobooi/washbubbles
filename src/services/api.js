@@ -393,11 +393,6 @@ export function createApi(config) {
   function restoreHopper(payload) {
     return request('/admin/hopper/restore', { method: 'POST', json: payload, expect: 'json' })
   }
-  function refillHopper(payload) {
-    // payload: { coins: [{value, count}], notes? } — coins brought from outside into the hopper
-    return request('/admin/hopper/refill', { method: 'POST', json: payload, expect: 'json' })
-  }
-
   // Gift card (free card, credit default 0): the kiosk sends the staff PIN with every call; the admin is logged in.
   function giftKioskCard(payload, opts) {
     const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
@@ -777,7 +772,6 @@ export function createApi(config) {
     getDayCloses,
     createDayClose,
     addDayCloseFloat,
-    refillHopper,
     restoreHopper,
     withdrawCash,
     payoutBankCoins,
