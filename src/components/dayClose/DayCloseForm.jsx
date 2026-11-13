@@ -364,7 +364,7 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onPayo
             <div className="text-xs text-neutral-400 mb-2">Conte as moedas que estão no hopper agora. O sistema sabe o que entra, mas não que moedas saem no troco (só o valor em euros).</div>
             {summary?.lastHopperCount && (
               <div className="text-xs text-primary-700 bg-primary-50 border border-primary-100 rounded-lg px-3 py-2 mb-2">
-                Pré-preenchido com a última contagem: {shopDateTime(summary.lastHopperCount.at)} ({summary.lastHopperCount.source === 'close' ? 'fecho' : 'moedas postas no hopper'}, {fmt(summary.lastHopperCount.total)}&euro;).
+                Pré-preenchido com a última contagem: {shopDateTime(summary.lastHopperCount.at)} ({summary.lastHopperCount.source === 'close' ? 'fecho' : summary.lastHopperCount.source === 'restore' ? 'moedas repostas no hopper' : 'moedas postas no hopper'}, {fmt(summary.lastHopperCount.total)}&euro;).
                 {summary.lastHopperCount.changeGivenSince > 0 ? <> Desde então o troco dado foi {fmt(summary.lastHopperCount.changeGivenSince)}&euro;. </> : ' '}
                 Corrija para o que está lá agora.
               </div>

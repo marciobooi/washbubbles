@@ -32,6 +32,9 @@ const IDLE_READINGS_TO_FREE = 3
  * CoinMachine coordinator - integrates middleware, client state, and backend API
  * Based on the coin-machine module from the old program
  */
+// Sizes (EUR) the hopper is emptied with, largest first; see CoinMachine.emptyHopper.
+const EMPTY_STEPS = [50, 10, 2, 0.5, 0.1]
+
 class CoinMachine extends EventEmitter {
   constructor(options = {}) {
     super()
@@ -1583,12 +1586,28 @@ class CoinMachine extends EventEmitter {
     if (roundMoney(this.client.getState().balance) > 0) return { dispensed: 0, error: 'Há crédito de um cliente na máquina: espere ou devolva-o primeiro' }
     const hopper = await Peripheral.findOne(this.scoped({ type: 'hopper', enabled: true }))
     if (!hopper) return { dispensed: 0, error: 'Nenhum hopper configurado' }
-    const result = await this.dispenseChange(hopper._id, 9999, { timeoutMs: 10 * 60 * 1000 })
-    const dispensed = roundMoney(Number(result?.dispensed) || 0)
+    // ONE huge request (9999 EUR = 999900 cents) made the controller answer nonsense (2026-11-12: 79.60 with 115.20 on the table; 9919.40 read
+    // as paid), so the hopper is emptied with ordinary requests, the way change is paid, and what each one PAID is added up: the controller
+    // answers every request with exactly what it could NOT pay, so the total is as exact as the change is. A request that is not paid in
+    // full means the coins that make that amount ran out: go on with a smaller one until even 0.10 EUR is not paid.
+    let dispensed = 0
+    const stages = []
+    let unconfirmed = false
+    let error
+    outer: for (const size of EMPTY_STEPS) {
+      for (let i = 0; i < 40; i++) {
+        const r = await this.dispenseChange(hopper._id, size, { timeoutMs: 3 * 60 * 1000, emptying: true, noFlow: true })
+        const paid = roundMoney(Number(r?.dispensed) || 0)
+        dispensed = roundMoney(dispensed + paid)
+        stages.push([size, paid])
+        if (r?.unconfirmed) { unconfirmed = true; error = r.error; break outer } // nobody knows what came out of this one: stop and say so
+        if (paid < size - 0.005) break // ran short at this size: try a smaller one
+      }
+    }
     // Everything that could be paid was paid, so the stock kept by the system is zero (counted by hand again after a refill).
-    if (dispensed > 0 || result?.success !== false) await Peripheral.findOneAndUpdate({ _id: hopper._id }, { $set: { 'hopperConfig.currentCount': 0, 'hopperConfig.currentStock': {} } })
-    await this.auditSystem('hopper.empty', { dispensed, error: result?.error })
-    return { dispensed, error: result?.error, unconfirmed: !!result?.unconfirmed }
+    await Peripheral.findOneAndUpdate({ _id: hopper._id }, { $set: { 'hopperConfig.currentCount': 0, 'hopperConfig.currentStock': {} } })
+    await this.auditSystem('hopper.empty', { dispensed, error, stages })
+    return { dispensed, error, unconfirmed }
   }
 
   /**
@@ -1616,6 +1635,8 @@ class CoinMachine extends EventEmitter {
    * Dispense change
    */
   async dispenseChange(hopperId, amount, opts = {}) {
+    // Emptying the hopper on purpose (a series of ordinary requests): no second tries, no flow steps, no "customer is owed" alerts.
+    const change = amount < 9000 && !opts.emptying
     try {
       let result = await this.middleware.dispenseChange(hopperId, amount, opts)
 
@@ -1624,7 +1645,7 @@ class CoinMachine extends EventEmitter {
       // what was paid), and never for the "empty the hopper" request.
       const delay = Number.isFinite(opts.retryDelayMs) ? opts.retryDelayMs : (Number(process.env.CHANGE_RETRY_DELAY_MS) >= 0 ? Number(process.env.CHANGE_RETRY_DELAY_MS) : 3000)
       let paid = Number(result?.dispensed) || 0
-      for (let attempt = 1; attempt <= 3 && amount < 9000 && result && result.success === false && !result.unconfirmed && Number(result.remaining) > 0; attempt++) {
+      for (let attempt = 1; attempt <= 3 && change && result && result.success === false && !result.unconfirmed && Number(result.remaining) > 0; attempt++) {
         console.warn(`[Change] EUR ${Number(result.remaining).toFixed(2)} still owed (${result.error || 'not paid'}): trying again in ${delay / 1000} s (attempt ${attempt}/3)`)
         if (!opts.noFlow) flows.step(this.tenantId, 'change_retry', `Troco: faltam ${Number(result.remaining).toFixed(2).replace('.', ',')} € (${result.error || 'não pago'}); nova tentativa ${attempt}/3`, { attempt }, { ok: false })
         await new Promise((r) => setTimeout(r, delay))
@@ -1633,7 +1654,7 @@ class CoinMachine extends EventEmitter {
         result = { ...(next || {}), dispensed: paid }
       }
       
-      if (!opts.noFlow && amount < 9000 && result) {
+      if (!opts.noFlow && change && result) {
         if (result.success === false) flows.step(this.tenantId, 'change_short', `Troco incompleto: pago ${paid.toFixed(2).replace('.', ',')} €, faltam ${Math.max(0, roundMoney(amount - paid)).toFixed(2).replace('.', ',')} €`, { requested: amount, paid, error: result.error || null }, { ok: false, change: paid })
         else flows.step(this.tenantId, 'change_paid', `Troco de ${amount.toFixed(2).replace('.', ',')} € pago`, { amount }, { change: amount })
       }
@@ -1641,7 +1662,7 @@ class CoinMachine extends EventEmitter {
       
       // Pass the controller's real answer on. This used to return { success: true } whatever
       // happened, so a hopper that came up short looked like a completed payout.
-      if (result && result.success === false && amount < 9000 && !(opts.unconfirmedHandled && result.unconfirmed)) this.reportChangeShortfall(amount, result).catch(() => {}) // 9999 = emptying the hopper on purpose
+      if (result && result.success === false && change && !(opts.unconfirmedHandled && result.unconfirmed)) this.reportChangeShortfall(amount, result).catch(() => {}) // 9999 = emptying the hopper on purpose
       return { ...(result || {}), success: result?.success !== false }
     } catch (err) {
       console.error('Failed to dispense change:', err)

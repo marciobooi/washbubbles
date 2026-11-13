@@ -129,6 +129,26 @@ describe('The last count of coins in the hopper comes back on the hopper screen'
     const after = (await request(app).get('/api/admin/day-close/summary').set(auth())).body.lastHopperCount
     expect(after).to.include({ source: 'close', total: 20 })
   })
+
+  it('"Repor" puts the same coins back into the hopper: the count shows, the money does not move', async () => {
+    await request(app).post('/api/admin/day-close').set(auth()).send({ amountToBank: 0, floatLeft: 0, countedCash: 0, hopperActualBefore: [{ value: 1, count: 20 }] })
+    const sum = async () => (await request(app).get('/api/admin/day-close/summary').set(auth())).body
+    const before = await sum()
+    const DayClose = (await import('../src/models/dayClose.js')).default
+    const records = await DayClose.countDocuments()
+
+    expect((await request(app).post('/api/admin/hopper/restore').set(auth()).send({ coins: [] })).status).to.equal(400)
+    const r = await request(app).post('/api/admin/hopper/restore').set(auth()).send({ coins: [{ value: 2, count: 36 }, { value: 1, count: 21 }, { value: 0.5, count: 15 }, { value: 0.2, count: 53 }, { value: 0.1, count: 41 }] })
+    expect(r.status).to.equal(200)
+    expect(r.body.restored.total).to.equal(115.2)
+
+    const after = await sum()
+    expect(after.lastHopperCount).to.include({ source: 'restore', total: 115.2 })      // the screen opens with it, newer than the close's count
+    expect(after.lastHopperCount.coins).to.have.length(5)
+    expect(after.expectedCash).to.equal(before.expectedCash)                            // not a reinforcement: no money moved
+    expect(after.floatAdded || 0).to.equal(before.floatAdded || 0)
+    expect(await DayClose.countDocuments()).to.equal(records)                           // and no cash record was created
+  })
 })
 
 describe('An annulled record is left out of every calculation', function () {

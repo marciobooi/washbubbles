@@ -36,7 +36,7 @@ describe('OPERATOR role: a shop assistant can only start or release a machine', 
   it('cannot reach anything else: users, settings, prices, cards, day close, audit, service state', async () => {
     for (const [m, url] of [
       ['get', '/api/admin/users'], ['post', '/api/admin/users'], ['get', '/api/admin/cards'], ['get', '/api/admin/audit-log'],
-      ['post', '/api/admin/hopper/empty'], ['post', '/api/admin/cards/blank-reader'], ['get', '/api/admin/day-close/summary'],
+      ['post', '/api/admin/hopper/empty'], ['post', '/api/admin/hopper/restore'], ['post', '/api/admin/cards/blank-reader'], ['get', '/api/admin/day-close/summary'],
       ['put', `/api/admin/machines/${machine._id}`], ['delete', `/api/admin/machines/${machine._id}`], ['post', `/api/admin/machines/${machine._id}/service`],
     ]) {
       const r = await as(m, url).send({})

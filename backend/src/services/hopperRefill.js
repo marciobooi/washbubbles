@@ -13,6 +13,22 @@ import { createFloatAdjustment } from './dayClose.js'
 
 export const REFILL_COINS = [0.05, 0.10, 0.20, 0.50, 1.00, 2.00]
 
+/**
+ * "Repor": the SAME coins that are already in the cash float go back into the hopper (after it was emptied to count them). Nothing
+ * is booked as money: only what the hopper holds again is written down, so the hopper screen opens with it. Not a reinforcement.
+ */
+export async function restoreHopper(req, { coins = [], notes = '' } = {}) {
+  const clean = (Array.isArray(coins) ? coins : [])
+    .map((c) => ({ value: Number(c && c.value), count: Math.floor(Number(c && c.count)) }))
+    .filter((c) => REFILL_COINS.some((v) => Math.abs(v - c.value) < 0.001) && Number.isFinite(c.count) && c.count > 0)
+  if (!clean.length) return { status: 400, body: { error: 'Indique pelo menos uma moeda' } }
+  const { default: Setting } = await import('../models/setting.js')
+  const total = Number(clean.reduce((s, c) => s + c.value * c.count, 0).toFixed(2))
+  const value = { at: new Date().toISOString(), coins: clean, total, by: req.userModel?.username || '', notes: String(notes || '').slice(0, 300) }
+  await withTenant(Setting, req).findOneAndUpdate({ key: 'hopperRestore' }, { $set: { value } }, { upsert: true })
+  return { status: 200, body: { restored: value } }
+}
+
 export async function refillHopper(req, { coins = [], notes = '' } = {}) {
   const clean = (Array.isArray(coins) ? coins : [])
     .map((c) => ({ value: Number(c && c.value), count: Math.floor(Number(c && c.count)) }))

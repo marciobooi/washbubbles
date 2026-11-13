@@ -3,7 +3,7 @@ import { shopDateTime } from '@/lib/shopTime'
 import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
 import Modal from '@/components/ui/Modal'
-import { PiggyBank, Trash2 } from 'lucide-react'
+import { PiggyBank, Trash2, Undo2 } from 'lucide-react'
 import DayCloseForm from '@/components/dayClose/DayCloseForm'
 import HopperRefillModal from '@/components/dayClose/HopperRefillModal'
 import CashWithdrawModal from '@/components/dayClose/CashWithdrawModal'
@@ -19,6 +19,7 @@ export default function AdminDayClose() {
   const [floatModalOpen, setFloatModalOpen] = useState(false)
   const [tab, setTab] = useState('fecho') // 'fecho' | 'hopper' | 'historico'
   const [refillOpen, setRefillOpen] = useState(false)
+  const [restoreOpen, setRestoreOpen] = useState(false)
   const [withdrawOpen, setWithdrawOpen] = useState(false)
   const [emptying, setEmptying] = useState(false)
   async function emptyHopper() {
@@ -38,7 +39,7 @@ export default function AdminDayClose() {
           if (c?.status === 'failed') { r = { dispensed: 0, error: c.error }; break }
         }
       }
-      toast({ title: r.dispensed > 0 ? `Hopper esvaziado: saíram ${fmt(r.dispensed)}€` : 'Não saiu nenhuma moeda', description: r.error || undefined, variant: r.dispensed > 0 ? 'success' : 'destructive' })
+      toast({ title: r.dispensed > 0 ? `Hopper esvaziado: saíram ${fmt(r.dispensed)}€` : 'Não saiu nenhuma moeda', description: r.error || (r.dispensed > 0 ? 'Conte as moedas que caíram. Depois de as pôr no hopper, use «Repor».' : undefined), variant: r.dispensed > 0 ? 'success' : 'destructive' })
     } catch (err) {
       toast({ title: err?.body?.error || 'Erro ao esvaziar o hopper', variant: 'destructive' })
     } finally { setEmptying(false) }
@@ -100,6 +101,7 @@ export default function AdminDayClose() {
       </div>
 
       <HopperRefillModal open={refillOpen} onClose={() => setRefillOpen(false)} onSubmit={(p) => api.refillHopper(p)} onDone={() => { setRefillOpen(false); loadSummary(); loadHistory() }} />
+      <HopperRefillModal mode="restore" open={restoreOpen} onClose={() => setRestoreOpen(false)} onSubmit={(p) => api.restoreHopper(p)} onDone={() => { setRestoreOpen(false); loadSummary() }} />
 
       <CashWithdrawModal open={withdrawOpen} onClose={() => setWithdrawOpen(false)} expectedCash={summary?.expectedCash} onSubmit={(p) => api.withdrawCash(p)} onDone={() => { setWithdrawOpen(false); loadSummary(); loadHistory() }} />
 
@@ -120,14 +122,19 @@ export default function AdminDayClose() {
       </div>
 
       {tab === 'hopper' && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 px-4 py-3">
-          <p className="text-sm text-emerald-900">Reforço: moedas que traz de fora para o hopper (por exemplo, acabaram as de 1€). Sobe o stock do hopper e entra como fundo, nunca como venda.</p>
-          <button type="button" onClick={() => setRefillOpen(true)} className="abtn abtn-primary">
-            <PiggyBank /> Fazer reforço
-          </button>
-          <button type="button" disabled={emptying} onClick={emptyHopper} className="abtn abtn-danger">
-            <Trash2 /> {emptying ? 'A esvaziar…' : 'Esvaziar hopper'}
-          </button>
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="flex flex-col justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/60 px-4 py-3">
+            <p className="text-sm text-emerald-900"><b>Reforço</b>: traz moedas novas de fora para o hopper (por exemplo, acabaram as de 1€). O fundo de caixa sobe esse valor.</p>
+            <button type="button" onClick={() => setRefillOpen(true)} className="abtn abtn-primary"><PiggyBank /> Reforço (moedas novas)</button>
+          </div>
+          <div className="flex flex-col justify-between gap-3 rounded-2xl border border-sky-200 bg-sky-50/60 px-4 py-3">
+            <p className="text-sm text-sky-900"><b>Repor</b>: volta a pôr no hopper as mesmas moedas que tirou para contar. O dinheiro não muda, só fica registado o que o hopper tem.</p>
+            <button type="button" onClick={() => setRestoreOpen(true)} className="abtn abtn-primary"><Undo2 /> Repor (moedas de volta)</button>
+          </div>
+          <div className="flex flex-col justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50/60 px-4 py-3">
+            <p className="text-sm text-rose-900"><b>Esvaziar</b>: o hopper larga todas as moedas no tabuleiro, para as contar. Ponha um recipiente por baixo. Mostra quantas saíram.</p>
+            <button type="button" disabled={emptying} onClick={emptyHopper} className="abtn abtn-danger"><Trash2 /> {emptying ? 'A esvaziar…' : 'Esvaziar hopper'}</button>
+          </div>
         </div>
       )}
 

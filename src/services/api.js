@@ -390,6 +390,9 @@ export function createApi(config) {
     return request('/admin/day-close/withdraw', { method: 'POST', json: payload, expect: 'json' })
   }
 
+  function restoreHopper(payload) {
+    return request('/admin/hopper/restore', { method: 'POST', json: payload, expect: 'json' })
+  }
   function refillHopper(payload) {
     // payload: { coins: [{value, count}], notes? } — coins brought from outside into the hopper
     return request('/admin/hopper/refill', { method: 'POST', json: payload, expect: 'json' })
@@ -775,6 +778,7 @@ export function createApi(config) {
     createDayClose,
     addDayCloseFloat,
     refillHopper,
+    restoreHopper,
     withdrawCash,
     payoutBankCoins,
     payoutBankCoinsKiosk,

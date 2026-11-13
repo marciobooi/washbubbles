@@ -1589,6 +1589,14 @@ router.post('/hopper/refill', requireAdmin, async (req, res) => {
   res.status(status).json(body)
 })
 
+// POST /admin/hopper/restore — the same coins go back into the hopper (money unchanged): only the count is written down.
+router.post('/hopper/restore', requireAdmin, async (req, res) => {
+  const { restoreHopper } = await import('../services/hopperRefill.js')
+  const { status, body } = await restoreHopper(req, req.body || {})
+  if (status === 200) logAction(req, 'hopper.restore', 'Peripheral', null, { coins: req.body?.coins, total: body.restored?.total })
+  res.status(status).json(body)
+})
+
 // POST /admin/hopper/empty — pay out everything the hopper holds (coins drop into the tray: a container must be under it).
 // On the shop PC it runs right here; on the central server, which has no hardware, it is queued for the shop (picked up within
 // ~5 s, see services/remoteCommands.js) and the page follows it through GET /admin/commands/:id.

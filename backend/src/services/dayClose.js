@@ -10,6 +10,7 @@
 import { getEmailBrand } from './emailBrand.js'
 import Sale from '../models/sale.js'
 import DayClose from '../models/dayClose.js'
+import Setting from '../models/setting.js'
 import { withTenant } from './tenant.js'
 import { acquireLock, releaseLock } from '../models/lock.js'
 import { sendMail } from './mailer.js'
@@ -133,7 +134,7 @@ export async function getDayCloseSummary(req) {
     totalChangeDispensed: tally.totalChangeDispensed,
     acceptedDenominations,
     acceptedTotal,
-    lastHopperCount: await lastHopperCount(DayCloseT, SaleT).catch(() => null),
+    lastHopperCount: await lastHopperCount(DayCloseT, SaleT, withTenant(Setting, req)).catch(() => null),
     openingMechanismCoins: lastClose?.coinMechanismInventory || [],
     openingMechanismTotal: lastClose?.coinMechanismTotal || 0,
     openingHopperCoins: lastClose?.hopperCoins || [],
@@ -147,16 +148,31 @@ export async function getDayCloseSummary(req) {
  * point for "coins left now"; the screen shows it with the date and the change given since, and the admin corrects it. Before, those
  * counts were saved but never shown again, so the hopper screen always opened empty (2026-11-12).
  */
-export async function lastHopperCount(DayCloseT, SaleT) {
+export async function lastHopperCount(DayCloseT, SaleT, SettingT = null) {
+  // "Repor": coins put BACK into the hopper after it was emptied (money unchanged). If it is newer than the last close or top-up it wins.
+  const back = SettingT ? await SettingT.findOne({ key: 'hopperRestore' }).lean().catch(() => null) : null
+  const restore = back?.value?.at && Array.isArray(back.value.coins) && back.value.coins.length ? back.value : null
+  const fromClose = await lastHopperCountFromRecords(DayCloseT, SaleT)
+  if (restore && (!fromClose || new Date(restore.at) > new Date(fromClose.at))) {
+    const coins = restore.coins.map((c) => ({ value: Number(c.value), count: Number(c.count) })).filter((c) => c.value > 0 && c.count > 0)
+    const total = Number(coins.reduce((s, c) => s + c.value * c.count, 0).toFixed(2))
+    const given = await SaleT.aggregate([{ $match: { createdAt: { $gt: new Date(restore.at) }, change: { $gt: 0 } } }, { $group: { _id: null, t: { $sum: '$change' } } }])
+    return { at: new Date(restore.at), source: 'restore', coins, total, changeGivenSince: Number((given[0]?.t || 0).toFixed(2)) }
+  }
+  return fromClose
+}
+
+async function lastHopperCountFromRecords(DayCloseT, SaleT) {
   const recent = await DayCloseT.find({ source: { $in: ['dashboard', 'adjustment'] }, voided: { $ne: true } }).sort({ createdAt: -1 }).limit(40).lean()
   const coinsOf = (arr) => (arr || []).filter((d) => Number(d.value) > 0 && Number(d.value) < 3 && Number(d.count) > 0).map((d) => ({ value: Number(d.value), count: Number(d.count) }))
   for (const d of recent) {
     const isTopUp = d.source === 'adjustment' && Number(d.metadata?.adjustmentAmount) > 0
     const coins = d.source === 'dashboard' ? coinsOf(d.hopperActualBefore) : isTopUp ? coinsOf(d.countedDenominations) : []
     if (!coins.length) continue
+    const from = d.createdAt
     const total = Number(coins.reduce((s, c) => s + c.value * c.count, 0).toFixed(2))
-    const given = await SaleT.aggregate([{ $match: { createdAt: { $gt: d.createdAt }, change: { $gt: 0 } } }, { $group: { _id: null, t: { $sum: '$change' } } }])
-    return { at: d.createdAt, source: d.source === 'dashboard' ? 'close' : 'topup', coins, total, changeGivenSince: Number((given[0]?.t || 0).toFixed(2)) }
+    const given = await SaleT.aggregate([{ $match: { createdAt: { $gt: from }, change: { $gt: 0 } } }, { $group: { _id: null, t: { $sum: '$change' } } }])
+    return { at: from, source: d.source === 'dashboard' ? 'close' : 'topup', coins, total, changeGivenSince: Number((given[0]?.t || 0).toFixed(2)) }
   }
   return null
 }
