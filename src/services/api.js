@@ -1,4 +1,6 @@
 
+import { requestPinRenew } from '../lib/pinRenew'
+
 // api.ts
 // Lightweight, dependency-free fetch helper with retries, timeout, and robust errors.
 
@@ -315,9 +317,16 @@ export function createApi(config) {
   // Verify the operator's admin PIN. The PIN itself is never returned — the
   // server compares it and answers ok / 401, so it cannot leak to a renderer
   // running on a public terminal.
+  // A staff PIN that is right but expired (it is renewed every Monday): ask the person at the kiosk for a new one (components/PinRenewHost).
+  function renewStaffPin(payload, opts) {
+    const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
+    return request('/pos/admin/renew-pin', { method: 'POST', json: payload, headers, skipAuth: true, expect: 'json' })
+  }
+
   function verifyAdminPin(pin, opts) {
     const headers = opts?.apiKey ? { Authorization: `ApiKey ${String(opts.apiKey)}` } : undefined
     return request('/pos/admin/verify-pin', { method: 'POST', json: { pin }, headers, skipAuth: true, expect: 'json' })
+      .catch((e) => { if (e?.status === 410) requestPinRenew({ apiKey: opts?.apiKey }); throw e }) // right PIN, expired: the popup asks for a new one
   }
 
   // Kiosk day-close: same reconciliation as the admin dashboard's, reachable
@@ -734,6 +743,7 @@ export function createApi(config) {
     gatewayGetCard,
     gatewayTopupCard,
     verifyAdminPin,
+    renewStaffPin,
   getKioskDayCloseSummary,
   createKioskDayClose,
     getKioskDayCloseSummary,
@@ -897,3 +907,4 @@ export const {
 } = api;
 
 export default api;
+

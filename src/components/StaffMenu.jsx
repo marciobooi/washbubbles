@@ -89,7 +89,7 @@ export default function StaffMenu() {
       setShowChooser(true)
       setPin('')
     } catch (e) {
-      setPinError(e?.status === 410 ? 'PIN expirado. Peça ao administrador para criar um PIN novo no admin.' : e?.status === 409 ? 'Nenhum PIN configurado para este local.' : e?.status === 429 ? 'Demasiadas tentativas. Aguarde.' : 'PIN inválido')
+      setPinError(e?.status === 410 ? 'PIN expirado. Defina um PIN novo.' : e?.status === 409 ? 'Nenhum PIN configurado para este local.' : e?.status === 429 ? 'Demasiadas tentativas. Aguarde.' : 'PIN inválido')
       setPin('')
     } finally {
       setChecking(false)

@@ -17,6 +17,7 @@ import ReceiptPrompt from './components/ReceiptPrompt'
 import { ToastProvider, toast } from './components/ui/Toast'
 import HelpTutorial from './components/HelpTutorial'
 import LanguageSwitcher from './components/LanguageSwitcher'
+import PinRenewHost from './components/PinRenewHost'
 import ConnectionBadge from './components/ConnectionBadge'
 import { isKioskScreen } from './lib/kioskContext'
 import DevCardPreview from './pages/DevCardPreview'
@@ -788,6 +789,7 @@ function AppInner() {
           admin dashboard, which has its own equivalent pages/auth. */}
       {!location.pathname.startsWith('/admin') && <StaffMenu />}
       {!location.pathname.startsWith('/admin') && <KioskLockOverlay />}
+      {!location.pathname.startsWith('/admin') && <PinRenewHost />}
       {!location.pathname.startsWith('/admin') && <ShutdownOverlay />}
     </div>
   )

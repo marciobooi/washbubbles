@@ -296,7 +296,7 @@ describe('Audit 2026-11', function () {
     })
   })
 
-  describe('the staff PIN lasts a week', () => {
+  describe('the staff PIN is renewed every Monday', () => {
     let Setting
     const setPin = (value) => request(app).post('/api/admin/settings').set(adminAuth()).send({ key: 'adminPin', value })
     const tryPin = (pin) => request(app).post('/api/pos/admin/verify-pin').set(kioskAuth()).send({ pin })
@@ -304,12 +304,10 @@ describe('Audit 2026-11', function () {
     before(async () => { Setting = (await import('../src/models/setting.js')).default })
     beforeEach(async () => { (await import('../src/routes/pos.js'))._resetPinGuards() }) // the PIN attempts limit is per kiosk key
 
-    it('a new PIN works, and after seven days the kiosk answers that it has expired', async () => {
+    it('a new PIN works, and once a Monday has passed the kiosk answers that it has expired', async () => {
       expect((await setPin('4821')).status).to.equal(200)
       expect((await tryPin('4821')).status).to.equal(200)
-      await madeDaysAgo(6)
-      expect((await tryPin('4821')).status).to.equal(200)
-      await madeDaysAgo(8)
+      await madeDaysAgo(8) // a week ago and a day: a Monday has gone by whatever the day today is
       const old = await tryPin('4821')
       expect(old.status).to.equal(410)
       expect(old.body.code).to.equal('pin-expired')
@@ -328,7 +326,7 @@ describe('Audit 2026-11', function () {
       expect((await tryPin('7733')).status).to.equal(200)
       const info = await request(app).get('/api/admin/settings/adminPin').set(adminAuth())
       expect(info.body.expired).to.equal(false)
-      expect(info.body.daysLeft).to.equal(7)
+      expect(info.body.daysLeft).to.be.within(1, 7) // until the coming Monday
     })
 
     it('the date cannot be pushed forward by hand, and a PIN from before this rule gets its week at start-up', async () => {

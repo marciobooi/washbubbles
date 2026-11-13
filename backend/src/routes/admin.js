@@ -788,7 +788,7 @@ router.get('/settings', requireAdmin, async (req, res) => {
   const SettingT = withTenant(Setting, req)
   // sync.* are this shop's private settings (a key waiting for the connection): never listed. Secrets are listed as set / not set,
   // never with their value (the screen that edits one reads it on its own, see GET /settings/:key).
-  const SECRET_SETTINGS = new Set(['adminPin', 'payments.mbway.apiKey', 'shopmail.account'])
+  const SECRET_SETTINGS = new Set(['adminPin', 'adminPin.history', 'payments.mbway.apiKey', 'shopmail.account'])
   const list = (await SettingT.find().lean())
     .filter((s) => !String(s.key).startsWith('sync.'))
     .map((s) => (SECRET_SETTINGS.has(s.key) ? { ...s, value: s.value ? '••••••' : s.value } : s))
@@ -817,7 +817,8 @@ router.get('/settings/:key', requireAdmin, async (req, res) => {
     const row = await withTenant(Setting, req).findOne({ key: 'adminPin' }).lean()
     const { pinAge, PIN_SET_AT } = await import('../services/staffPin.js')
     const at = row?.value ? (await withTenant(Setting, req).findOne({ key: PIN_SET_AT }).lean())?.value : null
-    return res.json({ key: 'adminPin', value: null, isSet: Boolean(row?.value), ...pinAge(at) })
+    const via = row?.value ? (await withTenant(Setting, req).findOne({ key: 'adminPin.setVia' }).lean())?.value : null
+    return res.json({ key: 'adminPin', value: null, isSet: Boolean(row?.value), setVia: via === 'kiosk' ? 'kiosk' : via === 'admin' ? 'admin' : null, ...pinAge(at) })
   }
   const SettingT = withTenant(Setting, req)
   const s = await SettingT.findOne({ key: req.params.key }).lean()
@@ -891,6 +892,8 @@ router.post('/settings', requireAdmin, async (req, res) => {
   if (!key || typeof key !== 'string' || key.length > 100) return res.status(400).json({ error: 'Missing key' })
   // sync.* is the link between the shop and the central server (keys, pending key changes): written by the server itself, never from this form.
   if (key.startsWith('sync.')) return res.status(400).json({ error: 'Esta definição não pode ser alterada aqui' })
+  if (key === 'adminPin.setVia') return res.status(400).json({ error: 'Esta definição não pode ser alterada aqui' })
+  if (key === 'adminPin.history') return res.status(400).json({ error: 'Esta definição não pode ser alterada aqui' })
   if (key === 'adminPin.setAt') return res.status(400).json({ error: 'Esta definição não pode ser alterada aqui' }) // written with the PIN itself
   if (key === 'shopmail.account') return res.status(400).json({ error: 'Use /shop-mail' }) // the password must be encrypted on its way in
   // Seconds before unspent cash is paid back from the hopper; 0 = never. A bad value here
@@ -908,13 +911,18 @@ router.post('/settings', requireAdmin, async (req, res) => {
     if (value === null || value === '' || value === undefined) toStore = null
     else if (!PIN_FORMAT.test(String(value))) return res.status(400).json({ error: 'O PIN deve ter entre 4 e 8 dígitos' })
     else {
-      // a new PIN is a different PIN: saving the same digits again would only reset the week
-      const cur = await withTenant(Setting, req).findOne({ key: 'adminPin' }).lean()
+      // a new PIN is a different PIN: saving the same digits again would only reset the week. The admin may change it at any time and
+      // is NOT held to the last-3 rule (that is for the kiosk), but the PIN it replaces is remembered so the kiosk knows the last 3.
+      const { rememberPin } = await import('../services/staffPin.js')
+      const SettingP = withTenant(Setting, req)
+      const cur = await SettingP.findOne({ key: 'adminPin' }).lean()
       if (cur?.value && await verifyPin(cur.value, String(value))) return res.status(400).json({ error: 'Escolha um PIN diferente do actual' })
+      await rememberPin(SettingP, cur?.value)
       toStore = await hashPin(String(value))
     }
     // the day it was made goes with it (services/staffPin.js: a PIN lasts a week)
     await withTenant(Setting, req).findOneAndUpdate({ key: PIN_SET_AT }, { value: toStore ? new Date().toISOString() : null }, { upsert: true })
+    await withTenant(Setting, req).findOneAndUpdate({ key: 'adminPin.setVia' }, { value: toStore ? 'admin' : null }, { upsert: true })
   }
   const SettingT = withTenant(Setting, req)
   const s = await SettingT.findOneAndUpdate({ key }, { value: toStore }, { upsert: true, new: true })

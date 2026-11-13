@@ -33,6 +33,17 @@ const MAX_APPLIED_DELTAS = 200
 // All sync routes require kiosk authentication
 router.use(requireKiosk)
 
+// ─── A new staff PIN made at a kiosk once the old one has expired (the shop relays it: this server holds the PIN) ───
+// { oldPin, newPin }. The old PIN must be right and expired; the new one is 4 to 8 digits and different. Written here, it reaches
+// every shop PC with the settings.
+router.post('/pin-renew', async (req, res) => {
+  const { renewExpiredPin } = await import('../services/staffPin.js')
+  const r = await renewExpiredPin(withTenant(Setting, req), req.body?.oldPin, req.body?.newPin)
+  if (!r.ok) return res.status(r.status).json({ error: r.error, code: r.code })
+  logAction(req, 'staff_pin.renewed_at_kiosk', 'Setting', 'adminPin', { by: 'kiosk (old PIN had expired)' })
+  res.json({ ok: true })
+})
+
 // ─── Daily copy of the data, kept on both sides (services/dailyBackup.js) ───
 // The shop PC sends its own copy here in parts, and fetches the copy of what this server holds FOR THAT SHOP (never another shop's rows).
 const COMMAND_REPORT_MS = 10 * 60 * 1000

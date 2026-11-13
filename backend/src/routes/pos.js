@@ -217,6 +217,30 @@ async function checkAdminPin(req, pin) {
 }
 
 /**
+ * POST /pos/admin/renew-pin — the staff PIN has expired (it is renewed every Monday): the person at the kiosk types the old PIN
+ * (already proven by the 410 answer), a new one and its confirmation. The central server, which holds the PIN, is asked first; only
+ * if it accepts is the new PIN written on this PC. Without a central server (a standalone PC) it is written here.
+ */
+router.post('/admin/renew-pin', adminPinLimiter, requireKiosk, async (req, res) => {
+  const { pin, newPin, confirm } = req.body || {}
+  if (typeof newPin !== 'string' || newPin !== confirm) return res.status(400).json({ error: 'Os dois PIN não são iguais', code: 'mismatch' })
+  const { renewExpiredPin } = await import('../services/staffPin.js')
+  const SettingT = withTenant(Setting, req)
+  const check = await renewExpiredPin(SettingT, pin, newPin, { write: false })
+  if (!check.ok) return res.status(check.status).json({ error: check.error, code: check.code })
+  const { hasCentral, relayPinRenewal } = await import('../services/pinRenewClient.js')
+  if (hasCentral()) {
+    const sent = await relayPinRenewal({ oldPin: pin, newPin })
+    if (!sent.ok) return res.status(sent.status).json({ error: sent.error, code: sent.code })
+  }
+  const done = await renewExpiredPin(SettingT, pin, newPin)
+  // the central server may already have sent the new PIN down to this PC by now: then there is nothing left to write here
+  if (!done.ok && done.code !== 'invalid-pin' && done.code !== 'pin-valid') return res.status(done.status).json({ error: done.error, code: done.code })
+  try { const { logAction } = await import('../services/auditLog.js'); logAction(req, 'staff_pin.renewed_at_kiosk', 'Setting', 'adminPin', { by: 'kiosk (old PIN had expired)' }) } catch { /* the trail must not undo a saved PIN */ }
+  res.json({ ok: true })
+})
+
+/**
  * POST /pos/admin/verify-pin
  *
  * Confirms the operator's admin PIN so the kiosk can unlock staff-only actions
