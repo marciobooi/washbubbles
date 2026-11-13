@@ -1,6 +1,6 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
-import { Smartphone } from 'lucide-react'
+import mbwayLogo from '@/assets/mbway-logo.svg'
 import QRCode from 'qrcode'
 import api from '@/services/api'
 import { toast } from '@/components/ui/Toast'
@@ -148,9 +148,8 @@ export default function MbwayPanel({ items, total, couponCode, batchId, kind = '
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 p-6" onClick={(e) => e.stopPropagation()}>
       <div role="dialog" aria-modal="true" className="w-full bg-white rounded-[2rem] shadow-2xl p-9 flex flex-col gap-6" style={{ maxWidth: 'min(80vw, 760px)' }}>
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-[#d3101c]/10 flex items-center justify-center"><Smartphone className="w-9 h-9 text-[#d3101c]" strokeWidth={1.8} /></div>
+          <img src={mbwayLogo} alt="MB WAY" className="h-16 w-auto" draggable={false} />
           <div>
-            <div className="text-4xl font-black text-slate-900">MB WAY</div>
             <div className="text-xl text-slate-500">{t('mbwayAmount', { amount: `${Number(total).toFixed(2).replace('.', ',')}€` })}</div>
           </div>
         </div>
