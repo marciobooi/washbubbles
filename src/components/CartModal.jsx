@@ -764,18 +764,18 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
                           {cashingOut ? t('cashOutBusy') : t('cashOut', { amount: eur(localSession.cashBalance) })}
                         </button>
                       )}
+                      {mbwayEnabled && (onlyOneRecharge || !cart.some((i) => i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge')))) && !(credit > 0) && total >= 1 && (
+                        <button
+                          type="button"
+                          onClick={() => { mbwayBatch.current = `mw-${Date.now().toString(36)}`; setMbwayOpen(true) }}
+                          aria-label={t('mbwayButton')}
+                          className="flex-1 min-h-[54px] py-2 px-3 rounded-xl bg-white border-2 border-slate-300 text-slate-800 font-bold text-sm sm:text-base shadow-sm active:scale-[0.99] flex items-center justify-center gap-2"
+                        >
+                          <span>{t('mbwayPayWith')}</span>
+                          <img src={mbwayLogo} alt="MB WAY" className="h-8 w-auto" draggable={false} />
+                        </button>
+                      )}
                     </div>
-                    {mbwayEnabled && (onlyOneRecharge || !cart.some((i) => i.type === 'Recarga de Cartão' || (i.id && String(i.id).startsWith('recharge')))) && !(credit > 0) && total >= 1 && (
-                      <button
-                        type="button"
-                        onClick={() => { mbwayBatch.current = `mw-${Date.now().toString(36)}`; setMbwayOpen(true) }}
-                        aria-label={t('mbwayButton')}
-                        className="w-full min-h-[56px] py-2 px-4 rounded-xl bg-white border-2 border-slate-300 text-slate-800 font-bold text-base sm:text-lg shadow-sm active:scale-[0.99] flex items-center justify-center gap-3"
-                      >
-                        <span>{t('mbwayPayWith')}</span>
-                        <img src={mbwayLogo} alt="MB WAY" className="h-9 w-auto" draggable={false} />
-                      </button>
-                    )}
                     {/* The staff's manual payment is in the PIN menu, not here: customers no longer see a button for it. */}
                   </div>
                 </div>
