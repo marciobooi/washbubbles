@@ -8,6 +8,7 @@ import { toast } from '@/components/ui/Toast'
 import * as websocket from '@/services/websocket'
 import * as localApi from '@/services/local-api'
 import MbwayPanel from './MbwayPanel'
+import mbwayLogo from '@/assets/mbway-logo.svg'
 
 let cachedLogo = null
 function useShopLogo() {
@@ -768,9 +769,11 @@ export default function CartModal({ open, onClose, onPay = () => {}, onClear = (
                       <button
                         type="button"
                         onClick={() => { mbwayBatch.current = `mw-${Date.now().toString(36)}`; setMbwayOpen(true) }}
-                        className="w-full min-h-[56px] py-3 px-4 rounded-xl bg-[#d3101c] text-white font-bold text-base sm:text-lg shadow-sm active:scale-[0.99]"
+                        aria-label={t('mbwayButton')}
+                        className="w-full min-h-[56px] py-2 px-4 rounded-xl bg-white border-2 border-slate-300 text-slate-800 font-bold text-base sm:text-lg shadow-sm active:scale-[0.99] flex items-center justify-center gap-3"
                       >
-                        {t('mbwayButton')}
+                        <span>{t('mbwayPayWith')}</span>
+                        <img src={mbwayLogo} alt="MB WAY" className="h-9 w-auto" draggable={false} />
                       </button>
                     )}
                     {/* The staff's manual payment is in the PIN menu, not here: customers no longer see a button for it. */}

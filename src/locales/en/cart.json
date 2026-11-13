@@ -244,6 +244,7 @@
   "cardInReaderAria": "Card in the reader: open my card",
   "payRechargeCashOnly": "Top-ups can only be paid in cash: insert the amount in coins or notes.",
   "mbwayButton": "Pay with MB WAY",
+  "mbwayPayWith": "Pay with",
   "mbwayAmount": "To pay: {{amount}}",
   "mbwayPhoneLabel": "Your MB WAY mobile number",
   "mbwayBadPhone": "Invalid number: enter the 9 digits of your mobile.",

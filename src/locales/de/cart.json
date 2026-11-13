@@ -244,6 +244,7 @@
   "cardInReaderAria": "Karte im Lesegerät: meine Karte öffnen",
   "payRechargeCashOnly": "Aufladungen können nur bar bezahlt werden: Werfen Sie den Betrag als Münzen oder Scheine ein.",
   "mbwayButton": "Mit MB WAY bezahlen",
+  "mbwayPayWith": "Bezahlen mit",
   "mbwayAmount": "Zu zahlen: {{amount}}",
   "mbwayPhoneLabel": "Ihre MB-WAY-Handynummer",
   "mbwayBadPhone": "Ungültige Nummer: Geben Sie die 9 Ziffern Ihrer Handynummer ein.",

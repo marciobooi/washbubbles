@@ -244,6 +244,7 @@
   "cardInReaderAria": "Tarjeta en el lector: ver mi tarjeta",
   "payRechargeCashOnly": "Las recargas solo se pagan en efectivo: introduzca el importe en monedas o billetes.",
   "mbwayButton": "Pagar con MB WAY",
+  "mbwayPayWith": "Pagar con",
   "mbwayAmount": "A pagar: {{amount}}",
   "mbwayPhoneLabel": "Su número de móvil de MB WAY",
   "mbwayBadPhone": "Número no válido: escriba los 9 dígitos del móvil.",
