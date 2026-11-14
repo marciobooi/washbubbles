@@ -53,6 +53,21 @@ describe('Round 14 — refunds, roles, coupons, audit log', function () {
       expect(reloaded.status).to.equal('refunded')
     })
 
+    it('a sale pushed by the shop (card CODE only, no central card id) still credits the card back', async () => {
+      const Card = (await import('../src/models/card.js')).default
+      const card = await Card.create({ tenantId: tenant._id, code: '365656747', balance: 3.1 })
+      const sale = await createSale({ amount: 1.8, method: 'card', cardCode: card.code })
+      expect(sale.cardId).to.equal(undefined)
+
+      const res = await request(app)
+        .post(`/api/admin/transactions/${sale._id}/refund`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ reason: 'Falha na ativação' })
+      expect(res.status).to.equal(200)
+      expect(String(res.body.refund.cardId)).to.equal(String(card._id))
+      expect((await Card.findById(card._id)).balance).to.equal(4.9)
+    })
+
     it('does not touch a card balance for a cash sale', async () => {
       const sale = await createSale({ amount: 3, method: 'cash' })
       const res = await request(app)

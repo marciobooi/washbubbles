@@ -569,10 +569,17 @@ router.post('/transactions/:id/refund', requireAdmin, async (req, res) => {
     amount = p.value
   }
   const payout = req.body?.payout === true
+  // Sales that the shop PC pushed carry the card's CODE but not central's card id (the shop's ids are its own): find the card by code,
+  // otherwise a refund of a card payment would never reach the card.
+  let cardId = sale.cardId || null
+  if (!cardId && sale.cardCode) {
+    const c = await withTenant(Card, req).findOne({ code: String(sale.cardCode) }).select('_id').lean()
+    cardId = c?._id || null
+  }
   if (payout && sale.method !== 'cash') return res.status(400).json({ error: 'Só as vendas em dinheiro podem ser pagas pelo hopper' })
   // A sale that PUT money on a card (a recharge, the balance that came with a new card) is undone by taking that balance back off
   // the card. A sale PAID with a card is undone by giving the balance back. (Crediting in both cases gave the customer the money twice.)
-  const loadedCard = Boolean(sale.cardId) && ['recharge', 'card_purchase', 'gift_card'].includes(sale.type)
+  const loadedCard = Boolean(cardId) && ['recharge', 'card_purchase', 'gift_card'].includes(sale.type)
   // of a new card's price only the balance that came with it is on the card; of a gift card nothing was paid at all
   const loadedCredit = sale.type === 'recharge' ? sale.amount : roundMoney(Number(sale.metadata?.initialCredit) || 0)
   const takeBack = loadedCard ? roundMoney(Math.max(0, Math.min(amount, loadedCredit - alreadyRefunded))) : 0
@@ -583,19 +590,19 @@ router.post('/transactions/:id/refund', requireAdmin, async (req, res) => {
   const CardT = withTenant(Card, req)
   // on the central server the shop's own card must follow (the shop PC has no SYNC_SERVER_URL set to itself)
   const tellShop = async (delta) => {
-    if (!process.env.SYNC_SERVER_URL) await CardT.findByIdAndUpdate(sale.cardId, { $push: { shopAdjustments: { $each: [{ opId: String(new mongoose.Types.ObjectId()), delta, reason: 'refund', at: new Date() }], $slice: -50 } } })
+    if (!process.env.SYNC_SERVER_URL) await CardT.findByIdAndUpdate(cardId, { $push: { shopAdjustments: { $each: [{ opId: String(new mongoose.Types.ObjectId()), delta, reason: 'refund', at: new Date() }], $slice: -50 } } })
   }
 
   // Balance that the sale loaded comes off the card BEFORE any money goes out: what was already spent cannot be refunded.
   if (takeBack > 0) {
     // plain atomic update (not debitCard): a blocked card must still give its balance back
-    const took = await CardT.findOneAndUpdate({ _id: sale.cardId, balance: { $gte: takeBack - 0.005 } }, balanceUpdate(-takeBack), { new: true })
+    const took = await CardT.findOneAndUpdate({ _id: cardId, balance: { $gte: takeBack - 0.005 } }, balanceUpdate(-takeBack), { new: true })
     if (!took) {
-      const c = await CardT.findById(sale.cardId).select('balance').lean()
+      const c = await CardT.findById(cardId).select('balance').lean()
       return res.status(409).json({ error: `O cartão só tem ${Number(c?.balance || 0).toFixed(2)} € de saldo: o resto já foi gasto. Reembolse no máximo esse valor.` })
     }
   }
-  const giveBack = async () => { if (takeBack > 0) await creditCard(CardT, { _id: sale.cardId }, takeBack) }
+  const giveBack = async () => { if (takeBack > 0) await creditCard(CardT, { _id: cardId }, takeBack) }
 
   // The cash goes out FIRST: when the hopper pays nothing, nothing is recorded and the admin can try again.
   let paid = null
@@ -613,9 +620,9 @@ router.post('/transactions/:id/refund', requireAdmin, async (req, res) => {
   }
 
   if (takeBack > 0) await tellShop(-takeBack)
-  if (sale.cardId && !loadedCard) {
+  if (cardId && !loadedCard) {
     // No status guard on creditCard — this must succeed even onto a blocked card.
-    await creditCard(CardT, { _id: sale.cardId }, amount)
+    await creditCard(CardT, { _id: cardId }, amount)
     await tellShop(amount)
   }
 
@@ -627,7 +634,7 @@ router.post('/transactions/:id/refund', requireAdmin, async (req, res) => {
     type: 'refund',
     method: sale.method,
     batchId: `refund-${sale._id}`,
-    cardId: sale.cardId || null,
+    cardId,
     cardCode: sale.cardCode || null,
     refundOf: sale._id,
     refundReason: reason + note
