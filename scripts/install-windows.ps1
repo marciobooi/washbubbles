@@ -388,6 +388,16 @@ try {
       Register-ScheduledTask -TaskName 'WashBubbles Bridge' -Action $brAction -Trigger $brTrigger -Settings $settings -Principal $bPrincipal -Force | Out-Null
       Ok "task 'WashBubbles Bridge' keeps the controller connection at boot"
 
+      # Windows (security, Defender; never drivers) and Tailscale updates, 5 minutes after the PC starts (the kiosk is up first).
+      # Never restarts the PC: what needs a restart finishes with the night's shutdown. See scripts/windows-morning-updates.ps1.
+      $mu = Join-Path $Root 'scripts\windows-morning-updates.ps1'
+      $muAction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$mu`"" -WorkingDirectory $Root
+      $muTrigger = New-ScheduledTaskTrigger -AtStartup
+      $muTrigger.Delay = 'PT5M'
+      $muSettings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 2)
+      Register-ScheduledTask -TaskName 'WashBubbles Morning Updates' -Action $muAction -Trigger $muTrigger -Settings $muSettings -Principal $bPrincipal -Force | Out-Null
+      Ok "task 'WashBubbles Morning Updates' installs Windows and Tailscale updates after each start (no drivers, no restart)"
+
       # Automatic updates every minute: a PC installed from the central server (no git folder) updates from it.
       if ($SyncUrl) {
         $upd = Join-Path $Root 'scripts\kiosk-update-bundle.ps1'
