@@ -96,10 +96,11 @@ services:
       TRANSLATE_URL: http://libretranslate:5000
     depends_on:
       - mongo
-    ports:
-      - "127.0.0.1:3010:3000"
+    # No published port: two backends run side by side during a deploy (scripts/hetzner-autodeploy.sh) and only the frontend
+    # containers reach them, by name. For a look from the server itself: docker compose exec backend ...
 
   frontend:
+    image: washbubbles-frontend
     build:
       context: .
       dockerfile: docker/frontend.Dockerfile
@@ -115,6 +116,18 @@ services:
       - backend
     ports:
       - "127.0.0.1:8081:80" # the host nginx (TLS) is the only door
+
+  # The same site a second time, so that one is always up while the other is replaced (the host nginx sends to both, see
+  # docker/host-nginx-upstream.conf). Same image as frontend: built once, never pulled.
+  frontend_b:
+    image: washbubbles-frontend
+    pull_policy: never
+    restart: unless-stopped
+    logging: *default-logging
+    depends_on:
+      - backend
+    ports:
+      - "127.0.0.1:8082:80"
 
 volumes:
   washbubbles_lt_models:

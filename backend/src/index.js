@@ -344,10 +344,14 @@ async function start() {
 start()
 
 // Graceful shutdown
+// No new connections (nginx then sends them to the process that replaces this one), the requests under way get a few seconds to
+// finish, open sockets (WebSocket clients) are closed so they reconnect to the new process, then this one exits.
 process.on('SIGTERM', async () => {
   console.log('SIGTERM signal received: closing HTTP server')
-  await coinMachine.stop()
-  server.close(() => {
-    console.log('HTTP server closed')
-  })
+  const bye = setTimeout(() => { console.log('Shutdown: exiting'); process.exit(0) }, 8000)
+  bye.unref?.()
+  server.close(() => { console.log('HTTP server closed'); process.exit(0) })
+  server.closeIdleConnections?.()
+  try { await coinMachine.stop() } catch (e) { console.warn('Shutdown: coin machine stop failed:', e.message) }
+  setTimeout(() => server.closeAllConnections?.(), 5000).unref?.()
 })
