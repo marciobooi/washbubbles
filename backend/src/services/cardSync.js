@@ -164,6 +164,8 @@ export class CardSync extends EventEmitter {
       return result
     })().finally(() => this.inflight.delete(code))
     this.inflight.set(code, job)
+    // Said at once (the balance just changed, the payment is about to start a machine): the start order waits for this write.
+    this.middleware?.noteCardWrite?.(job)
     return job
   }
 

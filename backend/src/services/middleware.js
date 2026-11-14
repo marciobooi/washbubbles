@@ -863,6 +863,30 @@ class Middleware extends EventEmitter {
   }
 
   /** How long a start with no answer is given to prove itself (a late answer, or the machine saying it started) before anybody is told. */
+  /**
+   * How long a start order waits for a card write that is under way. 2026-11-10..14: every start the controller never answered
+   * (Secar 7, 8, 9, 10, 11, Lavar 5: 13 of them, two refunds) was sent 2-5 ms after the `write-card` of the same payment; the controller
+   * answered the card (3-4 s later) and the start was lost. Sent once the card is written, it answers in 2 ms.
+   */
+  activationCardWaitMs() {
+    if (Number.isFinite(this.activationCardWait)) return this.activationCardWait
+    const env = Number(process.env.ACTIVATION_CARD_WAIT_MS)
+    return Number.isFinite(env) && env >= 0 ? env : 10000
+  }
+
+  /** Waits (bounded) for the card write under way, if any: a start order must not reach the controller in the middle of one. */
+  async waitCardWrite() {
+    const busy = this.cardWriteInFlight
+    if (!busy) return
+    const ms = this.activationCardWaitMs()
+    let timer
+    const t0 = Date.now()
+    await Promise.race([busy.catch(() => {}), new Promise((r) => { timer = setTimeout(r, ms); timer.unref?.() })])
+    clearTimeout(timer)
+    const waited = Date.now() - t0
+    if (waited > 50) console.log(`[HW] start order held ${waited} ms until the card was written`)
+  }
+
   activationLateMs() {
     if (Number.isFinite(this.activationLate)) return this.activationLate
     const env = Number(process.env.ACTIVATION_LATE_MS)
@@ -899,6 +923,7 @@ class Middleware extends EventEmitter {
       const addr = String(iface.address)
       const prev = this.lastActivation
       if (prev && prev.addr === addr) await prev.started // same interface: let it finish the previous machine first
+      await this.waitCardWrite() // never in the middle of a card write: the controller loses the start (see activationCardWaitMs)
       const started = this.waitMachineStarted(addr, machine.port, this.activationConfirmMs())
       const ackMs = this.activationAckMs()
       // The answer is the controller saying it TOOK the order (code 200, the only one ever seen: 182 of 182 in the shop's log on
@@ -1002,7 +1027,8 @@ class Middleware extends EventEmitter {
    * other code = failure. Resolves only on 201.
    */
   writeCardViaGateway(peripheral, cardData) {
-    return this.serializeGateway(async () => {
+    // Known AT ONCE (before the chain runs it): a start order of the same payment, sent right after, waits for it (waitCardWrite).
+    const job = this.serializeGateway(async () => {
       if (!this.lowLevel?.isConnected) throw new Error('Low-level controller is not connected — cannot write card')
 
       // Legacy order of events for a NEW card: `card-release` -> the customer
@@ -1035,6 +1061,15 @@ class Middleware extends EventEmitter {
       this.emit('card-written', { peripheral, cardData })
       return { success: true, cardCode: data.cardId }
     })
+    this.noteCardWrite(job)
+    return job
+  }
+
+  /** A card write is on its way (from the moment the balance changed, see cardSync.push): start orders wait for it. */
+  noteCardWrite(job) {
+    this.cardWriteInFlight = job
+    const clear = () => { if (this.cardWriteInFlight === job) this.cardWriteInFlight = null }
+    Promise.resolve(job).then(clear, clear)
   }
 
   /**

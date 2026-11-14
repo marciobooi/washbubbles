@@ -330,6 +330,32 @@ describe('Middleware over the low-level gateway', () => {
     expect(Date.now() - t0).to.be.within(70, 1500)
   })
 
+  it('a start order waits for the card write of the same payment (2026-11-10..14: 13 starts lost when sent 3 ms after write-card)', async () => {
+    const mw = gatewayMiddleware()
+    mw.activationGap = 0
+    mw.lastCard = { cardId: '365656747' }
+    const write = mw.writeCardViaGateway({ name: 'reader' }, { code: '365656747', balance: 3.1 })
+    const start = mw.sendMachineActivation({ _id: 'a', name: 'Secar 10', port: 2 }, { _id: 'i5', name: 'Int 5', address: 15 })
+    await tick(40)
+    expect(mw.sent.map((p) => p.op)).to.deep.equal(['write-card']) // the start is held while the card is written
+    mw.handlePackage({ op: 'write-card', code: '201', msg: 'ok' })
+    await write
+    await start
+    expect(mw.sent.map((p) => p.op)).to.deep.equal(['write-card', 'activate-machine'])
+  })
+
+  it('the wait for a card write is bounded: a write that never ends does not keep the machine from starting', async () => {
+    const mw = gatewayMiddleware()
+    mw.activationGap = 0
+    mw.activationCardWait = 60
+    mw.lastCard = { cardId: '1' }
+    mw.writeCardViaGateway({ name: 'reader' }, { code: '1', balance: 1 }).catch(() => {})
+    const t0 = Date.now()
+    await mw.sendMachineActivation({ _id: 'a', name: 'Lavar 5', port: 1 }, { _id: 'i3', name: 'Int 3', address: 13 })
+    expect(Date.now() - t0).to.be.within(50, 1500)
+    expect(mw.sent.map((p) => p.op)).to.deep.equal(['write-card', 'activate-machine'])
+  })
+
   it('a failed activation does not block the next one, and still reports its own error', async () => {
     const mw = gatewayMiddleware({ connected: false })
     mw.activationGap = 0
