@@ -71,7 +71,9 @@ try {
     $wg = Get-Command winget -ErrorAction SilentlyContinue
     if (-not $wg) { $wg = Get-ChildItem "$env:ProgramFiles\WindowsApps\Microsoft.DesktopAppInstaller_*_x64__8wekyb3d8bbwe\winget.exe" -ErrorAction SilentlyContinue | Select-Object -Last 1 }
     if ($wg) {
-      $lines = & $wg.Source upgrade --accept-source-agreements --disable-interactivity 2>$null
+      # Get-Command gives .Source, the file found under WindowsApps (when run as SYSTEM) gives .FullName
+      $wgPath = if ($wg.Source) { $wg.Source } else { $wg.FullName }
+      $lines = & $wgPath upgrade --accept-source-agreements --disable-interactivity 2>$null
       $rows = $lines | Where-Object { $_ -match '\s(winget|msstore)\s*$' }
       foreach ($r in $rows) { $summary.programs += ($r -replace '\s{2,}', ' | ').Trim() }
       Log "programs with a newer version (not updated, listed only): $($summary.programs.Count)"
