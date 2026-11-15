@@ -613,8 +613,8 @@ export async function sendDayCloseEmail(tenantId, dc, to) {
   const brand = await getEmailBrand(tenantId)
   if (dc.source === 'dashboard' || dc.source === 'kiosk') {
     const { buildDayCloseReport } = await import('./dayCloseReport.js')
-    const r = await buildDayCloseReport(dc)
-    await sendMail({ tenantId, to, subject: r.subject, text: r.text, html: renderEmailHtml({ title: 'Fecho de caixa', preheader: r.subject, bodyHtml: r.html, brand, wide: true }), attachments: r.attachments })
+    const r = await buildDayCloseReport(dc, brand)
+    await sendMail({ tenantId, to, subject: r.subject, text: r.text, html: renderEmailHtml({ title: 'Fecho de caixa', preheader: r.subject, bodyHtml: r.html, brand, bare: true }), attachments: r.attachments })
     return
   }
   await sendMail({ tenantId, to, subject: 'Fecho de Caixa', text: formatDayCloseReceiptText(dc), html: renderEmailHtml({ title: 'Fecho de Caixa', bodyHtml: formatDayCloseReceiptHtml(dc), brand }) })
@@ -625,8 +625,9 @@ export async function previewDayCloseReport(req, id) {
   const dc = await withTenant(DayClose, req).findById(id).lean()
   if (!dc) return { status: 404, body: { error: 'Cash session record not found' } }
   const { buildDayCloseReport } = await import('./dayCloseReport.js')
-  const r = await buildDayCloseReport(dc)
-  let html = renderEmailHtml({ title: 'Fecho de caixa', preheader: r.subject, bodyHtml: r.html, brand: await getEmailBrand(req.tenantId), wide: true })
+  const brand = await getEmailBrand(req.tenantId)
+  const r = await buildDayCloseReport(dc, brand)
+  let html = renderEmailHtml({ title: 'Fecho de caixa', preheader: r.subject, bodyHtml: r.html, brand, bare: true })
   for (const a of r.attachments) html = html.split(`cid:${a.cid}`).join(`data:image/png;base64,${a.content.toString('base64')}`)
   return { status: 200, body: { html, subject: r.subject } }
 }

@@ -1007,17 +1007,14 @@ router.post('/receipt', requireKiosk, async (req, res) => {
     'Obrigado pela sua visita!',
   ].join('\n')
 
-  const rowsHtml = sales.map((s) => {
-    const label = s.type === 'recharge' ? 'Recarga de cartão' : (s.machineId?.name || 'Máquina')
-    return `<tr><td style="padding:8px 0; border-bottom:1px solid #eef6f4;">${escapeHtml(label)}</td><td style="padding:8px 0; border-bottom:1px solid #eef6f4; text-align:right;">€${roundMoney(s.amount).toFixed(2)}</td></tr>`
-  }).join('')
+  const K = await import('../services/emailKit.js')
+  const when = new Date(sales[0].createdAt).toLocaleString('pt-PT', { timeZone: 'Europe/Lisbon', day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  const rows = sales.map((s) => [s.type === 'recharge' ? 'Recarga de cartão' : (s.machineId?.name || 'Máquina'), K.eur(roundMoney(s.amount))])
   const bodyHtml = `
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
-      ${rowsHtml}
-      <tr><td style="padding:12px 0 0; font-weight:bold;">Total</td><td style="padding:12px 0 0; font-weight:bold; text-align:right;">€${roundMoney(total).toFixed(2)}</td></tr>
-    </table>
-    <p style="margin:20px 0 0; font-size:13px; color:#3d6a63;">${escapeHtml(new Date(sales[0].createdAt).toLocaleString('pt-PT'))}</p>
-    <p style="margin:20px 0 0;">Obrigado pela sua visita!</p>
+    <div style="font-size:13px;color:#64748b;margin-bottom:16px;">${escapeHtml(when)}</div>
+    ${K.boxRow([K.kpi({ label: 'Total pago', value: roundMoney(total).toFixed(2).replace('.', ','), tone: 'teal', width: '100%' })], 0)}
+    <div style="margin-top:20px;">${K.kv(rows)}</div>
+    <p style="margin:24px 0 0;text-align:center;color:#64748b;">Obrigado pela sua visita!</p>
   `
 
   await sendMail({

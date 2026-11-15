@@ -7,7 +7,7 @@
 import { getEmailBrand } from './emailBrand.js'
 import Setting from '../models/setting.js'
 import { sendMail } from './mailer.js'
-import { renderEmailHtml, escapeHtmlMultiline } from './emailTemplate.js'
+import { renderEmailHtml, escapeHtmlMultiline, escapeHtml } from './emailTemplate.js'
 
 export async function sendAlertForTenant(tenantId, subject, message) {
   try {
@@ -16,7 +16,11 @@ export async function sendAlertForTenant(tenantId, subject, message) {
     const val = (k) => rows.find((r) => r.key === k)?.value
     const to = val('alerts.email') || val('support.email') // the support address is where alerts go unless a separate alerts address is set
     if (!to) return
-    const bodyHtml = `<p>${escapeHtmlMultiline(message)}</p>`
+    const K = await import('./emailKit.js')
+    const good = /online outra vez|recuperad|voltou|resolvid/i.test(subject)
+    const when = new Date().toLocaleString('pt-PT', { timeZone: 'Europe/Lisbon', day: '2-digit', month: 'long', hour: '2-digit', minute: '2-digit' })
+    const bodyHtml = `<div style="margin-bottom:14px;">${K.badge(good ? 'Resolvido' : 'Atenção', good ? 'green' : 'amber')}<span style="font-size:12px;color:#94a3b8;margin-left:10px;">${escapeHtml(when)}</span></div>
+      ${K.note({ tone: good ? 'green' : 'amber', html: `<div style="font-size:14px;line-height:1.7;color:#0f172a;">${escapeHtmlMultiline(message)}</div>` })}`
     await sendMail({
       tenantId,
       to,

@@ -6,14 +6,15 @@
 import sharp from 'sharp'
 import Sale from '../models/sale.js'
 import Machine from '../models/machine.js'
-import { escapeHtml } from './emailTemplate.js'
+import { escapeHtml, resolveBrand } from './emailTemplate.js'
+import * as K from './emailKit.js'
 
 export const COLORS = { cash: '#0f766e', mbway: '#d3101c', topup: '#f59e0b', wash: '#0ea5e9', dry: '#f97316', other: '#94a3b8' }
 const INK = '#1f2937'
 const SOFT = '#6b7280'
 const LINE = '#e5e7eb'
 
-const eur = (n) => `${Number(n || 0).toFixed(2).replace('.', ',')} €`
+const eur = K.eur
 const r2 = (n) => Math.round(Number(n || 0) * 100) / 100
 const pct = (part, total) => (total > 0 ? Math.round((part / total) * 100) : 0)
 
@@ -94,66 +95,40 @@ export async function reportData(dc) {
   }
 }
 
-const dateLong = (d) => { const t = d.toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Lisbon' }); return t.charAt(0).toUpperCase() + t.slice(1) }
-const timeShort = (d) => d.toLocaleString('pt-PT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Lisbon' })
-
-/** A box that IS a table cell: the cells of one row always have the same height, in every mail client. */
-const CELL = `background:#ffffff;border:1px solid ${LINE};border-radius:14px;`
-const GAP = '<td width="12" style="font-size:0;line-height:0;">&nbsp;</td>'
-
-/** A row of boxes of equal height, with a gap between them. */
-function boxRow(cells, top = 16) {
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:${top}px;border-collapse:separate;"><tr>${cells.join(GAP)}</tr></table>`
-}
-
-function tile(label, value, color = INK, sub = '') {
-  return `<td width="25%" valign="top" style="${CELL}padding:14px 16px;">
-      <div style="font-size:12px;color:${SOFT};text-transform:uppercase;letter-spacing:.5px;">${escapeHtml(label)}</div>
-      <div style="font-size:26px;font-weight:bold;color:${color};margin-top:4px;">${escapeHtml(value)}</div>
-      ${sub ? `<div style="font-size:12px;color:${SOFT};margin-top:2px;">${escapeHtml(sub)}</div>` : ''}
-    </td>`
-}
-
-/** A titled box as a cell of a boxRow. */
-function cellBox(title, inner, width = '50%') {
-  return `<td width="${width}" valign="top" style="${CELL}padding:20px 24px;">${title ? `<div style="font-size:16px;font-weight:bold;color:${INK};margin-bottom:12px;">${escapeHtml(title)}</div>` : ''}${inner}</td>`
-}
+const dateLong = (d) => d.toLocaleDateString('pt-PT', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Europe/Lisbon' }).replace(/\./g, '')
+const timeOf = (d) => d.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Lisbon' })
+const dayTime = (d) => d.toLocaleString('pt-PT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Lisbon' }).replace(',', '')
 
 function legend(items, total) {
   return items.map((x) => `<tr>
-    <td style="padding:5px 0;width:16px;" valign="middle"><div style="width:12px;height:12px;border-radius:3px;background:${x.color};"></div></td>
-    <td style="padding:5px 8px;font-size:14px;color:${INK};">${escapeHtml(x.label)}</td>
-    <td style="padding:5px 0;font-size:14px;color:${INK};text-align:right;white-space:nowrap;"><b>${escapeHtml(x.text)}</b> <span style="color:${SOFT};">${pct(x.value, total)}%</span></td>
+    <td style="padding:7px 0;font-size:13px;color:${K.T.text};"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${x.color};margin-right:8px;"></span>${escapeHtml(x.label)}</td>
+    <td style="padding:7px 0;font-size:13px;text-align:right;white-space:nowrap;"><b style="color:${K.T.ink};">${escapeHtml(x.text)}</b> <span style="color:${K.T.faint};">${pct(x.value, total)}%</span></td>
   </tr>`).join('')
 }
 
-function chartBlock(title, cid, items, total, note = '') {
-  return cellBox(title, `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-    <tr>
-      <td width="190" valign="middle" align="center"><img src="cid:${cid}" width="170" height="170" alt="" style="display:block;"></td>
-      <td style="padding-left:20px;" valign="middle"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${legend(items, total)}</table>
-      ${note ? `<div style="font-size:12px;color:${SOFT};margin-top:8px;">${escapeHtml(note)}</div>` : ''}</td>
-    </tr></table>`)
+/** One chart box: the donut (an inline image) and its legend side by side. `bars` puts a progress bar under each legend line. */
+function chartPanel({ title, subtitle, tag, cid, items, total, foot, bars = false }) {
+  const rows = bars
+    ? items.map((x) => `<tr><td style="padding:8px 0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+        <td style="font-size:13px;color:${K.T.text};"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${x.color};margin-right:8px;"></span>${escapeHtml(x.label)}</td>
+        <td style="font-size:13px;text-align:right;white-space:nowrap;"><b style="color:${K.T.ink};">${escapeHtml(x.text)}</b> <span style="color:${K.T.faint};">${pct(x.value, total)}%</span></td></tr></table>${K.bar(pct(x.value, total), x.color)}</td></tr>`).join('')
+    : legend(items, total)
+  const inner = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+      <td width="170" valign="middle" align="center"><img src="cid:${cid}" width="150" height="150" alt="" style="display:block;border:0;"></td>
+      <td valign="middle" style="padding-left:18px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}</table></td>
+    </tr></table>`
+  return K.panel({ title, subtitle, tag, inner, foot })
 }
 
-/** One module = one white box with its own title. */
-function box(title, inner, extra = '') {
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid ${LINE};border-radius:14px;margin-top:16px;${extra}">
-    <tr><td style="padding:20px 24px;">${title ? `<div style="font-size:16px;font-weight:bold;color:${INK};margin-bottom:12px;">${escapeHtml(title)}</div>` : ''}${inner}</td></tr></table>`
-}
-
-function rows(list) {
-  return list.map(([label, value, opt = {}]) => `<tr>
-    <td style="padding:8px 0;border-bottom:1px solid ${LINE};font-size:14px;color:${opt.soft ? SOFT : INK};${opt.bold ? 'font-weight:bold;' : ''}">${escapeHtml(label)}</td>
-    <td style="padding:8px 0;border-bottom:1px solid ${LINE};font-size:14px;text-align:right;white-space:nowrap;color:${opt.color || (opt.soft ? SOFT : INK)};${opt.bold ? 'font-weight:bold;' : ''}">${escapeHtml(value)}</td>
-  </tr>`).join('')
-}
-
-/** subject, text, the inner HTML (to go inside renderEmailHtml) and the chart images to attach. */
-export async function buildDayCloseReport(dc) {
+/** subject, text, the inner HTML (to go inside renderEmailHtml with bare:true) and the chart images to attach. */
+export async function buildDayCloseReport(dc, brandIn = {}) {
   const d = await reportData(dc)
-  const diffColor = Math.abs(d.discrepancy) < 0.005 ? '#15803d' : d.discrepancy < 0 ? '#b91c1c' : '#b45309'
-  const diffText = Math.abs(d.discrepancy) < 0.005 ? 'Certo' : `${d.discrepancy > 0 ? '+' : ''}${eur(d.discrepancy)}`
+  const brand = resolveBrand(brandIn)
+  const T = K.T
+  const noDiff = Math.abs(d.discrepancy) < 0.005
+  const diffTone = noDiff ? 'green' : 'rose'
+  const diffText = noDiff ? '0,00' : `${d.discrepancy > 0 ? '+' : ''}${eur(d.discrepancy).replace(' €', '')}`
+  const num = (n) => eur(n).replace(' €', '')
 
   const pay = [
     { label: 'Dinheiro (máquinas)', value: d.cashServices, color: COLORS.cash, text: eur(d.cashServices) },
@@ -161,71 +136,81 @@ export async function buildDayCloseReport(dc) {
     { label: 'MB WAY', value: d.mbway, color: COLORS.mbway, text: eur(d.mbway) },
   ]
   const useItems = [
-    { label: `Lavagens (${d.use.wash.n})`, value: d.use.wash.eur, color: COLORS.wash, text: eur(d.use.wash.eur) },
-    { label: `Secagens (${d.use.dry.n})`, value: d.use.dry.eur, color: COLORS.dry, text: eur(d.use.dry.eur) },
+    { label: `Lavagens (${d.use.wash.n} ${d.use.wash.n === 1 ? 'ciclo' : 'ciclos'})`, value: d.use.wash.eur, color: COLORS.wash, text: eur(d.use.wash.eur) },
+    { label: `Secagens (${d.use.dry.n} ${d.use.dry.n === 1 ? 'ciclo' : 'ciclos'})`, value: d.use.dry.eur, color: COLORS.dry, text: eur(d.use.dry.eur) },
   ]
   const useTotal = d.use.wash.eur + d.use.dry.eur
+  const cycles = d.use.wash.n + d.use.dry.n
   const attachments = [
-    { filename: 'pagamentos.png', cid: 'chart-pay', contentType: 'image/png', content: await donutPng(pay) },
-    { filename: 'servicos.png', cid: 'chart-use', contentType: 'image/png', content: await donutPng(useItems) },
+    { filename: 'pagamentos.png', cid: 'chart-pay', contentType: 'image/png', content: await donutPng(pay, 150) },
+    { filename: 'servicos.png', cid: 'chart-use', contentType: 'image/png', content: await donutPng(useItems, 150) },
   ]
 
-  const period = d.from && d.from.getTime() > 0 ? `${timeShort(d.from)} → ${timeShort(d.to)}` : `até ${timeShort(d.to)}`
-  const bankSub = d.bankNotes != null ? `${eur(d.bankNotes)} em notas + ${eur(d.bankCoins)} em moedas` : ''
+  const period = d.from && d.from.getTime() > 0 ? `${dayTime(d.from)} → ${dayTime(d.to)}` : `até ${dayTime(d.to)}`
+  const bankSub = d.bankNotes != null ? `${eur(d.bankNotes)} em notas · ${eur(d.bankCoins)} em moedas` : 'Preparado para recolha'
 
-  const vendas = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows([
-      ['Dinheiro (máquinas)', eur(d.cashServices)],
-      ['Carregamentos e cartões novos (dinheiro)', eur(d.cashTopups)],
-      ['MB WAY', eur(d.mbway)],
-      ['Total faturado', eur(d.revenue), { bold: true }],
-      ['Pago com cartão (saldo já contado)', eur(d.cardSpent), { soft: true }],
-      ...(d.refunds > 0 ? [['Reembolsos', `-${eur(d.refunds)}`, { soft: true }]] : []),
-    ])}</table>`
-  const caixa = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows([
-      ['Fundo no início', eur(d.openingFloat)],
-      ['Dinheiro que entrou', eur(d.cashTotal)],
-      ...(d.floatAdded > 0 ? [['Fundo adicionado', eur(d.floatAdded)]] : []),
-      ...(d.floatWithdrawn > 0 ? [['Levantamentos', `-${eur(d.floatWithdrawn)}`]] : []),
-      ['Esperado na máquina', eur(d.expected)],
-      ['Contado', eur(d.counted), { bold: true }],
-      ['Diferença', diffText, { bold: true, color: diffColor }],
-      ['Depositado no banco', eur(d.toBank), { bold: true }],
-      ...(d.bankNotes != null ? [['em notas', eur(d.bankNotes), { soft: true }], ['em moedas (pelo hopper)', eur(d.bankCoins), { soft: true }]] : []),
-      ['Fundo que fica', eur(d.floatLeft)],
-      ['Troco dado aos clientes', eur(d.change), { soft: true }],
-    ])}</table>`
+  const meta = K.meta([['Data do fecho:', `${dateLong(d.to)}, ${timeOf(d.to)}`], ['Período:', period]],
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+      <td style="font-size:12px;color:${T.soft};">${K.avatar(d.closedBy || '·')}&nbsp; Operador: <b style="color:${T.ink};">${escapeHtml(d.closedBy || '-')}</b></td>
+      <td align="right">${K.badge('Concluído', 'green')}</td></tr></table>`)
 
-  const html = `
-  <div style="font-family:Arial,Helvetica,sans-serif;color:${INK};">
-    ${box('', `<div style="font-size:22px;font-weight:bold;color:${INK};">Fecho de caixa</div>
-      <div style="font-size:14px;color:${SOFT};margin-top:4px;">${escapeHtml(dateLong(d.to))} · período ${escapeHtml(period)}${d.closedBy ? ` · fechado por ${escapeHtml(d.closedBy)}` : ''}</div>`, 'margin-top:0;')}
+  const kpis = K.boxRow([
+    K.kpi({ label: 'Faturação do dia', value: num(d.revenue), sub: `<span style="display:inline-block;background:${T.hair};padding:2px 8px;border-radius:6px;font-weight:bold;color:${T.text};">${d.salesCount} movimentos</span> no terminal` }),
+    K.kpi({ label: 'Depósito no banco', value: num(d.toBank), tone: 'teal', sub: escapeHtml(bankSub) }),
+    K.kpi({ label: 'Diferença no caixa', value: diffText, tone: diffTone, sub: `Contado: <b style="color:${T.text};">${eur(d.counted)}</b><br>Esperado: <b style="color:${T.text};">${eur(d.expected)}</b>` }),
+    K.kpi({ label: 'Fundo em máquina', value: num(d.floatLeft), sub: 'Fundo de trocos operacional' }),
+  ], 24)
 
-    ${boxRow([
-      tile('Faturação do dia', eur(d.revenue), INK, `${d.salesCount} movimentos`),
-      tile('Depositado no banco', eur(d.toBank), COLORS.cash, bankSub),
-      tile('Diferença na contagem', diffText, diffColor, `contado ${eur(d.counted)} · esperado ${eur(d.expected)}`),
-      tile('Fundo que fica', eur(d.floatLeft), INK, 'na máquina'),
-    ])}
-    ${boxRow([
-      chartBlock('Como entrou o dinheiro', 'chart-pay', pay, d.revenue, d.cardSpent > 0 ? `Gasto com cartões: ${eur(d.cardSpent)} (já contado quando o cartão foi carregado).` : ''),
-      chartBlock('Lavagens e secagens', 'chart-use', useItems, useTotal, 'Valor das utilizações, incluindo as pagas com cartão.'),
-    ])}
-    ${boxRow([cellBox('Vendas', vendas), cellBox('Caixa', caixa)])}
-    ${d.notes ? box('Notas', `<div style="font-size:14px;color:${INK};">${escapeHtml(d.notes)}</div>`) : ''}
-  </div>`
+  const charts = K.boxRow([
+    chartPanel({ title: 'Origem da faturação', subtitle: 'Distribuição por método de liquidação', tag: `Total: ${eur(d.revenue)}`, cid: 'chart-pay', items: pay, total: d.revenue,
+      foot: d.cardSpent > 0 ? K.note({ html: `<b>Nota contábil:</b> gasto com cartões: <b>${eur(d.cardSpent)}</b> (já incluído quando o saldo foi carregado).` }) : '' }),
+    chartPanel({ title: 'Utilização dos serviços', subtitle: 'Divisão de receita entre lavagens e secagens', tag: `${cycles} ciclos`, cid: 'chart-use', items: useItems, total: useTotal, bars: true,
+      foot: K.note({ html: `Inclui utilizações em dinheiro e com saldo de cartões. <b style="float:right;">Total: ${eur(useTotal)}</b>` }) }),
+  ])
+
+  const vendas = K.kv([
+    ['Dinheiro direto (máquinas)', eur(d.cashServices), { dot: COLORS.cash }],
+    ['Carregamentos e cartões novos (espécie)', eur(d.cashTopups), { dot: COLORS.topup }],
+    ['MB WAY', eur(d.mbway), { dot: COLORS.mbway }],
+    ['Total faturado no período', eur(d.revenue), { bold: true, bg: T.tealTint, color: T.tealDark }],
+  ])
+  const caixa = K.kv([
+    ['Fundo no início do turno', eur(d.openingFloat), { size: 12 }],
+    ['Dinheiro que entrou (físico)', eur(d.cashTotal), { sign: '(+)', signColor: T.green, color: T.greenDark }],
+    ...(d.floatAdded > 0 ? [['Fundo de troco adicionado', eur(d.floatAdded), { sign: '(+)' }]] : []),
+    ...(d.floatWithdrawn > 0 ? [['Levantamentos', `-${eur(d.floatWithdrawn)}`, { sign: '(-)', signColor: T.rose }]] : []),
+    ['Total esperado na máquina', eur(d.expected), { sign: '(=)', bold: true, bg: T.tint }],
+    ['Total contado fisicamente', eur(d.counted), { bold: true, bg: T.amberTint }],
+    [noDiff ? 'Contagem certa' : 'Diferença de contagem', noDiff ? eur(0) : `${d.discrepancy > 0 ? '+' : ''}${eur(d.discrepancy)}`, { bold: true, bg: noDiff ? T.greenTint : T.roseTint, color: noDiff ? T.greenDark : T.rose }],
+    ['Depositado no banco', eur(d.toBank), { sign: '(-)', signColor: T.rose }],
+    ...(d.bankNotes != null ? [['em notas', eur(d.bankNotes), { soft: true }], ['em moedas (pelo hopper)', eur(d.bankCoins), { soft: true }]] : []),
+    ['Fundo residual que fica na máquina', eur(d.floatLeft), { sign: '(=)', signColor: T.teal, bg: T.tealTint, color: T.tealDark, bold: true }],
+  ], { size: 12 })
+  const tables = K.boxRow([
+    K.panel({ title: 'Demonstração de vendas', subtitle: 'Resumo discriminado das receitas', tag: 'EUR (€)', inner: vendas,
+      foot: K.note({ html: `Pago com cartão de cliente <span style="color:${T.faint};">(saldo já contado)</span> <b style="float:right;font-family:Menlo,Consolas,monospace;">${eur(d.cardSpent)}</b>` }) }),
+    K.panel({ title: 'Reconciliação e fluxo físico', subtitle: 'Auditoria do dinheiro na máquina', tag: 'Auditoria', inner: caixa,
+      foot: `<div style="font-size:12px;color:${T.soft};">Troco dado aos clientes: <b style="float:right;font-family:Menlo,Consolas,monospace;color:${T.text};">${eur(d.change)}</b></div>` }),
+  ])
+
+  const notes = d.notes ? K.boxRow([K.panel({ title: 'Observações do turno', subtitle: 'Ocorrências, justificações de divergências ou avisos para o turno seguinte', width: '100%',
+    inner: K.note({ tone: 'amber', html: `<div style="font-size:13px;color:${T.ink};line-height:1.6;">${escapeHtml(d.notes)}</div>${d.closedBy ? `<div style="margin-top:10px;font-size:11px;color:${T.soft};">${K.avatar(d.closedBy)}&nbsp; Anotado por: <b style="color:${T.ink};">${escapeHtml(d.closedBy)}</b></div>` : ''}` }) })]) : ''
+
+  const generated = `Documento gerado eletronicamente em ${d.to.toLocaleDateString('pt-PT', { timeZone: 'Europe/Lisbon' })} às ${timeOf(new Date())}`
+  const html = K.card(`${K.header({ brand, title: 'Fecho de caixa diário', subtitle: 'Demonstração financeira detalhada e auditoria de caixa', meta })}${kpis}${charts}${tables}${notes}${K.footer({ brand, line: generated })}`)
 
   const text = [
     `Fecho de caixa — ${dateLong(d.to)}`, `Período ${period}${d.closedBy ? ` · fechado por ${d.closedBy}` : ''}`, '',
     `Faturação do dia: ${eur(d.revenue)}`,
     `  Dinheiro (máquinas): ${eur(d.cashServices)}`,
-    `  Carregamentos e cartões (dinheiro): ${eur(d.cashTopups)}`,
+    `  Carregamentos: ${eur(d.cashTopups)}`,
     `  MB WAY: ${eur(d.mbway)}`,
     `  Pago com cartão (já contado): ${eur(d.cardSpent)}`,
     `Lavagens: ${d.use.wash.n} (${eur(d.use.wash.eur)}) · Secagens: ${d.use.dry.n} (${eur(d.use.dry.eur)})`, '',
-    `Esperado: ${eur(d.expected)} · Contado: ${eur(d.counted)} · Diferença: ${diffText}`,
-    `Depositado no banco: ${eur(d.toBank)}${bankSub ? ` (${bankSub})` : ''}`,
+    `Esperado: ${eur(d.expected)} · Contado: ${eur(d.counted)} · Diferença: ${noDiff ? 'certo' : eur(d.discrepancy)}`,
+    `Depositado no banco: ${eur(d.toBank)}${d.bankNotes != null ? ` (${bankSub})` : ''}`,
     `Fundo que fica: ${eur(d.floatLeft)}`,
-    ...(d.notes ? ['', `Notas: ${d.notes}`] : []),
+    ...(d.notes ? ['', `Observações: ${d.notes}`] : []),
   ].join('\n')
 
   const day = d.to.toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit', timeZone: 'Europe/Lisbon' })

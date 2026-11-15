@@ -39,7 +39,7 @@ describe('Day-close report e-mail', function () {
     const { buildDayCloseReport } = await import('../src/services/dayCloseReport.js')
     const DayClose = (await import('../src/models/dayClose.js')).default
     const dc = await DayClose.findById(res.body._id).lean()
-    const r = await buildDayCloseReport(dc)
+    const r = await buildDayCloseReport(dc, {})
     expect(r.data.revenue).to.equal(Number((9 * 10.5 + 6 * 7 + 5 * 3.6 + 40 + 3 * 10.5).toFixed(2)))
     expect(r.data.mbway).to.equal(31.5)
     expect(r.data.cashTopups).to.equal(40)
@@ -52,7 +52,7 @@ describe('Day-close report e-mail', function () {
     // a preview of the e-mail for a person to look at (images inlined as data: so a browser shows them)
     if (process.env.REPORT_PREVIEW) {
       const { renderEmailHtml } = await import('../src/services/emailTemplate.js')
-      let html = renderEmailHtml({ title: 'Fecho de caixa', preheader: r.subject, bodyHtml: r.html, wide: true })
+      let html = renderEmailHtml({ title: 'Fecho de caixa', preheader: r.subject, bodyHtml: r.html, bare: true })
       for (const a of r.attachments) html = html.replace(`cid:${a.cid}`, `data:image/png;base64,${a.content.toString('base64')}`)
       fs.writeFileSync(process.env.REPORT_PREVIEW, `<!-- ${r.subject} -->\n` + html)
     }
