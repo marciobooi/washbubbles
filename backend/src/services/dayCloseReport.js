@@ -101,8 +101,8 @@ const dayTime = (d) => d.toLocaleString('pt-PT', { day: '2-digit', month: '2-dig
 
 function legend(items, total) {
   return items.map((x) => `<tr>
-    <td style="padding:7px 0;font-size:13px;color:${K.T.text};"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${x.color};margin-right:8px;"></span>${escapeHtml(x.label)}</td>
-    <td style="padding:7px 0;font-size:13px;text-align:right;white-space:nowrap;"><b style="color:${K.T.ink};">${escapeHtml(x.text)}</b> <span style="color:${K.T.faint};">${pct(x.value, total)}%</span></td>
+    <td style="padding:7px 0;font-size:12px;color:${K.T.text};"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${x.color};margin-right:8px;"></span>${escapeHtml(x.label)}</td>
+    <td style="padding:7px 0;font-size:12px;text-align:right;white-space:nowrap;"><b style="color:${K.T.ink};">${escapeHtml(x.text)}</b> <span style="color:${K.T.faint};">${pct(x.value, total)}%</span></td>
   </tr>`).join('')
 }
 
@@ -110,14 +110,14 @@ function legend(items, total) {
 function chartPanel({ title, subtitle, tag, cid, items, total, foot, bars = false }) {
   const rows = bars
     ? items.map((x) => `<tr><td style="padding:8px 0;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-        <td style="font-size:13px;color:${K.T.text};"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${x.color};margin-right:8px;"></span>${escapeHtml(x.label)}</td>
-        <td style="font-size:13px;text-align:right;white-space:nowrap;"><b style="color:${K.T.ink};">${escapeHtml(x.text)}</b> <span style="color:${K.T.faint};">${pct(x.value, total)}%</span></td></tr></table>${K.bar(pct(x.value, total), x.color)}</td></tr>`).join('')
+        <td style="font-size:12px;color:${K.T.text};"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${x.color};margin-right:8px;"></span>${escapeHtml(x.label)}</td>
+        <td style="font-size:12px;text-align:right;white-space:nowrap;"><b style="color:${K.T.ink};">${escapeHtml(x.text)}</b> <span style="color:${K.T.faint};">${pct(x.value, total)}%</span></td></tr></table>${K.bar(pct(x.value, total), x.color)}</td></tr>`).join('')
     : legend(items, total)
   const inner = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-      <td width="170" valign="middle" align="center"><img src="cid:${cid}" width="150" height="150" alt="" style="display:block;border:0;"></td>
-      <td valign="middle" style="padding-left:18px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}</table></td>
+      <td width="125" valign="middle" align="center"><img src="cid:${cid}" width="115" height="115" alt="" style="display:block;border:0;"></td>
+      <td valign="middle" style="padding-left:12px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}</table></td>
     </tr></table>`
-  return K.panel({ title, subtitle, tag, inner, foot })
+  return { title, subtitle, tag, inner, foot }
 }
 
 /** subject, text, the inner HTML (to go inside renderEmailHtml with bare:true) and the chart images to attach. */
@@ -136,14 +136,14 @@ export async function buildDayCloseReport(dc, brandIn = {}) {
     { label: 'MB WAY', value: d.mbway, color: COLORS.mbway, text: eur(d.mbway) },
   ]
   const useItems = [
-    { label: `Lavagens (${d.use.wash.n} ${d.use.wash.n === 1 ? 'ciclo' : 'ciclos'})`, value: d.use.wash.eur, color: COLORS.wash, text: eur(d.use.wash.eur) },
-    { label: `Secagens (${d.use.dry.n} ${d.use.dry.n === 1 ? 'ciclo' : 'ciclos'})`, value: d.use.dry.eur, color: COLORS.dry, text: eur(d.use.dry.eur) },
+    { label: `Lavagens · ${d.use.wash.n}`, value: d.use.wash.eur, color: COLORS.wash, text: eur(d.use.wash.eur) },
+    { label: `Secagens · ${d.use.dry.n}`, value: d.use.dry.eur, color: COLORS.dry, text: eur(d.use.dry.eur) },
   ]
   const useTotal = d.use.wash.eur + d.use.dry.eur
   const cycles = d.use.wash.n + d.use.dry.n
   const attachments = [
-    { filename: 'pagamentos.png', cid: 'chart-pay', contentType: 'image/png', content: await donutPng(pay, 150) },
-    { filename: 'servicos.png', cid: 'chart-use', contentType: 'image/png', content: await donutPng(useItems, 150) },
+    { filename: 'pagamentos.png', cid: 'chart-pay', contentType: 'image/png', content: await donutPng(pay, 115) },
+    { filename: 'servicos.png', cid: 'chart-use', contentType: 'image/png', content: await donutPng(useItems, 115) },
   ]
 
   const period = d.from && d.from.getTime() > 0 ? `${dayTime(d.from)} → ${dayTime(d.to)}` : `até ${dayTime(d.to)}`
@@ -155,17 +155,17 @@ export async function buildDayCloseReport(dc, brandIn = {}) {
       <td align="right">${K.badge('Concluído', 'green')}</td></tr></table>`)
 
   const kpis = K.boxRow([
-    K.kpi({ label: 'Faturação do dia', value: num(d.revenue), sub: `<span style="display:inline-block;background:${T.hair};padding:2px 8px;border-radius:6px;font-weight:bold;color:${T.text};">${d.salesCount} movimentos</span> no terminal` }),
+    K.kpi({ label: 'Faturação do dia', value: num(d.revenue), sub: 'Dinheiro, carregamentos e MB WAY' }),
     K.kpi({ label: 'Depósito no banco', value: num(d.toBank), tone: 'teal', sub: escapeHtml(bankSub) }),
     K.kpi({ label: 'Diferença no caixa', value: diffText, tone: diffTone, sub: `Contado: <b style="color:${T.text};">${eur(d.counted)}</b><br>Esperado: <b style="color:${T.text};">${eur(d.expected)}</b>` }),
     K.kpi({ label: 'Fundo em máquina', value: num(d.floatLeft), sub: 'Fundo de trocos operacional' }),
   ], 24)
 
-  const charts = K.boxRow([
-    chartPanel({ title: 'Origem da faturação', subtitle: 'Distribuição por método de liquidação', tag: `Total: ${eur(d.revenue)}`, cid: 'chart-pay', items: pay, total: d.revenue,
-      foot: d.cardSpent > 0 ? K.note({ html: `<b>Nota contábil:</b> gasto com cartões: <b>${eur(d.cardSpent)}</b> (já incluído quando o saldo foi carregado).` }) : '' }),
+  const charts = K.panelRow([
+    chartPanel({ title: 'Origem da faturação', subtitle: 'Distribuição por método de liquidação', tag: `${pay.filter((x) => x.value > 0).length} métodos`, cid: 'chart-pay', items: pay, total: d.revenue,
+      foot: d.cardSpent > 0 ? K.note({ height: 52, html: `<b>Nota contábil:</b> gasto com cartões: <b>${eur(d.cardSpent)}</b> (já incluído quando o saldo foi carregado).` }) : '' }),
     chartPanel({ title: 'Utilização dos serviços', subtitle: 'Divisão de receita entre lavagens e secagens', tag: `${cycles} ciclos`, cid: 'chart-use', items: useItems, total: useTotal, bars: true,
-      foot: K.note({ html: `Inclui utilizações em dinheiro e com saldo de cartões. <b style="float:right;">Total: ${eur(useTotal)}</b>` }) }),
+      foot: K.note({ height: 52, html: `Inclui utilizações em dinheiro e com saldo de cartões.<br><b>Total: ${eur(useTotal)}</b>` }) }),
   ])
 
   const vendas = K.kv([
@@ -173,6 +173,9 @@ export async function buildDayCloseReport(dc, brandIn = {}) {
     ['Carregamentos e cartões novos (espécie)', eur(d.cashTopups), { dot: COLORS.topup }],
     ['MB WAY', eur(d.mbway), { dot: COLORS.mbway }],
     ['Total faturado no período', eur(d.revenue), { bold: true, bg: T.tealTint, color: T.tealDark }],
+    ['Pago com cartão de cliente (saldo já contado)', eur(d.cardSpent), { soft: true, dot: T.faint }],
+    ['Reembolsos', d.refunds > 0 ? `-${eur(d.refunds)}` : eur(0), { soft: true, dot: T.faint }],
+    ['Movimentos no terminal', String(d.salesCount), { soft: true, dot: T.faint }],
   ])
   const caixa = K.kv([
     ['Fundo no início do turno', eur(d.openingFloat), { size: 12 }],
@@ -183,17 +186,16 @@ export async function buildDayCloseReport(dc, brandIn = {}) {
     ['Total contado fisicamente', eur(d.counted), { bold: true, bg: T.amberTint }],
     [noDiff ? 'Contagem certa' : 'Diferença de contagem', noDiff ? eur(0) : `${d.discrepancy > 0 ? '+' : ''}${eur(d.discrepancy)}`, { bold: true, bg: noDiff ? T.greenTint : T.roseTint, color: noDiff ? T.greenDark : T.rose }],
     ['Depositado no banco', eur(d.toBank), { sign: '(-)', signColor: T.rose }],
-    ...(d.bankNotes != null ? [['em notas', eur(d.bankNotes), { soft: true }], ['em moedas (pelo hopper)', eur(d.bankCoins), { soft: true }]] : []),
     ['Fundo residual que fica na máquina', eur(d.floatLeft), { sign: '(=)', signColor: T.teal, bg: T.tealTint, color: T.tealDark, bold: true }],
   ], { size: 12 })
-  const tables = K.boxRow([
-    K.panel({ title: 'Demonstração de vendas', subtitle: 'Resumo discriminado das receitas', tag: 'EUR (€)', inner: vendas,
-      foot: K.note({ html: `Pago com cartão de cliente <span style="color:${T.faint};">(saldo já contado)</span> <b style="float:right;font-family:Menlo,Consolas,monospace;">${eur(d.cardSpent)}</b>` }) }),
-    K.panel({ title: 'Reconciliação e fluxo físico', subtitle: 'Auditoria do dinheiro na máquina', tag: 'Auditoria', inner: caixa,
-      foot: `<div style="font-size:12px;color:${T.soft};">Troco dado aos clientes: <b style="float:right;font-family:Menlo,Consolas,monospace;color:${T.text};">${eur(d.change)}</b></div>` }),
+  const tables = K.panelRow([
+    ({ title: 'Demonstração de vendas', subtitle: 'Resumo discriminado das receitas', tag: 'EUR (€)', inner: vendas,
+      foot: K.note({ height: 40, html: `Soma do que entrou: dinheiro + carregamentos + MB WAY. O que se gasta com cartões já foi contado ao carregar.` }) }),
+    ({ title: 'Reconciliação e fluxo físico', subtitle: 'Auditoria do dinheiro na máquina', tag: 'Auditoria', inner: caixa,
+      foot: K.note({ height: 40, html: `Troco dado aos clientes <b style="float:right;font-family:Menlo,Consolas,monospace;color:${T.text};">${eur(d.change)}</b>` }) }),
   ])
 
-  const notes = d.notes ? K.boxRow([K.panel({ title: 'Observações do turno', subtitle: 'Ocorrências, justificações de divergências ou avisos para o turno seguinte', width: '100%',
+  const notes = d.notes ? K.panelRow([({ title: 'Observações do turno', subtitle: 'Ocorrências, justificações de divergências ou avisos para o turno seguinte', width: '100%',
     inner: K.note({ tone: 'amber', html: `<div style="font-size:13px;color:${T.ink};line-height:1.6;">${escapeHtml(d.notes)}</div>${d.closedBy ? `<div style="margin-top:10px;font-size:11px;color:${T.soft};">${K.avatar(d.closedBy)}&nbsp; Anotado por: <b style="color:${T.ink};">${escapeHtml(d.closedBy)}</b></div>` : ''}` }) })]) : ''
 
   const generated = `Documento gerado eletronicamente em ${d.to.toLocaleDateString('pt-PT', { timeZone: 'Europe/Lisbon' })} às ${timeOf(new Date())}`

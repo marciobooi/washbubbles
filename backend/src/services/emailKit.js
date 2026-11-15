@@ -81,33 +81,33 @@ export function footer({ brand, line = '' }) {
     ${bits}${line ? `<div style="font-size:11px;color:${T.faint};margin-top:10px;">${escapeHtml(line)}</div>` : ''}</div>`
 }
 
-const GAP = '<td width="14" style="font-size:0;line-height:0;">&nbsp;</td>'
+const GAP = '<td width="16" style="width:16px;font-size:0;line-height:0;">&nbsp;</td>'
 
 /** Boxes side by side. Each cell is itself the box, so the cells of a row always have the same height. */
 export function boxRow(cells, top = 24) {
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:${top}px;border-collapse:separate;"><tr>${cells.join(GAP)}</tr></table>`
 }
 
-export function kpi({ label, value, unit = '€', sub = '', tone: t = 'neutral', width = '25%' }) {
+export function kpi({ label, value, unit = '€', sub = '', tone: t = 'neutral', width = '24%' }) {
   const c = tone(t)
-  return `<td width="${width}" valign="top" style="background:${c.bg};border:1px solid ${c.line};border-radius:16px;padding:18px 20px;">
-    <div style="font-size:11px;font-weight:bold;color:${c.label};text-transform:uppercase;letter-spacing:1px;">${escapeHtml(label)}</div>
-    <div style="font-size:30px;font-weight:bold;color:${c.value};margin-top:8px;line-height:1.1;">${escapeHtml(value)}${unit ? ` <span style="font-size:20px;color:${T.soft};">${escapeHtml(unit)}</span>` : ''}</div>
-    ${sub ? `<div style="font-size:12px;color:${T.soft};margin-top:8px;line-height:1.5;">${sub}</div>` : ''}
+  return `<td width="${width}" valign="top" style="background:${c.bg};border:1px solid ${c.line};border-radius:16px;padding:16px 16px;">
+    <div style="font-size:10px;font-weight:bold;color:${c.label};text-transform:uppercase;letter-spacing:.8px;">${escapeHtml(label)}</div>
+    <div style="font-size:25px;font-weight:bold;color:${c.value};margin-top:6px;line-height:1.1;">${escapeHtml(value)}${unit ? ` <span style="font-size:16px;color:${T.soft};">${escapeHtml(unit)}</span>` : ''}</div>
+    ${sub ? `<div style="font-size:11px;color:${T.soft};margin-top:6px;line-height:1.5;">${sub}</div>` : ''}
   </td>`
 }
 
 /** A titled box. `inner` is trusted HTML; title, subtitle and tag are escaped here. */
-export function panel({ title, subtitle = '', tag = '', inner, foot = '', width = '50%', flush = false }) {
+export function panel({ title, subtitle = '', tag = '', inner, foot = '', width = '49%', flush = false }) {
   const head = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
-      <td valign="top"><div style="font-size:15px;font-weight:bold;color:${T.ink};">${escapeHtml(title)}</div>${subtitle ? `<div style="font-size:12px;color:${T.soft};margin-top:2px;">${escapeHtml(subtitle)}</div>` : ''}</td>
+      <td valign="top"><div style="font-size:14px;font-weight:bold;color:${T.ink};">${escapeHtml(title)}</div>${subtitle ? `<div style="font-size:11px;color:${T.soft};margin-top:2px;">${escapeHtml(subtitle)}</div>` : ''}</td>
       ${tag ? `<td valign="top" align="right" style="white-space:nowrap;"><span style="display:inline-block;padding:4px 10px;border-radius:8px;background:${T.hair};font-size:11px;font-weight:bold;color:${T.soft};">${escapeHtml(tag)}</span></td>` : ''}
     </tr></table>`
-  return `<td width="${width}" valign="top" style="background:#ffffff;border:1px solid ${T.line};border-radius:16px;padding:22px 24px;">${head}<div style="margin-top:16px;">${inner}</div>${foot ? `<div style="margin-top:16px;">${foot}</div>` : ''}${flush ? '' : ''}</td>`
+  return `<td width="${width}" valign="top" style="background:#ffffff;border:1px solid ${T.line};border-radius:16px;padding:18px 20px;"><table role="presentation" width="100%" height="100%" cellpadding="0" cellspacing="0" style="height:100%;"><tr><td valign="top" height="100%" style="height:100%;">${head}<div style="margin-top:14px;">${inner}</div></td></tr>${foot ? `<tr><td valign="bottom" style="padding-top:14px;">${foot}</td></tr>` : ''}</table></td>`
 }
 
 /** Label / value rows. opt: bold, soft, color, sign ('(+)', '(-)', '(=)'), dot (a colour), bg (row tint). */
-export function kv(list, { size = 13 } = {}) {
+export function kv(list, { size = 12 } = {}) {
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${list.map(([label, value, o = {}]) => {
     const col = o.color || (o.soft ? T.soft : T.ink)
     const lead = o.dot ? `<span style="display:inline-block;width:8px;height:8px;border-radius:4px;background:${o.dot};margin-right:8px;"></span>` : o.sign ? `<span style="font-weight:bold;color:${o.signColor || T.soft};margin-right:6px;">${escapeHtml(o.sign)}</span>` : ''
@@ -119,9 +119,9 @@ export function kv(list, { size = 13 } = {}) {
 }
 
 /** A coloured notice. `html` is trusted. */
-export function note({ html, tone: t = 'neutral' }) {
+export function note({ html, tone: t = 'neutral', height = 0 }) {
   const c = tone(t)
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="background:${c.bg};border:1px solid ${c.line};border-radius:12px;padding:12px 14px;font-size:12px;line-height:1.6;color:${T.text};">${html}</td></tr></table>`
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td ${height ? `height="${height}" ` : ''}valign="middle" style="background:${c.bg};border:1px solid ${c.line};border-radius:12px;padding:10px 12px;font-size:11px;line-height:1.6;color:${T.text};">${html}</td></tr></table>`
 }
 
 /** A thin progress bar (a two-cell table: works everywhere). */
@@ -132,7 +132,29 @@ export function bar(pct, color) {
     <td${p < 100 ? '' : ' width="0"'} height="6" style="background:${T.hair};border-radius:3px;font-size:0;line-height:0;">&nbsp;</td></tr></table>`
 }
 
+/** The head of a box: title, subtitle and an optional tag on the right. */
+function panelHead({ title, subtitle = '', tag = '' }) {
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+      <td valign="top"><div style="font-size:14px;font-weight:bold;color:${T.ink};">${escapeHtml(title)}</div>${subtitle ? `<div style="font-size:11px;color:${T.soft};margin-top:2px;">${escapeHtml(subtitle)}</div>` : ''}</td>
+      ${tag ? `<td valign="top" align="right" style="white-space:nowrap;"><span style="display:inline-block;padding:4px 10px;border-radius:8px;background:${T.hair};font-size:11px;font-weight:bold;color:${T.soft};">${escapeHtml(tag)}</span></td>` : ''}
+    </tr></table>`
+}
+
+/**
+ * Boxes side by side: [{ title, subtitle, tag, inner, foot, width }]. Every box is a body cell with its foot cell right under it
+ * (a second table row), so the bodies are always the same height and the feet always on the same line. A box with no foot
+ * still gets an empty foot cell, so the row stays aligned.
+ */
+export function panelRow(specs, top = 24) {
+  const anyFoot = specs.some((s) => s.foot)
+  const edge = `background:#ffffff;border:1px solid ${T.line};`
+  const body = specs.map((s) => `<td width="${s.width || (specs.length === 1 ? '100%' : Math.floor(96 / specs.length) + '%')}" valign="top" style="${edge}${anyFoot ? 'border-bottom:0;border-radius:16px 16px 0 0;padding:18px 20px 0;' : 'border-radius:16px;padding:18px 20px;'}">${panelHead(s)}<div style="margin-top:14px;">${s.inner}</div></td>`)
+  const foot = specs.map((s) => `<td valign="bottom" style="${edge}border-top:0;border-radius:0 0 16px 16px;padding:14px 20px 18px;">${s.foot || ''}</td>`)
+  const gap = `<td rowspan="2" width="16" style="width:16px;font-size:0;line-height:0;">&nbsp;</td>`
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:${top}px;border-collapse:separate;"><tr>${body.join(gap)}</tr>${anyFoot ? `<tr>${foot.join('')}</tr>` : ''}</table>`
+}
+
 /** A section for a longer text (observations, a message): one full-width box. */
 export function wide({ title, subtitle = '', tag = '', inner }) {
-  return boxRow([panel({ title, subtitle, tag, inner, width: '100%' })])
+  return panelRow([{ title, subtitle, tag, inner, width: '100%' }])
 }
