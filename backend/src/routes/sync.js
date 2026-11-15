@@ -91,6 +91,10 @@ const MAIL_PER_MIN = 20
 const MAIL_PER_DAY = 500
 router.post('/mail', async (req, res) => {
   const { to, subject, text, html } = req.body || {}
+  // inline images of a report (the day-close charts): PNG only, at most 4 of at most 400 KB
+  const att = Array.isArray(req.body?.attachments) ? req.body.attachments : []
+  if (att.length > 4 || att.some((a) => a?.contentType !== 'image/png' || !/^[\w.-]{1,60}$/.test(String(a?.cid || '')) || String(a?.content || '').length > 550_000)) return res.status(400).json({ error: 'Invalid attachments' })
+  const attachments = att.map((a) => ({ filename: String(a.filename || 'image.png').slice(0, 60), cid: String(a.cid), contentType: 'image/png', content: Buffer.from(String(a.content), 'base64') }))
   const addr = String(to || '').trim()
   if (!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]{2,}$/.test(addr)) return res.status(400).json({ error: 'Invalid recipient' })
   if (!subject || String(subject).length > 200 || !(text || html) || String(text || '').length > 100_000 || String(html || '').length > 200_000) return res.status(400).json({ error: 'Invalid message' })
@@ -101,7 +105,7 @@ router.post('/mail', async (req, res) => {
   times.push(now); mailWindow.set(key, times)
   const { sendMail } = await import('../services/mailer.js')
   try {
-    await sendMail({ tenantId: req.tenantId, to: addr, subject: String(subject), text: String(text || ''), html: html ? String(html) : undefined, relayed: true })
+    await sendMail({ tenantId: req.tenantId, to: addr, subject: String(subject), text: String(text || ''), html: html ? String(html) : undefined, relayed: true, ...(attachments.length ? { attachments } : {}) })
     res.json({ ok: true })
   } catch (err) {
     res.status(502).json({ error: err.message || 'send failed' })

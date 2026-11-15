@@ -53,7 +53,8 @@ export function emailButton(label, href) {
  * and a footer with real contact facts (same ones the public landing page
  * uses — see views/landing.js's DEFAULT_CONTENT.brand).
  */
-export function renderEmailHtml({ title, preheader, bodyHtml, brand = {} }) {
+/** wide: about the width of an A4 page (800 px) and the body is NOT wrapped in one white card (a report brings its own boxes). */
+export function renderEmailHtml({ title, preheader, bodyHtml, brand = {}, wide = false }) {
   // The shop's own name, logo and contact from the admin (services/emailBrand.js) win over the built-in defaults.
   const pick = (v, d) => (v && String(v).trim() ? String(v).trim() : d)
   // A shop that has its own brand never borrows FreshBubbles' address, phone, e-mail or logo: what it lacks is simply left out.
@@ -76,7 +77,7 @@ export function renderEmailHtml({ title, preheader, bodyHtml, brand = {} }) {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${PRIMARY_BG};">
     <tr>
       <td align="center" style="padding:32px 16px;">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:${wide ? 820 : 600}px;">
           <tr>
             <td align="center" style="padding-bottom:24px;">
               ${logo ? `<img src="${escapeHtml(logo)}" width="56" height="56" alt="${escapeHtml(B.name)}" style="display:block;">` : ''}
@@ -85,12 +86,12 @@ export function renderEmailHtml({ title, preheader, bodyHtml, brand = {} }) {
             </td>
           </tr>
           <tr>
-            <td style="background:#ffffff; border:1px solid ${BORDER}; border-radius:16px; padding:32px;">
+            ${wide ? `<td style="font-family:Arial,Helvetica,sans-serif; font-size:15px; line-height:1.5; color:${INK};">${bodyHtml}</td>` : `<td style="background:#ffffff; border:1px solid ${BORDER}; border-radius:16px; padding:32px;">
               ${title ? `<h1 style="margin:0 0 16px; font-family:Arial,Helvetica,sans-serif; font-size:20px; color:${INK};">${escapeHtml(title)}</h1>` : ''}
               <div style="font-family:Arial,Helvetica,sans-serif; font-size:15px; line-height:1.6; color:${INK};">
                 ${bodyHtml}
               </div>
-            </td>
+            </td>`}
           </tr>
           <tr>
             <td align="center" style="padding:24px 12px 0; font-family:Arial,Helvetica,sans-serif; font-size:12px; color:${INK_SOFT}; line-height:1.6;">

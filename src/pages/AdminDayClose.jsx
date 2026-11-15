@@ -3,7 +3,8 @@ import { shopDateTime } from '@/lib/shopTime'
 import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
 import Modal from '@/components/ui/Modal'
-import { PiggyBank, Trash2, Undo2 } from 'lucide-react'
+import { PiggyBank, Trash2, Undo2, Mail, Eye } from 'lucide-react'
+import Modal from '@/components/ui/Modal'
 import DayCloseForm from '@/components/dayClose/DayCloseForm'
 import HopperRefillModal from '@/components/dayClose/HopperRefillModal'
 import CashExchangeModal from '@/components/dayClose/CashExchangeModal'
@@ -17,6 +18,35 @@ export default function AdminDayClose() {
   const [history, setHistory]               = useState([])
   const [historyLoading, setHistoryLoading] = useState(true)
   const [expandedId, setExpandedId]         = useState(null)
+  const [mailingId, setMailingId]           = useState(null)
+  const [preview, setPreview]               = useState(null) // { html, subject } of the report being looked at
+  const [previewingId, setPreviewingId]     = useState(null)
+
+  async function showReport(dc) {
+    setPreviewingId(dc._id)
+    try { setPreview(await api.getDayCloseReport(dc._id)) } catch (e) {
+      toast({ title: 'Não foi possível abrir o relatório', description: e?.body?.error || e?.message, variant: 'destructive' })
+    } finally { setPreviewingId(null) }
+  }
+
+  // The envelope of a close in the history: the report again, to the shop's alerts/support e-mail (asked for when there is none).
+  async function resendReport(dc) {
+    setMailingId(dc._id)
+    try {
+      let r
+      try { r = await api.emailDayCloseReceipt(dc._id, '') } catch (e) {
+        if (e?.body?.code !== 'no-recipient') throw e
+        const to = window.prompt('Não há email de alertas nas Definições. Enviar o relatório para que email?')
+        if (!to) return
+        r = await api.emailDayCloseReceipt(dc._id, to.trim())
+      }
+      toast({ title: 'Relatório enviado', description: r?.to || '', variant: 'success' })
+    } catch (e) {
+      toast({ title: 'Erro ao enviar', description: e?.body?.error || e?.message, variant: 'destructive' })
+    } finally {
+      setMailingId(null)
+    }
+  }
   const [floatModalOpen, setFloatModalOpen] = useState(false)
   const [tab, setTab] = useState('fecho') // 'fecho' | 'hopper' | 'historico'
   const [restoreOpen, setRestoreOpen] = useState(false)
@@ -67,6 +97,12 @@ export default function AdminDayClose() {
 
   return (
     <div className="p-4 md:p-6 space-y-5 max-w-6xl mx-auto">
+      {/* The report of a close, as the e-mail shows it: nothing is sent */}
+      <Modal open={Boolean(preview)} onClose={() => setPreview(null)} title={preview?.subject || 'Relatório do fecho'} maxWidth="900px">
+        {preview && (
+          <iframe title="Relatório do fecho" srcDoc={preview.html} sandbox="" className="w-full rounded-lg border border-neutral-200" style={{ height: '78vh' }} />
+        )}
+      </Modal>
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-heading font-bold text-neutral-800">Fecho de Caixa</h1>
@@ -170,9 +206,10 @@ export default function AdminDayClose() {
               return (
                 <div key={dc._id}>
                   {/* Row */}
+                  <div className="flex items-stretch">
                   <button
                     type="button"
-                    className={`w-full text-left px-5 py-4 hover:bg-neutral-50 transition flex flex-wrap items-center gap-x-5 gap-y-1 ${dc.voided ? 'opacity-50 line-through' : ''}`}
+                    className={`flex-1 min-w-0 text-left px-5 py-4 hover:bg-neutral-50 transition flex flex-wrap items-center gap-x-5 gap-y-1 ${dc.voided ? 'opacity-50 line-through' : ''}`}
                     onClick={() => setExpandedId(prev => prev === dc._id ? null : dc._id)}
                   >
                     <div className="text-xs text-neutral-400 w-32 shrink-0">
@@ -200,6 +237,31 @@ export default function AdminDayClose() {
                       <span className={`text-primary-500 transition-transform ${isOpen ? 'rotate-180' : ''}`}>&#9660;</span>
                     </div>
                   </button>
+                  {(dc.source === 'dashboard' || dc.source === 'kiosk') && !dc.voided && (
+                    <button
+                      type="button"
+                      onClick={() => showReport(dc)}
+                      disabled={previewingId === dc._id}
+                      title="Ver o relatório deste fecho"
+                      aria-label="Ver o relatório deste fecho"
+                      className="shrink-0 px-3 text-neutral-400 hover:text-primary-600 hover:bg-neutral-50 transition disabled:opacity-40"
+                    >
+                      <Eye className={`h-4 w-4 ${previewingId === dc._id ? 'animate-pulse' : ''}`} />
+                    </button>
+                  )}
+                  {(dc.source === 'dashboard' || dc.source === 'kiosk') && !dc.voided && (
+                    <button
+                      type="button"
+                      onClick={() => resendReport(dc)}
+                      disabled={mailingId === dc._id}
+                      title="Enviar o relatório deste fecho por email"
+                      aria-label="Enviar o relatório deste fecho por email"
+                      className="shrink-0 px-4 text-neutral-400 hover:text-primary-600 hover:bg-neutral-50 transition disabled:opacity-40"
+                    >
+                      <Mail className={`h-4 w-4 ${mailingId === dc._id ? 'animate-pulse' : ''}`} />
+                    </button>
+                  )}
+                  </div>
                   {/* Expanded detail */}
                   {isOpen && (
                     <div className="bg-neutral-50 border-t border-neutral-100 px-5 py-4">

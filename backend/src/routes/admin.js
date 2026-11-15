@@ -57,7 +57,7 @@ router.use(requireDashboardUser)
 // ...but an OPERATOR reaches ONLY the machines (list, manual start / release) and the till and hopper (day close, float, withdrawals, bank coins,
 // exchange, empty / put back / top up the hopper): every other route answers 403 for them.
 const OPERATOR_ALLOWED = (req) =>
-  (req.method === 'GET' && (req.path === '/machines' || req.path === '/shop-status' || req.path === '/day-close' || req.path === '/day-close/summary' || /^\/(day-close|commands)\/[0-9a-f]{24}$/.test(req.path))) ||
+  (req.method === 'GET' && (req.path === '/machines' || req.path === '/shop-status' || req.path === '/day-close' || req.path === '/day-close/summary' || /^\/(day-close|commands)\/[0-9a-f]{24}$/.test(req.path) || /^\/day-close\/[0-9a-f]{24}\/report$/.test(req.path))) ||
   (req.method === 'POST' && (/^\/machines\/[^/]+\/(start|end)$/.test(req.path) || req.path === '/day-close' || /^\/day-close\/(adjust-float|withdraw|exchange|payout-coins)$/.test(req.path) || /^\/day-close\/[0-9a-f]{24}\/email$/.test(req.path) || /^\/hopper\/(refill|restore|empty)$/.test(req.path)))
 router.use((req, res, next) => {
   if (req.userModel?.role === 'OPERATOR' && !OPERATOR_ALLOWED(req)) return res.status(403).json({ error: 'Forbidden' })
@@ -1785,6 +1785,13 @@ router.post('/day-close/withdraw', requireCashStaff, async (req, res) => {
   const { createCashWithdrawal } = await import('../services/dayClose.js')
   const { status, body } = await createCashWithdrawal(req, req.body || {})
   if (status === 200) logAction(req, 'dayclose.withdrawal', 'DayClose', body._id, { amount: body.metadata?.withdrawalAmount })
+  res.status(status).json(body)
+})
+
+// GET /admin/day-close/:id/report — the report of one close as a page (the same as the e-mail), to look at without sending it.
+router.get('/day-close/:id/report', requireCashRead, async (req, res) => {
+  const { previewDayCloseReport } = await import('../services/dayClose.js')
+  const { status, body } = await previewDayCloseReport(req, req.params.id)
   res.status(status).json(body)
 })
 

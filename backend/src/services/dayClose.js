@@ -343,6 +343,16 @@ export async function createDayClose(req, {
     // "accepted since last close" ledger starts fresh from here.
     await resetCashDrawerLedger(req).catch(() => { /* next Step 1 just starts unprefilled — not fatal */ })
 
+    // The report goes out by itself to the shop's alerts (or support) address, after the answer: a mail problem never touches the close.
+    const tenantId = req.tenantId
+    const record = dc.toObject ? dc.toObject() : dc
+    setImmediate(async () => {
+      try {
+        const to = await dayCloseReportRecipient(tenantId)
+        if (to) { await sendDayCloseEmail(tenantId, record, to); console.log('[DayClose] report sent by e-mail') }
+      } catch (e) { console.error('[DayClose] could not send the report:', e.message) }
+    })
+
     return { status: 200, body: dc }
   } finally {
     await releaseLock(req.tenantId, 'day-close')
@@ -591,22 +601,47 @@ function formatDayCloseReceiptHtml(dc) {
 }
 
 /** Email a Z-report summary of one close (or float adjustment) — same record the history view already renders. */
+/** Where a shop's day-close reports go when nobody types an address: its alerts e-mail, else its support e-mail. */
+export async function dayCloseReportRecipient(tenantId) {
+  const rows = await Setting.find({ tenantId, key: { $in: ['alerts.email', 'support.email'] } }).lean()
+  const val = (k) => { const v = rows.find((r) => r.key === k)?.value; return typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()) ? v.trim() : '' }
+  return val('alerts.email') || val('support.email')
+}
+
+/** Sends one close by e-mail: a real close as the full report (numbers, charts, till, deposit), anything else as the short receipt. */
+export async function sendDayCloseEmail(tenantId, dc, to) {
+  const brand = await getEmailBrand(tenantId)
+  if (dc.source === 'dashboard' || dc.source === 'kiosk') {
+    const { buildDayCloseReport } = await import('./dayCloseReport.js')
+    const r = await buildDayCloseReport(dc)
+    await sendMail({ tenantId, to, subject: r.subject, text: r.text, html: renderEmailHtml({ title: 'Fecho de caixa', preheader: r.subject, bodyHtml: r.html, brand, wide: true }), attachments: r.attachments })
+    return
+  }
+  await sendMail({ tenantId, to, subject: 'Fecho de Caixa', text: formatDayCloseReceiptText(dc), html: renderEmailHtml({ title: 'Fecho de Caixa', bodyHtml: formatDayCloseReceiptHtml(dc), brand }) })
+}
+
+/** The report of one close as a page to look at (the history's eye button): the same e-mail, images inline, nothing sent. */
+export async function previewDayCloseReport(req, id) {
+  const dc = await withTenant(DayClose, req).findById(id).lean()
+  if (!dc) return { status: 404, body: { error: 'Cash session record not found' } }
+  const { buildDayCloseReport } = await import('./dayCloseReport.js')
+  const r = await buildDayCloseReport(dc)
+  let html = renderEmailHtml({ title: 'Fecho de caixa', preheader: r.subject, bodyHtml: r.html, brand: await getEmailBrand(req.tenantId), wide: true })
+  for (const a of r.attachments) html = html.split(`cid:${a.cid}`).join(`data:image/png;base64,${a.content.toString('base64')}`)
+  return { status: 200, body: { html, subject: r.subject } }
+}
+
 export async function emailDayCloseReceipt(req, id, email) {
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || ''))) {
-    return { status: 400, body: { error: 'A valid email is required' } }
+  let to = String(email || '').trim()
+  if (!to) to = await dayCloseReportRecipient(req.tenantId) // the history's envelope button: send it again to the shop's address
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+    return { status: 400, body: { error: email ? 'A valid email is required' : 'Não há email de alertas nem de suporte nas Definições', code: 'no-recipient' } }
   }
   const DayCloseT = withTenant(DayClose, req)
   const dc = await DayCloseT.findById(id).lean()
   if (!dc) return { status: 404, body: { error: 'Cash session record not found' } }
-
-  await sendMail({
-    tenantId: req.tenantId,
-    to: email,
-    subject: 'Fecho de Caixa',
-    text: formatDayCloseReceiptText(dc),
-    html: renderEmailHtml({ title: 'Fecho de Caixa', bodyHtml: formatDayCloseReceiptHtml(dc), brand: await getEmailBrand(req.tenantId) }),
-  })
-  return { status: 200, body: { success: true } }
+  try { await sendDayCloseEmail(req.tenantId, dc, to) } catch (e) { return { status: 502, body: { error: e.message || 'send failed' } } }
+  return { status: 200, body: { success: true, to } }
 }
 
 export default { findLastDashboardClose, getDayCloseSummary, createDayClose, createFloatAdjustment, emailDayCloseReceipt }
