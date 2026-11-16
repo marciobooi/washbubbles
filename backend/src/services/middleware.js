@@ -823,7 +823,7 @@ class Middleware extends EventEmitter {
   activationGapMs() {
     if (Number.isFinite(this.activationGap)) return this.activationGap
     const env = Number(process.env.ACTIVATION_GAP_MS)
-    return Number.isFinite(env) && env >= 0 ? env : 1200
+    return Number.isFinite(env) && env >= 0 ? env : 2500
   }
 
   /**
@@ -874,6 +874,18 @@ class Middleware extends EventEmitter {
     return Number.isFinite(env) && env >= 0 ? env : 10000
   }
 
+  /**
+   * The pause after a card write, before the start order. 2026-11-15/16: of 14 starts sent within 2 ms of a card write, 7 were answered
+   * only after ~1.04 s (the controller was still busy with the card) and 1 was never answered (Lavar 5, 16/11 12:35, sent 1 ms after the
+   * write: the machine never started; the staff's own start 90 s later was answered in 2 ms). A second of calm after the write costs
+   * the customer nothing and gives the controller its second.
+   */
+  activationCardSettleMs() {
+    if (Number.isFinite(this.activationCardSettle)) return this.activationCardSettle
+    const env = Number(process.env.ACTIVATION_CARD_SETTLE_MS)
+    return Number.isFinite(env) && env >= 0 ? env : 1500
+  }
+
   /** Waits (bounded) for the card write under way, if any: a start order must not reach the controller in the middle of one. */
   async waitCardWrite() {
     const busy = this.cardWriteInFlight
@@ -883,8 +895,10 @@ class Middleware extends EventEmitter {
     const t0 = Date.now()
     await Promise.race([busy.catch(() => {}), new Promise((r) => { timer = setTimeout(r, ms); timer.unref?.() })])
     clearTimeout(timer)
+    const settle = this.activationCardSettleMs()
+    if (settle > 0) await sleepMs(settle)
     const waited = Date.now() - t0
-    if (waited > 50) console.log(`[HW] start order held ${waited} ms until the card was written`)
+    if (waited > 50) console.log(`[HW] start order held ${waited} ms until the card was written (+${settle} ms of calm)`)
   }
 
   activationLateMs() {
