@@ -10,6 +10,10 @@ import { Button } from '@/components/ui/button'
 import { WasherIcon, DryerIcon } from '@/components/icons/MachineIcons'
 import { useAuth } from '@/context/AuthContext'
 
+// A machine that is broken (fault) or taken out of service is red, whatever else its state says.
+const isBroken = (m) => Boolean(m) && (m.status === 'fault' || m.outOfService === true)
+const statusTone = (m) => isBroken(m) ? 'bg-red-100 text-red-800' : m?.status === 'working' ? 'bg-yellow-100 text-yellow-800' : m?.status === 'offline' ? 'bg-gray-100 text-gray-800' : 'bg-green-100 text-green-800'
+
 // A live update (WebSocket) has the machine's state but not what the list adds: the cycles and the populated interface.
 // Without this the first live update erased them (cycles back to 0, the interface shown as its raw id).
 function keepListFields(prev, live) {
@@ -349,7 +353,7 @@ export default function AdminMachines(){
                     ) : '—'}
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-1 rounded ${m.status === 'working' ? 'bg-yellow-100 text-yellow-800' : m.status === 'offline' ? 'bg-gray-100 text-gray-800' : 'bg-green-100 text-green-800'}`}>{m.statusText || (m.status === 'working' ? 'Ocupado' : m.status === 'offline' ? 'Offline' : 'Livre')}</span>
+                    <span className={`text-xs px-2 py-1 rounded ${statusTone(m)}`}>{m.statusText || (isBroken(m) ? 'Avariada' : m.status === 'working' ? 'Ocupado' : m.status === 'offline' ? 'Offline' : 'Livre')}</span>
                   </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{m.cycle || 0}</td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">
@@ -468,7 +472,7 @@ export default function AdminMachines(){
                 </div>
 
                 <div>
-                  <div className={`flex justify-center  text-xs px-2 py-1 rounded ${editing?.status === 'working' ? 'bg-yellow-100 text-yellow-800' : editing?.status === 'offline' ? 'bg-gray-100 text-gray-800' : 'bg-green-100 text-green-800'}`}>{editing?.statusText || (editing?.status === 'working' ? 'Ocupado' : editing?.status === 'offline' ? 'Offline' : 'Livre')}</div>
+                  <div className={`flex justify-center  text-xs px-2 py-1 rounded ${statusTone(editing)}`}>{editing?.statusText || (isBroken(editing) ? 'Avariada' : editing?.status === 'working' ? 'Ocupado' : editing?.status === 'offline' ? 'Offline' : 'Livre')}</div>
                 </div>
 
                 <div className="flex justify-center">
