@@ -10,6 +10,14 @@ import { Button } from '@/components/ui/button'
 import { WasherIcon, DryerIcon } from '@/components/icons/MachineIcons'
 import { useAuth } from '@/context/AuthContext'
 
+// A live update (WebSocket) has the machine's state but not what the list adds: the cycles and the populated interface.
+// Without this the first live update erased them (cycles back to 0, the interface shown as its raw id).
+function keepListFields(prev, live) {
+  if (!prev) return live
+  const keepIface = typeof live.interfaceId === 'string' && prev.interfaceId && typeof prev.interfaceId === 'object'
+  return { ...live, cycle: prev.cycle ?? live.cycle, ...(keepIface ? { interfaceId: prev.interfaceId } : {}) }
+}
+
 export default function AdminMachines(){
   const navigate = useNavigate()
   const { role } = useAuth()
@@ -80,7 +88,8 @@ export default function AdminMachines(){
       
       // Handle machine-status (full list)
       if (data.type === 'machine-status' && Array.isArray(data.payload)) {
-        setMachines(data.payload)
+        // the live list has the state only: keep the cycles and the interface (name, address) that the list from the server carries
+        setMachines(prev => data.payload.map(m => keepListFields(prev.find(p => p._id === m._id), m)))
         console.log('[AdminMachines] Received machine-status update:', data.payload.length, 'machines')
       }
       
@@ -95,7 +104,7 @@ export default function AdminMachines(){
           } else {
             // Update existing machine
             const next = [...prev]
-            next[idx] = updated
+            next[idx] = keepListFields(prev[idx], updated)
             return next
           }
         })
