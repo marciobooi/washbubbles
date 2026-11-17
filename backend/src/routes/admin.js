@@ -90,7 +90,14 @@ router.use((req, res, next) => {
 router.get('/machines', async (req, res) => {
   const MachineT = withTenant(Machine, req)
   const machines = await MachineT.find().populate('interfaceId', 'name address').sort({ createdAt: -1 })
-  res.json(machines)
+  // "Ciclos": the paid cycles of each machine, counted from its sales (the stored counter was never incremented and always read 0).
+  // Refunded sales and the staff's own starts (no money) do not count.
+  const counts = await withTenant(Sale, req).aggregate([
+    { $match: { tenantId: new mongoose.Types.ObjectId(req.tenantId), type: 'payment', status: { $ne: 'refunded' }, machineId: { $ne: null } } },
+    { $group: { _id: '$machineId', n: { $sum: 1 } } },
+  ])
+  const byMachine = Object.fromEntries(counts.map((c) => [String(c._id), c.n]))
+  res.json(machines.map((m) => ({ ...m.toObject(), cycle: byMachine[String(m._id)] || 0 })))
 })
 
 // create machine
