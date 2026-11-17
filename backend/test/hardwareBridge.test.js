@@ -1,4 +1,5 @@
 import { expect } from 'chai'
+import { EventEmitter } from 'node:events'
 import net from 'net'
 import { startBridge } from '../src/hardwareBridge.js'
 
@@ -116,6 +117,42 @@ describe('Hardware bridge: what it writes down when the controller drops', funct
       expect(lost).to.match(/after a session of \d+ min/)
       const back = lines.filter((l) => /controller connected/.test(l))[1]
       expect(back).to.match(/down for \d+ s; [1-9]\d* failed attempt\(s\): ECONNREFUSED/)
+    } finally {
+      bridge.close()
+      sockets.forEach((s) => s.destroy())
+      await new Promise((r) => fake.close(r))
+    }
+  })
+})
+
+describe('Hardware bridge: an attempt that gets no answer does not hold the line for 20 seconds', function () {
+  this.timeout(10000)
+  it('gives up after the connect timeout and the next attempt connects (the controller\'s lost SYN, 2026-11-10..17)', async () => {
+    const lines = []
+    const sockets = []
+    const fake = net.createServer((s) => sockets.push(s))
+    await new Promise((r) => fake.listen(0, '127.0.0.1', r))
+    const port = fake.address().port
+    // the first attempt is a socket that never answers (no connect, no error): the operating system would wait ~21 s
+    let attempts = 0
+    const connect = (opts) => {
+      attempts++
+      if (attempts > 1) return net.createConnection(opts)
+      const dead = new EventEmitter()
+      let ms = 0; let timer = null
+      dead.setKeepAlive = () => {}; dead.setNoDelay = () => {}
+      dead.setTimeout = (n) => { clearTimeout(timer); ms = n; if (n > 0) timer = setTimeout(() => dead.emit('timeout'), n) }
+      dead.destroy = (err) => { clearTimeout(timer); if (err) dead.emit('error', err); dead.emit('close') }
+      dead.write = () => true
+      return dead
+    }
+    const t0 = Date.now()
+    const bridge = startBridge({ controllerHost: '127.0.0.1', controllerPort: port, listenPort: await freePort(), reconnectMs: 30, connectTimeoutMs: 120, connect, log: (m) => lines.push(m) })
+    try {
+      while (!lines.some((l) => /controller connected/.test(l)) && Date.now() - t0 < 3000) await wait(20)
+      expect(attempts).to.equal(2)
+      expect(Date.now() - t0).to.be.below(1000) // not ~21 s
+      expect(bridge.controllerUp).to.equal(true)
     } finally {
       bridge.close()
       sockets.forEach((s) => s.destroy())

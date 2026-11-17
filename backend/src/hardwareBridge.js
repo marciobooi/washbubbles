@@ -31,7 +31,11 @@ export function startBridge({
   controllerPort = LOWLEVEL_DEFAULT_PORT,
   listenHost = '127.0.0.1',
   listenPort = BRIDGE_DEFAULT_PORT,
-  reconnectMs = 2000,
+  // A drop is followed by new attempts fast: 3 s to connect (the Windows default is ~21 s: 2026-11-10..17 the controller's SYN was lost
+  // five times and every one of them cost 25 s without a controller; the next attempt connected at once), then 1 s before the next one.
+  reconnectMs = 1000,
+  connectTimeoutMs = 3000,
+  connect = net.createConnection, // replaceable, for the tests
   bufferTtlMs = 120_000,
   // with the time: bridge.log had none, so a controller drop could not be matched with anything else (2026-11-10)
   log = (...a) => console.log(new Date().toISOString().replace('T', ' ').slice(0, 19), '[bridge]', ...a),
@@ -62,12 +66,16 @@ export function startBridge({
 
   function connectController() {
     if (stopped) return
-    const sock = net.createConnection({ host: controllerHost, port: controllerPort })
+    const sock = connect({ host: controllerHost, port: controllerPort })
     controller = sock
     sock.setKeepAlive(true, 30_000)
     sock.setNoDelay(true)
+    // an attempt that gets no answer is given up after connectTimeoutMs and the next one starts (cleared once connected)
+    sock.setTimeout(connectTimeoutMs)
+    sock.on('timeout', () => { if (!controllerUp) sock.destroy(Object.assign(new Error('connect timeout'), { code: 'ETIMEDOUT' })) })
 
     sock.on('connect', () => {
+      sock.setTimeout(0)
       controllerUp = true
       controllerSince = Date.now()
       log(`controller connected ${controllerHost}:${controllerPort}` + (lostAt ? ` (down for ${Math.round((Date.now() - lostAt) / 1000)} s; ${failed.length} failed attempt(s)${failed.length ? ': ' + [...new Set(failed)].join(', ') : ''})` : ''))
