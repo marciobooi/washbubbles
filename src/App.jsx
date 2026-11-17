@@ -744,7 +744,8 @@ function AppInner() {
             <Route path="transactions" element={<AdminTransactions />} />
             <Route path="day-close" element={<AdminDayClose />} />
             <Route path="operations" element={<RequireAdmin roles={['ADMIN', 'SUPERADMIN', 'OPERATOR']}><AdminOperations /></RequireAdmin>} />
-            <Route path="settings" element={<RequireAdmin><AdminSettings /></RequireAdmin>} />
+            <Route path="settings" element={<RequireAdmin><AdminSettings scope="system" /></RequireAdmin>} />
+            <Route path="website" element={<RequireAdmin><AdminSettings scope="website" /></RequireAdmin>} />
             <Route path="audit-log" element={<RequireAdmin><AdminAuditLog /></RequireAdmin>} />
             <Route path="profile" element={<AdminProfile />} />
           </Route>

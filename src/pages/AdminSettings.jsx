@@ -38,21 +38,24 @@ const HIDDEN_ADVANCED_KEYS = new Set([
   'payments.mbway.enabled', 'payments.mbway.qr', 'payments.mbway.typed', 'payments.mbway.env', 'payments.mbway.apiKey', 'sync.pendingKey', 'sync.pendingKeyResult',
 ])
 
+// Two menu entries share this page: "Website" (what the public sees: branding, banner, the start page, legal) and "Definições" (how
+// the shop works: the kiosk PIN, WiFi, MB WAY, WhatsApp). 'scope' picks the tabs; everything below is the same component.
 const TABS = [
-  { id: 'branding', label: 'Branding', Icon: Palette },
-  { id: 'banner', label: 'Banner', Icon: ImageIcon },
-  { id: 'landing', label: 'Página Inicial', Icon: Globe },
-  { id: 'legal', label: 'Legal / RGPD', Icon: Scale },
-  { id: 'staff', label: 'Staff & Manutenção', Icon: ShieldCheck },
-  { id: 'wifi', label: 'WiFi', Icon: WifiIcon },
-  { id: 'payments', label: 'Pagamentos', Icon: CardIcon },
-  { id: 'alerts', label: 'Alertas', Icon: Bell },
-  { id: 'whatsapp', label: 'WhatsApp', Icon: MessageCircle },
-  { id: 'advanced', label: 'Avançado', Icon: SlidersHorizontal },
+  { id: 'branding', label: 'Branding', Icon: Palette, scope: 'website' },
+  { id: 'banner', label: 'Banner', Icon: ImageIcon, scope: 'website' },
+  { id: 'landing', label: 'Página Inicial', Icon: Globe, scope: 'website' },
+  { id: 'legal', label: 'Legal / RGPD', Icon: Scale, scope: 'website' },
+  { id: 'alerts', label: 'Alertas', Icon: Bell, scope: 'website' },
+  { id: 'advanced', label: 'Avançado', Icon: SlidersHorizontal, scope: 'website' },
+  { id: 'staff', label: 'Kiosk PIN', Icon: ShieldCheck, scope: 'system' },
+  { id: 'wifi', label: 'WiFi', Icon: WifiIcon, scope: 'system' },
+  { id: 'payments', label: 'Mbway', Icon: CardIcon, scope: 'system' },
+  { id: 'whatsapp', label: 'WhatsApp', Icon: MessageCircle, scope: 'system' },
 ]
 
-export default function AdminSettings(){
-  const [activeTab, setActiveTab] = useState('branding')
+export default function AdminSettings({ scope = 'website' }){
+  const tabs = TABS.filter((t) => t.scope === scope)
+  const [activeTab, setActiveTab] = useState(tabs[0].id)
 
   const [list, setList] = useState([])
   const [key, setKey] = useState('')
@@ -720,7 +723,7 @@ export default function AdminSettings(){
 
   return (
     <div className="p-4 space-y-4">
-      <h2 className="text-2xl font-bold">Settings</h2>
+      <h2 className="text-2xl font-bold">{scope === 'system' ? 'Definições' : 'Website'}</h2>
 
       {/* Tab bar — one section visible at a time instead of every Card
           stacked and expanded. Sections keep their own state/effects at the
@@ -728,7 +731,7 @@ export default function AdminSettings(){
           WhatsApp status poll above, for instance), so switching tabs never
           loses in-flight state. */}
       <div className="flex gap-2 overflow-x-auto pb-1 max-w-full">
-        {TABS.map((t) => {
+        {tabs.map((t) => {
           const active = activeTab === t.id
           return (
             <button

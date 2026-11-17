@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { useSidebar } from './ui/sidebar'
 import Fuse from 'fuse.js'
 import Highlight from './Highlight'
-import { Cpu, Users, CreditCard, Settings, Activity, PlugZap, Coins, Cable, Wallet, Banknote, LayoutDashboard, Wrench, Tag, ScrollText } from 'lucide-react'
+import { Cpu, Users, CreditCard, Settings, Globe, Activity, PlugZap, Coins, Cable, Wallet, Banknote, LayoutDashboard, Wrench, Tag, ScrollText } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useBranding } from '../context/BrandingContext'
 import {
@@ -36,6 +36,7 @@ const navItems = [
   { title: 'Utilizadores', url: '/admin/users', Icon: Users },
   { title: 'Transacções', url: '/admin/transactions', Icon: CreditCard, roles: ['ADMIN', 'SUPERADMIN', 'STAFF'] },
   { title: 'Fecho de Dia', url: '/admin/day-close', Icon: Banknote, roles: ['ADMIN', 'SUPERADMIN', 'STAFF', 'OPERATOR'] },
+  { title: 'Website', url: '/admin/website', Icon: Globe },
   { title: 'Definições', url: '/admin/settings', Icon: Settings },
   { title: 'Auditoria', url: '/admin/audit-log', Icon: ScrollText },
   { title: 'Lojas', url: '/admin/tenants', Icon: Users, roles: ['SUPERADMIN'] },
