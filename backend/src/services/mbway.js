@@ -185,7 +185,7 @@ async function finalizePaid(p) {
       ? { status: 'start_failed', startedAt: saleIds.length ? new Date() : undefined, saleIds, error: `Pago, mas não arrancou: ${failed.map((f) => `${f.l.name} (${f.message})`).join('; ')}. A devolver ao cliente: ${owed.toFixed(2)} EUR` }
       : { status: 'started', startedAt: new Date(), saleIds },
   }, { new: true })
-  if (saleIds.length) flows.step(p.tenantId, 'sale_recorded', `Venda registada · ${roundMoney(flipped.amount - owed).toFixed(2).replace('.', ',')} € · MB WAY`, { saleIds: saleIds.map(String) }, { amount: roundMoney(flipped.amount - owed), method: 'mbway' })
+  if (saleIds.length) flows.step(p.tenantId, 'sale_recorded', `Venda registada · ${roundMoney(flipped.amount - owed).toFixed(2).replace('.', ',')} € · MB WAY`, { saleIds: saleIds.map(String) }, { method: 'mbway' }) // no amount: mbway_paid already counted it
   if (failed.length) flows.step(p.tenantId, 'mbway_start_failed', `Pago com MB WAY mas a máquina não arrancou: ${failed.map((f) => f.l.name).join(', ')}`, { reference: p.reference }, { ok: false })
   if (failed.length) await alertOperator(p.tenantId, 'MB WAY pago mas a máquina não arrancou', `Referência ${p.reference}. ${done.error}. Devolver o valor no backoffice do Eupago.`)
   return done

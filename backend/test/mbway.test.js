@@ -105,6 +105,9 @@ describe('MB WAY payment (Eupago, simulated)', function () {
     expect(sales[0].method).to.equal('mbway')
     expect(sales[0].amount).to.equal(10.5)
     expect((await Machine.findOne({ name: 'Lavar 1' })).status).to.equal('working')
+    // the flow shows what was paid ONCE (10.5, not 21: the paid step and the sale step both used to add it)
+    const flows = await import('../src/services/flows.js')
+    expect(flows._peek(tenant._id)?.amount).to.equal(10.5)
 
     // asking again never starts or books a second time
     await MbwayPayment.updateOne({ _id: s.body.id }, { $set: { lastPolledAt: new Date(0) } })
