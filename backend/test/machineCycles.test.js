@@ -9,7 +9,7 @@ describe('Machines list: cycles', function () {
   after(async () => { await stopTestDb() })
   beforeEach(async () => { await clearTestDb(); ({ tenant, admin } = await seedTenantAndUsers()) })
 
-  it('counts the paid cycles of each machine (not refunded ones, not the staff\'s own starts)', async () => {
+  it('counts every cycle of each machine: the paid ones and the staff\'s own starts (not the refunded ones)', async () => {
     const Machine = (await import('../src/models/machine.js')).default
     const Sale = (await import('../src/models/sale.js')).default
     const m1 = await Machine.create({ tenantId: tenant._id, name: 'Secar 8', number: 8, type: 'dry', weight: 18, port: 1, status: 'free' })
@@ -20,7 +20,7 @@ describe('Machines list: cycles', function () {
     const res = await request(app).get('/api/admin/machines').set('Authorization', `Bearer ${signToken(admin)}`)
     expect(res.status).to.equal(200)
     const by = Object.fromEntries(res.body.map((m) => [m.name, m.cycle]))
-    expect(by['Secar 8']).to.equal(2)
+    expect(by['Secar 8']).to.equal(3)
     expect(by['Lavar 1']).to.equal(0)
   })
 })
