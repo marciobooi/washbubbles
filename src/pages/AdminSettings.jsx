@@ -6,7 +6,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { CreditCard as CardIcon, Scale, Palette, ShieldCheck, Wifi as WifiIcon, Bell, MessageCircle, SlidersHorizontal, Image as ImageIcon, Plus, Trash2, ArrowUp, ArrowDown, Globe, Eye, EyeOff } from 'lucide-react'
+import { CreditCard as CardIcon, Scale, Palette, ShieldCheck, Wifi as WifiIcon, Bell, MessageCircle, SlidersHorizontal, Image as ImageIcon, Plus, Trash2, ArrowUp, ArrowDown, Globe, Eye, EyeOff, Power } from 'lucide-react'
+import ShutdownScheduleForm from '@/components/ShutdownScheduleForm'
 import { DEFAULT_BANNERS } from '@/lib/defaultBanners'
 import { DEFAULT_LANDING_CONTENT } from '@/lib/defaultLandingContent'
 import LandingTranslations from '@/components/LandingTranslations'
@@ -51,6 +52,7 @@ const TABS = [
   { id: 'wifi', label: 'WiFi', Icon: WifiIcon, scope: 'system' },
   { id: 'payments', label: 'Mbway', Icon: CardIcon, scope: 'system' },
   { id: 'whatsapp', label: 'WhatsApp', Icon: MessageCircle, scope: 'system' },
+  { id: 'shutdown', label: 'Desligar PC', Icon: Power, scope: 'system' },
 ]
 
 export default function AdminSettings({ scope = 'website' }){
@@ -1661,6 +1663,8 @@ export default function AdminSettings({ scope = 'website' }){
       )}
 
       {/* WhatsApp cycle-complete notifications */}
+      {activeTab === 'shutdown' && <ShutdownScheduleForm />}
+
       {activeTab === 'whatsapp' && (
       <Card>
         <CardHeader>

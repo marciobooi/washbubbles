@@ -1,4 +1,3 @@
-import ShutdownScheduleForm from '@/components/ShutdownScheduleForm'
 import React from 'react'
 import { Cpu, Trash2, Plus, Settings, Sparkles, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -812,7 +811,6 @@ export default function AdminPeripherals() {
           </div>
         </div>
       )}
-      <ShutdownScheduleForm />
     </div>
   )
 }
