@@ -164,10 +164,8 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onPayo
   const countedLoadedRef = useRef(false)
   useEffect(() => {
     if (countedLoadedRef.current) return
-    if (summary?.acceptedDenominations?.length) {
-      setCountedDenoms(buildDenomFromSaved(ALL_CASH_DENOMS, summary.acceptedDenominations))
-      countedLoadedRef.current = true
-    }
+    // The count starts EMPTY: what the machines accepted is not what is in the box (the change already given out is not in it any more),
+    // so a pre-filled count showed a false surplus (2026-11-18: 1654,70 € counted, 1204,80 € expected). The operator counts the box.
   }, [summary])
 
   // Common case: bank today's cash sales, keep the float unchanged — prefilled
@@ -216,7 +214,7 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onPayo
     const fl  = parseFloat(floatLeft)
     if (isNaN(atb) || isNaN(fl)) return toast({ title: 'Indique o valor para o banco', variant: 'destructive' })
     if (atb < 0 || fl < 0) return toast({ title: 'Os valores nao podem ser negativos', variant: 'destructive' })
-    if (!(countedCash > 0)) return toast({ title: 'Conte o dinheiro que está na máquina (a contagem vem pré-preenchida com as notas e moedas aceites)', variant: 'destructive' })
+    if (!(countedCash > 0)) return toast({ title: 'Conte o dinheiro que está na caixa (notas e moedas) antes de fechar', variant: 'destructive' })
     if (Math.abs(atb + fl - countedCash) > 0.005) return toast({
       title: `Banco + Fundo (${fmt(atb + fl)}€) ≠ Total contado (${fmt(countedCash)}€)`,
       variant: 'destructive'
@@ -298,12 +296,12 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onPayo
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className={view === 'fecho' ? 'space-y-4' : 'hidden'}>
-        <Step number="1" title="Contagem de caixa" subtitle="Confirme o que já sabemos que entrou — só precisa de corrigir o que faltar ou sobrar" accent="teal">
-          {summary?.acceptedTotal > 0 && (
-            <div className="text-xs text-neutral-400 -mt-1">
-              Pré-preenchido com o aceite desde o último fecho ({fmt(summary.acceptedTotal)}&euro;).
-              {summary.openingFloat > 0 && <> Se o fundo de caixa de {fmt(summary.openingFloat)}&euro; ainda lá estiver, adicione-o também.</>}
-              {' '}Corrija o que não bater certo.
+        <Step number="1" title="Contagem de caixa" subtitle="Conte o dinheiro que está na caixa (notas e moedas)" accent="teal">
+          {summary && (
+            <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-900">
+              Vendas em dinheiro <strong>{fmt(Number(summary.totalCash || 0) - Number(summary.floatWithdrawn || 0))}&euro;</strong>
+              {' '}+ fundo de maneio <strong>{fmt(expectedCash - (Number(summary.totalCash || 0) - Number(summary.floatWithdrawn || 0)))}&euro;</strong>
+              {' '}= deve haver <strong>{fmt(expectedCash)}&euro;</strong> na caixa. Conte o que lá está.
             </div>
           )}
           <CoinChipGrid denoms={countedDenoms} onChange={makeUpdater(setCountedDenoms)} />
