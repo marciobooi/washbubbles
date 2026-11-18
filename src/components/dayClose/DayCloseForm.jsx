@@ -319,26 +319,6 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onPayo
           </div>
         </Step>
 
-        {countedCash > 0 && (
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 space-y-3">
-            <div className="text-sm font-bold text-emerald-900">Retirar da caixa</div>
-            <div className="flex flex-wrap gap-2">
-              {withdrawPlan.filter((d) => d.take > 0).sort((a, b) => b.value - a.value).map((d) => (
-                <span key={d.value} className="inline-flex items-center gap-1.5 rounded-xl bg-white border border-emerald-200 px-3 py-2 text-base font-extrabold text-emerald-800">
-                  {d.take} <span className="text-emerald-500 font-bold">×</span> {fmtDenomLabel(d.value)}
-                </span>
-              ))}
-              {takeTotal === 0 && <span className="text-sm text-neutral-500">Nada a retirar.</span>}
-            </div>
-            <div className="text-xs text-emerald-800">
-              Total a retirar: <strong>{fmt(takeTotal)}&euro;</strong>
-              {hopperTotalIn > 0 && <> · fica no hopper para repor o troco: <strong>{fmt(hopperTotalIn)}&euro;</strong> ({withdrawPlan.filter((d) => d.toHopper > 0).map((d) => `${d.toHopper}×${fmtDenomLabel(d.value)}`).join(', ')})</>}
-              {keptNotes.length > 0 && <> · nota(s) que ficam no fundo: {keptNotes.map((d) => `${d.keepNotes}×${fmtDenomLabel(d.value)}`).join(', ')}</>}
-              . As notas saem todas, exceto as que escolher deixar para acertar o fundo. A lista parte do que as máquinas registaram; corrija a contagem acima se algo não bater.
-            </div>
-          </div>
-        )}
-
         </div>
 
         <button
@@ -382,6 +362,25 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onPayo
 
         <div className={view === 'fecho' ? 'space-y-4' : 'hidden'}>
         <Step number="2" title="Para o banco" subtitle="O que retira da caixa agora; o resto fica na caixa e o hopper gere-se no menu Hopper" accent="emerald">
+        {countedCash > 0 && (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 space-y-3">
+            <div className="text-sm font-bold text-emerald-900">Retirar da caixa</div>
+            <div className="flex flex-wrap gap-2">
+              {withdrawPlan.filter((d) => d.take > 0).sort((a, b) => b.value - a.value).map((d) => (
+                <span key={d.value} className="inline-flex items-center gap-1.5 rounded-xl bg-white border border-emerald-200 px-3 py-2 text-base font-extrabold text-emerald-800">
+                  {d.take} <span className="text-emerald-500 font-bold">×</span> {fmtDenomLabel(d.value)}
+                </span>
+              ))}
+              {takeTotal === 0 && <span className="text-sm text-neutral-500">Nada a retirar.</span>}
+            </div>
+            <div className="text-xs text-emerald-800">
+              Total a retirar: <strong>{fmt(takeTotal)}&euro;</strong>
+              {hopperTotalIn > 0 && <> · fica no hopper para repor o troco: <strong>{fmt(hopperTotalIn)}&euro;</strong> ({withdrawPlan.filter((d) => d.toHopper > 0).map((d) => `${d.toHopper}×${fmtDenomLabel(d.value)}`).join(', ')})</>}
+              {keptNotes.length > 0 && <> · nota(s) que ficam no fundo: {keptNotes.map((d) => `${d.keepNotes}×${fmtDenomLabel(d.value)}`).join(', ')}</>}
+              . As notas saem todas, exceto as que escolher deixar para acertar o fundo. A lista parte do que as máquinas registaram; corrija a contagem acima se algo não bater.
+            </div>
+          </div>
+        )}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <MoneyInput
               label="Para o banco"
