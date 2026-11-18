@@ -156,4 +156,17 @@ describe('Flows: every customer action as one log with its steps', function () {
       expect((await request(app).get('/api/admin/flows/o-1').set('Authorization', `Bearer ${adminTok}`)).status).to.equal(404)
     })
   })
+
+  it('an open flow makes the updater wait (hasRecentOpen), and closeAll closes it normally and saves it', async () => {
+    flows._reset()
+    expect(flows.hasRecentOpen()).to.equal(false)
+    flows.step(t(), 'cash_inserted', 'Moeda de 2,00 € inserida', null, { inserted: 2 })
+    expect(flows.hasRecentOpen()).to.equal(true)
+    await flows.closeAll()
+    expect(flows.hasRecentOpen()).to.equal(false)
+    const Flow = (await import('../src/models/flow.js')).default
+    const saved = await Flow.findOne({ tenantId: t() }).lean()
+    expect(saved.status).to.not.equal('open')
+    expect(saved.status).to.not.equal('interrupted')
+  })
 })

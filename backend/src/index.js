@@ -350,6 +350,8 @@ process.on('SIGTERM', async () => {
   console.log('SIGTERM signal received: closing HTTP server')
   const bye = setTimeout(() => { console.log('Shutdown: exiting'); process.exit(0) }, 8000)
   bye.unref?.()
+  // what a customer was doing is closed normally and saved first, instead of being left open ('interrupted' on the next start)
+  try { await Promise.race([(await import('./services/flows.js')).closeAll(), new Promise((r) => setTimeout(r, 3000))]) } catch (e) { console.warn('Shutdown: flows not closed:', e.message) }
   server.close(() => { console.log('HTTP server closed'); process.exit(0) })
   server.closeIdleConnections?.()
   try { await coinMachine.stop() } catch (e) { console.warn('Shutdown: coin machine stop failed:', e.message) }

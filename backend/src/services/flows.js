@@ -123,6 +123,19 @@ export async function closeIdle({ all = false } = {}) {
   const now = Date.now()
   for (const f of [...open.values()]) if (all || now - f.lastAt.getTime() >= IDLE_MS) close(f)
 }
+/** Is a flow open that something happened in less than `ms` ago? The updater waits for it before restarting (a restart would mark it 'interrupted'). */
+export function hasRecentOpen(ms = 150_000) {
+  const now = Date.now()
+  return [...open.values()].some((f) => now - f.lastAt.getTime() < ms)
+}
+
+/** Close every open flow NOW, normally (done/problem), and wait until they are saved: used before the server stops. */
+export async function closeAll() {
+  const list = [...open.values()]
+  for (const f of list) close(f)
+  await Promise.all(list.map((f) => f.saving).filter(Boolean))
+}
+
 export async function closeInterrupted() {
   // flows a power cut / restart left 'open' in the database: mark them and send them
   const stale = await Flow.find({ status: 'open', lastAt: { $lt: new Date(Date.now() - IDLE_MS) } }).select('tenantId flowId').lean().catch(() => [])

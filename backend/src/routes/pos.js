@@ -387,6 +387,9 @@ router.get('/busy', requireKiosk, async (req, res) => {
       if (coinMachine.refunding) reasons.push('refund')
       if (coinMachine.impulseJobs > 0) reasons.push('impulses')
     }
+    // a customer's flow is still open (it closes by itself ~90 s after the last step): restarting now would mark it 'interrupted' (orange)
+    const flows = await import('../services/flows.js')
+    if (flows.hasRecentOpen()) reasons.push('flow')
     const MbwayPayment = (await import('../models/mbwayPayment.js')).default
     if (await MbwayPayment.exists({ tenantId: req.tenantId, status: { $in: ['pending', 'paid'] }, createdAt: { $gt: new Date(Date.now() - 15 * 60 * 1000) } })) reasons.push('mbway')
   } catch (e) { console.error('[pos] busy check:', e.message) }
