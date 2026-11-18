@@ -57,7 +57,9 @@ const TABS = [
 
 export default function AdminSettings({ scope = 'website' }){
   const tabs = TABS.filter((t) => t.scope === scope)
-  const [activeTab, setActiveTab] = useState(tabs[0].id)
+  const [activeTabRaw, setActiveTab] = useState(tabs[0].id)
+  // never show a tab that belongs to the other page (the same component serves both menu entries)
+  const activeTab = tabs.some((t) => t.id === activeTabRaw) ? activeTabRaw : tabs[0].id
 
   const [list, setList] = useState([])
   const [key, setKey] = useState('')
