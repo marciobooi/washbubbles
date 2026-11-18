@@ -85,17 +85,17 @@ export function CoinChipGrid({ denoms, onChange, readOnly = false, className = '
           // and tapping the card still adds one
           <div className="flex items-center justify-center gap-1" onClick={e => e.stopPropagation()}>
             <button type="button" aria-label="Diminuir" onClick={() => set(i, (d.count || 0) - 1)}
-              className="w-8 h-9 shrink-0 rounded-lg bg-neutral-100 hover:bg-neutral-200 active:scale-90 text-neutral-600 font-bold">−</button>
+              className="w-9 h-10 shrink-0 !rounded-xl bg-neutral-100 hover:bg-neutral-200 active:scale-90 text-neutral-600 font-bold">−</button>
             <input
               type="text" inputMode="numeric" pattern="[0-9]*" aria-label={`Quantidade de ${fmtDenomLabel(d.value)}`}
               value={d.count || 0}
               onClick={(e) => { e.stopPropagation(); e.target.select() }}
               onFocus={(e) => e.target.select()}
               onChange={(e) => set(i, parseInt(e.target.value.replace(/\D/g, '').slice(0, 5), 10) || 0)}
-              className={`w-12 min-w-0 text-center text-xl font-extrabold leading-none bg-transparent rounded-md border border-transparent focus:border-primary-400 focus:bg-white focus:outline-none ${active ? 'text-primary-700' : 'text-neutral-400'}`}
+              className={`w-12 h-10 min-w-0 p-0 text-center text-xl font-extrabold leading-none bg-white !rounded-xl border border-neutral-200 focus:border-primary-400 focus:outline-none ${active ? 'text-primary-700' : 'text-neutral-400'}`}
             />
             <button type="button" aria-label="Aumentar" onClick={() => set(i, (d.count || 0) + 1)}
-              className="w-8 h-9 shrink-0 rounded-lg bg-primary-50 text-primary-700 hover:bg-primary-100 active:scale-90 font-bold">+</button>
+              className="w-9 h-10 shrink-0 !rounded-xl bg-primary-50 text-primary-700 hover:bg-primary-100 active:scale-90 font-bold">+</button>
           </div>
         )}
       </div>
