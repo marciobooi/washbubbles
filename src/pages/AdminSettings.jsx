@@ -70,17 +70,12 @@ function CreditSettings() {
   }
   useEffect(() => { load() }, [])
 
-  async function save(e) {
+  async function saveOne(e, entries, okTitle) {
     e.preventDefault()
-    if (!Number.isInteger(refundSeconds) || refundSeconds < 0 || refundSeconds > 3600) {
-      toast({ title: 'A devolução automática tem de ser entre 0 e 3600 segundos (0 = nunca devolver)', variant: 'destructive' })
-      return
-    }
     setSaving(true)
     try {
-      await api.setSetting({ key: 'autoCharge', value: autoCharge })
-      await api.setSetting({ key: 'creditRefundSeconds', value: refundSeconds })
-      toast({ title: 'Guardado', variant: 'success' })
+      for (const [key, value] of entries) await api.setSetting({ key, value })
+      toast({ title: okTitle, variant: 'success' })
       load()
     } catch (err) {
       console.error(err)
@@ -88,39 +83,64 @@ function CreditSettings() {
     } finally { setSaving(false) }
   }
 
+  function saveAutoCharge(e) { return saveOne(e, [['autoCharge', autoCharge]], 'Guardado') }
+  function saveRefund(e) {
+    if (!Number.isInteger(refundSeconds) || refundSeconds < 0 || refundSeconds > 3600) {
+      e.preventDefault()
+      toast({ title: 'A devolução automática tem de ser entre 0 e 3600 segundos (0 = nunca devolver)', variant: 'destructive' })
+      return
+    }
+    return saveOne(e, [['creditRefundSeconds', refundSeconds]], 'Guardado')
+  }
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Cartão e crédito</CardTitle>
-        <CardDescription>O dinheiro que o cliente deixa no quiosque</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={save} className="space-y-6 max-w-xl">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <input id="autoCharge" type="checkbox" checked={autoCharge} onChange={(e) => setAutoCharge(e.target.checked)} className="w-4 h-4" />
-              <Label htmlFor="autoCharge" className="cursor-pointer">Carregar cartão automaticamente ao remover</Label>
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Carregar cartão ao remover</CardTitle>
+          <CardDescription>O que acontece ao dinheiro quando o cliente tira o cartão do leitor</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={saveAutoCharge} className="space-y-4 max-w-xl">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <input id="autoCharge" type="checkbox" checked={autoCharge} onChange={(e) => setAutoCharge(e.target.checked)} className="w-4 h-4" />
+                <Label htmlFor="autoCharge" className="cursor-pointer">Carregar cartão automaticamente ao remover</Label>
+              </div>
+              <p className="text-xs text-muted-foreground ml-6">Guardar automaticamente o saldo em dinheiro no cartão quando este é removido (vale para moedas e notas)</p>
             </div>
-            <p className="text-xs text-muted-foreground ml-6">Guardar automaticamente o saldo em dinheiro no cartão quando este é removido (vale para moedas e notas)</p>
-          </div>
+            <div className="flex gap-2">
+              <Button type="submit" disabled={saving}>Guardar</Button>
+              <Button type="button" variant="outline" onClick={() => { load(); toast({ title: 'Revertido', variant: 'success' }) }}>Reverter</Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
 
-          <div className="space-y-2">
-            <Label htmlFor="creditRefundSeconds">Devolver o dinheiro não usado ao fim de (segundos)</Label>
-            <Input id="creditRefundSeconds" type="number" step="1" min="0" max="3600" value={refundSeconds} onChange={(e) => setRefundSeconds(Number(e.target.value))} />
-            <p className="text-xs text-muted-foreground">
-              Se o cliente inserir moedas/notas e deixar o quiosque sem tocar neste tempo, o dinheiro é devolvido pelo hopper.
-              Cada moeda, nota ou toque no ecrã reinicia a contagem. <strong>0 = nunca devolver.</strong> Por omissão: 120 (2 minutos).
-              A alteração chega ao quiosque em poucos minutos.
-            </p>
-          </div>
-
-          <div className="flex gap-2">
-            <Button type="submit" disabled={saving}>Guardar</Button>
-            <Button type="button" variant="outline" onClick={() => { load(); toast({ title: 'Revertido', variant: 'success' }) }}>Reverter</Button>
-          </div>
-        </form>
-      </CardContent>
-    </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Devolução automática do crédito</CardTitle>
+          <CardDescription>O dinheiro que o cliente deixa no quiosque sem usar</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={saveRefund} className="space-y-4 max-w-xl">
+            <div className="space-y-2">
+              <Label htmlFor="creditRefundSeconds">Devolver o dinheiro não usado ao fim de (segundos)</Label>
+              <Input id="creditRefundSeconds" type="number" step="1" min="0" max="3600" value={refundSeconds} onChange={(e) => setRefundSeconds(Number(e.target.value))} />
+              <p className="text-xs text-muted-foreground">
+                Se o cliente inserir moedas/notas e deixar o quiosque sem tocar neste tempo, o dinheiro é devolvido pelo hopper.
+                Cada moeda, nota ou toque no ecrã reinicia a contagem. <strong>0 = nunca devolver.</strong> Por omissão: 120 (2 minutos).
+                A alteração chega ao quiosque em poucos minutos.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button type="submit" disabled={saving}>Guardar</Button>
+              <Button type="button" variant="outline" onClick={() => { load(); toast({ title: 'Revertido', variant: 'success' }) }}>Reverter</Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
   )
 }
 
