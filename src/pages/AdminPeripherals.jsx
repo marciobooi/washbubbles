@@ -19,7 +19,6 @@ export default function AdminPeripherals() {
   const [loading, setLoading] = React.useState(true)
   const [selectedPeripheral, setSelectedPeripheral] = React.useState(null)
   const [showConfig, setShowConfig] = React.useState(false)
-  const [showHardware, setShowHardware] = React.useState(false)
 
   // Coin/Bill acceptor equivalence tables + related hardware settings — moved
   // here from Preços (it's peripheral config, not pricing) and tucked behind
@@ -468,257 +467,6 @@ export default function AdminPeripherals() {
         })}
       </div>
 
-      {/* Coin/Bill Machine Settings — hardware-facing config (raw denomination
-          codes, hopper limits): not something a non-technical admin should be
-          confronted with by default, so it's tucked behind this toggle. */}
-      <button
-        type="button"
-        onClick={() => setShowHardware(s => !s)}
-        className="w-full flex items-center justify-between gap-2 rounded-xl border border-dashed border-neutral-300 bg-neutral-50 hover:bg-neutral-100 px-4 py-2.5 text-left transition mt-6"
-      >
-        <span className="text-xs font-semibold text-neutral-600">
-          Avançado — configuração de aceitador de moedas e notas
-          <span className="font-normal text-neutral-400 ml-1.5">(só para quem instala/configura o equipamento)</span>
-        </span>
-        <span className={`text-neutral-400 transition-transform ${showHardware ? 'rotate-180' : ''}`}>&#9660;</span>
-      </button>
-
-      {showHardware && (
-      <Card className="mt-3">
-        <CardHeader>
-          <CardTitle>Configurações de Aceitador de Moedas e Notas</CardTitle>
-          <CardDescription>Configure mapeamentos de valores de moedas/notas e bónus de recarga</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={saveCoinMachineSettings} className="space-y-6">
-            {/* Coin Equivalence Table */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-base font-semibold">Tabela de Equivalência de Moedas</Label>
-                <div className="flex gap-2">
-                  {coinEqTable.length === 0 && (
-                    <Button type="button" variant="secondary" size="sm" onClick={loadDefaultCoinMappings}>
-                      Carregar Padrões
-                    </Button>
-                  )}
-                  <Button type="button" variant="outline" size="sm" onClick={loadShopCoinMappings} disabled={!!calibrating}>
-                    Padrões da loja
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={() => startCalibration('coin')} disabled={!!calibrating}>
-                    <Sparkles className="h-3.5 w-3.5 mr-1.5" /> Calibrar automaticamente
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={addCoinMapping}>
-                    + Adicionar Moeda
-                  </Button>
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Mapear códigos de moedas do hardware (ex: 0x01, 0x02) para valores em euros
-              </p>
-              <div className="space-y-2">
-                {coinEqTable.map((entry, idx) => (
-                  <div key={idx} className="flex gap-2 items-center">
-                    <Input
-                      placeholder="Código moeda (0x01)"
-                      value={entry.key}
-                      onChange={(e) => updateCoinMapping(idx, 'key', e.target.value)}
-                      className="w-40"
-                    />
-                    <span className="text-muted-foreground">→</span>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="Valor €"
-                      value={entry.value}
-                      onChange={(e) => updateCoinMapping(idx, 'value', e.target.value)}
-                      className="w-32"
-                    />
-                    <span className="text-sm">€</span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeCoinMapping(idx)}
-                    >
-                      ✕
-                    </Button>
-                  </div>
-                ))}
-                {coinEqTable.length === 0 && (
-                  <div className="border-2 border-dashed rounded-lg p-4 text-center">
-                    <p className="text-sm text-muted-foreground mb-2">Nenhum mapeamento de moedas configurado</p>
-                    <Button type="button" variant="secondary" size="sm" onClick={loadDefaultCoinMappings}>
-                      Carregar Mapeamentos Padrão
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Bill Equivalence Table */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-base font-semibold">Tabela de Equivalência de Notas</Label>
-                <div className="flex gap-2">
-                  {billEqTable.length === 0 && (
-                    <Button type="button" variant="secondary" size="sm" onClick={loadDefaultBillMappings}>
-                      Carregar Padrões
-                    </Button>
-                  )}
-                  <Button type="button" variant="outline" size="sm" onClick={loadShopBillMappings} disabled={!!calibrating}>
-                    Padrões da loja
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={() => startCalibration('bill')} disabled={!!calibrating}>
-                    <Sparkles className="h-3.5 w-3.5 mr-1.5" /> Calibrar automaticamente
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={addBillMapping}>
-                    + Adicionar Nota
-                  </Button>
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Mapear códigos de notas do hardware (ex: 0x10, 0x11) para valores em euros
-              </p>
-              <div className="space-y-2">
-                {billEqTable.map((entry, idx) => (
-                  <div key={idx} className="flex gap-2 items-center">
-                    <Input
-                      placeholder="Código nota (0x10)"
-                      value={entry.key}
-                      onChange={(e) => updateBillMapping(idx, 'key', e.target.value)}
-                      className="w-40"
-                    />
-                    <span className="text-muted-foreground">→</span>
-                    <Input
-                      type="number"
-                      step="1"
-                      placeholder="Valor €"
-                      value={entry.value}
-                      onChange={(e) => updateBillMapping(idx, 'value', e.target.value)}
-                      className="w-32"
-                    />
-                    <span className="text-sm">€</span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => removeBillMapping(idx)}
-                    >
-                      ✕
-                    </Button>
-                  </div>
-                ))}
-                {billEqTable.length === 0 && (
-                  <div className="border-2 border-dashed rounded-lg p-4 text-center">
-                    <p className="text-sm text-muted-foreground mb-2">Nenhum mapeamento de notas configurado</p>
-                    <Button type="button" variant="secondary" size="sm" onClick={loadDefaultBillMappings}>
-                      Carregar Mapeamentos Padrão
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Bonus Settings */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t">
-              <div className="space-y-2">
-                <Label htmlFor="rechargeCoinBonus">Bónus de Recarga com Moedas (%)</Label>
-                <Input
-                  id="rechargeCoinBonus"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  value={rechargeCoinBonus}
-                  onChange={(e) => setRechargeCoinBonus(Number(e.target.value))}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Percentagem de bónus adicionada às recargas com moedas (ex: 10% significa €1.00 → €1.10)
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="rechargeBillBonus">Bónus de Recarga com Notas (%)</Label>
-                <Input
-                  id="rechargeBillBonus"
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.1"
-                  value={rechargeBillBonus}
-                  onChange={(e) => setRechargeBillBonus(Number(e.target.value))}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Percentagem de bónus adicionada às recargas com notas
-                </p>
-              </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <div className="flex items-center gap-2">
-                  <input
-                    id="autoCharge"
-                    type="checkbox"
-                    checked={autoCharge}
-                    onChange={(e) => setAutoCharge(e.target.checked)}
-                    className="w-4 h-4"
-                  />
-                  <Label htmlFor="autoCharge" className="cursor-pointer">
-                    Carregar cartão automaticamente ao remover
-                  </Label>
-                </div>
-                <p className="text-xs text-muted-foreground ml-6">
-                  Guardar automaticamente o saldo em dinheiro no cartão quando este é removido
-                </p>
-              </div>
-            </div>
-
-            <div className="border-t pt-4">
-              <Label className="mb-2 block">Hopper (dispensador de troco)</Label>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="hopperCoinValue">Valor da moeda no hopper (€)</Label>
-                  <Input id="hopperCoinValue" type="number" step="0.01" min="0.01" value={hopperCoinValue} onChange={(e) => setHopperCoinValue(Number(e.target.value))} />
-                  <p className="text-xs text-muted-foreground">A maioria dos hoppers guarda uma única denominação de moeda.</p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="hopperMaxDispenseCoins">Máximo de moedas por dispensa</Label>
-                  <Input id="hopperMaxDispenseCoins" type="number" step="1" min="1" value={hopperMaxDispenseCoins} onChange={(e) => setHopperMaxDispenseCoins(Number(e.target.value))} />
-                  <p className="text-xs text-muted-foreground">Limite de segurança — um pedido acima disto é recusado em vez de arriscar esvaziar o hopper por um erro de cálculo.</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="border-t pt-4">
-              <Label className="mb-2 block">Devolução automática do crédito</Label>
-              <div className="space-y-2 max-w-md">
-                <Label htmlFor="creditRefundSeconds">Devolver o dinheiro não usado ao fim de (segundos)</Label>
-                <Input id="creditRefundSeconds" type="number" step="1" min="0" max="3600" value={creditRefundSeconds} onChange={(e) => setCreditRefundSeconds(Number(e.target.value))} />
-                <p className="text-xs text-muted-foreground">
-                  Se o cliente inserir moedas/notas e deixar o quiosque sem tocar neste tempo, o dinheiro é devolvido pelo hopper.
-                  Cada moeda, nota ou toque no ecrã reinicia a contagem. <strong>0 = nunca devolver.</strong> Por omissão: 120 (2 minutos).
-                  A alteração chega ao quiosque em poucos minutos.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <Button type="submit">Guardar Configurações de Moedas/Notas</Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  loadCoinMachineSettings();
-                  toast({ title: 'Revertido', variant: 'success' })
-                }}
-              >
-                Reverter
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-      )}
-
       {/* Configuration Modal */}
       {showConfig && selectedPeripheral && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -798,6 +546,255 @@ export default function AdminPeripherals() {
                   />
                 </div>
               </div>
+
+
+              {/* Moedas aceites: the same settings the old "Avançado" block had, now where they belong */}
+              {selectedPeripheral.type === 'coin_acceptor' && (
+                <form onSubmit={saveCoinMachineSettings} className="mt-6 pt-6 border-t space-y-6">
+                  <div className="text-base font-bold text-[#1c2530]">Moedas aceites</div>
+            {/* Coin Equivalence Table */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-base font-semibold">Tabela de Equivalência de Moedas</Label>
+                <div className="flex gap-2">
+                  {coinEqTable.length === 0 && (
+                    <Button type="button" variant="secondary" size="sm" onClick={loadDefaultCoinMappings}>
+                      Carregar Padrões
+                    </Button>
+                  )}
+                  <Button type="button" variant="outline" size="sm" onClick={loadShopCoinMappings} disabled={!!calibrating}>
+                    Padrões da loja
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => startCalibration('coin')} disabled={!!calibrating}>
+                    <Sparkles className="h-3.5 w-3.5 mr-1.5" /> Calibrar automaticamente
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={addCoinMapping}>
+                    + Adicionar Moeda
+                  </Button>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Mapear códigos de moedas do hardware (ex: 0x01, 0x02) para valores em euros
+              </p>
+              <div className="space-y-2">
+                {coinEqTable.map((entry, idx) => (
+                  <div key={idx} className="flex gap-2 items-center">
+                    <Input
+                      placeholder="Código moeda (0x01)"
+                      value={entry.key}
+                      onChange={(e) => updateCoinMapping(idx, 'key', e.target.value)}
+                      className="w-40"
+                    />
+                    <span className="text-muted-foreground">→</span>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="Valor €"
+                      value={entry.value}
+                      onChange={(e) => updateCoinMapping(idx, 'value', e.target.value)}
+                      className="w-32"
+                    />
+                    <span className="text-sm">€</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeCoinMapping(idx)}
+                    >
+                      ✕
+                    </Button>
+                  </div>
+                ))}
+                {coinEqTable.length === 0 && (
+                  <div className="border-2 border-dashed rounded-lg p-4 text-center">
+                    <p className="text-sm text-muted-foreground mb-2">Nenhum mapeamento de moedas configurado</p>
+                    <Button type="button" variant="secondary" size="sm" onClick={loadDefaultCoinMappings}>
+                      Carregar Mapeamentos Padrão
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+
+                  <div className="grid grid-cols-1 gap-4 pt-4 border-t">
+              <div className="space-y-2">
+                <Label htmlFor="rechargeCoinBonus">Bónus de Recarga com Moedas (%)</Label>
+                <Input
+                  id="rechargeCoinBonus"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={rechargeCoinBonus}
+                  onChange={(e) => setRechargeCoinBonus(Number(e.target.value))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Percentagem de bónus adicionada às recargas com moedas (ex: 10% significa €1.00 → €1.10)
+                </p>
+              </div>
+
+              <div className="space-y-2 md:col-span-2">
+                <div className="flex items-center gap-2">
+                  <input
+                    id="autoCharge"
+                    type="checkbox"
+                    checked={autoCharge}
+                    onChange={(e) => setAutoCharge(e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                  <Label htmlFor="autoCharge" className="cursor-pointer">
+                    Carregar cartão automaticamente ao remover
+                  </Label>
+                </div>
+                <p className="text-xs text-muted-foreground ml-6">
+                  Guardar automaticamente o saldo em dinheiro no cartão quando este é removido
+                </p>
+              </div>
+
+                  </div>
+                  <div className="flex gap-2">
+                    <Button type="submit">Guardar moedas aceites</Button>
+                    <Button type="button" variant="outline" onClick={() => { loadCoinMachineSettings(); toast({ title: 'Revertido', variant: 'success' }) }}>Reverter</Button>
+                  </div>
+                </form>
+              )}
+
+              {/* Notas aceites: the same settings the old "Avançado" block had, now where they belong */}
+              {selectedPeripheral.type === 'bill_acceptor' && (
+                <form onSubmit={saveCoinMachineSettings} className="mt-6 pt-6 border-t space-y-6">
+                  <div className="text-base font-bold text-[#1c2530]">Notas aceites</div>
+            {/* Bill Equivalence Table */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-base font-semibold">Tabela de Equivalência de Notas</Label>
+                <div className="flex gap-2">
+                  {billEqTable.length === 0 && (
+                    <Button type="button" variant="secondary" size="sm" onClick={loadDefaultBillMappings}>
+                      Carregar Padrões
+                    </Button>
+                  )}
+                  <Button type="button" variant="outline" size="sm" onClick={loadShopBillMappings} disabled={!!calibrating}>
+                    Padrões da loja
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => startCalibration('bill')} disabled={!!calibrating}>
+                    <Sparkles className="h-3.5 w-3.5 mr-1.5" /> Calibrar automaticamente
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={addBillMapping}>
+                    + Adicionar Nota
+                  </Button>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Mapear códigos de notas do hardware (ex: 0x10, 0x11) para valores em euros
+              </p>
+              <div className="space-y-2">
+                {billEqTable.map((entry, idx) => (
+                  <div key={idx} className="flex gap-2 items-center">
+                    <Input
+                      placeholder="Código nota (0x10)"
+                      value={entry.key}
+                      onChange={(e) => updateBillMapping(idx, 'key', e.target.value)}
+                      className="w-40"
+                    />
+                    <span className="text-muted-foreground">→</span>
+                    <Input
+                      type="number"
+                      step="1"
+                      placeholder="Valor €"
+                      value={entry.value}
+                      onChange={(e) => updateBillMapping(idx, 'value', e.target.value)}
+                      className="w-32"
+                    />
+                    <span className="text-sm">€</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeBillMapping(idx)}
+                    >
+                      ✕
+                    </Button>
+                  </div>
+                ))}
+                {billEqTable.length === 0 && (
+                  <div className="border-2 border-dashed rounded-lg p-4 text-center">
+                    <p className="text-sm text-muted-foreground mb-2">Nenhum mapeamento de notas configurado</p>
+                    <Button type="button" variant="secondary" size="sm" onClick={loadDefaultBillMappings}>
+                      Carregar Mapeamentos Padrão
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+
+                  <div className="grid grid-cols-1 gap-4 pt-4 border-t">
+              <div className="space-y-2">
+                <Label htmlFor="rechargeBillBonus">Bónus de Recarga com Notas (%)</Label>
+                <Input
+                  id="rechargeBillBonus"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={rechargeBillBonus}
+                  onChange={(e) => setRechargeBillBonus(Number(e.target.value))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Percentagem de bónus adicionada às recargas com notas
+                </p>
+              </div>
+
+
+                  </div>
+                  <div className="flex gap-2">
+                    <Button type="submit">Guardar notas aceites</Button>
+                    <Button type="button" variant="outline" onClick={() => { loadCoinMachineSettings(); toast({ title: 'Revertido', variant: 'success' }) }}>Reverter</Button>
+                  </div>
+                </form>
+              )}
+
+              {/* Hopper e devolução do crédito: the same settings the old "Avançado" block had, now where they belong */}
+              {selectedPeripheral.type === 'hopper' && (
+                <form onSubmit={saveCoinMachineSettings} className="mt-6 pt-6 border-t space-y-6">
+                  <div className="text-base font-bold text-[#1c2530]">Hopper e devolução do crédito</div>
+            <div className="border-t pt-4">
+              <Label className="mb-2 block">Hopper (dispensador de troco)</Label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="hopperCoinValue">Valor da moeda no hopper (€)</Label>
+                  <Input id="hopperCoinValue" type="number" step="0.01" min="0.01" value={hopperCoinValue} onChange={(e) => setHopperCoinValue(Number(e.target.value))} />
+                  <p className="text-xs text-muted-foreground">A maioria dos hoppers guarda uma única denominação de moeda.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="hopperMaxDispenseCoins">Máximo de moedas por dispensa</Label>
+                  <Input id="hopperMaxDispenseCoins" type="number" step="1" min="1" value={hopperMaxDispenseCoins} onChange={(e) => setHopperMaxDispenseCoins(Number(e.target.value))} />
+                  <p className="text-xs text-muted-foreground">Limite de segurança — um pedido acima disto é recusado em vez de arriscar esvaziar o hopper por um erro de cálculo.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t pt-4">
+              <Label className="mb-2 block">Devolução automática do crédito</Label>
+              <div className="space-y-2 max-w-md">
+                <Label htmlFor="creditRefundSeconds">Devolver o dinheiro não usado ao fim de (segundos)</Label>
+                <Input id="creditRefundSeconds" type="number" step="1" min="0" max="3600" value={creditRefundSeconds} onChange={(e) => setCreditRefundSeconds(Number(e.target.value))} />
+                <p className="text-xs text-muted-foreground">
+                  Se o cliente inserir moedas/notas e deixar o quiosque sem tocar neste tempo, o dinheiro é devolvido pelo hopper.
+                  Cada moeda, nota ou toque no ecrã reinicia a contagem. <strong>0 = nunca devolver.</strong> Por omissão: 120 (2 minutos).
+                  A alteração chega ao quiosque em poucos minutos.
+                </p>
+              </div>
+            </div>
+
+
+                  <div className="flex gap-2">
+                    <Button type="submit">Guardar hopper e devolução do crédito</Button>
+                    <Button type="button" variant="outline" onClick={() => { loadCoinMachineSettings(); toast({ title: 'Revertido', variant: 'success' }) }}>Reverter</Button>
+                  </div>
+                </form>
+              )}
 
               <div className="flex gap-3 mt-6">
                 <Button onClick={handleSaveConfig} className="flex-1">
