@@ -123,25 +123,29 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onPayo
   // What to take out of the till: the machine already knows what came in (coin acceptor + note reader, step 1 is
   // prefilled from it) and what the hopper holds, so this is just the list. Coins first refill the hopper up to its
   // target; what is left of each coin value, and every note, is what leaves the till.
-  const floatTarget = floatLeft !== '' && !isNaN(parseFloat(floatLeft)) ? parseFloat(floatLeft) : null
+  // What leaves the box is decided from the amount for the BANK: NOTES first (whole notes, the largest first) and COINS only for what the
+  // notes cannot make: the coins are the change, they stay in the machine as much as possible. Everything not taken stays in the box.
+  const bankAmount = amountToBank !== '' && !isNaN(parseFloat(amountToBank)) ? parseFloat(amountToBank) : 0
   const withdrawPlan = (() => {
-    const base = countedDenoms.map((d) => {
-      const isCoin = d.value < 3
-      const refill = isCoin ? Math.min(d.count, hopperGap.find((g) => Math.abs(g.value - d.value) < 0.001)?.toAdd || 0) : 0
-      return { value: d.value, isCoin, count: d.count, toHopper: refill, keepNotes: 0, take: 0 }
-    })
-    // The float may need a note (e.g. leave 5 EUR for tomorrow because the coins do not add up): after the hopper
-    // refill, keep the smallest notes that are still needed to reach the float, never more than it.
-    let need = floatTarget == null ? 0 : floatTarget - base.reduce((s, d) => s + d.toHopper * d.value, 0)
-    for (const d of base.filter((x) => !x.isCoin).sort((x, y) => x.value - y.value)) {
-      while (need >= d.value - 0.005 && d.keepNotes < d.count) { d.keepNotes += 1; need -= d.value }
+    const r2 = (n) => Math.round(n * 100) / 100
+    const rows = countedDenoms.map((d) => ({ value: d.value, isCoin: d.value < 3, count: d.count, take: 0 }))
+    let room = r2(Math.max(0, bankAmount))
+    const pick = (list) => {
+      for (const d of list.sort((a, b) => b.value - a.value)) {
+        const t = Math.min(d.count, Math.floor((room + 0.0001) / d.value))
+        d.take = t
+        room = r2(room - t * d.value)
+      }
     }
-    base.forEach((d) => { d.take = Math.max(0, d.count - d.toHopper - d.keepNotes) })
-    return base
+    pick(rows.filter((d) => !d.isCoin))
+    pick(rows.filter((d) => d.isCoin))
+    rows.room = room // what the counted notes and coins could not make
+    return rows
   })()
-  const keptNotes = withdrawPlan.filter((d) => d.keepNotes > 0)
-  const takeTotal   = withdrawPlan.reduce((s, d) => s + d.take * d.value, 0)
-  const hopperTotalIn = withdrawPlan.reduce((s, d) => s + d.toHopper * d.value, 0)
+  const takeTotal = withdrawPlan.reduce((s, d) => s + d.take * d.value, 0)
+  const stays = withdrawPlan.filter((d) => d.count - d.take > 0).sort((a, b) => b.value - a.value)
+  const staysTotal = stays.reduce((s, d) => s + (d.count - d.take) * d.value, 0)
+  const planShort = Math.round((withdrawPlan.room || 0) * 100) / 100
   const splitOk           = amountToBank !== '' && floatLeft !== '' && Math.abs(splitSum - countedCash) <= 0.005
 
   // The coins somebody last counted in the hopper (a close's hopper count, or the coins put in with a float top-up / reinforcement) come
@@ -223,7 +227,7 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onPayo
     try {
       // The coins of the deposit come out of the hopper by themselves when the close is confirmed, like change: the whole notes that fit go
       // to the bank by hand. What the hopper really paid is what is recorded; the rest stays in the machine.
-      const plan = planBank(summary?.acceptedDenominations, atb)
+      const plan = planBank(countedDenoms, atb)
       let finalBank = atb
       let coinsPaid = plan.coinsPart
       if (onPayoutCoins && plan.coinsPart > 0) {
@@ -373,11 +377,10 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onPayo
               ))}
               {takeTotal === 0 && <span className="text-sm text-neutral-500">Nada a retirar.</span>}
             </div>
-            <div className="text-xs text-emerald-800">
-              Total a retirar: <strong>{fmt(takeTotal)}&euro;</strong>
-              {hopperTotalIn > 0 && <> · fica no hopper para repor o troco: <strong>{fmt(hopperTotalIn)}&euro;</strong> ({withdrawPlan.filter((d) => d.toHopper > 0).map((d) => `${d.toHopper}×${fmtDenomLabel(d.value)}`).join(', ')})</>}
-              {keptNotes.length > 0 && <> · nota(s) que ficam no fundo: {keptNotes.map((d) => `${d.keepNotes}×${fmtDenomLabel(d.value)}`).join(', ')}</>}
-              . As notas saem todas, exceto as que escolher deixar para acertar o fundo. A lista parte do que as máquinas registaram; corrija a contagem acima se algo não bater.
+            <div className="text-xs text-emerald-800 space-y-1">
+              <div>Total a retirar: <strong>{fmt(takeTotal)}&euro;</strong> · primeiro as notas; as moedas só entram para o que as notas não fazem e ficam na máquina o mais possível (são o troco).</div>
+              <div>Fica na caixa: <strong>{fmt(staysTotal)}&euro;</strong>{stays.length > 0 && <> ({stays.map((d) => `${d.count - d.take}×${fmtDenomLabel(d.value)}`).join(', ')})</>}</div>
+              {planShort > 0.004 && <div className="font-semibold text-amber-700">Faltam {fmt(planShort)}&euro; para chegar ao valor do banco: não há notas nem moedas contadas que o façam exatamente. Acerte o valor ou a contagem.</div>}
             </div>
           </div>
         )}
