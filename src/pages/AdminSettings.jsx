@@ -46,13 +46,13 @@ const TABS = [
   { id: 'banner', label: 'Banner', Icon: ImageIcon, scope: 'website' },
   { id: 'landing', label: 'Página Inicial', Icon: Globe, scope: 'website' },
   { id: 'legal', label: 'Legal / RGPD', Icon: Scale, scope: 'website' },
-  { id: 'alerts', label: 'Alertas', Icon: Bell, scope: 'website' },
   { id: 'advanced', label: 'Avançado', Icon: SlidersHorizontal, scope: 'website' },
   { id: 'staff', label: 'Kiosk PIN', Icon: ShieldCheck, scope: 'system' },
   { id: 'wifi', label: 'WiFi', Icon: WifiIcon, scope: 'system' },
   { id: 'payments', label: 'Mbway', Icon: CardIcon, scope: 'system' },
   { id: 'whatsapp', label: 'WhatsApp', Icon: MessageCircle, scope: 'system' },
   { id: 'credit', label: 'Cartão e crédito', Icon: CardIcon, scope: 'system' },
+  { id: 'alerts', label: 'Email', Icon: Bell, scope: 'system' },
   { id: 'shutdown', label: 'Desligar PC', Icon: Power, scope: 'system' },
 ]
 
