@@ -214,6 +214,8 @@ describe('Audit 2026-11', function () {
   describe('the updater asks before restarting', () => {
     const busy = () => request(app).get('/api/pos/busy').set(kioskAuth())
     it('free when nothing is going on, busy with cash in the machine or an MB WAY payment open', async () => {
+      const flows = await import('../src/services/flows.js')
+      flows._reset() // flows open from earlier tests would make it busy (that is the new 'flow' reason, checked below)
       coinMachine.running = true
       coinMachine.client.client.balance = 0
       const free = await busy()
@@ -225,6 +227,11 @@ describe('Audit 2026-11', function () {
       const MbwayPayment = (await import('../src/models/mbwayPayment.js')).default
       await MbwayPayment.create({ tenantId: tenant._id, identifier: 'p', amount: 5, expiresAt: new Date(Date.now() + 60e3), status: 'pending' })
       expect((await busy()).body.reasons).to.deep.equal(['mbway'])
+      await MbwayPayment.deleteMany({})
+      // a customer's flow still open (it closes ~90 s after the last step): the updater waits for it
+      flows.step(tenant._id, 'cash_inserted', 'Moeda de 2,00 € inserida', null, { inserted: 2 })
+      expect((await busy()).body.reasons).to.deep.equal(['flow'])
+      flows._reset()
     })
     it('is not for the public', async () => {
       expect((await request(app).get('/api/pos/busy')).status).to.be.oneOf([401, 403])
