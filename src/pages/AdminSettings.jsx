@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import api from '@/services/api'
 import ShopMailForm from '@/components/ShopMailForm'
-import MarketingBroadcastCard from '@/components/MarketingBroadcastCard'
 import AlertPrefsCard from '@/components/AlertPrefsCard'
 import { toast } from '@/components/ui/Toast'
 import { Input } from '@/components/ui/input'
@@ -30,7 +29,7 @@ const HIDDEN_ADVANCED_KEYS = new Set([
   'cashDrawerLedger',
   'hopperTarget',
   'coinEqTable', 'billEqTable', 'rechargeCoinBonus', 'rechargeBillBonus', 'autoCharge',
-  'hopperCoinValue', 'hopperMaxDispenseCoins', 'creditRefundSeconds',
+  'hopperCoinValue', 'hopperMaxDispenseCoins', 'creditRefundSeconds', 'campaign.email',
   'branding.companyName', 'branding.logo', 'branding.primaryColor', 'branding.accentColor',
   'banners',
   'legal.info',
@@ -57,6 +56,46 @@ const TABS = [
   { id: 'alerts', label: 'Email', Icon: Bell, scope: 'system' },
   { id: 'shutdown', label: 'Desligar PC', Icon: Power, scope: 'system' },
 ]
+
+/** The address the customers' answers to a campaign go to. The campaign itself is written and sent in the Campanhas menu. */
+function CampaignEmailCard() {
+  const [email, setEmail] = useState('')
+  const [saved, setSaved] = useState('')
+  const [saving, setSaving] = useState(false)
+  useEffect(() => {
+    api.getSetting('campaign.email').then((r) => { const v = typeof r?.value === 'string' ? r.value : ''; setEmail(v); setSaved(v) }).catch(() => {})
+  }, [])
+  async function save(e) {
+    e.preventDefault()
+    const v = email.trim()
+    if (v && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)) { toast({ title: 'Email inválido', variant: 'destructive' }); return }
+    setSaving(true)
+    try {
+      await api.setSetting({ key: 'campaign.email', value: v })
+      setEmail(v); setSaved(v)
+      toast({ title: v ? 'Email das campanhas guardado' : 'Email das campanhas removido', variant: 'success' })
+    } catch (err) {
+      console.error(err)
+      toast({ title: 'Erro ao guardar', variant: 'destructive' })
+    } finally { setSaving(false) }
+  }
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Email das campanhas</CardTitle>
+        <CardDescription>Para onde vão as respostas dos clientes às campanhas</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={save} className="space-y-2 max-w-md">
+          <Label htmlFor="campaignEmail">Email das campanhas</Label>
+          <Input id="campaignEmail" type="email" placeholder="campanhas@exemplo.com" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <p className="text-xs text-muted-foreground">Deixe em branco para usar o email de suporte da loja. A campanha em si escreve-se e envia-se no menu <strong>Campanhas</strong>.</p>
+          <Button type="submit" size="sm" disabled={saving || email.trim() === saved}>{saving ? 'A guardar…' : 'Guardar'}</Button>
+        </form>
+      </CardContent>
+    </Card>
+  )
+}
 
 /** Two settings about the customer's money in the kiosk: save the cash on the card when it is taken out, and give back unused cash. */
 function CreditSettings() {
@@ -1733,7 +1772,7 @@ export default function AdminSettings({ scope = 'website' }){
             <li><strong>Alertas</strong> (avarias, quiosques offline, máquinas que não arrancam): para o <em>email para alertas</em> abaixo; se estiver vazio, para o <em>email de suporte</em>. Em <em>O que quer receber</em> escolhe-se cada um.</li>
             <li><strong>Relatório de fecho de caixa</strong>: para o mesmo endereço dos alertas, quando se confirma cada fecho. No histórico de fechos, o ícone do envelope reenvia-o e o do olho mostra-o sem enviar.</li>
             <li><strong>Recibos e emails aos clientes</strong>: saem da caixa de email da loja (se estiver configurada) ou da plataforma em nome da loja; as respostas vão para o email de suporte.</li>
-            <li><strong>Campanhas</strong>: só para clientes que aceitaram receber marketing.</li>
+            <li><strong>Campanhas</strong> (menu Campanhas): só para clientes que aceitaram receber marketing. As respostas dos clientes vão para o <em>email das campanhas</em> abaixo.</li>
           </ul>
           <p className="text-xs text-muted-foreground mt-3">O nome, o logótipo e os contactos que aparecem em todos os emails vêm de Website &gt; Branding e Legal / RGPD.</p>
         </CardContent>
@@ -1768,7 +1807,7 @@ export default function AdminSettings({ scope = 'website' }){
         </CardContent>
       </Card>
       <AlertPrefsCard />
-      <MarketingBroadcastCard />
+      <CampaignEmailCard />
       </>
       )}
 

@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { useSidebar } from './ui/sidebar'
 import Fuse from 'fuse.js'
 import Highlight from './Highlight'
-import { Cpu, Users, CreditCard, Settings, Globe, Activity, PlugZap, Coins, Cable, Wallet, Banknote, LayoutDashboard, Wrench, Tag, ScrollText } from 'lucide-react'
+import { Cpu, Users, CreditCard, Settings, Globe, Megaphone, Activity, PlugZap, Coins, Cable, Wallet, Banknote, LayoutDashboard, Wrench, Tag, ScrollText } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useBranding } from '../context/BrandingContext'
 import {
@@ -32,6 +32,7 @@ const navItems = [
   { title: 'Periféricos', url: '/admin/peripherals', Icon: Cable },
   { title: 'Preços', url: '/admin/prices', Icon: Coins },
   { title: 'Cupões', url: '/admin/coupons', Icon: Tag },
+  { title: 'Campanhas', url: '/admin/campaigns', Icon: Megaphone },
   { title: 'Cartões', url: '/admin/cards', Icon: Wallet, roles: ['ADMIN', 'SUPERADMIN', 'STAFF'] },
   { title: 'Utilizadores', url: '/admin/users', Icon: Users },
   { title: 'Transacções', url: '/admin/transactions', Icon: CreditCard, roles: ['ADMIN', 'SUPERADMIN', 'STAFF'] },

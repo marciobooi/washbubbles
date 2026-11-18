@@ -54,7 +54,7 @@ function initTransporter(cfg = null) {
  * @param tenantId  the shop this mail is on behalf of: the sender's display name is the SHOP's name and replies go to the SHOP's
  *                  e-mail (the sending mailbox itself is shared for now; per-shop domains with SPF/DKIM are a later step)
  */
-export async function sendMail({ to, bcc, subject, text, html, tenantId = null, relayed = false, attachments = null }) {
+export async function sendMail({ to, bcc, subject, text, html, tenantId = null, relayed = false, attachments = null, replyTo: replyToOverride = '' }) {
   // A shop PC has no mailbox password of its own: when it is linked to the central server it hands the message over (the server
   // sends it with the shop's mailbox). If the server cannot be reached, the PC's own MAIL_* settings (if any) are the fallback.
   const central = process.env.SYNC_SERVER_URL && process.env.SYNC_API_KEY
@@ -86,7 +86,7 @@ export async function sendMail({ to, bcc, subject, text, html, tenantId = null, 
   const fromName = shopName || (!own && cfg && cfg.fromName) || process.env.MAIL_FROM_NAME
   const from = fromName ? `"${fromName.replace(/"/g, "'")}" <${address}>` : address
   if (t) {
-    const info = await t.sendMail({ from, to, ...(bcc ? { bcc } : {}), ...(replyTo ? { replyTo } : {}), subject, text, html, ...(attachments?.length ? { attachments } : {}) })
+    const info = await t.sendMail({ from, to, ...(bcc ? { bcc } : {}), ...((replyToOverride || replyTo) ? { replyTo: replyToOverride || replyTo } : {}), subject, text, html, ...(attachments?.length ? { attachments } : {}) })
     // Say what the mail server answered (the recipient is shown only in part: it is a customer's address).
     const hide = (addr) => String(addr).replace(/^(.).*(@.*)$/, '$1***$2')
     const acc = (info?.accepted || []).map(hide).join(',') || '-'

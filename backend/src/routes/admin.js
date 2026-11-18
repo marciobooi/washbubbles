@@ -1519,6 +1519,9 @@ router.post('/marketing/broadcast', requireAdmin, async (req, res) => {
 
   const CardT = withTenant(Card, req)
   const recipients = await CardT.find({ marketingOptIn: true, email: { $nin: [null, ''] } }).select('email').lean()
+  // the address the customers' answers go to (Definições > Email > Email das campanhas); empty = the shop's usual one
+  const replyRow = await withTenant(Setting, req).findOne({ key: 'campaign.email' }).lean()
+  const replyTo = typeof replyRow?.value === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(replyRow.value.trim()) ? replyRow.value.trim() : ''
 
   const bodyHtml = `<p>${escapeHtmlMultiline(message)}</p>`
   const html = renderEmailHtml({ title: subject, bodyHtml, brand: await getEmailBrand(req.tenantId) })
@@ -1527,7 +1530,7 @@ router.post('/marketing/broadcast', requireAdmin, async (req, res) => {
   let failed = 0
   for (const r of recipients) {
     try {
-      await sendMail({ to: r.email, subject, text: message, html, tenantId: req.tenantId })
+      await sendMail({ to: r.email, subject, text: message, html, tenantId: req.tenantId, replyTo })
       sent++
     } catch (e) {
       failed++
