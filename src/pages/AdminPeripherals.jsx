@@ -28,10 +28,8 @@ export default function AdminPeripherals() {
   const [billEqTable, setBillEqTable] = React.useState([])
   const [rechargeCoinBonus, setRechargeCoinBonus] = React.useState(0)
   const [rechargeBillBonus, setRechargeBillBonus] = React.useState(0)
-  const [autoCharge, setAutoCharge] = React.useState(false)
   const [hopperCoinValue, setHopperCoinValue] = React.useState(1)
   const [hopperMaxDispenseCoins, setHopperMaxDispenseCoins] = React.useState(50)
-  const [creditRefundSeconds, setCreditRefundSeconds] = React.useState(120)
 
   // Guided calibration: instead of typing hex codes by hand, insert one coin/
   // note of each denomination and let the hardware tell us which channel code
@@ -144,19 +142,15 @@ export default function AdminPeripherals() {
       const billEq = await api.getSetting('billEqTable').catch(() => null)
       const coinBonus = await api.getSetting('rechargeCoinBonus').catch(() => null)
       const billBonus = await api.getSetting('rechargeBillBonus').catch(() => null)
-      const autoChargeVal = await api.getSetting('autoCharge').catch(() => null)
       const hopperVal = await api.getSetting('hopperCoinValue').catch(() => null)
       const hopperMax = await api.getSetting('hopperMaxDispenseCoins').catch(() => null)
-      const refundSecs = await api.getSetting('creditRefundSeconds').catch(() => null)
 
       setCoinEqTable(coinEq && Array.isArray(coinEq.value) ? coinEq.value : [])
       setBillEqTable(billEq && Array.isArray(billEq.value) ? billEq.value : [])
       setRechargeCoinBonus(coinBonus && coinBonus.value !== undefined ? Number(coinBonus.value) : 0)
       setRechargeBillBonus(billBonus && billBonus.value !== undefined ? Number(billBonus.value) : 0)
-      setAutoCharge(autoChargeVal && autoChargeVal.value ? Boolean(autoChargeVal.value) : false)
       setHopperCoinValue(hopperVal && hopperVal.value != null ? Number(hopperVal.value) : 1)
       setHopperMaxDispenseCoins(hopperMax && hopperMax.value != null ? Number(hopperMax.value) : 50)
-      setCreditRefundSeconds(refundSecs && refundSecs.value != null ? Number(refundSecs.value) : 120)
     } catch (e) {
       console.warn('loadCoinMachineSettings failed', e)
     }
@@ -168,19 +162,13 @@ export default function AdminPeripherals() {
       toast({ title: 'Máximo de moedas a dispensar parece muito alto (>200) — confirme antes de guardar', variant: 'destructive' })
       return
     }
-    if (!Number.isInteger(creditRefundSeconds) || creditRefundSeconds < 0 || creditRefundSeconds > 3600) {
-      toast({ title: 'A devolução automática tem de ser entre 0 e 3600 segundos (0 = nunca devolver)', variant: 'destructive' })
-      return
-    }
     try {
       await api.setSetting({ key: 'coinEqTable', value: coinEqTable })
       await api.setSetting({ key: 'billEqTable', value: billEqTable })
       await api.setSetting({ key: 'rechargeCoinBonus', value: rechargeCoinBonus })
       await api.setSetting({ key: 'rechargeBillBonus', value: rechargeBillBonus })
-      await api.setSetting({ key: 'autoCharge', value: autoCharge })
       await api.setSetting({ key: 'hopperCoinValue', value: hopperCoinValue })
       await api.setSetting({ key: 'hopperMaxDispenseCoins', value: hopperMaxDispenseCoins })
-      await api.setSetting({ key: 'creditRefundSeconds', value: creditRefundSeconds })
       toast({ title: 'Configurações de moedas/notas guardadas', variant: 'success' })
       loadCoinMachineSettings()
     } catch (e) {
@@ -634,24 +622,6 @@ export default function AdminPeripherals() {
                 </p>
               </div>
 
-              <div className="space-y-2 md:col-span-2">
-                <div className="flex items-center gap-2">
-                  <input
-                    id="autoCharge"
-                    type="checkbox"
-                    checked={autoCharge}
-                    onChange={(e) => setAutoCharge(e.target.checked)}
-                    className="w-4 h-4"
-                  />
-                  <Label htmlFor="autoCharge" className="cursor-pointer">
-                    Carregar cartão automaticamente ao remover
-                  </Label>
-                </div>
-                <p className="text-xs text-muted-foreground ml-6">
-                  Guardar automaticamente o saldo em dinheiro no cartão quando este é removido
-                </p>
-              </div>
-
                   </div>
                   <div className="flex gap-2">
                     <Button type="submit">Guardar moedas aceites</Button>
@@ -775,22 +745,8 @@ export default function AdminPeripherals() {
               </div>
             </div>
 
-            <div className="border-t pt-4">
-              <Label className="mb-2 block">Devolução automática do crédito</Label>
-              <div className="space-y-2 max-w-md">
-                <Label htmlFor="creditRefundSeconds">Devolver o dinheiro não usado ao fim de (segundos)</Label>
-                <Input id="creditRefundSeconds" type="number" step="1" min="0" max="3600" value={creditRefundSeconds} onChange={(e) => setCreditRefundSeconds(Number(e.target.value))} />
-                <p className="text-xs text-muted-foreground">
-                  Se o cliente inserir moedas/notas e deixar o quiosque sem tocar neste tempo, o dinheiro é devolvido pelo hopper.
-                  Cada moeda, nota ou toque no ecrã reinicia a contagem. <strong>0 = nunca devolver.</strong> Por omissão: 120 (2 minutos).
-                  A alteração chega ao quiosque em poucos minutos.
-                </p>
-              </div>
-            </div>
-
-
                   <div className="flex gap-2">
-                    <Button type="submit">Guardar hopper e devolução do crédito</Button>
+                    <Button type="submit">Guardar hopper</Button>
                     <Button type="button" variant="outline" onClick={() => { loadCoinMachineSettings(); toast({ title: 'Revertido', variant: 'success' }) }}>Reverter</Button>
                   </div>
                 </form>

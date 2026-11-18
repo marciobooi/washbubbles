@@ -52,8 +52,77 @@ const TABS = [
   { id: 'wifi', label: 'WiFi', Icon: WifiIcon, scope: 'system' },
   { id: 'payments', label: 'Mbway', Icon: CardIcon, scope: 'system' },
   { id: 'whatsapp', label: 'WhatsApp', Icon: MessageCircle, scope: 'system' },
+  { id: 'credit', label: 'Cartão e crédito', Icon: CardIcon, scope: 'system' },
   { id: 'shutdown', label: 'Desligar PC', Icon: Power, scope: 'system' },
 ]
+
+/** Two settings about the customer's money in the kiosk: save the cash on the card when it is taken out, and give back unused cash. */
+function CreditSettings() {
+  const [autoCharge, setAutoCharge] = useState(false)
+  const [refundSeconds, setRefundSeconds] = useState(120)
+  const [saving, setSaving] = useState(false)
+
+  async function load() {
+    const a = await api.getSetting('autoCharge').catch(() => null)
+    const r = await api.getSetting('creditRefundSeconds').catch(() => null)
+    setAutoCharge(a && a.value ? Boolean(a.value) : false)
+    setRefundSeconds(r && r.value != null ? Number(r.value) : 120)
+  }
+  useEffect(() => { load() }, [])
+
+  async function save(e) {
+    e.preventDefault()
+    if (!Number.isInteger(refundSeconds) || refundSeconds < 0 || refundSeconds > 3600) {
+      toast({ title: 'A devolução automática tem de ser entre 0 e 3600 segundos (0 = nunca devolver)', variant: 'destructive' })
+      return
+    }
+    setSaving(true)
+    try {
+      await api.setSetting({ key: 'autoCharge', value: autoCharge })
+      await api.setSetting({ key: 'creditRefundSeconds', value: refundSeconds })
+      toast({ title: 'Guardado', variant: 'success' })
+      load()
+    } catch (err) {
+      console.error(err)
+      toast({ title: 'Erro ao guardar', variant: 'destructive' })
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Cartão e crédito</CardTitle>
+        <CardDescription>O dinheiro que o cliente deixa no quiosque</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={save} className="space-y-6 max-w-xl">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <input id="autoCharge" type="checkbox" checked={autoCharge} onChange={(e) => setAutoCharge(e.target.checked)} className="w-4 h-4" />
+              <Label htmlFor="autoCharge" className="cursor-pointer">Carregar cartão automaticamente ao remover</Label>
+            </div>
+            <p className="text-xs text-muted-foreground ml-6">Guardar automaticamente o saldo em dinheiro no cartão quando este é removido (vale para moedas e notas)</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="creditRefundSeconds">Devolver o dinheiro não usado ao fim de (segundos)</Label>
+            <Input id="creditRefundSeconds" type="number" step="1" min="0" max="3600" value={refundSeconds} onChange={(e) => setRefundSeconds(Number(e.target.value))} />
+            <p className="text-xs text-muted-foreground">
+              Se o cliente inserir moedas/notas e deixar o quiosque sem tocar neste tempo, o dinheiro é devolvido pelo hopper.
+              Cada moeda, nota ou toque no ecrã reinicia a contagem. <strong>0 = nunca devolver.</strong> Por omissão: 120 (2 minutos).
+              A alteração chega ao quiosque em poucos minutos.
+            </p>
+          </div>
+
+          <div className="flex gap-2">
+            <Button type="submit" disabled={saving}>Guardar</Button>
+            <Button type="button" variant="outline" onClick={() => { load(); toast({ title: 'Revertido', variant: 'success' }) }}>Reverter</Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  )
+}
 
 export default function AdminSettings({ scope = 'website' }){
   const tabs = TABS.filter((t) => t.scope === scope)
@@ -1665,6 +1734,8 @@ export default function AdminSettings({ scope = 'website' }){
       )}
 
       {/* WhatsApp cycle-complete notifications */}
+      {activeTab === 'credit' && <CreditSettings />}
+
       {activeTab === 'shutdown' && <ShutdownScheduleForm />}
 
       {activeTab === 'whatsapp' && (
