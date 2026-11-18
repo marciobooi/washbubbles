@@ -458,7 +458,7 @@ export default function AdminPeripherals() {
       {/* Configuration Modal */}
       {showConfig && selectedPeripheral && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg max-w-5xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold">Configurar {selectedPeripheral.name}</h2>
@@ -542,8 +542,8 @@ export default function AdminPeripherals() {
                   <div className="text-base font-bold text-[#1c2530]">Moedas aceites</div>
             {/* Coin Equivalence Table */}
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-base font-semibold">Tabela de Equivalência de Moedas</Label>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label className="text-base font-semibold whitespace-nowrap">Tabela de Equivalência de Moedas</Label>
                 <div className="flex gap-2">
                   {coinEqTable.length === 0 && (
                     <Button type="button" variant="secondary" size="sm" onClick={loadDefaultCoinMappings}>
@@ -636,8 +636,8 @@ export default function AdminPeripherals() {
                   <div className="text-base font-bold text-[#1c2530]">Notas aceites</div>
             {/* Bill Equivalence Table */}
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-base font-semibold">Tabela de Equivalência de Notas</Label>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label className="text-base font-semibold whitespace-nowrap">Tabela de Equivalência de Notas</Label>
                 <div className="flex gap-2">
                   {billEqTable.length === 0 && (
                     <Button type="button" variant="secondary" size="sm" onClick={loadDefaultBillMappings}>
