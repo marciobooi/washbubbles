@@ -18,12 +18,6 @@ export default function AdminCoupons() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
 
-  // Marketing broadcast state
-  const [optInCount, setOptInCount] = useState(null)
-  const [subject, setSubject] = useState('')
-  const [message, setMessage] = useState('')
-  const [sending, setSending] = useState(false)
-
   async function load() {
     setLoading(true)
     try {
@@ -37,14 +31,7 @@ export default function AdminCoupons() {
     }
   }
 
-  async function loadOptInCount() {
-    try {
-      const { count } = await api.getMarketingOptInCount()
-      setOptInCount(count)
-    } catch (e) { console.warn('loadOptInCount failed', e) }
-  }
-
-  useEffect(() => { load(); loadOptInCount() }, [])
+  useEffect(() => { load() }, [])
 
   async function createCoupon(e) {
     e.preventDefault()
@@ -93,27 +80,9 @@ export default function AdminCoupons() {
     }
   }
 
-  async function sendBroadcast(e) {
-    e.preventDefault()
-    if (!subject.trim() || !message.trim()) return toast({ title: 'Preencha assunto e mensagem', variant: 'destructive' })
-    if (!confirm(`Enviar para ${optInCount ?? '?'} clientes? Esta ação não pode ser desfeita.`)) return
-    setSending(true)
-    try {
-      const res = await api.sendMarketingBroadcast({ subject: subject.trim(), message: message.trim() })
-      toast({ title: `Enviado: ${res.sent} · Falhados: ${res.failed}`, variant: 'success' })
-      setSubject('')
-      setMessage('')
-    } catch (e) {
-      console.error(e)
-      toast({ title: 'Erro ao enviar campanha', variant: 'destructive' })
-    } finally {
-      setSending(false)
-    }
-  }
-
   return (
     <div className="p-4 space-y-4">
-      <h2 className="text-2xl font-bold">Cupões e Marketing</h2>
+      <h2 className="text-2xl font-bold">Cupões</h2>
 
       <Card>
         <CardHeader>
@@ -211,28 +180,6 @@ export default function AdminCoupons() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Campanha por email</CardTitle>
-          <CardDescription>
-            Enviado apenas a clientes que aceitaram receber marketing na compra do cartão.
-            {optInCount != null && <span className="font-medium"> {optInCount} clientes elegíveis.</span>}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={sendBroadcast} className="space-y-3 max-w-xl">
-            <div>
-              <Label htmlFor="broadcast-subject">Assunto</Label>
-              <Input id="broadcast-subject" value={subject} onChange={(e) => setSubject(e.target.value)} />
-            </div>
-            <div>
-              <Label htmlFor="broadcast-message">Mensagem</Label>
-              <textarea id="broadcast-message" className="w-full border rounded p-2 text-sm" rows={5} value={message} onChange={(e) => setMessage(e.target.value)} />
-            </div>
-            <Button type="submit" disabled={sending || !optInCount}>{sending ? 'A enviar…' : 'Enviar campanha'}</Button>
-          </form>
-        </CardContent>
-      </Card>
     </div>
   )
 }
