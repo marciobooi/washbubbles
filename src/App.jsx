@@ -33,7 +33,6 @@ import AdminTransactions from './pages/AdminTransactions'
 import AdminOperations from './pages/AdminOperations'
 import AdminOverview from './pages/AdminOverview'
 import AdminSettings from './pages/AdminSettings'
-import AdminCampaigns from './pages/AdminCampaigns'
 import AdminProfile from './pages/AdminProfile'
 import AdminInterfaces from './pages/AdminInterfaces'
 import AdminPeripherals from './pages/AdminPeripherals'
@@ -746,7 +745,7 @@ function AppInner() {
             <Route path="day-close" element={<AdminDayClose />} />
             <Route path="operations" element={<RequireAdmin roles={['ADMIN', 'SUPERADMIN', 'OPERATOR']}><AdminOperations /></RequireAdmin>} />
             <Route path="settings" element={<RequireAdmin><AdminSettings key="system" scope="system" /></RequireAdmin>} />
-            <Route path="campaigns" element={<RequireAdmin><AdminCampaigns /></RequireAdmin>} />
+            <Route path="campaigns" element={<Navigate to="/admin/coupons" replace />} />
             <Route path="website" element={<RequireAdmin><AdminSettings key="website" scope="website" /></RequireAdmin>} />
             <Route path="audit-log" element={<RequireAdmin><AdminAuditLog /></RequireAdmin>} />
             <Route path="profile" element={<AdminProfile />} />

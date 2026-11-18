@@ -89,7 +89,7 @@ function CampaignEmailCard() {
         <form onSubmit={save} className="space-y-2 max-w-md">
           <Label htmlFor="campaignEmail">Email das campanhas</Label>
           <Input id="campaignEmail" type="email" placeholder="campanhas@exemplo.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-          <p className="text-xs text-muted-foreground">Deixe em branco para usar o email de suporte da loja. A campanha em si escreve-se e envia-se no menu <strong>Campanhas</strong>.</p>
+          <p className="text-xs text-muted-foreground">Deixe em branco para usar o email de suporte da loja. A campanha em si escreve-se e envia-se no menu <strong>Cupões e Campanhas</strong>.</p>
           <Button type="submit" size="sm" disabled={saving || email.trim() === saved}>{saving ? 'A guardar…' : 'Guardar'}</Button>
         </form>
       </CardContent>
@@ -1772,7 +1772,7 @@ export default function AdminSettings({ scope = 'website' }){
             <li><strong>Alertas</strong> (avarias, quiosques offline, máquinas que não arrancam): para o <em>email para alertas</em> abaixo; se estiver vazio, para o <em>email de suporte</em>. Em <em>O que quer receber</em> escolhe-se cada um.</li>
             <li><strong>Relatório de fecho de caixa</strong>: para o mesmo endereço dos alertas, quando se confirma cada fecho. No histórico de fechos, o ícone do envelope reenvia-o e o do olho mostra-o sem enviar.</li>
             <li><strong>Recibos e emails aos clientes</strong>: saem da caixa de email da loja (se estiver configurada) ou da plataforma em nome da loja; as respostas vão para o email de suporte.</li>
-            <li><strong>Campanhas</strong> (menu Campanhas): só para clientes que aceitaram receber marketing. As respostas dos clientes vão para o <em>email das campanhas</em> abaixo.</li>
+            <li><strong>Campanhas</strong> (menu Cupões e Campanhas): só para clientes que aceitaram receber marketing. As respostas dos clientes vão para o <em>email das campanhas</em> abaixo.</li>
           </ul>
           <p className="text-xs text-muted-foreground mt-3">O nome, o logótipo e os contactos que aparecem em todos os emails vêm de Website &gt; Branding e Legal / RGPD.</p>
         </CardContent>

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import MarketingBroadcastCard from '@/components/MarketingBroadcastCard'
 import { shopDate } from '@/lib/shopTime'
 import api from '@/services/api'
 import { toast } from '@/components/ui/Toast'
@@ -82,7 +83,7 @@ export default function AdminCoupons() {
 
   return (
     <div className="p-4 space-y-4">
-      <h2 className="text-2xl font-bold">Cupões</h2>
+      <h2 className="text-2xl font-bold">Cupões e Campanhas</h2>
 
       <Card>
         <CardHeader>
@@ -180,6 +181,8 @@ export default function AdminCoupons() {
         </CardContent>
       </Card>
 
+
+      <MarketingBroadcastCard />
     </div>
   )
 }
