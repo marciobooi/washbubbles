@@ -877,6 +877,25 @@ router.get('/flows/:id', requireStaffRead, async (req, res) => {
   res.json(f)
 })
 
+// Which alerts and reports the admin receives by e-mail: the list (services/alertTypes.js) and what is chosen.
+router.get('/alerts/catalog', requireAdmin, async (req, res) => {
+  const { catalog, effectivePrefs } = await import('../services/alertTypes.js')
+  const row = await withTenant(Setting, req).findOne({ key: 'alerts.prefs' }).lean()
+  res.json({ ...catalog(), prefs: effectivePrefs(row?.value || {}) })
+})
+router.put('/alerts/prefs', requireAdmin, async (req, res) => {
+  const { ALERT_TYPES, effectivePrefs } = await import('../services/alertTypes.js')
+  const { resetAlertPrefsCache } = await import('../services/alerts.js')
+  const given = req.body?.prefs
+  if (!given || typeof given !== 'object') return res.status(400).json({ error: 'prefs is required' })
+  const prefs = {}
+  for (const t of ALERT_TYPES) if (typeof given[t.key] === 'boolean') prefs[t.key] = given[t.key]
+  await withTenant(Setting, req).findOneAndUpdate({ key: 'alerts.prefs' }, { $set: { value: prefs } }, { upsert: true, new: true, setDefaultsOnInsert: true })
+  resetAlertPrefsCache()
+  logAction(req, 'alerts.prefs', 'Setting', 'alerts.prefs', { off: Object.entries(effectivePrefs(prefs)).filter(([, v]) => !v).map(([k]) => k) })
+  res.json({ prefs: effectivePrefs(prefs) })
+})
+
 // The shop's own e-mail identity (support address, optional own mailbox): services/shopMail.js
 router.get('/shop-mail', requireAdmin, async (req, res) => {
   const { getShopMailPublic } = await import('../services/shopMail.js')

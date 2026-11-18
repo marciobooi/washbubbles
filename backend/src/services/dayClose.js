@@ -349,6 +349,8 @@ export async function createDayClose(req, {
     setImmediate(async () => {
       try {
         const to = await dayCloseReportRecipient(tenantId)
+        const { alertEnabled } = await import('./alerts.js')
+        if (to && !(await alertEnabled(tenantId, 'report.dayClose', 'report.dayClose'))) { console.log('[DayClose] report not sent: switched off by the admin'); return }
         if (to) { await sendDayCloseEmail(tenantId, record, to); console.log('[DayClose] report sent by e-mail') }
       } catch (e) { console.error('[DayClose] could not send the report:', e.message) }
     })

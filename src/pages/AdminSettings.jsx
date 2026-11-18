@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import api from '@/services/api'
 import ShopMailForm from '@/components/ShopMailForm'
 import MarketingBroadcastCard from '@/components/MarketingBroadcastCard'
+import AlertPrefsCard from '@/components/AlertPrefsCard'
 import { toast } from '@/components/ui/Toast'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -1729,7 +1730,7 @@ export default function AdminSettings({ scope = 'website' }){
         </CardHeader>
         <CardContent>
           <ul className="text-sm space-y-2 text-slate-700">
-            <li><strong>Alertas</strong> (avarias, quiosques offline, máquinas que não arrancam): para o <em>email para alertas</em> abaixo; se estiver vazio, para o <em>email de suporte</em>.</li>
+            <li><strong>Alertas</strong> (avarias, quiosques offline, máquinas que não arrancam): para o <em>email para alertas</em> abaixo; se estiver vazio, para o <em>email de suporte</em>. Em <em>O que quer receber</em> escolhe-se cada um.</li>
             <li><strong>Relatório de fecho de caixa</strong>: para o mesmo endereço dos alertas, quando se confirma cada fecho. No histórico de fechos, o ícone do envelope reenvia-o e o do olho mostra-o sem enviar.</li>
             <li><strong>Recibos e emails aos clientes</strong>: saem da caixa de email da loja (se estiver configurada) ou da plataforma em nome da loja; as respostas vão para o email de suporte.</li>
             <li><strong>Campanhas</strong>: só para clientes que aceitaram receber marketing.</li>
@@ -1766,6 +1767,7 @@ export default function AdminSettings({ scope = 'website' }){
           </form>
         </CardContent>
       </Card>
+      <AlertPrefsCard />
       <MarketingBroadcastCard />
       </>
       )}

@@ -8,10 +8,32 @@ import { getEmailBrand } from './emailBrand.js'
 import Setting from '../models/setting.js'
 import { sendMail } from './mailer.js'
 import { renderEmailHtml, escapeHtmlMultiline, escapeHtml } from './emailTemplate.js'
+import { alertTypeOf, effectivePrefs } from './alertTypes.js'
 
-export async function sendAlertForTenant(tenantId, subject, message) {
+// What the admin chose to receive (setting alerts.prefs: { key: true|false }), read at most every 30 s per shop.
+const prefsCache = new Map()
+export function resetAlertPrefsCache() { prefsCache.clear() }
+async function savedPrefs(tenantId) {
+  const k = String(tenantId)
+  const hit = prefsCache.get(k)
+  if (hit && Date.now() - hit.at < 30_000) return hit.prefs
+  let prefs = {}
+  try { prefs = (await Setting.findOne({ tenantId, key: 'alerts.prefs' }).lean())?.value || {} } catch { /* the defaults apply */ }
+  prefsCache.set(k, { at: Date.now(), prefs })
+  return prefs
+}
+
+/** Does this shop want this alert (or report)? An alert nobody listed is always sent. */
+export async function alertEnabled(tenantId, subjectOrKey, explicit = null) {
+  const type = alertTypeOf(subjectOrKey, explicit || subjectOrKey)
+  if (!type) return true
+  return effectivePrefs(await savedPrefs(tenantId))[type.key]
+}
+
+export async function sendAlertForTenant(tenantId, subject, message, type = null) {
   try {
     if (!tenantId) return
+    if (!(await alertEnabled(tenantId, subject, type))) { console.log(`[Alerts] "${subject}" not sent: switched off by the admin`); return }
     const rows = await Setting.find({ tenantId, key: { $in: ['alerts.email', 'support.email'] } }).lean()
     const val = (k) => rows.find((r) => r.key === k)?.value
     const to = val('alerts.email') || val('support.email') // the support address is where alerts go unless a separate alerts address is set
@@ -36,6 +58,6 @@ export async function sendAlertForTenant(tenantId, subject, message) {
 }
 
 /** Convenience for use inside a request handler, where `req.tenantId` is already resolved. */
-export async function sendAlert(req, subject, message) {
-  return sendAlertForTenant(req.tenantId, subject, message)
+export async function sendAlert(req, subject, message, type = null) {
+  return sendAlertForTenant(req.tenantId, subject, message, type)
 }

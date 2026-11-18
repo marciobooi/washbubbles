@@ -972,7 +972,7 @@ router.post('/alert', requireKiosk, async (req, res) => {
   const subject = String(req.body?.subject || '').slice(0, 200)
   const message = String(req.body?.message || '').slice(0, 2000)
   if (!subject) return res.status(400).json({ error: 'subject is required' })
-  await sendAlert(req, subject, message)
+  await sendAlert(req, subject, message, 'kiosk.alert')
   res.json({ success: true })
 })
 
