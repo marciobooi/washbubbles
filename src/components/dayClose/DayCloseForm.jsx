@@ -381,19 +381,22 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onPayo
             </div>
           </div>
         )}
+          {/* two boxes of the same height side by side, each with its label above; the explanation is outside, under both */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <MoneyInput
               label="Para o banco"
               value={amountToBank}
               onChange={handleAmountToBank}
               required
-              hint="Automático: todo o dinheiro que os clientes puseram desde o último fecho (vendas e recargas), menos o que já levantou. Pode alterar."
             />
-            <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm self-end">
-              <div className="text-neutral-500">Fica na caixa</div>
-              <div className="text-xl font-extrabold text-neutral-800">{floatLeft !== '' ? fmt(floatLeft) : '0.00'}&euro;</div>
+            <div>
+              <label className="block text-xs font-semibold text-neutral-600 mb-1.5">Fica na caixa</label>
+              <div className="w-full px-3 py-2.5 rounded-xl border border-neutral-200 bg-neutral-50 text-sm font-semibold text-neutral-800 tabular-nums">
+                <span className="text-neutral-400 font-medium mr-2">&euro;</span>{floatLeft !== '' ? fmt(floatLeft) : '0.00'}
+              </div>
             </div>
           </div>
+          <p className="text-[11px] text-neutral-400">Automático: todo o dinheiro que os clientes puseram desde o último fecho (vendas e recargas), menos o que já levantou. Pode alterar. O que não vai para o banco fica na caixa.</p>
           {amountToBank !== '' && parseFloat(amountToBank) > countedCash + 0.005 && (
             <div className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium bg-red-50 border border-red-200 text-red-600">
               {'⚠'} Não pode levar para o banco mais do que contou ({fmt(countedCash)}&euro;)
