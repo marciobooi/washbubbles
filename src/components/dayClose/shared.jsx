@@ -63,7 +63,7 @@ export function CoinChipGrid({ denoms, onChange, readOnly = false, className = '
       <div
         key={d.value}
         onClick={readOnly ? undefined : () => set(i, (d.count || 0) + 1)}
-        className={`select-none relative flex flex-col items-center justify-between rounded-2xl border p-2.5 min-h-[104px] transition
+        className={`select-none relative flex flex-col items-center justify-between rounded-2xl border p-2.5 gap-2 min-h-[96px] transition
           ${readOnly
             ? active ? 'border-primary-300 bg-primary-50' : 'border-neutral-100 bg-neutral-50 opacity-50'
             : `cursor-pointer active:scale-[0.98] ${active ? 'border-primary-400 bg-primary-50 shadow-sm' : 'border-neutral-200 bg-white hover:border-primary-300'}`
@@ -76,26 +76,26 @@ export function CoinChipGrid({ denoms, onChange, readOnly = false, className = '
           {fmtDenomLabel(d.value)}
         </div>
         {readOnly ? (
-          <div className={`text-xl font-extrabold leading-none ${active ? 'text-primary-700' : 'text-neutral-400'}`}>{d.count || 0}</div>
+          <>
+            <div className={`text-xl font-extrabold leading-none ${active ? 'text-primary-700' : 'text-neutral-400'}`}>{d.count || 0}</div>
+            <div className="h-7 text-[11px] text-primary-600 font-medium">{active ? `${fmt(d.value * d.count)}€` : ''}</div>
+          </>
         ) : (
-          // the quantity can be typed (a handful of coins at once) as well as stepped with − and +; tapping the card still adds one
-          <input
-            type="text" inputMode="numeric" pattern="[0-9]*" aria-label={`Quantidade de ${fmtDenomLabel(d.value)}`}
-            value={d.count || 0}
-            onClick={(e) => { e.stopPropagation(); e.target.select() }}
-            onFocus={(e) => e.target.select()}
-            onChange={(e) => set(i, parseInt(e.target.value.replace(/\D/g, '').slice(0, 5), 10) || 0)}
-            className={`w-16 text-center text-xl font-extrabold leading-none bg-transparent rounded-md border border-transparent focus:border-primary-400 focus:bg-white focus:outline-none ${active ? 'text-primary-700' : 'text-neutral-400'}`}
-          />
-        )}
-        {readOnly ? (
-          <div className="h-7 text-[11px] text-primary-600 font-medium">{active ? `${fmt(d.value * d.count)}€` : ''}</div>
-        ) : (
-          <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+          // − [quantity] + on ONE line, the quantity between the two buttons; it can also be typed (a handful of coins at once),
+          // and tapping the card still adds one
+          <div className="flex items-center justify-center gap-1" onClick={e => e.stopPropagation()}>
             <button type="button" aria-label="Diminuir" onClick={() => set(i, (d.count || 0) - 1)}
-              className="w-8 h-8 rounded-lg bg-neutral-100 hover:bg-neutral-200 active:scale-90 text-neutral-600 font-bold">−</button>
+              className="w-8 h-9 shrink-0 rounded-lg bg-neutral-100 hover:bg-neutral-200 active:scale-90 text-neutral-600 font-bold">−</button>
+            <input
+              type="text" inputMode="numeric" pattern="[0-9]*" aria-label={`Quantidade de ${fmtDenomLabel(d.value)}`}
+              value={d.count || 0}
+              onClick={(e) => { e.stopPropagation(); e.target.select() }}
+              onFocus={(e) => e.target.select()}
+              onChange={(e) => set(i, parseInt(e.target.value.replace(/\D/g, '').slice(0, 5), 10) || 0)}
+              className={`w-12 min-w-0 text-center text-xl font-extrabold leading-none bg-transparent rounded-md border border-transparent focus:border-primary-400 focus:bg-white focus:outline-none ${active ? 'text-primary-700' : 'text-neutral-400'}`}
+            />
             <button type="button" aria-label="Aumentar" onClick={() => set(i, (d.count || 0) + 1)}
-              className="w-8 h-8 rounded-lg bg-primary-50 text-primary-700 hover:bg-primary-100 active:scale-90 font-bold">+</button>
+              className="w-8 h-9 shrink-0 rounded-lg bg-primary-50 text-primary-700 hover:bg-primary-100 active:scale-90 font-bold">+</button>
           </div>
         )}
       </div>
