@@ -80,12 +80,13 @@ function RevenueChart({ rangeDays, rangeAvgDaily, rangeMaxDay }) {
   }
 
   return (
-    <Card>
-      <CardContent className="space-y-4">
-        <div className="relative pt-1">
-          <div className="relative flex items-end gap-[3px] h-[104px]">
+    <Card className="h-full flex flex-col">
+      <CardContent className="space-y-4 flex-1 flex flex-col">
+        {/* the bars take all the height the card has (it is stretched to the summary card beside it) */}
+        <div className="relative pt-1 flex-1 flex flex-col min-h-[124px]">
+          <div className="relative flex items-stretch gap-[3px] flex-1">
             {rangeAvgDaily > 0 && (
-              <div className="absolute left-0 right-0 border-t-2 border-dashed border-[#6366f1]/70 pointer-events-none z-[1]" style={{ bottom: `calc(20px + ${(rangeAvgDaily / rangeMaxDay) * 80}px)` }}>
+              <div className="absolute left-0 right-0 border-t-2 border-dashed border-[#6366f1]/70 pointer-events-none z-[1]" style={{ bottom: `calc(20px + ${rangeAvgDaily / rangeMaxDay} * (100% - 20px))` }}>
                 <span className="absolute right-0 -top-4 text-[10px] font-bold text-[#6366f1] bg-white/80 px-1 rounded">média {fmtEuro(rangeAvgDaily)}</span>
               </div>
             )}
