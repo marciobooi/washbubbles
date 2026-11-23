@@ -13,6 +13,7 @@ import api from '@/services/api'
 import { useAuth } from '@/context/AuthContext'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ChevronRight, ChevronDown, AlertTriangle, Check, Search, RefreshCw } from 'lucide-react'
+import { STATUS_BOX } from '@/components/admin/statusBox'
 
 const today = () => shopDayKey()
 const EMPTY_COLS = { machine: '', card: '', method: '__all__', amountMin: '', change: '__all__', timeFrom: '', timeTo: '' }
@@ -341,7 +342,7 @@ export default function AdminTransactions() {
                   <span className={`text-slate-400 flex-shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}>
                     <ChevronRight className="w-4 h-4" />
                   </span>
-                  <span className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 shadow-xs border ${hasError ? 'bg-rose-50 border-rose-200 text-rose-600' : 'bg-slate-100 border-slate-200 text-slate-700'}`}>
+                  <span className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 shadow-xs border ${STATUS_BOX[hasError ? 'error' : 'ok']}`}>
                     {hasError ? <AlertTriangle className="w-4 h-4" /> : <Check className="w-4 h-4" />}
                   </span>
                   <div className="w-24 flex-shrink-0 leading-tight">

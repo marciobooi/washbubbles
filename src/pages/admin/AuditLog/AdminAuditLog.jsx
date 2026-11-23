@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ChevronRight, ChevronDown, RefreshCw, AlertTriangle, Check, Search, Download, ClipboardList, Settings } from 'lucide-react'
+import { STATUS_BOX } from '@/components/admin/statusBox'
 
 const ACTION_LABELS = {
   'transaction.refund': 'Reembolso',
@@ -128,7 +129,7 @@ function AdminActionsPanel() {
                       <span className={`text-slate-400 flex-shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}>
                         <ChevronRight className="w-4 h-4" />
                       </span>
-                      <span className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 shadow-xs border ${hasError ? 'bg-rose-50 border-rose-200 text-rose-600' : 'bg-emerald-50 border-emerald-200 text-emerald-600'}`}>
+                      <span className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 shadow-xs border ${STATUS_BOX[hasError ? 'error' : 'ok']}`}>
                         {hasError ? <AlertTriangle className="w-4 h-4" /> : <Check className="w-4 h-4" />}
                       </span>
                       <div className="w-28 flex-shrink-0 leading-tight">
@@ -283,6 +284,7 @@ function FlowsPanel() {
     : s.type.startsWith('sale') || s.type === 'card_sold' || s.type === 'recharge_done' || s.type === 'mbway_paid' ? 'bg-emerald-600'
     : s.type.startsWith('mbway') ? 'bg-red-400'
     : 'bg-neutral-400')
+  const STATUS_TONE = { done: 'ok', problem: 'error', open: 'warn', interrupted: 'warn' }
   const STATUS_DOT = { done: 'bg-emerald-500', problem: 'bg-rose-500', open: 'bg-amber-400', interrupted: 'bg-amber-500' }
   const STATUS_LABEL = { done: 'Concluído', problem: 'Com problemas', open: 'Em curso', interrupted: 'Interrompido' }
   const KINDS = [['', 'Todos os tipos'], ['machine_payment', 'Máquinas'], ['card_purchase', 'Compra de cartão'], ['recharge', 'Carregamento de cartão'], ['mbway', 'MB WAY'], ['refund', 'Devolução de crédito'], ['admin', 'Staff / admin'], ['card', 'Só cartão'], ['other', 'Outros']]
@@ -424,7 +426,7 @@ function FlowsPanel() {
                   <span className={`text-slate-400 flex-shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}>
                     <ChevronRight className="w-4 h-4" />
                   </span>
-                  <span className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 shadow-xs border ${STATUS_DOT[r.status] ? `bg-${STATUS_DOT[r.status].replace('bg-', '')}/10 border-${STATUS_DOT[r.status].replace('bg-', '')}/20 text-${STATUS_DOT[r.status].replace('bg-', '')}-600` : 'bg-slate-100 border-slate-200 text-slate-700'}`}>
+                  <span className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 shadow-xs border ${STATUS_BOX[STATUS_TONE[r.status] || 'ok']}`}>
                     {STATUS_DOT[r.status] === 'bg-rose-500' ? <AlertTriangle className="w-4 h-4" /> : <Check className="w-4 h-4" />}
                   </span>
                   <div className="w-24 flex-shrink-0 leading-tight">
