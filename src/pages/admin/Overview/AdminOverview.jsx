@@ -63,7 +63,10 @@ function RevenueSummaryCard({ todayRevenue, rangeRevenue, rangeAvgDaily, rangeDa
   )
 }
 
-function RevenueChart({ rangeDays, rangeAvgDaily, rangeMaxDay }) {
+function RevenueChart({ rangeDays, rangeAvgDaily, rangeMaxDay, byMonth = false }) {
+  const unit = byMonth ? 'mensal' : 'diária'
+  const tick = byMonth ? Math.max(1, Math.ceil(rangeDays.length / 10)) : 5
+  const label = (k) => byMonth ? new Date(k + '-01T12:00:00').toLocaleDateString('pt-PT', { month: 'short', year: '2-digit' }).replace(' de ', '/') : fmtDay(k)
   if (rangeDays.length === 0) {
     return (
       <Card>
@@ -101,14 +104,14 @@ function RevenueChart({ rangeDays, rangeAvgDaily, rangeMaxDay }) {
                     <div className="bg-[#6366f1]" style={{ height: h(d.mbway) }} />
                     <div className="bg-primary-500" style={{ height: h(d.cash) }} />
                   </div>
-                  <div className="h-4 text-[10px] text-[#8a8478] whitespace-nowrap">{i % 5 === 0 || i === rangeDays.length - 1 ? fmtDay(d.key) : ''}</div>
+                  <div className="h-4 text-[10px] text-[#8a8478] whitespace-nowrap">{i % tick === 0 || i === rangeDays.length - 1 ? label(d.key) : ''}</div>
                   <div className={`hidden group-hover:block absolute bottom-full mb-1 z-20 w-[210px] ${side} rounded-xl bg-[#1c2530] text-white text-xs p-3 shadow-lg pointer-events-none`}>
-                    <div className="font-bold mb-1.5 capitalize">{weekdayShort(d.key)}, {fmtDay(d.key)} <span className="font-normal opacity-70">· {d.count} vendas</span></div>
+                    <div className="font-bold mb-1.5 capitalize">{byMonth ? monthLabel(d.key) : `${weekdayShort(d.key)}, ${fmtDay(d.key)}`} <span className="font-normal opacity-70">· {d.count} vendas</span></div>
                     <div className="flex justify-between"><span><span className="inline-block w-2 h-2 rounded-sm bg-primary-500 mr-1.5" />Dinheiro</span><b>{fmtEuro(d.cash)}</b></div>
                     <div className="flex justify-between"><span><span className="inline-block w-2 h-2 rounded-sm bg-[#6366f1] mr-1.5" />MB WAY</span><b>{fmtEuro(d.mbway)}</b></div>
                     <div className="flex justify-between"><span><span className="inline-block w-2 h-2 rounded-sm bg-amber-400 mr-1.5" />Cartão (consumo)</span><b>{fmtEuro(d.card)}</b></div>
                     <div className="flex justify-between border-t border-white/20 mt-1.5 pt-1.5"><span>Receita (dinheiro + MB WAY)</span><b>{fmtEuro(d.total)}</b></div>
-                    {vs !== null && <div className="mt-1 opacity-80">{vs >= 0 ? '+' : ''}{vs}% face à média diária ({fmtEuro(rangeAvgDaily)})</div>}
+                    {vs !== null && <div className="mt-1 opacity-80">{vs >= 0 ? '+' : ''}{vs}% face à média {unit} ({fmtEuro(rangeAvgDaily)})</div>}
                     <div className="mt-1 opacity-60">O consumo de cartão já foi contado quando o cartão foi recarregado.</div>
                   </div>
                 </div>
@@ -120,7 +123,7 @@ function RevenueChart({ rangeDays, rangeAvgDaily, rangeMaxDay }) {
           <span className="flex items-center gap-1.5 whitespace-nowrap"><span className="w-[9px] h-[9px] rounded-[3px] bg-primary-500 inline-block" />Dinheiro</span>
           <span className="flex items-center gap-1.5 whitespace-nowrap"><span className="w-[9px] h-[9px] rounded-[3px] bg-[#6366f1] inline-block" />MB WAY</span>
           <span className="flex items-center gap-1.5 whitespace-nowrap"><span className="w-[9px] h-[9px] rounded-[3px] bg-amber-400 inline-block" />Cartão</span>
-          {rangeAvgDaily > 0 && <span className="flex items-center gap-1.5 whitespace-nowrap"><span className="w-4 border-t-2 border-dashed border-[#6366f1] inline-block" />Média diária ({rangeDays.length} dias)</span>}
+          {rangeAvgDaily > 0 && <span className="flex items-center gap-1.5 whitespace-nowrap"><span className="w-4 border-t-2 border-dashed border-[#6366f1] inline-block" />Média {unit} ({rangeDays.length} {byMonth ? 'meses' : 'dias'})</span>}
         </div>
       </CardContent>
     </Card>
@@ -388,6 +391,19 @@ export default function AdminOverview() {
   const rangeAvgDaily = rangeDays.length ? rangeDays.reduce((s, d) => s + d.total, 0) / rangeDays.length : 0
   const rangeMaxDay = Math.max(1, ...rangeDays.map((d) => d.cash + d.card + d.mbway))
 
+  // "Todo" = the whole history: one bar per MONTH (hundreds of daily bars are unreadable)
+  const byMonth = range === 'all'
+  const chartDays = byMonth
+    ? Object.values(rangeDays.reduce((m, d) => {
+        const k = String(d.key).slice(0, 7)
+        const r = m[k] || (m[k] = { key: k, cash: 0, card: 0, mbway: 0, total: 0, count: 0 })
+        r.cash += d.cash; r.card += d.card; r.mbway += d.mbway; r.total += d.total; r.count += d.count || 0
+        return m
+      }, {})).sort((a, b) => a.key.localeCompare(b.key))
+    : rangeDays
+  const chartAvg = chartDays.length ? chartDays.reduce((s, d) => s + d.total, 0) / chartDays.length : 0
+  const chartMax = Math.max(1, ...chartDays.map((d) => d.cash + d.card + d.mbway))
+
   async function exportRevenueCsv() {
     try {
       const blob = await api.exportRevenueCsv()
@@ -449,9 +465,10 @@ export default function AdminOverview() {
         />
 
         <RevenueChart
-          rangeDays={rangeDays}
-          rangeAvgDaily={rangeAvgDaily}
-          rangeMaxDay={rangeMaxDay}
+          rangeDays={chartDays}
+          rangeAvgDaily={chartAvg}
+          rangeMaxDay={chartMax}
+          byMonth={byMonth}
         />
       </div>
 
