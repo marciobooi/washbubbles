@@ -42,6 +42,8 @@ const changeOptions = [
   { value: 'without', label: 'Sem troco' },
 ]
 
+const STATUS_PT = { completed: 'Concluído', done: 'Concluído', failed: 'Falhou', refunded: 'Reembolsado', pending: 'Pendente' }
+
 const methodOptions = [
   { value: '__all__', label: 'Todos os métodos' },
   { value: 'cash', label: 'Dinheiro' },
@@ -161,7 +163,7 @@ export default function AdminTransactions() {
     if (filters.from) filtered = filtered.filter((t) => new Date(t.createdAt) >= shopInstant(filters.from, '00:00:00'))
     if (filters.to) filtered = filtered.filter((t) => new Date(t.createdAt) <= shopInstant(filters.to, '23:59:59', 999))
     if (filters.type && filters.type !== '__all__') filtered = filtered.filter((t) => (t.type || 'payment') === filters.type)
-    if (filters.problems) filtered = filtered.filter((t) => t.status === 'failed' || t.change > 0 || t.items?.some(i => i.status === 'refunded'))
+    if (filters.problems) filtered = filtered.filter((t) => t.status === 'failed' || t.items?.some(i => i.status === 'refunded'))
 
     const hhmm = (t) => shopHHMM(t.createdAt)
     if (cols.timeFrom) filtered = filtered.filter((t) => hhmm(t) >= cols.timeFrom)
@@ -205,7 +207,7 @@ export default function AdminTransactions() {
   }, [tx, filters, cols, sortDir, searchTerm])
 
   const totalShown = filteredGroups.reduce((s, g) => s + g.amount, 0)
-  const problemsCount = tx.filter(t => t.status === 'failed' || t.change > 0).length
+  const problemsCount = tx.filter(t => t.status === 'failed').length
 
   return (
     <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 text-slate-800 font-sans">
@@ -333,7 +335,8 @@ export default function AdminTransactions() {
         ) : (
           filteredGroups.map((g) => {
             const isOpen = Boolean(openItems[g.key])
-            const hasError = g.status === 'failed' || g.change > 0 || g.items.some(i => i.status === 'refunded')
+            // change given back is normal (the hopper paid it); a problem is a failed sale or a refunded item
+            const hasError = g.status === 'failed' || g.items.some(i => i.status === 'refunded')
             const refundable = canRefund && g.type !== 'refund' && g.items.every((i) => i.status !== 'refunded') && g.items.length === 1
 
             return (
@@ -355,7 +358,7 @@ export default function AdminTransactions() {
                       {g.change > 0 ? ` · troco ${money(g.change)}` : ''}
                     </div>
                     <div className="text-xs text-slate-500 mt-0.5">
-                      Tipo: {g.type} {cardLabel(g.items[0]) ? `· Cartão: ${cardLabel(g.items[0])}` : ''}
+                      Tipo: {typeOptions.find((o) => o.value === g.type)?.label || g.type} {cardLabel(g.items[0]) ? `· Cartão: ${cardLabel(g.items[0])}` : ''}
                     </div>
                   </div>
                 </button>
@@ -363,7 +366,7 @@ export default function AdminTransactions() {
                 {isOpen && (
                   <div className="border-t border-slate-100 px-6 sm:px-12 py-5 bg-white space-y-4">
                     <div className="flex flex-wrap items-center gap-x-8 gap-y-2 text-xs text-slate-600 pb-4 border-b border-slate-100">
-                      <div>Estado: <strong className="text-slate-900 font-semibold">{g.status}</strong></div>
+                      <div>Estado: <strong className="text-slate-900 font-semibold">{STATUS_PT[g.status] || g.status}</strong></div>
                       <div>Valor: <strong className="text-slate-900 font-semibold">{money(g.amount)}</strong></div>
                       <div>Inserido: <strong className="text-slate-900 font-semibold">{g.inserted ? money(g.inserted) : '—'}</strong></div>
                       <div>Troco: <strong className="text-slate-900 font-semibold">{g.change ? money(g.change) : '0,00 €'}</strong></div>
