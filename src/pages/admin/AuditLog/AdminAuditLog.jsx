@@ -372,7 +372,7 @@ function FlowsPanel() {
 
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
           <div className="relative w-full sm:max-w-md">
-            <input placeholder="Procurar (cartão, texto…)" value={f.q} onChange={set('q')} className="w-full text-sm rounded-lg border-slate-300 pl-9 pr-4 py-2 focus:border-teal-500 focus:ring-teal-500 focus:ring-1" />
+            <Input placeholder="Procurar (cartão, texto…)" value={f.q} onChange={set('q')} className="pl-9 text-sm" />
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
           </div>
           <label className={`flex items-center gap-2 cursor-pointer select-none border px-3.5 py-1.5 rounded-lg transition self-start sm:self-auto ${f.problems ? 'bg-rose-100 border-rose-300' : 'bg-rose-50 hover:bg-rose-100/80 border-rose-200'}`}>

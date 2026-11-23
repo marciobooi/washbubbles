@@ -240,12 +240,12 @@ export default function AdminTransactions() {
             <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg p-1">
               <div className="flex items-center gap-1.5 px-2">
                 <label className="text-xs text-slate-400 font-medium">De</label>
-                <Input type="date" value={filters.from} onChange={(e) => setFilters(f => ({ ...f, from: e.target.value }))} className="border-0 bg-transparent p-0 text-sm font-medium text-slate-700 focus:ring-0 cursor-pointer h-7 w-32" />
+                <input type="date" value={filters.from} onChange={(e) => setFilters(f => ({ ...f, from: e.target.value }))} className="border-0 bg-transparent p-0 text-sm font-medium text-slate-700 focus:ring-0 cursor-pointer h-7 w-32" />
               </div>
               <span className="text-slate-300 font-light">até</span>
               <div className="flex items-center gap-1.5 px-2 border-l border-slate-200">
                 <label className="text-xs text-slate-400 font-medium">Até</label>
-                <Input type="date" value={filters.to} onChange={(e) => setFilters(f => ({ ...f, to: e.target.value }))} className="border-0 bg-transparent p-0 text-sm font-medium text-slate-700 focus:ring-0 cursor-pointer h-7 w-32" />
+                <input type="date" value={filters.to} onChange={(e) => setFilters(f => ({ ...f, to: e.target.value }))} className="border-0 bg-transparent p-0 text-sm font-medium text-slate-700 focus:ring-0 cursor-pointer h-7 w-32" />
               </div>
             </div>
           </div>
@@ -285,10 +285,10 @@ export default function AdminTransactions() {
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Máquina</label>
-            <Input placeholder="Ex: Secar 8..." value={cols.machine} onChange={(e) => setCols(c => ({ ...c, machine: e.target.value }))} className="bg-slate-50/50 text-sm h-9" />
+            <Input placeholder="Ex: Secar 9..." value={cols.machine} onChange={(e) => setCols(c => ({ ...c, machine: e.target.value }))} className="bg-slate-50/50 text-sm h-9" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">Status / Troco</label>
+            <label className="block text-xs font-medium text-slate-600 mb-1">Troco</label>
             <Select value={cols.change} onValueChange={(v) => setCols(c => ({ ...c, change: v }))}>
               <SelectTrigger className="w-full text-sm bg-slate-50/50">
                 <SelectValue placeholder="Todos" />
@@ -309,7 +309,7 @@ export default function AdminTransactions() {
             <input type="checkbox" checked={filters.problems} onChange={(e) => setFilters(f => ({ ...f, problems: e.target.checked }))} className="w-4 h-4 text-rose-600 rounded border-rose-300 focus:ring-rose-500" />
             <span className="text-xs font-semibold text-rose-800 flex items-center gap-1.5">
               <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
-              Exibir apenas com problemas / troco
+              Exibir apenas com problemas
             </span>
             {problemsCount > 0 && <span className="bg-rose-200 text-rose-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{problemsCount}</span>}
           </label>
