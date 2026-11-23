@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { toast } from '@/components/ui/Toast'
+import { Button } from '@/components/ui/button'
 import api from '@/services/api'
 import DayCloseReceiptModal from './DayCloseReceiptModal'
 import { shopDateTime } from '@/lib/shopTime'
@@ -330,15 +331,33 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onPrev
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {view === 'fecho' && (
-          <div className="flex items-center gap-2" aria-label={`Passo ${step} de 4`}>
-            {['Contar', 'Banco', 'Notas', 'Relatório'].map((t, i) => (
-              <button key={t} type="button" disabled={i + 1 >= step} onClick={() => setStep(i + 1)}
-                className={`flex-1 rounded-xl px-2 py-2 text-xs font-semibold border transition ${i + 1 === step ? 'bg-primary-600 text-white border-primary-600' : i + 1 < step ? 'bg-primary-50 text-primary-700 border-primary-200 hover:bg-primary-100' : 'bg-neutral-50 text-neutral-400 border-neutral-200'}`}>
-                {i + 1}. {t}
-              </button>
-            ))}
-            <span className="text-xs text-neutral-400 whitespace-nowrap">{step} de 4</span>
-          </div>
+          <ol className="flex items-start" aria-label={`Passo ${step} de 4`}>
+            {['Contar', 'Banco', 'Notas', 'Relatório'].map((t, i) => {
+              const n = i + 1
+              const done = n < step
+              const here = n === step
+              return (
+                <li key={t} className="relative flex-1 flex flex-col items-center">
+                  {i > 0 && (
+                    // the line to the left of the dot: grey track, filled (primary) once the step before it is done
+                    <span className="absolute top-4 right-1/2 w-full h-1 -translate-y-1/2 rounded-full bg-neutral-200 overflow-hidden" aria-hidden>
+                      <span className={`block h-full bg-primary-500 transition-all duration-500 ${n <= step ? 'w-full' : 'w-0'}`} />
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    disabled={!done || saving}
+                    onClick={() => setStep(n)}
+                    aria-current={here ? 'step' : undefined}
+                    className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-bold transition-colors ${here ? 'border-primary-600 bg-primary-600 text-white ring-4 ring-primary-100' : done ? 'border-primary-500 bg-primary-500 text-white hover:bg-primary-600' : 'border-neutral-300 bg-white text-neutral-400'}`}
+                  >
+                    {done ? '✓' : n}
+                  </button>
+                  <span className={`mt-1.5 text-xs font-semibold ${here ? 'text-primary-700' : done ? 'text-neutral-600' : 'text-neutral-400'}`}>{t}</span>
+                </li>
+              )
+            })}
+          </ol>
         )}
         <div className={view === 'fecho' && step === 1 ? 'space-y-4' : 'hidden'}>
         <Step number="1" title="Contagem de caixa" subtitle="Conte o dinheiro que está na caixa (notas e moedas)" accent="teal">
@@ -492,8 +511,8 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onPrev
 
         {view === 'fecho' && (
           <div className="flex gap-3">
-            {step > 1 && <button type="button" onClick={() => setStep((n) => n - 1)} disabled={saving} className="abtn abtn-secondary flex-1">Voltar</button>}
-            {step < 4 && <button type="button" onClick={goNext} className="abtn abtn-primary flex-1">Seguinte</button>}
+            {step > 1 && <Button type="button" variant="outline" onClick={() => setStep((n) => n - 1)} disabled={saving} className="flex-1">Voltar</Button>}
+            {step < 4 && <Button type="button" onClick={goNext} className="flex-1">Seguinte</Button>}
           </div>
         )}
       </form>
