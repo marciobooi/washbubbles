@@ -369,6 +369,23 @@ describe('Audit 2026-11', function () {
       expect((await tryPin(`card:${issueStaffToken(tenant._id)}`)).status).to.equal(200)
     })
 
+    it('erasing a master card: only the card that is in the reader and matches the code is wiped', async () => {
+      const mw = coinMachine.middleware
+      const keep = { last: mw.lastCard, blank: coinMachine.blankCardAtReader }
+      let wiped = 0
+      coinMachine.blankCardAtReader = async () => { wiped++; return { code: '1234567890' } }
+      try {
+        mw.lastCard = { cardId: '5550001111', name: 'Joana', balance: '500' } // somebody else's card
+        let err = null
+        await coinMachine.blankStaffCard('1234567890').catch((e) => { err = e })
+        expect(err?.message).to.match(/não é este cartão-mestre/)
+        expect(wiped).to.equal(0)
+        mw.lastCard = { cardId: '1234567890', name: 'Cartão-mestre', balance: '0' }
+        await coinMachine.blankStaffCard('1234567890')
+        expect(wiped).to.equal(1)
+      } finally { mw.lastCard = keep.last; coinMachine.blankCardAtReader = keep.blank }
+    })
+
     it('switched off, no card is a master card', async () => {
       await save({ enabled: false, cards: [{ code: '1234', label: 'Ana' }] })
       const { staffCardFor } = await import('../src/services/staffCards.js')

@@ -1805,6 +1805,27 @@ router.post('/staff-cards/write', requireAdmin, async (req, res) => {
   res.json({ queued: true, commandIds: cmds.map((c) => c._id) })
 })
 
+// POST /admin/staff-cards/blank { code } — wipe a master card in the reader back to a blank card (only that card; nothing else is wiped).
+router.post('/staff-cards/blank', requireAdmin, async (req, res) => {
+  const code = String(req.body?.code || '').trim()
+  if (!code) return res.status(400).json({ error: 'Falta o número do cartão' })
+  const { default: coinMachine } = await import('../services/coinMachine.js')
+  if (coinMachine.running) {
+    try {
+      const r = await coinMachine.blankStaffCard(code)
+      logAction(req, 'staff.card.blanked', 'Card', null, { card: `•••${code.slice(-4)}` })
+      return res.json({ queued: false, ...r })
+    } catch (e) { return res.status(409).json({ error: e.message }) }
+  }
+  const kiosks = await User.find({ tenantId: req.tenantId, role: 'KIOSK' }).select('_id').lean()
+  if (kiosks.length === 0) return res.status(409).json({ error: 'Nenhum quiosque registado para esta loja' })
+  const SyncCommandT = withTenant(SyncCommand, req)
+  const cmds = []
+  for (const k of kiosks) cmds.push(await SyncCommandT.create({ kioskId: k._id, type: 'blank_staff_card', payload: { code } }))
+  logAction(req, 'staff.card.blank_requested', 'Card', null, { card: `•••${code.slice(-4)}` })
+  res.json({ queued: true, commandIds: cmds.map((c) => c._id) })
+})
+
 // GET /admin/commands/:id — state and result of a command queued for the shop.
 router.get('/commands/:id', requireCashStaff, async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.id)) return res.status(400).json({ error: 'Invalid id' })

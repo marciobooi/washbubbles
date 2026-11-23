@@ -174,6 +174,7 @@ class CoinMachine extends EventEmitter {
           },
           blank_card: async () => this.blankCardAtReader(),
           write_staff_card: async () => this.writeStaffCard(),
+          blank_staff_card: async (p) => this.blankStaffCard(p?.code),
           gift_card: async (p) => { const { issueGiftCard } = await import('./giftCard.js'); return issueGiftCard({ tenantId: this.tenantId }, this, { ...p, by: p?.by || 'admin (central)' }) },
           sync_now: async () => { await this.downlink?.pullAll?.(); return { success: true } },
           reinit_hardware: async () => this.reinitHardware('remote'),
@@ -1614,6 +1615,20 @@ class CoinMachine extends EventEmitter {
       await this.auditSystem('staff.card.written', { card: `•••${code.slice(-4)}` })
       return { code }
     } finally { this.staffWriting = false }
+  }
+
+  /** Wipe a master card back to a blank card (to give it to a customer): only if THAT card is the one in the reader. */
+  async blankStaffCard(code) {
+    const want = String(code || '')
+    if (!want) throw new Error('Falta o número do cartão')
+    const until = Date.now() + 45_000
+    while (!this.middleware.lastCard && Date.now() < until) await new Promise((r) => setTimeout(r, 500))
+    const present = this.middleware.lastCard
+    if (!present) throw new Error('Não há nenhum cartão no leitor. Ponha o cartão-mestre no leitor e tente outra vez.')
+    if (String(present.cardId) !== want) throw new Error('O cartão no leitor não é este cartão-mestre: nada foi apagado.')
+    const r = await this.blankCardAtReader()
+    await this.auditSystem('staff.card.blanked', { card: `•••${want.slice(-4)}` })
+    return r
   }
 
   async blankCardAtReader() {

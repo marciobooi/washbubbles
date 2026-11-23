@@ -26,8 +26,6 @@ const STAFF_IDLE_MS = 60_000
 export default function StaffMenu() {
   const { lockFeatureEnabled, lock } = useKioskLock()
   const [showPinPrompt, setShowPinPrompt] = useState(false)
-  const [buttonShown, setButtonShown] = useState(true) // setting kioskStaffButton: the watermark button that asks for the PIN
-  useEffect(() => { api.getPublicSetting('kioskStaffButton').then((r) => setButtonShown(r?.value !== false)).catch(() => {}) }, [])
   const [pinEnabled, setPinEnabled] = useState(true) // setting staffPinEnabled: off = only a master card opens the staff area
   const [pinVisible, setPinVisible] = useState(false) // setting kioskPinVisible: show the digits while they are typed
   useEffect(() => {
@@ -147,7 +145,7 @@ export default function StaffMenu() {
 
   return (
     <>
-      {buttonShown && <button
+      {pinEnabled && <button
         type="button"
         onClick={() => { setPinError(null); setShowPinPrompt(true) }}
         aria-label="Staff"

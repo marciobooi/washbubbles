@@ -440,6 +440,7 @@ export function createApi(config) {
 
   // writes a blank card in the kiosk's reader as a master card: { code } (or { queued, commandIds } from the central server)
   function writeStaffCard() { return request('/admin/staff-cards/write', { method: 'POST', json: {}, expect: 'json' }) }
+  function blankStaffCard(code) { return request('/admin/staff-cards/blank', { method: 'POST', json: { code }, expect: 'json' }) }
   function adminCommand(id) { return request(`/admin/commands/${id}`, { method: 'GET', expect: 'json' }) }
 
   function reinitHardware() {
@@ -825,6 +826,7 @@ export function createApi(config) {
     kioskResetControllerLink,
     adminCommand,
     writeStaffCard,
+    blankStaffCard,
     updateCardProfile,
     blankCardAtReader,
     giftKioskCard,

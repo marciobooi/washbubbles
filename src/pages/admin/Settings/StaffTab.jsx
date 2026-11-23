@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ShieldCheck, Trash2, Plus } from 'lucide-react'
+import { ShieldCheck, Trash2, Plus, Eraser } from 'lucide-react'
 
 function Switch({ checked, onChange, disabled, label }) {
   return (
@@ -24,7 +24,6 @@ export default function StaffTab() {
   const [kioskLockEnabled, setKioskLockEnabled] = useState(false)
   const [savingLockToggle, setSavingLockToggle] = useState(false)
   const [pinVisible, setPinVisible] = useState(false)
-  const [staffButton, setStaffButton] = useState(true)
   const [pinEnabled, setPinEnabled] = useState(true)
   const [cards, setCards] = useState({ enabled: false, cards: [] })
   const [newLabel, setNewLabel] = useState('')
@@ -44,6 +43,30 @@ export default function StaffTab() {
     } finally { setSavingCards(false) }
   }
   const [writing, setWriting] = useState(false)
+  // a command asked of the shop PC through the central server: wait for its answer (the card has 45 s to be put in)
+  async function waitForShop(r) {
+    if (!r.queued) return r
+    toast({ title: 'Pedido enviado à loja', description: 'Ponha o cartão no leitor do quiosque.' })
+    const id = r.commandIds?.[0]
+    for (let i = 0; i < 40; i++) {
+      await new Promise((ok) => setTimeout(ok, 3000))
+      const c = await api.adminCommand(id).catch(() => null)
+      if (c?.status === 'done') return c.result || {}
+      if (c?.status === 'failed') return { error: c.error }
+    }
+    return { error: 'A loja não respondeu a tempo. Veja se o PC está ligado.' }
+  }
+  async function eraseCard(c) {
+    if (!window.confirm(`Apagar o cartão-mestre ${c.label || c.code}? Ponha ESSE cartão no leitor do quiosque. Fica em branco (pode dá-lo a um cliente) e sai da lista.`)) return
+    setWriting(true)
+    try {
+      const r = await waitForShop(await api.blankStaffCard(c.code))
+      if (r.error) throw Object.assign(new Error(r.error), { shown: true })
+      await saveCards({ ...cards, cards: cards.cards.filter((x) => x.code !== c.code) }, 'Cartão apagado: está em branco e saiu da lista')
+    } catch (err) {
+      toast({ title: err?.body?.error || err.message || 'Erro ao apagar o cartão', variant: 'destructive' })
+    } finally { setWriting(false) }
+  }
   async function addCard(e) {
     e.preventDefault()
     if (cards.cards.length >= 10) return toast({ title: 'No máximo 10 cartões-mestre', variant: 'destructive' })
@@ -76,11 +99,6 @@ export default function StaffTab() {
     try { await api.setSetting({ key: 'staffPinEnabled', value: next }); toast({ title: next ? 'Entrada com PIN ligada' : 'Entrada com PIN desligada: só com cartão-mestre', variant: 'success' }) }
     catch (e) { console.error(e); setPinEnabled(!next); toast({ title: 'Erro ao guardar', variant: 'destructive' }) }
   }
-  async function toggleStaffButton(next) {
-    setStaffButton(next)
-    try { await api.setSetting({ key: 'kioskStaffButton', value: next }); toast({ title: next ? 'Botão de staff visível no quiosque' : 'Botão de staff escondido no quiosque', variant: 'success' }) }
-    catch (e) { console.error(e); setStaffButton(!next); toast({ title: 'Erro ao guardar', variant: 'destructive' }) }
-  }
   async function togglePinVisible(next) {
     setPinVisible(next)
     try { await api.setSetting({ key: 'kioskPinVisible', value: next }); toast({ title: next ? 'O PIN passa a ver-se ao escrever' : 'O PIN fica escondido ao escrever', variant: 'success' }) }
@@ -94,8 +112,6 @@ export default function StaffTab() {
       const pv = await api.getSetting('kioskPinVisible').catch(() => null)
       const sc = await api.getSetting('staffCards').catch(() => null)
       setPinVisible(Boolean(pv && pv.value))
-      const sb = await api.getSetting('kioskStaffButton').catch(() => null)
-      setStaffButton(sb?.value !== false)
       const pe = await api.getSetting('staffPinEnabled').catch(() => null)
       setPinEnabled(pe?.value !== false)
       setCards({ enabled: Boolean(sc?.value?.enabled), cards: Array.isArray(sc?.value?.cards) ? sc.value.cards : [] })
@@ -167,7 +183,7 @@ export default function StaffTab() {
         <div className="flex items-start justify-between gap-4 max-w-xl">
           <div>
             <div className="font-medium text-sm">Entrar com PIN</div>
-            <p className="text-xs text-muted-foreground mt-1">Ligado, o staff escreve o PIN no quiosque. Desligado, só entra com um cartão-mestre.</p>
+            <p className="text-xs text-muted-foreground mt-1">Ligado, o staff escreve o PIN no quiosque (a pequena roda dentada no canto do ecrã). Desligado, a roda dentada desaparece e só entra com um cartão-mestre.</p>
           </div>
           <Switch checked={pinEnabled} onChange={togglePinEnabled} label="Entrar com PIN" />
         </div>
@@ -220,14 +236,6 @@ export default function StaffTab() {
 
         </>}
 
-        <div className="border-t pt-4 flex items-start justify-between gap-4 max-w-xl">
-          <div>
-            <div className="font-medium text-sm">Mostrar o botão de staff no quiosque</div>
-            <p className="text-xs text-muted-foreground mt-1">É a pequena roda dentada no canto do ecrã, quase invisível. Escondida, só se entra com um cartão-mestre (ligue-os abaixo antes de esconder).</p>
-          </div>
-          <Switch checked={staffButton} onChange={toggleStaffButton} label="Mostrar o botão de staff" />
-        </div>
-
         <div className="border-t pt-4 space-y-3 max-w-xl">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -239,11 +247,16 @@ export default function StaffTab() {
             </div>
             <Switch checked={cards.enabled} disabled={savingCards} label="Cartões-mestre" onChange={(v) => saveCards({ ...cards, enabled: v }, v ? 'Cartões-mestre ligados' : 'Cartões-mestre desligados')} />
           </div>
+          {cards.enabled && (
+            <>
           {cards.cards.length > 0 && (
             <ul className="divide-y rounded-lg border">
               {cards.cards.map((c) => (
                 <li key={c.code} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
                   <div className="min-w-0"><span className="font-mono">{c.code}</span>{c.label && <span className="ml-2 text-muted-foreground">{c.label}</span>}</div>
+                  <Button type="button" size="sm" variant="ghost" disabled={savingCards || writing} onClick={() => eraseCard(c)} title="Apagar o cartão (fica em branco) e tirar da lista" aria-label={`Apagar o cartão ${c.code}`}>
+                    <Eraser className="h-4 w-4" />
+                  </Button>
                   <Button type="button" size="sm" variant="ghost" disabled={savingCards} aria-label={`Remover ${c.code}`}
                     onClick={() => { if (window.confirm(`Remover o cartão ${c.code}? Deixa de abrir a área de staff.`)) saveCards({ ...cards, cards: cards.cards.filter((x) => x.code !== c.code) }, 'Cartão-mestre removido') }}>
                     <Trash2 className="h-4 w-4" />
@@ -257,6 +270,8 @@ export default function StaffTab() {
             <Button type="submit" size="sm" disabled={savingCards || writing || cards.cards.length >= 10}><Plus className="h-4 w-4" /> {writing ? 'A gravar… ponha o cartão no leitor' : 'Gravar novo cartão-mestre'}</Button>
           </form>
           <p className="text-xs text-muted-foreground">Ponha um cartão em <b>branco</b> no leitor do quiosque e carregue. O cartão fica gravado e entra na lista. Pode ter vários (até 10), um por pessoa.</p>
+            </>
+          )}
         </div>
 
         <div className="border-t pt-4 flex items-start justify-between gap-4 max-w-xl">
