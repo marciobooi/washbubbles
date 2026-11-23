@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ChevronRight, ChevronDown, RefreshCw, AlertTriangle, Check, Search, Download } from 'lucide-react'
+import { ChevronRight, ChevronDown, RefreshCw, AlertTriangle, Check, Search, Download, ClipboardList, Settings } from 'lucide-react'
 
 const ACTION_LABELS = {
   'transaction.refund': 'Reembolso',
@@ -184,24 +184,24 @@ export default function AdminAuditLog() {
         <nav aria-label="Seções de Auditoria" className="flex space-x-2">
           <button
             onClick={() => pick('flows')}
-            className={`group inline-flex items-center gap-2.5 py-3 px-4 text-sm font-semibold border-b-2 transition ${
+            className={`group inline-flex items-center gap-2.5 py-3 px-4 text-sm font-semibold whitespace-nowrap border-b-2 transition ${
               tab === 'flows'
                 ? 'border-teal-600 text-teal-700 bg-teal-50/60 rounded-t-lg'
                 : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
             }`}
           >
-            <span className="w-4 h-4">📋</span>
+            <ClipboardList className="w-4 h-4 shrink-0" />
             <span>Fluxos do Quiosque</span>
           </button>
           <button
             onClick={() => pick('actions')}
-            className={`group inline-flex items-center gap-2.5 py-3 px-4 text-sm font-medium border-b-2 transition ${
+            className={`group inline-flex items-center gap-2.5 py-3 px-4 text-sm font-semibold whitespace-nowrap border-b-2 transition ${
               tab === 'actions'
                 ? 'border-teal-600 text-teal-700 bg-teal-50/60 rounded-t-lg'
                 : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
             }`}
           >
-            <span className="w-4 h-4">⚙️</span>
+            <Settings className="w-4 h-4 shrink-0" />
             <span>Ações de Administração</span>
           </button>
         </nav>
