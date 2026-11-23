@@ -180,31 +180,17 @@ export default function AdminAuditLog() {
         </div>
       </div>
 
-      {/* Segmented Tab Navigation */}
-      <div className="flex items-center justify-between border-b border-slate-200">
-        <nav aria-label="Seções de Auditoria" className="flex space-x-2">
-          <button
-            onClick={() => pick('flows')}
-            className={`group inline-flex items-center gap-2.5 py-3 px-4 text-sm font-semibold whitespace-nowrap border-b-2 transition ${
-              tab === 'flows'
-                ? 'border-teal-600 text-teal-700 bg-teal-50/60 rounded-t-lg'
-                : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
-            }`}
-          >
+      {/* Tabs: the same buttons as the rest of the admin (filled when selected, outlined otherwise) */}
+      <div className="flex items-center justify-between">
+        <nav aria-label="Seções de Auditoria" className="flex flex-wrap gap-2">
+          <Button type="button" size="sm" variant={tab === 'flows' ? 'default' : 'outline'} onClick={() => pick('flows')} className="gap-2" aria-current={tab === 'flows' ? 'page' : undefined}>
             <ClipboardList className="w-4 h-4 shrink-0" />
             <span>Fluxos do Quiosque</span>
-          </button>
-          <button
-            onClick={() => pick('actions')}
-            className={`group inline-flex items-center gap-2.5 py-3 px-4 text-sm font-semibold whitespace-nowrap border-b-2 transition ${
-              tab === 'actions'
-                ? 'border-teal-600 text-teal-700 bg-teal-50/60 rounded-t-lg'
-                : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
-            }`}
-          >
+          </Button>
+          <Button type="button" size="sm" variant={tab === 'actions' ? 'default' : 'outline'} onClick={() => pick('actions')} className="gap-2" aria-current={tab === 'actions' ? 'page' : undefined}>
             <Settings className="w-4 h-4 shrink-0" />
             <span>Ações de Administração</span>
-          </button>
+          </Button>
         </nav>
         <span className="hidden sm:inline-block text-xs text-slate-400">Ambiente de Produção</span>
       </div>
