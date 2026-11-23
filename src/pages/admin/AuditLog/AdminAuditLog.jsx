@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { ChevronRight, ChevronDown, RefreshCw, AlertTriangle, Search, Download } from 'lucide-react'
+import { ChevronRight, ChevronDown, RefreshCw, AlertTriangle, Check, Search, Download } from 'lucide-react'
 
 const ACTION_LABELS = {
   'transaction.refund': 'Reembolso',
@@ -129,7 +129,7 @@ function AdminActionsPanel() {
                         <ChevronRight className="w-4 h-4" />
                       </span>
                       <span className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 shadow-xs border ${hasError ? 'bg-rose-50 border-rose-200 text-rose-600' : 'bg-emerald-50 border-emerald-200 text-emerald-600'}`}>
-                        <AlertTriangle className="w-4 h-4" />
+                        {hasError ? <AlertTriangle className="w-4 h-4" /> : <Check className="w-4 h-4" />}
                       </span>
                       <div className="w-28 flex-shrink-0 leading-tight">
                         <div className="font-mono text-xs font-semibold text-slate-800">{shopTime(e.createdAt)}</div>
@@ -425,7 +425,7 @@ function FlowsPanel() {
                     <ChevronRight className="w-4 h-4" />
                   </span>
                   <span className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 shadow-xs border ${STATUS_DOT[r.status] ? `bg-${STATUS_DOT[r.status].replace('bg-', '')}/10 border-${STATUS_DOT[r.status].replace('bg-', '')}/20 text-${STATUS_DOT[r.status].replace('bg-', '')}-600` : 'bg-slate-100 border-slate-200 text-slate-700'}`}>
-                    {STATUS_DOT[r.status] === 'bg-rose-500' ? <AlertTriangle className="w-4 h-4" /> : <ChevronRight className="w-4 h-4 rotate-90" />}
+                    {STATUS_DOT[r.status] === 'bg-rose-500' ? <AlertTriangle className="w-4 h-4" /> : <Check className="w-4 h-4" />}
                   </span>
                   <div className="w-24 flex-shrink-0 leading-tight">
                     <div className="font-mono text-xs font-semibold text-slate-800">{shopTime(r.startedAt)}</div>
