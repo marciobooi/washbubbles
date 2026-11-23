@@ -35,7 +35,7 @@ export default function ClientsPanel({ data }) {
   ]
   return (
     <div className={CARD_CLASS}>
-      <h3 className="m-0 mb-4 text-[17px] font-extrabold">Clientes (últimos {c.days || 30} dias)</h3>
+      <h3 className="m-0 mb-4 text-[17px] font-extrabold">Clientes (no período: {c.days || 30} {(c.days || 30) === 1 ? 'dia' : 'dias'})</h3>
       <div className="grid gap-8 lg:grid-cols-3">
         <Col title="Cartões novos por mês">
           <div className="flex items-end gap-2 h-[120px]">

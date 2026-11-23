@@ -41,6 +41,8 @@ const monthLabel = (m) => {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
 
+const shiftKey = (key, n) => new Date(new Date(key + 'T12:00:00Z').getTime() + n * 86400e3).toISOString().slice(0, 10)
+
 const weekdayShort = (k) => new Date(k + 'T12:00:00').toLocaleDateString('pt-PT', { weekday: 'short' })
 
 function RevenueSummaryCard({ todayRevenue, rangeRevenue, rangeAvgDaily, rangeDays, exportRevenueCsv }) {
@@ -131,23 +133,14 @@ function RevenueChart({ rangeDays, rangeAvgDaily, rangeMaxDay, byMonth = false }
   )
 }
 
-function RhythmSection({ rhythm, rhythmMonth, months, setRhythmMonth, loadInsights }) {
+function RhythmSection({ rhythm, rangeLabel }) {
   return (
     <Card>
-      <CardHeader className="flex flex-row items-start justify-between">
+      <CardHeader>
         <div>
           <CardTitle className="text-[17px] font-extrabold">Quando trabalha mais</CardTitle>
-          <CardDescription>Ciclos pagos nas máquinas ({rhythmMonth ? monthLabel(rhythmMonth) : 'todo o histórico'}), na hora da loja</CardDescription>
+          <CardDescription>Ciclos pagos nas máquinas ({rangeLabel}), na hora da loja</CardDescription>
         </div>
-        <Select value={rhythmMonth || '__all__'} onValueChange={(v) => setRhythmMonth(v === '__all__' ? '' : v)}>
-          <SelectTrigger className="h-9 w-[200px]">
-            <SelectValue placeholder="Todo o histórico" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="__all__">Todo o histórico</SelectItem>
-            {months.map((m) => <SelectItem key={m} value={m}>{monthLabel(m)}</SelectItem>)}
-          </SelectContent>
-        </Select>
       </CardHeader>
       <CardContent>
         {!rhythm || rhythm.parts.every((p) => !p.cycles) ? (
@@ -186,30 +179,13 @@ function RhythmSection({ rhythm, rhythmMonth, months, setRhythmMonth, loadInsigh
   )
 }
 
-function MachineUsageTable({ machines, month, months, idx, setMonth, insights, totalCycles, totalAdmin, totalMachineRevenue }) {
+function MachineUsageTable({ machines, rangeLabel, insights, totalCycles, totalAdmin, totalMachineRevenue }) {
   return (
     <Card>
-      <CardHeader className="flex flex-row items-start justify-between">
+      <CardHeader>
         <div>
           <CardTitle className="text-[17px] font-extrabold">Utilização das máquinas</CardTitle>
-          <CardDescription>Receita e nº de ciclos por máquina ({month ? monthLabel(month) : 'todo o histórico'})</CardDescription>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Button variant="outline" size="icon" onClick={() => setMonth(months[idx + 1])} disabled={!month || idx >= months.length - 1} aria-label="Mês anterior">
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-          </Button>
-          <Select value={month || '__all__'} onValueChange={(v) => setMonth(v === '__all__' ? '' : v)}>
-            <SelectTrigger className="h-9 w-[200px]">
-              <SelectValue placeholder="Todo o histórico" />
-            </SelectTrigger>
-            <SelectContent>
-              {months.map((m) => <SelectItem key={m} value={m}>{monthLabel(m)}</SelectItem>)}
-              <SelectItem value="__all__">Todo o histórico</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button variant="outline" size="icon" onClick={() => setMonth(months[idx - 1])} disabled={!month || idx <= 0} aria-label="Mês seguinte">
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-          </Button>
+          <CardDescription>Receita e nº de ciclos por máquina ({rangeLabel})</CardDescription>
         </div>
       </CardHeader>
       <CardContent>
@@ -226,7 +202,7 @@ function MachineUsageTable({ machines, month, months, idx, setMonth, insights, t
                   <th className="py-2 px-2.5 font-semibold" title="Ciclos pagos + arranques do admin: quantas vezes a máquina trabalhou">Total ciclos</th>
                   <th className="py-2 px-2.5 font-semibold">Receita</th>
                   <th className="py-2 px-2.5 font-semibold">% da receita</th>
-                  {insights && <th className="py-2 px-2.5 font-semibold">Ocupação (30 dias)</th>}
+                  {insights && <th className="py-2 px-2.5 font-semibold">Ocupação</th>}
                   {insights && <th className="py-2 px-2.5 font-semibold">Último uso</th>}
                 </tr>
               </thead>
@@ -308,70 +284,61 @@ function KiosksCard({ kiosks }) {
 export default function AdminOverview() {
   const [revenue, setRevenue] = useState([])
   const [machines, setMachines] = useState([])
-  const [months, setMonths] = useState([])
-  const [month, setMonth] = useState('')
   const [rhythm, setRhythm] = useState(null)
-  const [rhythmMonth, setRhythmMonth] = useState('')
   const [kiosks, setKiosks] = useState([])
   const [loading, setLoading] = useState(true)
   const [insights, setInsights] = useState(null)
   const [range, setRange] = useState('30')
+  const todayKey = shopDayKey()
+  // the dashboard filter as the days of the shop the server is asked about (Hoje = today; 7 / 30 days = the last N including today; Tudo = everything)
+  const rangeObj = React.useMemo(() => {
+    if (range === 'all') return { all: true }
+    const n = Number(range)
+    return { from: shiftKey(todayKey, -(n - 1)), to: todayKey }
+  }, [range, todayKey])
+  // "Hoje" draws the last 7 days in the chart (to have something to compare it with); the numbers are still today's
+  const revenueRange = range === '1' ? { from: shiftKey(todayKey, -6), to: todayKey } : rangeObj
+  const rangeLabel = range === 'all' ? 'todo o histórico' : range === '1' ? 'hoje' : `últimos ${range} dias`
 
   const loadInsights = React.useCallback(() => {
-    return api.getAnalyticsInsights()
+    return api.getAnalyticsInsights(undefined, rangeObj)
       .then((r) => setInsights(r && typeof r === 'object' ? r : null))
       .catch(() => setInsights(null))
-  }, [])
+  }, [rangeObj])
 
-  useEffect(() => { loadInsights() }, [loadInsights])
+  useEffect(() => { loadInsights() }, [loadInsights]) // again whenever the filter changes
 
+  // kiosks: once
   useEffect(() => {
     let mounted = true
-    async function load() {
-      try {
-        const [rev, mach, kiosk] = await Promise.all([
-          api.getAnalyticsRevenue(),
-          api.getAnalyticsMachineMonths().catch(() => []),
-          api.getKioskHealth().catch(() => []),
-        ])
-        if (!mounted) return
-        setRevenue(Array.isArray(rev) ? rev : [])
-        const list = Array.isArray(mach) ? mach : []
-        setMonths(list)
-        setMonth(list[0] || '')
-        setKiosks(Array.isArray(kiosk) ? kiosk : [])
-      } catch (e) {
-        console.error('Failed to load overview analytics', e)
-        toast({ title: 'Erro ao carregar visão geral', variant: 'destructive' })
-      } finally {
-        if (mounted) setLoading(false)
-      }
-    }
-    load()
+    api.getKioskHealth().catch(() => []).then((k) => { if (mounted) setKiosks(Array.isArray(k) ? k : []) })
     return () => { mounted = false }
   }, [])
 
+  // everything below follows the filter: the days, the machines and the hours of the day are asked again for the range
   useEffect(() => {
     let mounted = true
-    api.getAnalyticsMachines(month || undefined)
-      .then((m) => { if (mounted) setMachines(Array.isArray(m) ? m : []) })
-      .catch(() => { if (mounted) setMachines([]) })
+    Promise.all([
+      api.getAnalyticsRevenue(revenueRange),
+      api.getAnalyticsMachines(undefined, rangeObj).catch(() => []),
+      api.getAnalyticsRhythm(undefined, rangeObj).catch(() => null),
+    ]).then(([rev, mach, rhy]) => {
+      if (!mounted) return
+      setRevenue(Array.isArray(rev) ? rev : [])
+      setMachines(Array.isArray(mach) ? mach : [])
+      setRhythm(rhy)
+    }).catch((e) => {
+      console.error('Failed to load overview analytics', e)
+      toast({ title: 'Erro ao carregar visão geral', variant: 'destructive' })
+    }).finally(() => { if (mounted) setLoading(false) })
     return () => { mounted = false }
-  }, [month])
+  }, [range]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => {
-    let mounted = true
-    api.getAnalyticsRhythm(rhythmMonth || undefined).then((r) => { if (mounted) setRhythm(r) }).catch(() => { if (mounted) setRhythm(null) })
-    return () => { mounted = false }
-  }, [rhythmMonth])
-
-  const idx = months.indexOf(month)
   const totalCycles = machines.reduce((s, m) => s + (m.usageCount || 0), 0)
   const totalAdmin = machines.reduce((s, m) => s + (m.adminStarts || 0), 0)
   const totalMachineRevenue = machines.reduce((s, m) => s + (m.totalRevenue || 0), 0)
 
   const totalRevenue30d = revenue.reduce((s, r) => s + (r.total || 0), 0)
-  const todayKey = shopDayKey()
   const todayRevenue = revenue.find((r) => r._id === todayKey)?.total || 0
 
   const days = (() => {
@@ -379,7 +346,8 @@ export default function AdminOverview() {
     const byKey = new Map(revenue.map((r) => [r._id, r]))
     const out = []
     const end = new Date(todayKey + 'T12:00:00')
-    for (let d = new Date(revenue[0]._id + 'T12:00:00'); d <= end; d.setDate(d.getDate() + 1)) {
+    const startKey = revenueRange.from || revenue[0]._id
+    for (let d = new Date(startKey + 'T12:00:00'); d <= end; d.setDate(d.getDate() + 1)) {
       const k = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
       const r = byKey.get(k) || {}
       out.push({ key: k, cash: r.cash || 0, card: r.card || 0, mbway: r.mbway || 0, total: r.total || 0, count: r.count || 0 })
@@ -387,7 +355,7 @@ export default function AdminOverview() {
     return out
   })()
 
-  const rangeDays = range === 'all' ? days : days.slice(-Number(range))
+  const rangeDays = range === '1' ? days.slice(-1) : days
   const rangeRevenue = rangeDays.reduce((s, d) => s + d.total, 0)
   const rangeAvgDaily = rangeDays.length ? rangeDays.reduce((s, d) => s + d.total, 0) / rangeDays.length : 0
   const rangeMaxDay = Math.max(1, ...rangeDays.map((d) => d.cash + d.card + d.mbway))
@@ -484,13 +452,7 @@ export default function AdminOverview() {
 
       <ControlKpis data={insights} />
 
-      <RhythmSection
-        rhythm={rhythm}
-        rhythmMonth={rhythmMonth}
-        months={months}
-        setRhythmMonth={setRhythmMonth}
-        loadInsights={loadInsights}
-      />
+      <RhythmSection rhythm={rhythm} rangeLabel={rangeLabel} />
 
       {insights && (
         <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-4">
@@ -501,10 +463,7 @@ export default function AdminOverview() {
 
       <MachineUsageTable
         machines={machines}
-        month={month}
-        months={months}
-        idx={idx}
-        setMonth={setMonth}
+        rangeLabel={rangeLabel}
         insights={insights}
         totalCycles={totalCycles}
         totalAdmin={totalAdmin}

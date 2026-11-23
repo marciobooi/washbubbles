@@ -58,7 +58,7 @@ export default function OccupancyHours({ data, onSaved }) {
     <div className={`${CARD_CLASS} flex flex-col gap-3 min-w-0`}>
       <div>
         <h3 className="m-0 mb-0.5 text-[16px] font-extrabold">Ocupação por hora</h3>
-        <p className="m-0 text-xs text-[#8a8478]">Percentagem das máquinas ocupadas em cada hora · últimos {hours.days} dias</p>
+        <p className="m-0 text-xs text-[#8a8478]">Percentagem das máquinas ocupadas em cada hora · no período ({hours.days} {hours.days === 1 ? 'dia' : 'dias'})</p>
       </div>
       <div className="flex items-end gap-[3px] h-[130px]">
         {list.map((x, i) => {

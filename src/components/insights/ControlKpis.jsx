@@ -3,8 +3,8 @@ import { fmtEuro, CARD_CLASS } from './fmt'
 
 function DeltaChip({ pct, previous, unit, partial }) {
   const tip = partial
-    ? `A loja ainda não tinha vendas durante todo o ${unit} anterior, por isso não há uma comparação justa. Aparece quando houver um ${unit} anterior completo.`
-    : `Compara com os mesmos dias da ${unit} anterior (${fmtEuro(previous)}), para ser justo a meio do período.`
+    ? `A loja ainda não tinha vendas durante todo o ${unit} anterior, por isso não há uma comparação justa.`
+    : `Compara com o ${unit} anterior, do mesmo tamanho (${fmtEuro(previous)}).`
   if (pct == null) {
     return <span title={tip} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-[#f1efe9] text-[#8a8478]">sem comparação</span>
   }
@@ -30,11 +30,11 @@ const SMALL = 'text-xs text-[#8a8478]'
 
 export default function ControlKpis({ data }) {
   if (!data) return null
-  const { cardsLiability: cl, revenue, ticket } = data
+  const { cardsLiability: cl, period, ticket } = data
   const idle = cl?.idle
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      <Kpi label="Dinheiro dos clientes nos cartões">
+      <Kpi label="Dinheiro dos clientes nos cartões (agora)">
         <span className={BIG}>{fmtEuro(cl?.total)}</span>
         <span className={SMALL}>{cl?.cards || 0} cartões</span>
         {idle?.cards > 0 && (
@@ -43,15 +43,14 @@ export default function ControlKpis({ data }) {
           </span>
         )}
       </Kpi>
-      <Kpi label="Esta semana">
-        <span className={BIG}>{fmtEuro(revenue?.week?.current)}</span>
-        <div><DeltaChip pct={revenue?.week?.deltaPct} previous={revenue?.week?.previous} partial={revenue?.week?.partial} unit="semana" /></div>
-        <span className={SMALL}>mesmo período da semana anterior: {fmtEuro(revenue?.week?.previous)}</span>
+      <Kpi label="Receita no período">
+        <span className={BIG}>{fmtEuro(period?.revenue?.current)}</span>
+        <div><DeltaChip pct={period?.revenue?.deltaPct} previous={period?.revenue?.previous} partial={period?.revenue?.partial} unit="período" /></div>
+        <span className={SMALL}>{period?.revenue?.previous == null ? 'sem período anterior para comparar' : `período anterior (${period.days} dias): ${fmtEuro(period.revenue.previous)}`}</span>
       </Kpi>
-      <Kpi label="Este mês">
-        <span className={BIG}>{fmtEuro(revenue?.month?.current)}</span>
-        <div><DeltaChip pct={revenue?.month?.deltaPct} previous={revenue?.month?.previous} partial={revenue?.month?.partial} unit="mês" /></div>
-        <span className={SMALL}>mesmo período do mês anterior: {fmtEuro(revenue?.month?.previous)}</span>
+      <Kpi label="Ciclos pagos">
+        <span className={BIG}>{period?.cycles ?? 0}</span>
+        <span className={SMALL}>{data.washDry?.wash?.cycles || 0} lavagens · {data.washDry?.dry?.cycles || 0} secagens · {period?.days || 0} {period?.days === 1 ? 'dia' : 'dias'}</span>
       </Kpi>
       <Kpi label="Ticket médio">
         <span className={BIG}>{fmtEuro(ticket?.perVisit)} <span className="text-sm font-semibold text-[#8a8478]">por visita</span></span>

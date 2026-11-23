@@ -1899,6 +1899,7 @@ router.get('/analytics/revenue', requireStaffRead, async (req, res) => {
   const stats = await withTenant(Sale, req).aggregate([
     { $match: { 
         tenantId: new mongoose.Types.ObjectId(req.tenantId), 
+        status: { $ne: 'refunded' }, // money that went back to the customer is not revenue (the owner's numbers in insights.js agree)
         ...(range.active ? createdAtMatch(range) : { createdAt: { $gte: thirtyDaysAgo } })
     } },
     { $group: {
@@ -1922,7 +1923,7 @@ router.get('/analytics/revenue.csv', requireStaffRead, async (req, res) => {
   const { shopRange, createdAtMatch } = await import('../services/shopRange.js')
   const range = shopRange(req.query)
   const stats = await withTenant(Sale, req).aggregate([
-    { $match: { tenantId: new mongoose.Types.ObjectId(req.tenantId), ...(range.active ? createdAtMatch(range) : { createdAt: { $gte: thirtyDaysAgo } }) } },
+    { $match: { tenantId: new mongoose.Types.ObjectId(req.tenantId), status: { $ne: 'refunded' }, ...(range.active ? createdAtMatch(range) : { createdAt: { $gte: thirtyDaysAgo } }) } },
     { $group: {
         _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: 'Europe/Lisbon' } }, // the shop's day, not UTC's
         // Same rule as the day close: money counts when it comes in. What is spent from a card was counted when the card was loaded.
