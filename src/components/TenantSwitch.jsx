@@ -22,7 +22,7 @@ export default function TenantSwitch() {
         aria-label="Loja"
         value={current}
         onChange={(e) => { if (e.target.value === '__all') { window.location.assign('/admin/tenants'); return } selectTenant(e.target.value === (home?.id || '') ? null : e.target.value || null); window.location.reload() }}
-        className="rounded-full border border-black/[0.12] bg-transparent px-3 h-9 text-sm font-semibold"
+        className="rounded-full border border-black/[0.12] bg-transparent px-3 h-9 text-sm font-semibold transition-colors hover:bg-[#f7f5f1] hover:border-[var(--primary,#0d9488)] focus-visible:outline-2 focus-visible:outline-[var(--primary,#0d9488)]"
       >
         {home?.id && !tenants.some((t) => t._id === home.id) && <option value={home.id}>{home.name}</option>}
         {tenants.map((t) => <option key={t._id} value={t._id}>{t.name}</option>)}

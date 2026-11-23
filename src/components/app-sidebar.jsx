@@ -24,22 +24,32 @@ import {
 // replace) the backend's own per-route guards in routes/admin.js; it only
 // keeps the wrong role from seeing a link that would 403 anyway.
 const navItems = [
-  { title: 'Visão Geral', url: '/admin/overview', Icon: LayoutDashboard, roles: ['ADMIN', 'SUPERADMIN', 'STAFF'] },
-  { title: 'Operações', url: '/admin/operations', Icon: Activity, roles: ['ADMIN', 'SUPERADMIN', 'OPERATOR'] },
-  { title: 'Máquinas', url: '/admin/machines', Icon: Cpu, roles: ['ADMIN', 'SUPERADMIN', 'STAFF', 'TECHNICIAN'] },
-  { title: 'Manutenção', url: '/admin/maintenance', Icon: Wrench, roles: ['ADMIN', 'SUPERADMIN', 'TECHNICIAN'] },
-  { title: 'Interfaces', url: '/admin/interfaces', Icon: PlugZap },
-  { title: 'Periféricos', url: '/admin/peripherals', Icon: Cable },
-  { title: 'Preços', url: '/admin/prices', Icon: Coins },
-  { title: 'Cupões e Campanhas', url: '/admin/coupons', Icon: Tag },
-  { title: 'Cartões', url: '/admin/cards', Icon: Wallet, roles: ['ADMIN', 'SUPERADMIN', 'STAFF'] },
-  { title: 'Utilizadores', url: '/admin/users', Icon: Users },
-  { title: 'Transacções', url: '/admin/transactions', Icon: CreditCard, roles: ['ADMIN', 'SUPERADMIN', 'STAFF'] },
-  { title: 'Fecho de Dia', url: '/admin/day-close', Icon: Banknote, roles: ['ADMIN', 'SUPERADMIN', 'STAFF', 'OPERATOR'] },
-  { title: 'Website', url: '/admin/website', Icon: Globe },
-  { title: 'Definições', url: '/admin/settings', Icon: Settings },
-  { title: 'Auditoria', url: '/admin/audit-log', Icon: ScrollText },
-  { title: 'Lojas', url: '/admin/tenants', Icon: Users, roles: ['SUPERADMIN'] },
+  { id: 'overview', title: 'Visão Geral', url: '/admin/overview', Icon: LayoutDashboard, roles: ['ADMIN', 'SUPERADMIN', 'STAFF'] },
+  { id: 'operations', title: 'Operações', url: '/admin/operations', Icon: Activity, roles: ['ADMIN', 'SUPERADMIN', 'OPERATOR'] },
+  { id: 'machines', title: 'Máquinas', url: '/admin/machines', Icon: Cpu, roles: ['ADMIN', 'SUPERADMIN', 'STAFF', 'TECHNICIAN'] },
+  { id: 'maintenance', title: 'Manutenção', url: '/admin/maintenance', Icon: Wrench, roles: ['ADMIN', 'SUPERADMIN', 'TECHNICIAN'] },
+  { id: 'interfaces', title: 'Interfaces', url: '/admin/interfaces', Icon: PlugZap },
+  { id: 'peripherals', title: 'Periféricos', url: '/admin/peripherals', Icon: Cable },
+  { id: 'prices', title: 'Preços', url: '/admin/prices', Icon: Coins },
+  { id: 'coupons', title: 'Cupões e Campanhas', url: '/admin/coupons', Icon: Tag },
+  { id: 'cards', title: 'Cartões', url: '/admin/cards', Icon: Wallet, roles: ['ADMIN', 'SUPERADMIN', 'STAFF'] },
+  { id: 'users', title: 'Utilizadores', url: '/admin/users', Icon: Users },
+  { id: 'transactions', title: 'Transacções', url: '/admin/transactions', Icon: CreditCard, roles: ['ADMIN', 'SUPERADMIN', 'STAFF'] },
+  { id: 'day-close', title: 'Fecho de Dia', url: '/admin/day-close', Icon: Banknote, roles: ['ADMIN', 'SUPERADMIN', 'STAFF', 'OPERATOR'] },
+  { id: 'website', title: 'Website', url: '/admin/website', Icon: Globe },
+  { id: 'settings', title: 'Definições', url: '/admin/settings', Icon: Settings },
+  { id: 'audit-log', title: 'Auditoria', url: '/admin/audit-log', Icon: ScrollText },
+  { id: 'tenants', title: 'Lojas', url: '/admin/tenants', Icon: Users, roles: ['SUPERADMIN'] },
+]
+
+// Sidebar groups, in order. Empty groups (no visible items for the current
+// role) are skipped, so operators/staff only see the sections that apply.
+const navGroups = [
+  { id: 'geral', label: 'Geral', items: ['overview'] },
+  { id: 'maquina', label: 'Máquina', items: ['operations', 'machines', 'maintenance', 'interfaces', 'peripherals', 'day-close'] },
+  { id: 'negocios', label: 'Negócios', items: ['prices', 'coupons', 'cards', 'transactions'] },
+  { id: 'pessoas', label: 'Pessoas & Acesso', items: ['users', 'tenants'] },
+  { id: 'sistema', label: 'Sistema', items: ['website', 'settings', 'audit-log'] },
 ]
 
 export function AppSidebar(props) {
@@ -53,16 +63,35 @@ export function AppSidebar(props) {
   // have failed (or nothing is configured) the plain gradient mark is shown. Each source is tried once.
   const [failedLogos, setFailedLogos] = React.useState([])
   const logoSrc = [branding?.logo].find((u) => u && !failedLogos.includes(u))
+  const visibleRoles = (i) => (i.roles || ['ADMIN', 'SUPERADMIN']).includes(role)
+
+  const itemsById = new Map(navItems.map((i) => [i.id, i]))
+
   let itemsToRender = navItems
-    .filter(i => (i.roles || ['ADMIN', 'SUPERADMIN']).includes(role))
+    .filter((i) => visibleRoles(i))
     .map((i) => ({ ...i, matchIndices: [] }))
   if (q.length > 0) {
     const fuse = new Fuse(navItems, { keys: ['title'], includeMatches: true, threshold: 0.4 })
     const results = fuse.search(q)
-    itemsToRender = results.map((r) => {
-      const m = r.matches && r.matches.find((x) => x.key === 'title')
-      return { ...r.item, matchIndices: m ? m.indices : [] }
-    })
+    itemsToRender = results
+      .map((r) => {
+        const m = r.matches && r.matches.find((x) => x.key === 'title')
+        return { ...r.item, matchIndices: m ? m.indices : [] }
+      })
+      .filter((i) => visibleRoles(i))
+  }
+
+  const renderMenuItem = (it) => {
+    const isActive = location.pathname === it.url || location.pathname.startsWith(it.url + '/') || location.pathname.startsWith(it.url)
+    return (
+      <SidebarMenuItem key={it.id}>
+        <SidebarMenuButton asChild Icon={it.Icon} title={it.title} isActive={isActive}>
+          <NavLink to={it.url} className="flex items-center gap-2">
+            <span className="min-w-32"><Highlight text={it.title} matches={it.matchIndices} /></span>
+          </NavLink>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    )
   }
 
   return (
@@ -83,24 +112,30 @@ export function AppSidebar(props) {
         </div>
       </SidebarHeader>
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {itemsToRender.map((it) => {
-                const isActive = location.pathname === it.url || location.pathname.startsWith(it.url + '/') || location.pathname.startsWith(it.url)
-                return (
-                  <SidebarMenuItem key={it.title}>
-                    <SidebarMenuButton asChild Icon={it.Icon} title={it.title} isActive={isActive}>
-                      <NavLink to={it.url} className="flex items-center gap-2">
-                        <span className="min-w-32"><Highlight text={it.title} matches={it.matchIndices} /></span>
-                      </NavLink>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {q.length > 0 ? (
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {itemsToRender.map((it) => renderMenuItem(it))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ) : (
+          navGroups.map((group) => {
+            const groupItems = group.items.map((id) => itemsById.get(id)).filter((i) => i && visibleRoles(i))
+            if (groupItems.length === 0) return null
+            return (
+              <SidebarGroup key={group.id}>
+                <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {groupItems.map((it) => renderMenuItem(it))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            )
+          })
+        )}
       </SidebarContent>
       <SidebarRail />
     </Sidebar>

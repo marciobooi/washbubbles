@@ -102,45 +102,13 @@ export default function AdminDayClose() {
           <iframe title="Relatório do fecho" srcDoc={preview.html} sandbox="" className="w-full rounded-lg border border-neutral-200" style={{ height: '78vh' }} />
         )}
       </Modal>
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-heading font-bold text-neutral-800">Fecho de Caixa</h1>
-          {summary && !summaryLoading && (
-            <p className="text-xs text-neutral-400 mt-0.5">
-              Sessao desde {shopDateTime(summary.periodFrom)}
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={() => setFloatModalOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-700 text-xs font-semibold px-3 py-1.5 transition"
-          >
-            <PiggyBank className="w-3.5 h-3.5" strokeWidth={1.8} />
-            Adicionar fundo de caixa
-          </button>
-          <button
-            type="button"
-            onClick={() => setExchangeOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-700 text-xs font-semibold px-3 py-1.5 transition"
-          >
-            Troca de notas por moedas
-          </button>
-          <button
-            type="button"
-            onClick={() => setWithdrawOpen(true)}
-            className="inline-flex items-center gap-1.5 rounded-full border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-700 text-xs font-semibold px-3 py-1.5 transition"
-          >
-            Levantamento
-          </button>
-          {summary && (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold px-3 py-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Sessao ativa
-            </span>
-          )}
-        </div>
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-[#1c2530]">Fecho de Caixa</h1>
+        {summary && !summaryLoading && (
+          <p className="text-sm text-[#8a8478] mt-0.5">
+            Sessao desde {shopDateTime(summary.periodFrom)}
+          </p>
+        )}
       </div>
 
       <CashExchangeModal open={exchangeOpen} onClose={() => setExchangeOpen(false)} onSubmit={(p) => api.exchangeCash(p)} onDone={() => { setExchangeOpen(false); loadSummary(); loadHistory() }} />
@@ -155,13 +123,37 @@ export default function AdminDayClose() {
       />
 
       {/* the three areas of the day close */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
+      <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {[['fecho', 'Fecho'], ['hopper', 'Hopper'], ['historico', 'Histórico de fechos']].map(([id, label]) => (
           <button key={id} type="button" onClick={() => setTab(id)}
-            className={`px-4 py-2.5 text-sm font-semibold rounded-full border whitespace-nowrap transition-colors ${tab === id ? 'bg-emerald-50 border-emerald-300 text-emerald-800 shadow-sm' : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800 hover:border-emerald-200'}`}>
+            className={`px-4 py-2.5 text-sm font-semibold rounded-lg border whitespace-nowrap transition-colors focus-visible:outline-2 focus-visible:outline-[var(--primary,#0d9488)] ${tab === id ? 'bg-[var(--primary,#0d9488)] text-white border-transparent hover:bg-[color-mix(in_srgb,var(--primary,#0d9488)_88%,black)]' : 'bg-white border-black/[0.12] text-neutral-700 hover:bg-white hover:border-[var(--primary,#0d9488)] hover:text-[var(--primary,#0d9488)] active:bg-neutral-50'}`}>
             {label}
           </button>
         ))}
+        <div className="flex items-center gap-2 ml-auto flex-nowrap">
+          <button
+            type="button"
+            onClick={() => setFloatModalOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white hover:bg-white hover:border-[var(--primary,#0d9488)] hover:text-[var(--primary,#0d9488)] text-neutral-700 text-sm font-semibold px-4 py-2.5 transition whitespace-nowrap focus-visible:outline-2 focus-visible:outline-[var(--primary,#0d9488)]"
+          >
+            <PiggyBank className="w-3.5 h-3.5" strokeWidth={1.8} />
+            Adicionar fundo de caixa
+          </button>
+          <button
+            type="button"
+            onClick={() => setExchangeOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white hover:bg-white hover:border-[var(--primary,#0d9488)] hover:text-[var(--primary,#0d9488)] text-neutral-700 text-sm font-semibold px-4 py-2.5 transition whitespace-nowrap focus-visible:outline-2 focus-visible:outline-[var(--primary,#0d9488)]"
+          >
+            Troca de notas por moedas
+          </button>
+          <button
+            type="button"
+            onClick={() => setWithdrawOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white hover:bg-white hover:border-[var(--primary,#0d9488)] hover:text-[var(--primary,#0d9488)] text-neutral-700 text-sm font-semibold px-4 py-2.5 transition whitespace-nowrap focus-visible:outline-2 focus-visible:outline-[var(--primary,#0d9488)]"
+          >
+            Levantamento
+          </button>
+        </div>
       </div>
 
       {tab === 'hopper' && (
@@ -243,7 +235,7 @@ export default function AdminDayClose() {
                       disabled={previewingId === dc._id}
                       title="Ver o relatório deste fecho"
                       aria-label="Ver o relatório deste fecho"
-                      className="shrink-0 px-3 text-neutral-400 hover:text-primary-600 hover:bg-neutral-50 transition disabled:opacity-40"
+                      className="shrink-0 px-3 text-neutral-400 hover:text-[var(--primary,#0d9488)] hover:bg-white rounded-md transition disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-[var(--primary,#0d9488)]"
                     >
                       <Eye className={`h-4 w-4 ${previewingId === dc._id ? 'animate-pulse' : ''}`} />
                     </button>
@@ -255,7 +247,7 @@ export default function AdminDayClose() {
                       disabled={mailingId === dc._id}
                       title="Enviar o relatório deste fecho por email"
                       aria-label="Enviar o relatório deste fecho por email"
-                      className="shrink-0 px-4 text-neutral-400 hover:text-primary-600 hover:bg-neutral-50 transition disabled:opacity-40"
+                      className="shrink-0 px-4 text-neutral-400 hover:text-[var(--primary,#0d9488)] hover:bg-white rounded-md transition disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-[var(--primary,#0d9488)]"
                     >
                       <Mail className={`h-4 w-4 ${mailingId === dc._id ? 'animate-pulse' : ''}`} />
                     </button>
@@ -389,7 +381,7 @@ function AddFloatModal({ open, onClose, onAdded }) {
         <button
           type="submit"
           disabled={saving || total <= 0}
-          className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary-600 hover:bg-primary-700 active:bg-primary-800 text-white font-semibold py-3 text-sm transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+          className="abtn abtn-primary w-full"
         >
           {saving ? 'A guardar...' : `Adicionar ${fmt(total)}€ ao fundo`}
         </button>

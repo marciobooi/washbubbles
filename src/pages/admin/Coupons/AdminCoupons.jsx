@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import MarketingBroadcastCard from '@/components/MarketingBroadcastCard'
 import { shopDate } from '@/lib/shopTime'
 import api from '@/services/api'
+import PageHeader from '@/components/PageHeader'
 import { toast } from '@/components/ui/Toast'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -82,8 +83,8 @@ export default function AdminCoupons() {
   }
 
   return (
-    <div className="p-4 space-y-4">
-      <h2 className="text-2xl font-bold">Cupões e Campanhas</h2>
+    <div className="p-4 md:p-6 space-y-4">
+      <PageHeader title="Cupões e Campanhas" />
 
       <Card>
         <CardHeader>
@@ -123,7 +124,7 @@ export default function AdminCoupons() {
               <Label htmlFor="coupon-expires">Expira em (vazio = nunca)</Label>
               <Input id="coupon-expires" type="date" value={form.expiresAt} onChange={(e) => setForm((f) => ({ ...f, expiresAt: e.target.value }))} />
             </div>
-            <div className="md:col-span-3">
+            <div className="md:col-span-3 flex justify-end">
               <Button type="submit" disabled={saving}>{saving ? 'A criar…' : 'Criar cupão'}</Button>
             </div>
           </form>
@@ -171,7 +172,7 @@ export default function AdminCoupons() {
                       </button>
                     </td>
                     <td className="py-2 pr-4">
-                      <button className="text-red-600" onClick={() => remove(c._id)} title="Remover"><Trash2 className="h-4 w-4" /></button>
+                      <button className="text-red-600 hover:text-[#be123c] hover:bg-[#fff1f2] rounded-md p-1 transition-colors focus-visible:outline-2 focus-visible:outline-red-500" onClick={() => remove(c._id)} title="Remover"><Trash2 className="h-4 w-4" /></button>
                     </td>
                   </tr>
                 ))}

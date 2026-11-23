@@ -73,7 +73,7 @@ export default function ShopMailForm() {
             </div>
           )}
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap justify-end gap-2">
             <Button type="submit" size="sm" disabled={busy === 'save'}>{busy === 'save' ? 'A guardar…' : 'Guardar'}</Button>
             <Button type="button" size="sm" variant="outline" disabled={busy === 'test' || !d.supportEmail} onClick={test}>{busy === 'test' ? 'A enviar…' : 'Enviar email de teste'}</Button>
           </div>

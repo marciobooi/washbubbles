@@ -419,7 +419,7 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onPayo
           <button
             type="submit"
             disabled={saving}
-            className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary-600 hover:bg-primary-700 active:bg-primary-800 text-white font-semibold py-3 text-sm transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+            className="abtn abtn-primary w-full"
           >
             {saving ? (
               <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> A guardar...</>

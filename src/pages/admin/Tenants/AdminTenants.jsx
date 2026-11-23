@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useTenant } from '../context/TenantContext'
-import RequireSuperAdmin from '../components/RequireSuperAdmin'
+import { useTenant } from '@/context/TenantContext'
+import RequireSuperAdmin from '@/components/RequireSuperAdmin'
 import { toast } from '@/components/ui/Toast'
 import Modal from '@/components/ui/Modal'
+import PageHeader from '@/components/PageHeader'
 import api from '@/services/api'
 import { Settings, Plus, Store, Mail, Globe, LogIn, Power, Wifi, WifiOff, CheckCircle2, Circle, RefreshCw, Pencil, X, Download } from 'lucide-react'
 
@@ -131,19 +132,19 @@ export default function AdminTenants() {
   const stores = data?.stores || []
   return (
     <RequireSuperAdmin>
-      <div className="p-4 max-w-5xl">
-        <div className="flex items-center justify-between mb-4 gap-3">
-          <div>
-            <h2 className="text-lg font-semibold">Lojas</h2>
-            <p className="text-sm text-neutral-500">Todas as lojas do sistema. «Gerir» abre o painel dessa loja.</p>
-          </div>
-          <div className="flex gap-2">
-            <button className="abtn" onClick={openPlatform}><Settings /> Plataforma</button>
-            <button className="abtn abtn-primary" onClick={() => { setCreated(null); setCreateOpen(true) }}><Plus /> Criar loja</button>
-          </div>
-        </div>
+      <div className="p-4 md:p-6 max-w-5xl">
+        <PageHeader
+          title="Lojas"
+          subtitle="Todas as lojas do sistema. «Gerir» abre o painel dessa loja."
+          actions={
+            <div className="flex justify-end gap-2">
+              <button className="abtn" onClick={openPlatform}><Settings /> Plataforma</button>
+              <button className="abtn abtn-primary" onClick={() => { setCreated(null); setCreateOpen(true) }}><Plus /> Criar loja</button>
+            </div>
+          }
+        />
 
-        {!data && <div className="p-4 text-sm text-neutral-500">{loadError ? (<>Não foi possível carregar as lojas. <button className="underline" onClick={() => load()}>Tentar de novo</button></>) : 'A carregar…'}</div>}
+        {!data && <div className="p-4 text-sm text-neutral-500">{loadError ? (<>Não foi possível carregar as lojas. <button className="underline hover:text-primary-900 focus-visible:outline-2 focus-visible:outline-primary-500 rounded" onClick={() => load()}>Tentar de novo</button></>) : 'A carregar…'}</div>}
 
         <div className="space-y-3">
           {stores.map((s) => {
@@ -184,7 +185,7 @@ export default function AdminTenants() {
                   </div>
                 )}
 
-                <div className="flex flex-wrap gap-2 mt-3">
+                <div className="flex flex-wrap justify-end gap-2 mt-3">
                   <button className="abtn abtn-sm abtn-primary" onClick={() => manage(s)}><LogIn /> Gerir</button>
                   <button className="abtn abtn-sm" onClick={() => setAddr({ store: s, value: (s.domains || []).join(', ') })}><Pencil /> Endereços</button>
                   {s.domains.length > 0 && <button className="abtn abtn-sm" onClick={() => checkDns(s)}><Globe /> Verificar DNS</button>}

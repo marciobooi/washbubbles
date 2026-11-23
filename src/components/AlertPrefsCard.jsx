@@ -96,7 +96,7 @@ export default function AlertPrefsCard() {
             </div>
           )
         })}
-        <div className="flex gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           <Button type="button" onClick={save} disabled={!dirty || saving}>{saving ? 'A guardar…' : 'Guardar escolhas'}</Button>
           <Button type="button" variant="outline" onClick={() => setPrefs(saved)} disabled={!dirty || saving}>Reverter</Button>
         </div>

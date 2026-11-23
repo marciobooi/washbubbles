@@ -47,7 +47,7 @@ export default function CashWithdrawModal({ open, onClose, onSubmit, onDone, exp
           />
         </label>
         <textarea className="w-full rounded-xl border border-neutral-200 px-4 py-2.5 text-sm resize-none" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Observações (opcional): para o banco, para o dono..." />
-        <button type="submit" disabled={saving || !(value > 0)} className="w-full h-14 rounded-xl bg-primary-600 hover:bg-primary-700 text-white font-bold text-base shadow-sm disabled:opacity-50">
+        <button type="submit" disabled={saving || !(value > 0)} className="abtn abtn-primary w-full">
           {saving ? 'A registar...' : `Registar levantamento de ${value > 0 ? fmt(value) : '0.00'}€`}
         </button>
       </form>

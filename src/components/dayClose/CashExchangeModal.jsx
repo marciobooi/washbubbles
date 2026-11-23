@@ -54,7 +54,7 @@ export default function CashExchangeModal({ open, onClose, onSubmit, onDone }) {
           <span className={`text-sm font-bold ${equal ? 'text-emerald-700' : 'text-amber-700'}`}>{equal ? 'Valores iguais' : totalOut === 0 && totalIn === 0 ? '' : `Diferença ${fmt(Math.abs(totalOut - totalIn))}€`}</span>
         </div>
         <textarea className="w-full rounded-xl border border-neutral-200 px-4 py-2.5 text-sm resize-none" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Observações (opcional)" maxLength={300} />
-        <button type="submit" disabled={saving || !equal} className="w-full h-14 rounded-xl bg-primary-600 hover:bg-primary-700 text-white font-bold text-base shadow-sm disabled:opacity-50">
+        <button type="submit" disabled={saving || !equal} className="abtn abtn-primary w-full">
           {saving ? 'A registar...' : equal ? `Registar troca de ${fmt(totalOut)}€` : 'Os dois lados têm de ter o mesmo valor'}
         </button>
       </form>

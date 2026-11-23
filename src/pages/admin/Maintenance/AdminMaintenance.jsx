@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react'
 import { shopDateTime } from '@/lib/shopTime'
 import api from '@/services/api'
+import PageHeader from '@/components/PageHeader'
 import { toast } from '@/components/ui/Toast'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 export default function AdminMaintenance() {
   const [tickets, setTickets] = useState([])
@@ -12,6 +14,7 @@ export default function AdminMaintenance() {
   const [resolvingId, setResolvingId] = useState(null)
   const [reiniting, setReiniting] = useState(false)
   const [resetting, setResetting] = useState(false)
+  const [keeping, setKeeping] = useState(false)
   const [health, setHealth] = useState(null)
 
   useEffect(() => {
@@ -22,7 +25,6 @@ export default function AdminMaintenance() {
     return () => { alive = false; clearInterval(id) }
   }, [])
 
-  const [keeping, setKeeping] = useState(false)
   async function keepCredit() {
     const v = health?.running !== false && Number.isFinite(health?.credit) ? ` (${health.credit.toFixed(2).replace('.', ',')} €)` : ''
     if (!window.confirm(`O dinheiro inserido e não gasto${v} FICA na máquina: não é devolvido e não fica como crédito. Fica registado como entrada de dinheiro. Continuar?`)) return
@@ -115,8 +117,8 @@ export default function AdminMaintenance() {
   }
 
   return (
-    <div className="p-4 space-y-4">
-      <h2 className="text-2xl font-bold">Manutenção</h2>
+    <div className="p-4 md:p-6 max-w-[1180px] mx-auto space-y-4">
+      <PageHeader title="Manutenção" />
       <Card>
         <CardHeader>
           <CardTitle>Dinheiro inserido no quiosque</CardTitle>
@@ -134,7 +136,7 @@ export default function AdminMaintenance() {
         </CardHeader>
         <CardContent className="space-y-2">
           {health?.silent && <p className="text-sm font-semibold text-red-600">O controlador não responde há {Math.max(1, Math.round((Date.now() - new Date(health.since).getTime()) / 60000))} min — as máquinas não arrancam.</p>}
-          {health && health.running === false && <p className="text-sm text-neutral-500">O estado em direto só aparece no PC da loja; o pedido segue para lá.</p>}
+          {health && health.running === false && <p className="text-sm text-[#8a8478]">O estado em direto só aparece no PC da loja; o pedido segue para lá.</p>}
           <Button disabled={resetting} onClick={resetLink}>{resetting ? 'A pedir…' : 'Reiniciar ligação ao controlador'}</Button>
         </CardContent>
       </Card>
@@ -154,26 +156,31 @@ export default function AdminMaintenance() {
         </CardHeader>
         <CardContent>
           <div className="mb-3">
-            <select className="border p-2 rounded text-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-              <option value="open">Abertas</option>
-              <option value="resolved">Resolvidas</option>
-            </select>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Filtrar" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="open">Abertas</SelectItem>
+                <SelectItem value="resolved">Resolvidas</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {loading ? (
-            <div className="text-sm text-muted-foreground">A carregar…</div>
+            <div className="text-sm text-[#8a8478]">A carregar…</div>
           ) : tickets.length === 0 ? (
-            <div className="text-sm text-muted-foreground text-center p-6">
+            <div className="text-sm text-[#8a8478] text-center p-6">
               {statusFilter === 'open' ? 'Sem avarias abertas.' : 'Sem tickets resolvidos.'}
             </div>
           ) : (
-            <div className="border rounded-lg divide-y">
+            <div className="border rounded-lg divide-y divide-black/[0.06]">
               {tickets.map((t) => (
-                <div key={t._id} className="p-3 flex items-center justify-between gap-4">
+                <div key={t._id} className="p-3 flex items-center justify-between gap-4 hover:bg-neutral-50/50">
                   <div>
                     <div className="font-medium text-sm">{t.machineId?.name || 'Máquina removida'}</div>
-                    <div className="text-xs text-muted-foreground">{t.description}</div>
-                    <div className="text-xs text-muted-foreground mt-1">
+                    <div className="text-xs text-[#8a8478]">{t.description}</div>
+                    <div className="text-xs text-[#8a8478] mt-1">
                       {t.source === 'manual' ? 'Manual' : 'Automático'} · {shopDateTime(t.createdAt)}
                     </div>
                   </div>

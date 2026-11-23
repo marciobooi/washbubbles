@@ -67,7 +67,7 @@ export default function DayCloseReceiptModal({ dc, onEmail, onClose }) {
             type="button"
             onClick={print}
             disabled={printing}
-            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl bg-neutral-100 hover:bg-neutral-200 text-sm font-semibold text-neutral-700 disabled:opacity-50 transition"
+            className="abtn w-full"
           >
             <Printer className="h-4 w-4" />
             {printing ? 'A imprimir…' : 'Imprimir recibo'}
@@ -88,7 +88,7 @@ export default function DayCloseReceiptModal({ dc, onEmail, onClose }) {
               type="button"
               onClick={send}
               disabled={sending}
-              className="px-4 py-2 rounded-xl bg-primary-600 hover:bg-primary-700 active:bg-primary-800 text-white text-sm font-semibold disabled:opacity-50 inline-flex items-center gap-1.5 transition"
+              className="abtn abtn-primary abtn-sm shrink-0"
             >
               <Mail className="h-3.5 w-3.5" />
               {sending ? '...' : 'Enviar'}

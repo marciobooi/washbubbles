@@ -4,8 +4,8 @@ import { AppSidebar } from '@/components/app-sidebar'
 import NavSearch from '@/components/NavSearch'
 import { LogOut, Bell, Sun, Moon, ChevronDown, User, KeyRound } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
-import { useAuth } from '../context/AuthContext'
-import TenantSwitch, { ActingAsStrip } from '../components/TenantSwitch'
+import { useAuth } from '@/context/AuthContext'
+import TenantSwitch, { ActingAsStrip } from '@/components/TenantSwitch'
 import { useNavigate, useLocation, Navigate, Outlet } from 'react-router-dom'
 
 // Light "alabaster" is the design; dark is a re-mapping of its hard-coded colours (see `.admin-dark` in index.css),
@@ -27,7 +27,7 @@ function useTheme() {
 function TopbarIconButton({ className = '', children, ...props }) {
   return (
     <button
-      className={`h-10 w-10 rounded-full border border-black/[0.09] bg-[#f7f5f1] flex items-center justify-center cursor-pointer transition-[background,transform] duration-150 hover:bg-[#eeebe4] hover:scale-[1.06] ${className}`}
+      className={`h-10 w-10 rounded-full border border-black/[0.09] bg-[#f7f5f1] flex items-center justify-center cursor-pointer transition-[background,transform,border-color] duration-150 hover:bg-white hover:border-[var(--primary,#0d9488)] hover:text-[var(--primary,#0d9488)] hover:scale-[1.06] ${className}`}
       {...props}
     >
       {children}
@@ -67,7 +67,7 @@ export default function AdminDashboard() {
           <div className="flex flex-1 flex-col gap-4 min-w-0 px-4 sm:px-6 py-5">
             <ActingAsStrip />
             <header className="sticky top-0 z-20 h-[60px] shrink-0 flex items-center gap-3.5 px-3 sm:px-[18px] rounded-2xl bg-white shadow-[0_1px_2px_rgba(20,25,30,0.04),0_8px_20px_-12px_rgba(20,25,30,0.10)]">
-              <SidebarTrigger className="h-10 w-10 shrink-0 rounded-full border border-black/[0.09] bg-[#f7f5f1] flex items-center justify-center transition-[background,transform] duration-150 hover:bg-[#eeebe4] hover:scale-[1.06]" />
+              <SidebarTrigger className="h-10 w-10 shrink-0 rounded-full border border-black/[0.09] bg-[#f7f5f1] flex items-center justify-center transition-[background,transform,border-color] duration-150 hover:bg-white hover:border-[var(--primary,#0d9488)] hover:text-[var(--primary,#0d9488)] hover:scale-[1.06]" />
 
               <NavSearch className="flex-1 max-w-[380px]" />
               <TenantSwitch />
@@ -79,14 +79,14 @@ export default function AdminDashboard() {
                   <button
                     aria-label="Modo claro"
                     onClick={() => setDark(false)}
-                    className={`h-[34px] w-[34px] rounded-full flex items-center justify-center cursor-pointer transition-colors duration-150 ${!dark ? 'bg-[#f4c451] text-[#3a2c05]' : 'bg-transparent text-[#8a8478]'}`}
+                    className={`h-[34px] w-[34px] rounded-full flex items-center justify-center cursor-pointer transition-colors duration-150 ${!dark ? 'bg-[#f4c451] text-[#3a2c05] hover:bg-[#e8b845]' : 'bg-transparent text-[#8a8478] hover:bg-white hover:text-[var(--primary,#0d9488)]'}`}
                   >
                     <Sun className="h-[15px] w-[15px]" strokeWidth={1.8} />
                   </button>
                   <button
                     aria-label="Modo escuro"
                     onClick={() => setDark(true)}
-                    className={`h-[34px] w-[34px] rounded-full flex items-center justify-center cursor-pointer transition-colors duration-150 ${dark ? 'bg-[#f4c451] text-[#3a2c05]' : 'bg-transparent text-[#8a8478]'}`}
+                    className={`h-[34px] w-[34px] rounded-full flex items-center justify-center cursor-pointer transition-colors duration-150 ${dark ? 'bg-[#f4c451] text-[#3a2c05] hover:bg-[#e8b845]' : 'bg-transparent text-[#8a8478] hover:bg-white hover:text-[var(--primary,#0d9488)]'}`}
                   >
                     <Moon className="h-[15px] w-[15px]" strokeWidth={1.8} />
                   </button>
@@ -98,18 +98,18 @@ export default function AdminDashboard() {
                     aria-haspopup="menu"
                     aria-expanded={menuOpen}
                     onClick={() => setMenuOpen((o) => !o)}
-                    className="flex items-center gap-2 h-10 pl-[10px] pr-3.5 rounded-full border border-black/[0.09] cursor-pointer transition-colors duration-150 hover:bg-[#eeebe4]"
+                    className="flex items-center gap-2 h-10 pl-[10px] pr-3.5 rounded-full border border-black/[0.09] cursor-pointer transition-colors duration-150 hover:bg-white hover:border-[var(--primary,#0d9488)] hover:text-[var(--primary,#0d9488)] group"
                   >
                     <User className="h-[15px] w-[15px]" strokeWidth={1.8} />
-                    <span className="text-[13.5px] font-bold text-[#1c2530]">{username || roleLabel}</span>{username && <span className="text-[11px] text-neutral-500 hidden sm:inline">{roleLabel}</span>}
+                    <span className="text-[13.5px] font-bold text-[#1c2530] group-hover:text-[var(--primary,#0d9488)]">{username || roleLabel}</span>{username && <span className="text-[11px] text-neutral-500 hidden sm:inline">{roleLabel}</span>}
                     <ChevronDown className={`h-[13px] w-[13px] transition-transform ${menuOpen ? 'rotate-180' : ''}`} strokeWidth={2} />
                   </button>
                   {menuOpen && (
                     <div role="menu" className="absolute right-0 top-12 z-50 w-60 rounded-2xl border border-black/[0.09] bg-white p-1.5 shadow-lg">
-                      <button role="menuitem" onClick={() => { setMenuOpen(false); navigate('/admin/profile') }} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#1c2530] hover:bg-[#f5f2ec]">
+                      <button role="menuitem" onClick={() => { setMenuOpen(false); navigate('/admin/profile') }} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#1c2530] hover:bg-[#f5f2ec] hover:text-[var(--primary,#0d9488)]">
                         <KeyRound className="h-4 w-4" strokeWidth={1.8} /> Alterar palavra-passe
                       </button>
-                      <button role="menuitem" onClick={() => { setMenuOpen(false); handleLogout() }} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#1c2530] hover:bg-[#f5f2ec]">
+                      <button role="menuitem" onClick={() => { setMenuOpen(false); handleLogout() }} className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-[14px] font-semibold text-[#1c2530] hover:bg-[#f5f2ec] hover:text-[var(--primary,#0d9488)]">
                         <LogOut className="h-4 w-4" strokeWidth={1.8} /> Sair
                       </button>
                     </div>

@@ -64,7 +64,7 @@ function GlossaryEditor({ onSaved }) {
 
   return (
     <div className="border-t pt-3">
-      <button type="button" className="text-sm font-medium underline text-primary-700" onClick={() => setOpen((o) => !o)}>
+      <button type="button" className="text-sm font-medium underline underline-offset-2 transition-colors hover:text-[var(--primary,#0d9488)] focus-visible:outline-2 focus-visible:outline-[var(--primary,#0d9488)] rounded" onClick={() => setOpen((o) => !o)}>
         {open ? 'Fechar o dicionário' : 'Dicionário de traduções (palavras que o tradutor automático erra)'}
       </button>
       {open && (
@@ -99,7 +99,7 @@ function GlossaryEditor({ onSaved }) {
                           </td>
                         ))}
                         <td className="px-1 text-center">
-                          <button type="button" className="text-red-600 text-base leading-none" onClick={() => removeRow(i)} aria-label={`Apagar linha ${i + 1}`} title="Apagar">×</button>
+                          <button type="button" className="text-red-600 text-base leading-none rounded p-1 transition-colors hover:text-[#be123c] hover:bg-[#fff1f2] focus-visible:outline-2 focus-visible:outline-[#be123c]" onClick={() => removeRow(i)} aria-label={`Apagar linha ${i + 1}`} title="Apagar">×</button>
                         </td>
                       </tr>
                     ))}

@@ -39,8 +39,8 @@ function HoursEditor({ open, close, onSaved }) {
     <div className="flex flex-wrap items-center gap-2 text-xs">
       <label className="flex items-center gap-1">Abre às <input type="number" min={0} max={23} value={Number.isNaN(o) ? '' : o} onChange={(e) => setO(parseInt(e.target.value, 10))} className={inp} />h</label>
       <label className="flex items-center gap-1">Fecha às <input type="number" min={0} max={23} value={Number.isNaN(c) ? '' : c} onChange={(e) => setC(parseInt(e.target.value, 10))} className={inp} />h</label>
-      <button type="button" disabled={!valid || saving} onClick={save} className="h-8 px-3 rounded-full bg-[#0c2b26] text-white font-semibold disabled:opacity-40 cursor-pointer">Guardar</button>
-      <button type="button" onClick={() => setEditing(false)} className="h-8 px-3 rounded-full border border-black/[0.12] bg-white font-semibold cursor-pointer">Cancelar</button>
+      <button type="button" disabled={!valid || saving} onClick={save} className="h-8 px-3 rounded-full bg-[#0c2b26] text-white font-semibold transition-colors hover:bg-[color-mix(in_srgb,#0c2b26_88%,black)] focus-visible:outline-2 focus-visible:outline-[var(--primary,#0d9488)] disabled:opacity-40 cursor-pointer">Guardar</button>
+      <button type="button" onClick={() => setEditing(false)} className="h-8 px-3 rounded-full border border-black/[0.12] bg-white font-semibold transition-colors hover:bg-white hover:border-[var(--primary,#0d9488)] hover:text-[var(--primary,#0d9488)] focus-visible:outline-2 focus-visible:outline-[var(--primary,#0d9488)] cursor-pointer">Cancelar</button>
       {!valid && <span className="text-[#b91c1c]">O fecho tem de ser depois da abertura (0-23).</span>}
     </div>
   )

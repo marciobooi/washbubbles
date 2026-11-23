@@ -60,7 +60,7 @@ export default function ShutdownScheduleForm() {
                   : <span className="text-xs text-muted-foreground">fica ligado</span>}
               </div>
             ))}
-            <div className="px-3 py-2"><button type="button" className="text-xs underline" onClick={copyFirst}>Usar a hora de segunda em todos os dias</button></div>
+            <div className="px-3 py-2 flex justify-end"><button type="button" className="text-xs underline underline-offset-2 transition-colors hover:text-[var(--primary,#0d9488)] focus-visible:outline-2 focus-visible:outline-[var(--primary,#0d9488)] rounded" onClick={copyFirst}>Usar a hora de segunda em todos os dias</button></div>
           </div>
         )}
 

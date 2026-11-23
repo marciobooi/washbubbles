@@ -51,7 +51,7 @@ export default function HopperRefillModal({ open, onClose, onSubmit, onDone, mod
           <span className="text-2xl font-extrabold text-neutral-800">{fmt(total)}&euro;</span>
         </div>
         <textarea className="w-full rounded-xl border border-neutral-200 px-4 py-2.5 text-sm resize-none" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Observações (opcional)" maxLength={300} />
-        <button type="submit" disabled={saving || total <= 0} className="w-full h-14 rounded-xl bg-primary-600 hover:bg-primary-700 text-white font-bold text-base shadow-sm disabled:opacity-50">
+        <button type="submit" disabled={saving || total <= 0} className="abtn abtn-primary w-full">
           {saving ? 'A registar...' : restore ? `Registar reposição de ${fmt(total)}€` : `Adicionar ${fmt(total)}€ ao fundo`}
         </button>
       </form>

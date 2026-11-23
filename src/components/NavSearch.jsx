@@ -74,7 +74,7 @@ export default function NavSearch({ className = '' }) {
     <div ref={ref} className={`relative hidden md:flex items-center ${className}`}>
       <Input
         id="nav-search"
-        placeholder="Search…"
+        placeholder="Pesquisar…"
         className="h-10 w-full rounded-full border-black/[0.09] bg-[#f7f5f1] pl-4 pr-10 text-sm text-[#1c2530] shadow-none focus-visible:ring-2 focus-visible:ring-primary-400/40 focus-visible:border-primary-400"
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
@@ -85,14 +85,14 @@ export default function NavSearch({ className = '' }) {
       </span>
 
       {open && (userMatches.length || machineMatches.length) ? (
-        <div className="absolute left-0 mt-10 w-[28rem] bg-white shadow rounded z-50 p-2">
+        <div className="absolute left-0 mt-10 w-[28rem] bg-white border border-black/[0.09] shadow-lg rounded-2xl z-50 p-1.5">
           {userMatches.length > 0 && (
-            <div className="mb-2">
-              <div className="text-xs uppercase text-muted-foreground mb-1">Users</div>
-              <ul className="divide-y">
+            <div className="mb-1.5">
+              <div className="text-xs uppercase text-muted-foreground mb-1 px-2 pt-1">Users</div>
+              <ul>
                 {userMatches.map(({ item, indices }) => (
-                  <li key={item._id} className="py-1">
-                    <a className="block px-2 py-1 rounded hover:bg-muted/50" href={`/admin/users?u=${item._id}`}>
+                  <li key={item._id}>
+                    <a className="block px-2.5 py-2 rounded-xl text-sm font-medium hover:bg-[#f5f2ec] hover:text-[var(--primary,#0d9488)]" href={`/admin/users?u=${item._id}`}>
                       <Highlight text={item.username} matches={indices} /> <span className="text-xs text-muted-foreground">{item.role}</span>
                     </a>
                   </li>
@@ -103,11 +103,11 @@ export default function NavSearch({ className = '' }) {
 
           {machineMatches.length > 0 && (
             <div>
-              <div className="text-xs uppercase text-muted-foreground mb-1">Machines</div>
-              <ul className="divide-y">
+              <div className="text-xs uppercase text-muted-foreground mb-1 px-2 pt-1">Machines</div>
+              <ul>
                 {machineMatches.map(({ item, indices }) => (
-                  <li key={item._id} className="py-1">
-                    <a className="block px-2 py-1 rounded hover:bg-muted/50" href={`/admin/machines?m=${item._id}`}>
+                  <li key={item._id}>
+                    <a className="block px-2.5 py-2 rounded-xl text-sm font-medium hover:bg-[#f5f2ec] hover:text-[var(--primary,#0d9488)]" href={`/admin/machines?m=${item._id}`}>
                       <Highlight text={item.name} matches={indices} />
                     </a>
                   </li>

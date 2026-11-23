@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react'
 import { shopDateTime } from '@/lib/shopTime'
-import api from '../services/api'
-import { toast } from '../components/ui/Toast'
+import api from '@/services/api'
+import PageHeader from '@/components/PageHeader'
+import { toast } from '@/components/ui/Toast'
+import { SkeletonTable } from '@/components/ui/Skeleton'
+import { Card } from '@/components/ui/card'
 import { CreditCard, Search, RefreshCw, Mail, Phone, User, FileText, X, Calendar, Clock, Plus, Edit2, Save, Gift, Pencil } from 'lucide-react'
-import GiftCardForm from '../components/GiftCardForm'
+import GiftCardForm from '@/components/GiftCardForm'
 
 export default function AdminCards() {
   const [cards, setCards] = useState([])
@@ -225,45 +228,33 @@ export default function AdminCards() {
   }
 
   return (
-    <div className="p-4">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <h2 className="text-lg font-semibold whitespace-nowrap">Cartões de Cliente</h2>
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={blankCard}
-            disabled={blanking}
-            className="abtn abtn-danger"
-          >
-            <X className="h-4 w-4" />
-            {blanking ? 'A apagar…' : 'Limpar cartão no leitor'}
-          </button>
-          <button
-            onClick={() => setGiftOpen(true)}
-            className="abtn"
-          >
-            <Gift className="h-4 w-4" />
-            Cartão de oferta
-          </button>
-          <button
-            onClick={openCreateForm}
-            className="abtn abtn-primary"
-          >
-            <Plus className="h-4 w-4" />
-            Criar Cartão
-          </button>
-          <button
-            onClick={loadCards}
-            className="abtn"
-          >
-            <RefreshCw className="h-4 w-4" />
-            Atualizar
-          </button>
-        </div>
-      </div>
+    <div className="p-4 md:p-6">
+      <PageHeader
+        title="Cartões de Cliente"
+        actions={
+          <div className="flex flex-wrap items-center gap-3">
+            <button onClick={blankCard} disabled={blanking} className="abtn abtn-danger">
+              <X className="h-4 w-4" />
+              {blanking ? 'A apagar…' : 'Limpar cartão no leitor'}
+            </button>
+            <button onClick={() => setGiftOpen(true)} className="abtn">
+              <Gift className="h-4 w-4" />
+              Cartão de oferta
+            </button>
+            <button onClick={openCreateForm} className="abtn abtn-primary">
+              <Plus className="h-4 w-4" />
+              Criar Cartão
+            </button>
+            <button onClick={loadCards} className="abtn">
+              <RefreshCw className="h-4 w-4" />
+              Atualizar
+            </button>
+          </div>
+        }
+      />
 
       {/* Search */}
-      <div className="bg-white rounded shadow p-4 mb-4">
+      <Card className="p-4 mb-4">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input
@@ -274,12 +265,12 @@ export default function AdminCards() {
             className="w-full pl-10 pr-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-primary"
           />
         </div>
-      </div>
+      </Card>
 
       {/* Cards Table */}
-      <div className="bg-white rounded shadow overflow-auto">
+      <Card className="overflow-auto">
         {loading ? (
-          <div className="p-4">A carregar...</div>
+          <SkeletonTable rows={6} cols={5} />
         ) : (
           <table className="min-w-full divide-y text-sm">
             <thead className="bg-muted-foreground/5">
@@ -339,10 +330,10 @@ export default function AdminCards() {
             </tbody>
           </table>
         )}
-      </div>
+      </Card>
 
       {/* Stats Footer */}
-      <div className="bg-white rounded shadow p-4 mt-4">
+      <Card className="p-4 mt-4">
         <div className="grid gap-4 md:grid-cols-3 text-center">
           <div>
             <div className="text-2xl font-bold text-primary">{cards.length}</div>
@@ -361,13 +352,13 @@ export default function AdminCards() {
             <p className="text-sm text-muted-foreground">Com Dados de Cliente</p>
           </div>
         </div>
-      </div>
+      </Card>
 
       {giftOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => !giftBusy && setGiftOpen(false)}>
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-semibold mb-3">Cartão de oferta</h3>
-            <GiftCardForm withDetails busy={giftBusy} onSubmit={issueGift} onCancel={() => setGiftOpen(false)} />
+            <GiftCardForm withDetails busy={giftBusy} buttonClass="abtn" onSubmit={issueGift} onCancel={() => setGiftOpen(false)} />
           </div>
         </div>
       )}
