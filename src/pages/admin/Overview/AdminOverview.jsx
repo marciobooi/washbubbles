@@ -95,17 +95,18 @@ function RevenueChart({ rangeDays, rangeAvgDaily, rangeMaxDay, byMonth = false }
             )}
             {rangeDays.map((d, i) => {
               const h = (n) => `${Math.round((n / rangeMaxDay) * 100)}%`
-              const side = i < 6 ? 'left-0' : i > rangeDays.length - 7 ? 'right-0' : 'left-1/2 -translate-x-1/2'
+              // beside the bar (right of it in the left half, left of it in the right half), from the top of the chart: never above it, where the page header cuts it off
+              const side = i < rangeDays.length / 2 ? 'left-full ml-2' : 'right-full mr-2'
               const vs = rangeAvgDaily > 0 ? Math.round((d.total / rangeAvgDaily - 1) * 100) : null
               return (
                 <div key={d.key} className="group relative flex-1 min-w-0 flex flex-col items-center gap-1">
-                  <div className="flex flex-col justify-end h-20 w-full max-w-[30px] rounded overflow-hidden bg-[#eee9df] group-hover:ring-2 ring-[#6366f1]/40">
+                  <div className="flex flex-col justify-end flex-1 min-h-0 w-full max-w-[30px] rounded overflow-hidden bg-[#eee9df] group-hover:ring-2 ring-[#6366f1]/40">
                     <div className="bg-amber-400" style={{ height: h(d.card) }} />
                     <div className="bg-[#6366f1]" style={{ height: h(d.mbway) }} />
                     <div className="bg-primary-500" style={{ height: h(d.cash) }} />
                   </div>
                   <div className="h-4 text-[10px] text-[#8a8478] whitespace-nowrap">{i % tick === 0 || i === rangeDays.length - 1 ? label(d.key) : ''}</div>
-                  <div className={`hidden group-hover:block absolute bottom-full mb-1 z-20 w-[210px] ${side} rounded-xl bg-[#1c2530] text-white text-xs p-3 shadow-lg pointer-events-none`}>
+                  <div className={`hidden group-hover:block absolute top-0 z-20 w-[210px] ${side} rounded-xl bg-[#1c2530] text-white text-xs p-3 shadow-lg pointer-events-none`}>
                     <div className="font-bold mb-1.5 capitalize">{byMonth ? monthLabel(d.key) : `${weekdayShort(d.key)}, ${fmtDay(d.key)}`} <span className="font-normal opacity-70">· {d.count} vendas</span></div>
                     <div className="flex justify-between"><span><span className="inline-block w-2 h-2 rounded-sm bg-primary-500 mr-1.5" />Dinheiro</span><b>{fmtEuro(d.cash)}</b></div>
                     <div className="flex justify-between"><span><span className="inline-block w-2 h-2 rounded-sm bg-[#6366f1] mr-1.5" />MB WAY</span><b>{fmtEuro(d.mbway)}</b></div>
