@@ -99,7 +99,7 @@ function SummaryPanel({ summary }) {
   )
 }
 
-export default function DayCloseForm({ summary, summaryLoading, onSubmit, onPayoutCoins, onClosed, onEmail, onDone, view = 'fecho', hidden = false }) {
+export default function DayCloseForm({ summary, summaryLoading, onSubmit, onPreview, onPayoutCoins, onClosed, onEmail, onDone, view = 'fecho', hidden = false }) {
   const [countedDenoms, setCountedDenoms]   = useState(buildDenomState(ALL_CASH_DENOMS))
   const [hopperActualDenoms, setHopperActualDenoms] = useState(buildDenomState(COIN_DENOMS))
   const [hopperTargetDenoms, setHopperTargetDenoms] = useState(buildDenomState(COIN_DENOMS))
@@ -212,8 +212,37 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onPayo
     }
   }
 
+  const [step, setStep] = useState(1)
+  const [report, setReport] = useState({ loading: false, html: '', error: '' })
+  const draftPayload = () => ({
+    amountToBank: parseFloat(amountToBank), floatLeft: parseFloat(floatLeft), countedCash,
+    countedDenominations: countedDenoms.filter(d => d.count > 0).map(d => ({ value: d.value, count: d.count })),
+    hopperActualBefore: hopperActualDenoms.filter(d => d.count > 0).map(d => ({ value: d.value, count: d.count })),
+    notes
+  })
+  async function goNext() {
+    if (step === 1 && !(countedCash > 0)) return toast({ title: 'Conte o dinheiro que está na caixa (notas e moedas) antes de seguir', variant: 'destructive' })
+    if (step === 2) {
+      const atb = parseFloat(amountToBank), fl = parseFloat(floatLeft)
+      if (isNaN(atb) || isNaN(fl) || atb < 0) return toast({ title: 'Indique o valor para o banco', variant: 'destructive' })
+      if (atb > countedCash + 0.005) return toast({ title: `Não pode levar para o banco mais do que contou (${fmt(countedCash)}€)`, variant: 'destructive' })
+      if (Math.abs(atb + fl - countedCash) > 0.005) return toast({ title: 'Banco + Fundo não bate com o total contado', variant: 'destructive' })
+    }
+    if (step === 3) {
+      setStep(4)
+      if (onPreview) {
+        setReport({ loading: true, html: '', error: '' })
+        try { const r = await onPreview(draftPayload()); setReport({ loading: false, html: r?.html || '', error: '' }) }
+        catch (err) { setReport({ loading: false, html: '', error: err?.body?.error || 'Não foi possível montar o relatório' }) }
+      }
+      return
+    }
+    setStep((n) => Math.min(4, n + 1))
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
+    if (step < 4) return goNext() // Enter inside a field only moves on; the close is confirmed on the last step
     const atb = parseFloat(amountToBank)
     const fl  = parseFloat(floatLeft)
     if (isNaN(atb) || isNaN(fl)) return toast({ title: 'Indique o valor para o banco', variant: 'destructive' })
@@ -251,6 +280,7 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onPayo
         notes
       })
       toast({ title: 'Sessao fechada com sucesso!' })
+      setStep(1); setReport({ loading: false, html: '', error: '' })
       setAmountToBank(''); setFloatLeft(''); setNotes('')
       setCountedDenoms(buildDenomState(ALL_CASH_DENOMS))
       hopperLoadedRef.current = false
@@ -299,7 +329,18 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onPayo
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className={view === 'fecho' ? 'space-y-4' : 'hidden'}>
+        {view === 'fecho' && (
+          <div className="flex items-center gap-2" aria-label={`Passo ${step} de 4`}>
+            {['Contar', 'Banco', 'Notas', 'Relatório'].map((t, i) => (
+              <button key={t} type="button" disabled={i + 1 >= step} onClick={() => setStep(i + 1)}
+                className={`flex-1 rounded-xl px-2 py-2 text-xs font-semibold border transition ${i + 1 === step ? 'bg-primary-600 text-white border-primary-600' : i + 1 < step ? 'bg-primary-50 text-primary-700 border-primary-200 hover:bg-primary-100' : 'bg-neutral-50 text-neutral-400 border-neutral-200'}`}>
+                {i + 1}. {t}
+              </button>
+            ))}
+            <span className="text-xs text-neutral-400 whitespace-nowrap">{step} de 4</span>
+          </div>
+        )}
+        <div className={view === 'fecho' && step === 1 ? 'space-y-4' : 'hidden'}>
         <Step number="1" title="Contagem de caixa" subtitle="Conte o dinheiro que está na caixa (notas e moedas)" accent="teal">
           {summary && (
             <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-900">
@@ -364,7 +405,7 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onPayo
           </>
         )}
 
-        <div className={view === 'fecho' ? 'space-y-4' : 'hidden'}>
+        <div className={view === 'fecho' && step === 2 ? 'space-y-4' : 'hidden'}>
         <Step number="2" title="Para o banco" subtitle="O que retira da caixa agora; o resto fica na caixa e o hopper gere-se no menu Hopper" accent="emerald">
         {countedCash > 0 && (
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 space-y-3">
@@ -406,8 +447,10 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onPayo
             </div>
           )}
         </Step>
+        </div>
 
-        <Step number="3" title="Notas e confirmacao" accent="violet">
+        <div className={view === 'fecho' && step === 3 ? 'space-y-4' : 'hidden'}>
+        <Step number="3" title="Notas" subtitle="Observações opcionais sobre este fecho" accent="violet">
           <textarea
             className="w-full rounded-xl border border-neutral-200 px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-400 text-neutral-700 placeholder-neutral-300"
             rows={3}
@@ -416,19 +459,43 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onPayo
             placeholder="Observacoes opcionais sobre este fecho..."
             maxLength={500}
           />
-          <button
-            type="submit"
-            disabled={saving}
-            className="abtn abtn-primary w-full"
-          >
+        </Step>
+        </div>
+
+        <div className={view === 'fecho' && step === 4 ? 'space-y-4' : 'hidden'}>
+        <Step number="4" title="Relatório e confirmação" subtitle="É o relatório que fica registado e segue por e-mail. Confira e feche a caixa" accent="emerald">
+          {onPreview ? (
+            report.loading ? (
+              <div className="flex items-center gap-3 text-neutral-400 text-sm py-6"><div className="w-4 h-4 rounded-full border-2 border-neutral-300 border-t-primary-500 animate-spin" /> A montar o relatório...</div>
+            ) : report.error ? (
+              <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600">{report.error}</div>
+            ) : report.html ? (
+              <iframe title="Relatório do fecho" sandbox="" srcDoc={report.html} className="w-full h-[70vh] rounded-xl border border-neutral-200 bg-white" />
+            ) : null
+          ) : (
+            <div className="rounded-xl bg-neutral-50 border border-neutral-100 px-4 py-3 text-sm space-y-1">
+              <div>Total contado: <strong>{fmt(countedCash)}&euro;</strong>{summary && <> (esperado {fmt(expectedCash)}&euro;)</>}</div>
+              <div>Para o banco: <strong>{fmt(parseFloat(amountToBank) || 0)}&euro;</strong></div>
+              <div>Fica na caixa: <strong>{fmt(parseFloat(floatLeft) || 0)}&euro;</strong></div>
+              {summary && countedCash > 0 && <DiscrepancyPill value={discrepancy} />}
+            </div>
+          )}
+          <button type="submit" disabled={saving || report.loading} className="abtn abtn-primary w-full">
             {saving ? (
               <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> A guardar...</>
             ) : (
-              'Confirmar Fecho de Sessao'
+              'Fechar caixa'
             )}
           </button>
         </Step>
         </div>
+
+        {view === 'fecho' && (
+          <div className="flex gap-3">
+            {step > 1 && <button type="button" onClick={() => setStep((n) => n - 1)} disabled={saving} className="abtn abtn-secondary flex-1">Voltar</button>}
+            {step < 4 && <button type="button" onClick={goNext} className="abtn abtn-primary flex-1">Seguinte</button>}
+          </div>
+        )}
       </form>
     </div>
   )

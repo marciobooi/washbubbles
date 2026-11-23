@@ -495,6 +495,11 @@ export function createApi(config) {
     return request('/admin/day-close/adjust-float', { method: 'POST', json: payload, expect: 'json' });
   }
 
+  // the report of the close being filled in (nothing saved): { html, subject }
+  function previewDayCloseReport(payload) {
+    return request('/admin/day-close/preview-report', { method: 'POST', json: payload, expect: 'json' });
+  }
+
   function getDayCloseReport(id) {
     return request(`/admin/day-close/${id}/report`, { expect: 'json' });
   }
@@ -832,6 +837,7 @@ export function createApi(config) {
     emptyKioskHopper,
     emailDayCloseReceipt,
     getDayCloseReport,
+    previewDayCloseReport,
 
     // Tenants
     getTenants,

@@ -175,6 +175,7 @@ export default function AdminDayClose() {
         summary={summary}
         summaryLoading={summaryLoading}
         onSubmit={(payload) => api.createDayClose(payload)}
+        onPreview={(payload) => api.previewDayCloseReport(payload)}
         onPayoutCoins={(amount) => api.payoutBankCoins({ amount })}
         onClosed={() => { loadSummary(); loadHistory() }}
         onEmail={(id, email) => api.emailDayCloseReceipt(id, email)}

@@ -28,6 +28,20 @@ describe('Day-close report e-mail', function () {
     await DayClose.create({ tenantId: tenant._id, source: 'dashboard', openingFloat: 120, floatLeft: 120, countedCash: 120, expectedCash: 120, periodFrom: t0, periodTo: t0, createdAt: t0 })
   }
 
+  it('the draft report (wizard step 4) renders before the close exists and writes nothing', async () => {
+    await seedDay()
+    const DayClose = (await import('../src/models/dayClose.js')).default
+    const before = await DayClose.countDocuments({})
+    const res = await request(app).post('/api/admin/day-close/preview-report').set('Authorization', `Bearer ${signToken(admin)}`)
+      .send({ countedCash: 200, amountToBank: 80, floatLeft: 120 })
+    expect(res.status).to.equal(200)
+    expect(res.body.html).to.include('data:image/png;base64')
+    expect(await DayClose.countDocuments({})).to.equal(before)
+    const bad = await request(app).post('/api/admin/day-close/preview-report').set('Authorization', `Bearer ${signToken(admin)}`)
+      .send({ countedCash: 200, amountToBank: 10, floatLeft: 10 })
+    expect(bad.status).to.equal(400)
+  })
+
   it('a confirmed close builds the report: big numbers, split by payment and service, two inline charts', async () => {
     await seedDay()
     const { getDayCloseSummary } = await import('../src/services/dayClose.js')

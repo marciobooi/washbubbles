@@ -223,7 +223,7 @@ function cleanDenoms(arr) {
 export async function createDayClose(req, {
   amountToBank, floatLeft, countedCash,
   countedDenominations = [], coinMechanismInventory = [], hopperActualBefore = [], hopperCoins = [],
-  notes, bankBreakdown = null
+  notes, bankBreakdown = null, preview = false
 }) {
   if (amountToBank == null || floatLeft == null) {
     return { status: 400, body: { error: 'amountToBank and floatLeft are required' } }
@@ -243,7 +243,8 @@ export async function createDayClose(req, {
   // separate records. A per-tenant lock serialises the whole sequence; the
   // lock itself IS atomic (a single-document update against a unique index),
   // so this holds even without a replica set / multi-document transactions.
-  const gotLock = await acquireLock(req.tenantId, 'day-close')
+  // a preview (the wizard's report step) writes nothing, so it needs no lock
+  const gotLock = preview ? true : await acquireLock(req.tenantId, 'day-close')
   if (!gotLock) {
     return { status: 409, body: { error: 'A cash session close is already in progress for this site. Please try again in a few seconds.' } }
   }
@@ -296,7 +297,7 @@ export async function createDayClose(req, {
     // already guarantees only one request executes this whole
     // read-compute-write sequence at a time, regardless of which surface
     // (dashboard or kiosk) it came from.
-    const dc = await DayCloseT.create({
+    const fields = {
       source: 'dashboard',
       openingFloat,
       floatAdded,
@@ -329,7 +330,9 @@ export async function createDayClose(req, {
       periodTo,
       // how the deposit was made up: whole notes by hand + coins paid out of the hopper (what it really paid, which can be less than asked)
       ...(bankBreakdown && typeof bankBreakdown === 'object' ? { metadata: { bank: { notes: cleanDenoms(bankBreakdown.notes), coins: roundMoney(Number(bankBreakdown.coins) || 0), coinsAsked: roundMoney(Number(bankBreakdown.coinsAsked) || 0) } } } : {})
-    })
+    }
+    if (preview) return { status: 200, body: new DayClose({ ...fields, tenantId: req.tenantId }).toObject() }
+    const dc = await DayCloseT.create(fields)
 
     // Tag every sale this close actually covered so the association survives
     // independent of the timestamp-range logic used to compute it — an auditor
@@ -357,7 +360,7 @@ export async function createDayClose(req, {
 
     return { status: 200, body: dc }
   } finally {
-    await releaseLock(req.tenantId, 'day-close')
+    if (!preview) await releaseLock(req.tenantId, 'day-close')
   }
 }
 
@@ -632,6 +635,18 @@ export async function previewDayCloseReport(req, id) {
   let html = renderEmailHtml({ title: 'Fecho de caixa', preheader: r.subject, bodyHtml: r.html, brand, bare: true })
   for (const a of r.attachments) html = html.split(`cid:${a.cid}`).join(`data:image/png;base64,${a.content.toString('base64')}`)
   return { status: 200, body: { html, subject: r.subject } }
+}
+
+/** The report of a close that is not saved yet (the wizard's last step): the same numbers the close would write, nothing written. */
+export async function previewDraftDayCloseReport(req, body) {
+  const r = await createDayClose(req, { ...body, preview: true })
+  if (r.status !== 200) return r
+  const { buildDayCloseReport } = await import('./dayCloseReport.js')
+  const brand = await getEmailBrand(req.tenantId)
+  const rep = await buildDayCloseReport(r.body, brand)
+  let html = renderEmailHtml({ title: 'Fecho de caixa', preheader: rep.subject, bodyHtml: rep.html, brand, bare: true })
+  for (const a of rep.attachments) html = html.split(`cid:${a.cid}`).join(`data:image/png;base64,${a.content.toString('base64')}`)
+  return { status: 200, body: { html, subject: rep.subject } }
 }
 
 export async function emailDayCloseReceipt(req, id, email) {
