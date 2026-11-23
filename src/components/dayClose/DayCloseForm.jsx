@@ -100,7 +100,7 @@ function SummaryPanel({ summary }) {
   )
 }
 
-export default function DayCloseForm({ summary, summaryLoading, onSubmit, onPreview, onPayoutCoins, onClosed, onEmail, onDone, view = 'fecho', hidden = false }) {
+export default function DayCloseForm({ summary, summaryLoading, onSubmit, onPreview, onEmptyHopper, emptying, onPayoutCoins, onClosed, onEmail, onDone, view = 'fecho', hidden = false }) {
   const [countedDenoms, setCountedDenoms]   = useState(buildDenomState(ALL_CASH_DENOMS))
   const [hopperActualDenoms, setHopperActualDenoms] = useState(buildDenomState(COIN_DENOMS))
   const [hopperTargetDenoms, setHopperTargetDenoms] = useState(buildDenomState(COIN_DENOMS))
@@ -381,6 +381,12 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onPrev
               </div>
             )}
           </div>
+          {onEmptyHopper && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50/60 px-4 py-3">
+              <p className="text-xs text-rose-900 flex-1 min-w-[12rem]"><b>Moedas do hopper</b>: para as contar, o hopper larga todas no tabuleiro. Ponha um recipiente por baixo.</p>
+              <Button type="button" variant="outline" disabled={emptying} onClick={onEmptyHopper} className="border-rose-300 text-rose-700 hover:bg-rose-100 hover:text-rose-800">{emptying ? 'A esvaziar…' : 'Esvaziar hopper'}</Button>
+            </div>
+          )}
         </Step>
 
         </div>

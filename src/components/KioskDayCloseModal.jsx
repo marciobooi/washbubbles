@@ -114,6 +114,8 @@ export default function KioskDayCloseModal({ open, onClose, pin }) {
         view={tab}
         summary={summary}
         summaryLoading={summaryLoading}
+        onEmptyHopper={emptyHopper}
+        emptying={emptying}
         onSubmit={(payload) => api.createKioskDayClose({ ...payload, pin }, { apiKey: getKioskApiKey() })}
         onPayoutCoins={(amount) => api.payoutBankCoinsKiosk({ amount, pin }, { apiKey: getKioskApiKey() })}
         onClosed={() => { loadSummary() }}
