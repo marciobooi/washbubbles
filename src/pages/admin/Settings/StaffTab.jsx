@@ -25,6 +25,7 @@ export default function StaffTab() {
   const [savingLockToggle, setSavingLockToggle] = useState(false)
   const [pinVisible, setPinVisible] = useState(false)
   const [staffButton, setStaffButton] = useState(true)
+  const [pinEnabled, setPinEnabled] = useState(true)
   const [cards, setCards] = useState({ enabled: false, cards: [] })
   const [newLabel, setNewLabel] = useState('')
   const [savingCards, setSavingCards] = useState(false)
@@ -69,6 +70,12 @@ export default function StaffTab() {
       toast({ title: err?.body?.error || err.message || 'Erro ao gravar o cartão', variant: 'destructive' })
     } finally { setWriting(false) }
   }
+  async function togglePinEnabled(next) {
+    if (!next && !(cards.enabled && cards.cards.length) && !window.confirm('Não há cartões-mestre ligados: sem PIN, ninguém entra na área de staff do quiosque. Desligar mesmo assim?')) return
+    setPinEnabled(next)
+    try { await api.setSetting({ key: 'staffPinEnabled', value: next }); toast({ title: next ? 'Entrada com PIN ligada' : 'Entrada com PIN desligada: só com cartão-mestre', variant: 'success' }) }
+    catch (e) { console.error(e); setPinEnabled(!next); toast({ title: 'Erro ao guardar', variant: 'destructive' }) }
+  }
   async function toggleStaffButton(next) {
     setStaffButton(next)
     try { await api.setSetting({ key: 'kioskStaffButton', value: next }); toast({ title: next ? 'Botão de staff visível no quiosque' : 'Botão de staff escondido no quiosque', variant: 'success' }) }
@@ -89,6 +96,8 @@ export default function StaffTab() {
       setPinVisible(Boolean(pv && pv.value))
       const sb = await api.getSetting('kioskStaffButton').catch(() => null)
       setStaffButton(sb?.value !== false)
+      const pe = await api.getSetting('staffPinEnabled').catch(() => null)
+      setPinEnabled(pe?.value !== false)
       setCards({ enabled: Boolean(sc?.value?.enabled), cards: Array.isArray(sc?.value?.cards) ? sc.value.cards : [] })
       setAdminPin('')
       setPinIsSet(Boolean(pin && pin.isSet))
@@ -155,6 +164,15 @@ export default function StaffTab() {
         <CardDescription>PIN de staff e bloqueio de ecrã do quiosque durante manutenção</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
+        <div className="flex items-start justify-between gap-4 max-w-xl">
+          <div>
+            <div className="font-medium text-sm">Entrar com PIN</div>
+            <p className="text-xs text-muted-foreground mt-1">Ligado, o staff escreve o PIN no quiosque. Desligado, só entra com um cartão-mestre.</p>
+          </div>
+          <Switch checked={pinEnabled} onChange={togglePinEnabled} label="Entrar com PIN" />
+        </div>
+
+        {pinEnabled && <>
         <form onSubmit={saveAdminPin} className="space-y-2 max-w-xs">
           <Label htmlFor="adminPin">PIN de staff</Label>
           <Input
@@ -199,6 +217,8 @@ export default function StaffTab() {
           </div>
           <Switch checked={pinVisible} onChange={togglePinVisible} label="Mostrar o PIN ao escrever" />
         </div>
+
+        </>}
 
         <div className="border-t pt-4 flex items-start justify-between gap-4 max-w-xl">
           <div>

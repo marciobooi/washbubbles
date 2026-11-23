@@ -358,6 +358,17 @@ describe('Audit 2026-11', function () {
       } finally { mw.lastCard = keep.last; mw.writeCardData = keep.write; coinMachine.tenantId = keep.tid; await reader.deleteOne() }
     })
 
+    it('with the PIN switched off a right PIN is refused, but a master card token still works', async () => {
+      await request(app).post('/api/admin/settings').set(adminAuth()).send({ key: 'adminPin', value: '4821' })
+      expect((await tryPin('4821')).status).to.equal(200)
+      await request(app).post('/api/admin/settings').set(adminAuth()).send({ key: 'staffPinEnabled', value: false })
+      const off = await tryPin('4821')
+      expect(off.status).to.equal(403)
+      expect(off.body.code).to.equal('pin-disabled')
+      const { issueStaffToken } = await import('../src/services/staffCards.js')
+      expect((await tryPin(`card:${issueStaffToken(tenant._id)}`)).status).to.equal(200)
+    })
+
     it('switched off, no card is a master card', async () => {
       await save({ enabled: false, cards: [{ code: '1234', label: 'Ana' }] })
       const { staffCardFor } = await import('../src/services/staffCards.js')

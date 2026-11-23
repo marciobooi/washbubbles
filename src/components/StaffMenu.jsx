@@ -28,9 +28,11 @@ export default function StaffMenu() {
   const [showPinPrompt, setShowPinPrompt] = useState(false)
   const [buttonShown, setButtonShown] = useState(true) // setting kioskStaffButton: the watermark button that asks for the PIN
   useEffect(() => { api.getPublicSetting('kioskStaffButton').then((r) => setButtonShown(r?.value !== false)).catch(() => {}) }, [])
+  const [pinEnabled, setPinEnabled] = useState(true) // setting staffPinEnabled: off = only a master card opens the staff area
   const [pinVisible, setPinVisible] = useState(false) // setting kioskPinVisible: show the digits while they are typed
   useEffect(() => {
     api.getPublicSetting('kioskPinVisible').then((r) => setPinVisible(Boolean(r?.value))).catch(() => {})
+    api.getPublicSetting('staffPinEnabled').then((r) => setPinEnabled(r?.value !== false)).catch(() => {})
   }, [showPinPrompt])
   const [pin, setPin] = useState('')
   const [pinError, setPinError] = useState(null)
@@ -158,8 +160,8 @@ export default function StaffMenu() {
       {showPinPrompt && (
         <Modal open={showPinPrompt} onClose={closeAll} title="Área de Staff">
           <div className="space-y-4">
-            <p className="text-sm text-neutral-600">Introduza o PIN de staff para continuar.</p>
-            <input
+            <p className="text-sm text-neutral-600">{pinEnabled ? 'Introduza o PIN de staff para continuar.' : 'Ponha o cartão-mestre no leitor para entrar.'}</p>
+            {pinEnabled && <input
               type={pinVisible ? 'text' : 'password'}
               inputMode="numeric"
               autoComplete="off"
@@ -169,14 +171,14 @@ export default function StaffMenu() {
               placeholder="PIN"
               className="w-full px-4 py-3 rounded-lg border border-neutral-300 text-center text-2xl tracking-widest"
               autoFocus
-            />
+            />}
             {pinError && <div className="text-sm text-red-600 font-semibold">{pinError}</div>}
             <div className="flex gap-2">
               <button onClick={closeAll} className="flex-1 py-2 rounded-lg border">Cancelar</button>
               <button
                 onClick={verifyPin}
-                disabled={checking || !pin}
-                className={`flex-1 py-2 rounded-lg ${checking || !pin ? 'bg-neutral-100 text-neutral-500' : 'bg-teal-600 text-white'}`}
+                disabled={checking || !pin || !pinEnabled}
+                className={`flex-1 py-2 rounded-lg ${checking || !pin || !pinEnabled ? 'bg-neutral-100 text-neutral-500' : 'bg-teal-600 text-white'}`}
               >
                 {checking ? 'A verificar…' : 'Continuar'}
               </button>
