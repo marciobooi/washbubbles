@@ -361,11 +361,10 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onPrev
         )}
         <div className={view === 'fecho' && step === 1 ? 'space-y-4' : 'hidden'}>
         <Step number="1" title="Contagem de caixa" subtitle="Conte o dinheiro que está na caixa (notas e moedas)" accent="teal">
-          {summary && (
-            <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-900">
-              Vendas em dinheiro <strong>{fmt(Number(summary.totalCash || 0) - Number(summary.floatWithdrawn || 0))}&euro;</strong>
-              {' '}+ fundo de maneio <strong>{fmt(expectedCash - (Number(summary.totalCash || 0) - Number(summary.floatWithdrawn || 0)))}&euro;</strong>
-              {' '}= deve haver <strong>{fmt(expectedCash)}&euro;</strong> na caixa. Conte o que lá está.
+          {onEmptyHopper && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50/60 px-4 py-3">
+              <p className="text-xs text-rose-900 flex-1 min-w-[12rem]"><b>Moedas do hopper</b>: para as contar, o hopper larga todas no tabuleiro. Ponha um recipiente por baixo.</p>
+              <Button type="button" variant="outline" disabled={emptying} onClick={onEmptyHopper} className="border-rose-300 text-rose-700 hover:bg-rose-100 hover:text-rose-800">{emptying ? 'A esvaziar…' : 'Esvaziar hopper'}</Button>
             </div>
           )}
           <CoinChipGrid denoms={countedDenoms} onChange={makeUpdater(setCountedDenoms)} />
@@ -381,12 +380,6 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onPrev
               </div>
             )}
           </div>
-          {onEmptyHopper && (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50/60 px-4 py-3">
-              <p className="text-xs text-rose-900 flex-1 min-w-[12rem]"><b>Moedas do hopper</b>: para as contar, o hopper larga todas no tabuleiro. Ponha um recipiente por baixo.</p>
-              <Button type="button" variant="outline" disabled={emptying} onClick={onEmptyHopper} className="border-rose-300 text-rose-700 hover:bg-rose-100 hover:text-rose-800">{emptying ? 'A esvaziar…' : 'Esvaziar hopper'}</Button>
-            </div>
-          )}
         </Step>
 
         </div>
