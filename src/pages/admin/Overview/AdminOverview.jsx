@@ -392,9 +392,10 @@ export default function AdminOverview() {
   const rangeAvgDaily = rangeDays.length ? rangeDays.reduce((s, d) => s + d.total, 0) / rangeDays.length : 0
   const rangeMaxDay = Math.max(1, ...rangeDays.map((d) => d.cash + d.card + d.mbway))
 
-  // "Todo" = the whole history: one bar per MONTH (hundreds of daily bars are unreadable)
+  // "Tudo" = the whole history: one bar per MONTH (hundreds of daily bars are unreadable)
   const byMonth = range === 'all'
-  const chartDays = byMonth
+  // "Hoje" is one day: the chart keeps the last 7 so there is something to compare it with
+  const chartDays = range === '1' ? days.slice(-7) : byMonth
     ? Object.values(rangeDays.reduce((m, d) => {
         const k = String(d.key).slice(0, 7)
         const r = m[k] || (m[k] = { key: k, cash: 0, card: 0, mbway: 0, total: 0, count: 0 })
@@ -437,10 +438,10 @@ export default function AdminOverview() {
         actions={
           <div className="flex items-center gap-1.5">
             {[
+              { id: '1', label: 'Hoje' },
               { id: '7', label: '7 dias' },
               { id: '30', label: '30 dias' },
-              { id: '90', label: '90 dias' },
-              { id: 'all', label: 'Todo' },
+              { id: 'all', label: 'Tudo' },
             ].map((r) => (
               <Button
                 key={r.id}
