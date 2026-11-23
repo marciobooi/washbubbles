@@ -13,6 +13,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import Skeleton, { SkeletonTable } from '@/components/ui/Skeleton'
+import { Area, Bar, BarChart, CartesianGrid, ComposedChart, Line, ReferenceLine, XAxis, YAxis } from 'recharts'
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 
 function fmtEuro(n) {
   return `${(Number(n) || 0).toFixed(2)}€`
@@ -65,67 +67,72 @@ function RevenueSummaryCard({ todayRevenue, rangeRevenue, rangeAvgDaily, rangeDa
   )
 }
 
-function RevenueChart({ rangeDays, rangeAvgDaily, rangeMaxDay, byMonth = false }) {
+// Revenue by day (or by month for "Tudo"): cash + MB WAY stacked (the revenue), card use as a line, the average as a dashed line
+const REVENUE_CONFIG = {
+  cash: { label: 'Dinheiro', color: '#43b8a8' },
+  mbway: { label: 'MB WAY', color: '#6366f1' },
+  card: { label: 'Cartão (consumo)', color: '#f6c026' },
+}
+
+function RevenueChart({ rangeDays, rangeAvgDaily, byMonth = false }) {
   const unit = byMonth ? 'mensal' : 'diária'
-  const tick = byMonth ? Math.max(1, Math.ceil(rangeDays.length / 10)) : 5
-  const label = (k) => byMonth ? new Date(k + '-01T12:00:00').toLocaleDateString('pt-PT', { month: 'short', year: '2-digit' }).replace(' de ', '/') : fmtDay(k)
+  const monthName = (k) => new Date(k + '-01T12:00:00').toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' })
+  const tick = (k) => byMonth ? new Date(k + '-01T12:00:00').toLocaleDateString('pt-PT', { month: 'short', year: '2-digit' }).replace(' de ', '/') : fmtDay(k)
   if (rangeDays.length === 0) {
     return (
       <Card>
         <CardContent className="py-8">
-          <div className="flex items-end gap-1.5 h-[76px]">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <span key={i} className="flex-1 h-[8%] bg-[#eee9df] rounded" />
-            ))}
-          </div>
-          <p className="m-0 text-[12.5px] text-[#8a8478] text-center mt-4">Sem vendas nos últimos 30 dias.</p>
+          <p className="m-0 text-[12.5px] text-[#8a8478] text-center">Sem vendas neste período.</p>
         </CardContent>
       </Card>
     )
   }
-
+  const data = rangeDays.map((d) => ({ key: d.key, cash: d.cash, mbway: d.mbway, card: d.card, total: d.total, count: d.count }))
   return (
     <Card className="h-full flex flex-col">
-      <CardContent className="space-y-4 flex-1 flex flex-col">
-        {/* the bars take all the height the card has (it is stretched to the summary card beside it) */}
-        <div className="relative pt-1 flex-1 flex flex-col min-h-[124px]">
-          <div className="relative flex items-stretch gap-[3px] flex-1">
-            {rangeAvgDaily > 0 && (
-              <div className="absolute left-0 right-0 border-t-2 border-dashed border-[#6366f1]/70 pointer-events-none z-[1]" style={{ bottom: `calc(20px + ${rangeAvgDaily / rangeMaxDay} * (100% - 20px))` }}>
-                <span className="absolute right-0 -top-4 text-[10px] font-bold text-[#6366f1] bg-white/80 px-1 rounded">média {fmtEuro(rangeAvgDaily)}</span>
-              </div>
+      <CardContent className="flex-1 flex flex-col gap-3 min-h-[240px]">
+        <ChartContainer config={REVENUE_CONFIG} className="flex-1 w-full aspect-auto min-h-[200px]">
+          <ComposedChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <defs>
+              {['cash', 'mbway'].map((k) => (
+                <linearGradient key={k} id={`fill-${k}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={`var(--color-${k})`} stopOpacity={0.55} />
+                  <stop offset="95%" stopColor={`var(--color-${k})`} stopOpacity={0.05} />
+                </linearGradient>
+              ))}
+            </defs>
+            <CartesianGrid vertical={false} strokeDasharray="3 3" />
+            <XAxis dataKey="key" tickLine={false} axisLine={false} tickMargin={8} minTickGap={28} tickFormatter={tick} />
+            <YAxis tickLine={false} axisLine={false} width={44} tickFormatter={(v) => `${v}€`} />
+            <ChartTooltip
+              cursor={{ strokeDasharray: '3 3' }}
+              content={<ChartTooltipContent
+                labelFormatter={(k) => byMonth ? monthName(k).replace(/^./, (c) => c.toUpperCase()) : `${weekdayShort(k).replace(/^./, (c) => c.toUpperCase())}, ${fmtDay(k)}`}
+                valueFormatter={fmtEuro}
+                total={{ label: 'Receita (dinheiro + MB WAY)', value: (items) => fmtEuro(items.filter((i) => i.dataKey !== 'card').reduce((t, i) => t + (Number(i.value) || 0), 0)) }}
+              />}
+            />
+            {rangeAvgDaily > 0 && <ReferenceLine y={rangeAvgDaily} stroke="#6366f1" strokeDasharray="5 4" strokeOpacity={0.7} label={{ value: `média ${fmtEuro(rangeAvgDaily)}`, position: 'insideTopRight', fill: '#6366f1', fontSize: 10, fontWeight: 700 }} />}
+            {byMonth ? (
+              // a few months: bars (a line between two points says nothing)
+              <>
+                <Bar dataKey="cash" stackId="a" fill="var(--color-cash)" maxBarSize={56} />
+                <Bar dataKey="mbway" stackId="a" fill="var(--color-mbway)" maxBarSize={56} radius={[4, 4, 0, 0]} />
+              </>
+            ) : (
+              <>
+                <Area dataKey="mbway" type="monotone" stackId="a" stroke="var(--color-mbway)" fill="url(#fill-mbway)" />
+                <Area dataKey="cash" type="monotone" stackId="a" stroke="var(--color-cash)" fill="url(#fill-cash)" />
+              </>
             )}
-            {rangeDays.map((d, i) => {
-              const h = (n) => `${Math.round((n / rangeMaxDay) * 100)}%`
-              // beside the bar (right of it in the left half, left of it in the right half), from the top of the chart: never above it, where the page header cuts it off
-              const side = i < rangeDays.length / 2 ? 'left-full ml-2' : 'right-full mr-2'
-              const vs = rangeAvgDaily > 0 ? Math.round((d.total / rangeAvgDaily - 1) * 100) : null
-              return (
-                <div key={d.key} className="group relative flex-1 min-w-0 flex flex-col items-center gap-1">
-                  <div className="flex flex-col justify-end flex-1 min-h-0 w-full max-w-[30px] rounded overflow-hidden bg-[#eee9df] group-hover:ring-2 ring-[#6366f1]/40">
-                    <div className="bg-amber-400" style={{ height: h(d.card) }} />
-                    <div className="bg-[#6366f1]" style={{ height: h(d.mbway) }} />
-                    <div className="bg-primary-500" style={{ height: h(d.cash) }} />
-                  </div>
-                  <div className="h-4 text-[10px] text-[#8a8478] whitespace-nowrap">{i % tick === 0 || i === rangeDays.length - 1 ? label(d.key) : ''}</div>
-                  <div className={`hidden group-hover:block absolute top-0 z-20 w-[210px] ${side} rounded-xl bg-[#1c2530] text-white text-xs p-3 shadow-lg pointer-events-none`}>
-                    <div className="font-bold mb-1.5 capitalize">{byMonth ? monthLabel(d.key) : `${weekdayShort(d.key)}, ${fmtDay(d.key)}`} <span className="font-normal opacity-70">· {d.count} vendas</span></div>
-                    <div className="flex justify-between"><span><span className="inline-block w-2 h-2 rounded-sm bg-primary-500 mr-1.5" />Dinheiro</span><b>{fmtEuro(d.cash)}</b></div>
-                    <div className="flex justify-between"><span><span className="inline-block w-2 h-2 rounded-sm bg-[#6366f1] mr-1.5" />MB WAY</span><b>{fmtEuro(d.mbway)}</b></div>
-                    <div className="flex justify-between"><span><span className="inline-block w-2 h-2 rounded-sm bg-amber-400 mr-1.5" />Cartão (consumo)</span><b>{fmtEuro(d.card)}</b></div>
-                    <div className="flex justify-between border-t border-white/20 mt-1.5 pt-1.5"><span>Receita (dinheiro + MB WAY)</span><b>{fmtEuro(d.total)}</b></div>
-                    {vs !== null && <div className="mt-1 opacity-80">{vs >= 0 ? '+' : ''}{vs}% face à média {unit} ({fmtEuro(rangeAvgDaily)})</div>}
-                    <div className="mt-1 opacity-60">O consumo de cartão já foi contado quando o cartão foi recarregado.</div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
+            {/* card use is not revenue (it was counted when the card was loaded): a line on its own, not part of the stack */}
+            <Line dataKey="card" type="monotone" stroke="var(--color-card)" strokeWidth={2} dot={false} />
+          </ComposedChart>
+        </ChartContainer>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
-          <span className="flex items-center gap-1.5 whitespace-nowrap"><span className="w-[9px] h-[9px] rounded-[3px] bg-primary-500 inline-block" />Dinheiro</span>
-          <span className="flex items-center gap-1.5 whitespace-nowrap"><span className="w-[9px] h-[9px] rounded-[3px] bg-[#6366f1] inline-block" />MB WAY</span>
-          <span className="flex items-center gap-1.5 whitespace-nowrap"><span className="w-[9px] h-[9px] rounded-[3px] bg-amber-400 inline-block" />Cartão</span>
+          {Object.entries(REVENUE_CONFIG).map(([k, v]) => (
+            <span key={k} className="flex items-center gap-1.5 whitespace-nowrap"><span className="w-[9px] h-[9px] rounded-[3px] inline-block" style={{ background: v.color }} />{v.label}</span>
+          ))}
           {rangeAvgDaily > 0 && <span className="flex items-center gap-1.5 whitespace-nowrap"><span className="w-4 border-t-2 border-dashed border-[#6366f1] inline-block" />Média {unit} ({rangeDays.length} {byMonth ? 'meses' : 'dias'})</span>}
         </div>
       </CardContent>
@@ -188,7 +195,19 @@ function MachineUsageTable({ machines, rangeLabel, insights, totalCycles, totalA
           <CardDescription>Receita e nº de ciclos por máquina ({rangeLabel})</CardDescription>
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-5">
+        {machines.some((m) => (m.usageCount || 0) + (m.adminStarts || 0) > 0) && (
+          <ChartContainer config={{ paid: { label: 'Ciclos pagos', color: '#43b8a8' }, admin: { label: 'Admin', color: '#a78bfa' } }} className="w-full aspect-auto h-[190px]">
+            <BarChart data={machines.map((m) => ({ name: m.machineInfo?.name || String(m._id), paid: m.usageCount || 0, admin: m.adminStarts || 0 }))} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid vertical={false} strokeDasharray="3 3" />
+              <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} interval={0} />
+              <YAxis tickLine={false} axisLine={false} width={32} allowDecimals={false} />
+              <ChartTooltip cursor={{ fill: 'rgba(0,0,0,0.04)' }} content={<ChartTooltipContent total={{ label: 'Total de ciclos', value: (items) => items.reduce((t, i) => t + (Number(i.value) || 0), 0) }} />} />
+              <Bar dataKey="paid" stackId="c" fill="var(--color-paid)" radius={[0, 0, 0, 0]} />
+              <Bar dataKey="admin" stackId="c" fill="var(--color-admin)" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ChartContainer>
+        )}
         {machines.length === 0 ? (
           <p className="m-0 text-sm text-[#8a8478]">Sem dados de utilização ainda.</p>
         ) : (
@@ -372,7 +391,6 @@ export default function AdminOverview() {
       }, {})).sort((a, b) => a.key.localeCompare(b.key))
     : rangeDays
   const chartAvg = chartDays.length ? chartDays.reduce((s, d) => s + d.total, 0) / chartDays.length : 0
-  const chartMax = Math.max(1, ...chartDays.map((d) => d.cash + d.card + d.mbway))
 
   async function exportRevenueCsv() {
     try {
@@ -437,7 +455,6 @@ export default function AdminOverview() {
         <RevenueChart
           rangeDays={chartDays}
           rangeAvgDaily={chartAvg}
-          rangeMaxDay={chartMax}
           byMonth={byMonth}
         />
       </div>
