@@ -1892,11 +1892,14 @@ router.get('/analytics/revenue', requireStaffRead, async (req, res) => {
   const SaleT = withTenant(Sale, req)
   const thirtyDaysAgo = new Date()
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+  // ?from=&to= (days of the shop) or ?all=1: that range instead of the last 30 days
+  const { shopRange, createdAtMatch } = await import('../services/shopRange.js')
+  const range = shopRange(req.query)
 
   const stats = await withTenant(Sale, req).aggregate([
     { $match: { 
         tenantId: new mongoose.Types.ObjectId(req.tenantId), 
-        createdAt: { $gte: thirtyDaysAgo } 
+        ...(range.active ? createdAtMatch(range) : { createdAt: { $gte: thirtyDaysAgo } })
     } },
     { $group: {
         _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: 'Europe/Lisbon' } }, // the shop's day, not UTC's
@@ -1916,8 +1919,10 @@ router.get('/analytics/revenue', requireStaffRead, async (req, res) => {
 router.get('/analytics/revenue.csv', requireStaffRead, async (req, res) => {
   const thirtyDaysAgo = new Date()
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+  const { shopRange, createdAtMatch } = await import('../services/shopRange.js')
+  const range = shopRange(req.query)
   const stats = await withTenant(Sale, req).aggregate([
-    { $match: { tenantId: new mongoose.Types.ObjectId(req.tenantId), createdAt: { $gte: thirtyDaysAgo } } },
+    { $match: { tenantId: new mongoose.Types.ObjectId(req.tenantId), ...(range.active ? createdAtMatch(range) : { createdAt: { $gte: thirtyDaysAgo } }) } },
     { $group: {
         _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: 'Europe/Lisbon' } }, // the shop's day, not UTC's
         // Same rule as the day close: money counts when it comes in. What is spent from a card was counted when the card was loaded.
@@ -1945,7 +1950,9 @@ router.get('/analytics/revenue.csv', requireStaffRead, async (req, res) => {
 router.get('/analytics/insights', requireStaffRead, async (req, res) => {
   const days = Math.min(90, Math.max(7, Number(req.query.days) || 30))
   const { computeInsights } = await import('../services/insights.js')
-  res.json(await computeInsights(req.tenantId, { days }))
+  const { shopRange } = await import('../services/shopRange.js')
+  const range = shopRange(req.query) // ?from=&to=&all=1: the dashboard filter (see computeInsights)
+  res.json(await computeInsights(req.tenantId, { days, ...(range.active ? { range } : {}) }))
 })
 
 // When the shop works: payments by part of the day and by day of the week, in the shop's own time (Lisbon). Morning 06-12, afternoon
@@ -1953,9 +1960,11 @@ router.get('/analytics/insights', requireStaffRead, async (req, res) => {
 router.get('/analytics/rhythm', requireStaffRead, async (req, res) => {
   const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(req.query.month || '')) ? String(req.query.month) : null
   const tz = 'Europe/Lisbon'
+  const { shopRange, createdAtMatch } = await import('../services/shopRange.js')
+  const range = shopRange(req.query) // ?from=&to=&all=1 wins over ?month=
   const rows = await withTenant(Sale, req).aggregate([
     { $match: { tenantId: new mongoose.Types.ObjectId(req.tenantId), machineId: { $ne: null }, type: 'payment', status: { $ne: 'refunded' },
-      ...(month ? { $expr: { $eq: [{ $dateToString: { format: '%Y-%m', date: '$createdAt', timezone: tz } }, month] } } : {}) } },
+      ...(range.active ? createdAtMatch(range) : month ? { $expr: { $eq: [{ $dateToString: { format: '%Y-%m', date: '$createdAt', timezone: tz } }, month] } } : {}) } },
     { $project: { amount: 1, hour: { $hour: { date: '$createdAt', timezone: tz } }, dow: { $isoDayOfWeek: { date: '$createdAt', timezone: tz } } } },
     { $project: { amount: 1, dow: 1, part: { $switch: { branches: [
       { case: { $and: [{ $gte: ['$hour', 6] }, { $lt: ['$hour', 12] }] }, then: 'morning' },
@@ -1993,10 +2002,12 @@ router.get('/analytics/machines/months', requireStaffRead, async (req, res) => {
 // ?month=YYYY-MM limits it to that month (the shop's own calendar); without it, the whole history.
 router.get('/analytics/machines', requireStaffRead, async (req, res) => {
   const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(String(req.query.month || '')) ? String(req.query.month) : null
+  const { shopRange, createdAtMatch } = await import('../services/shopRange.js')
+  const range = shopRange(req.query) // ?from=&to=&all=1 wins over ?month=
   const stats = await withTenant(Sale, req).aggregate([
     // Payments for a machine only: not the staff's own starts (no money), not refunds, and not a payment that was refunded.
     { $match: { tenantId: new mongoose.Types.ObjectId(req.tenantId), machineId: { $ne: null }, type: 'payment', status: { $ne: 'refunded' },
-      ...(month ? { $expr: { $eq: [{ $dateToString: { format: '%Y-%m', date: '$createdAt', timezone: 'Europe/Lisbon' } }, month] } } : {}) } },
+      ...(range.active ? createdAtMatch(range) : month ? { $expr: { $eq: [{ $dateToString: { format: '%Y-%m', date: '$createdAt', timezone: 'Europe/Lisbon' } }, month] } } : {}) } },
     { $group: {
         _id: "$machineId",
         totalRevenue: { $sum: "$amount" },
@@ -2020,7 +2031,7 @@ router.get('/analytics/machines', requireStaffRead, async (req, res) => {
   for (const m of allMachines) { const k = String(m.name).trim().toLowerCase(); idByName.set(k, idByName.has(k) ? null : String(m._id)) }
   const adminBy = new Map()
   for (const s of await staffStarts(new mongoose.Types.ObjectId(req.tenantId), { dryNames })) {
-    if (month && !monthMatches(s.at, month)) continue
+    if (range.active ? ((range.from && s.at < range.from) || (range.to && s.at >= range.to)) : (month && !monthMatches(s.at, month))) continue
     const id = idByName.get(s.name.trim().toLowerCase())
     if (id) adminBy.set(id, (adminBy.get(id) || 0) + 1)
   }

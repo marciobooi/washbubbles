@@ -513,17 +513,26 @@ export function createApi(config) {
 
 
   // Analytics
-  function getAnalyticsRevenue() {
-    return request('/admin/analytics/revenue', { method: 'GET', expect: 'json' });
+  // `range` = { from: 'YYYY-MM-DD', to: 'YYYY-MM-DD', all: true }: the dashboard filter (days of the shop; each side optional). Without it, the old defaults.
+  const rangeQuery = (range, extra = {}) => {
+    const q = new URLSearchParams()
+    for (const [k, v] of Object.entries(extra)) if (v) q.set(k, v)
+    if (range?.all) q.set('all', '1')
+    else { if (range?.from) q.set('from', range.from); if (range?.to) q.set('to', range.to) }
+    const s = q.toString()
+    return s ? `?${s}` : ''
   }
-  function getAnalyticsMachines(month) {
-    return request(`/admin/analytics/machines${month ? `?month=${encodeURIComponent(month)}` : ''}`, { method: 'GET', expect: 'json' });
+  function getAnalyticsRevenue(range) {
+    return request(`/admin/analytics/revenue${rangeQuery(range)}`, { method: 'GET', expect: 'json' });
   }
-  function getAnalyticsInsights(days) {
-    return request(`/admin/analytics/insights${days ? `?days=${encodeURIComponent(days)}` : ''}`, { method: 'GET', expect: 'json' });
+  function getAnalyticsMachines(month, range) {
+    return request(`/admin/analytics/machines${rangeQuery(range, { month })}`, { method: 'GET', expect: 'json' });
   }
-  function getAnalyticsRhythm(month) {
-    return request(`/admin/analytics/rhythm${month ? `?month=${encodeURIComponent(month)}` : ''}`, { method: 'GET', expect: 'json' });
+  function getAnalyticsInsights(days, range) {
+    return request(`/admin/analytics/insights${rangeQuery(range, { days })}`, { method: 'GET', expect: 'json' });
+  }
+  function getAnalyticsRhythm(month, range) {
+    return request(`/admin/analytics/rhythm${rangeQuery(range, { month })}`, { method: 'GET', expect: 'json' });
   }
   function getAnalyticsMachineMonths() {
     return request('/admin/analytics/machines/months', { method: 'GET', expect: 'json' });

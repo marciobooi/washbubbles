@@ -39,6 +39,33 @@ describe('Owner insights', function () {
     expect(lisbon(at('2026-07-01T23:30:00Z'))).to.include({ day: '2026-07-02', hour: 0, dow: 4 })
   })
 
+  it('a date range (the dashboard filter) limits the window, compares with the one before, and the API takes ?from/?to/?all', async () => {
+    await sale({ machineId: wash._id, amount: 5, batchId: 'a', createdAt: at('2026-11-09T12:00:00Z') })
+    await sale({ machineId: wash._id, amount: 6, batchId: 'b', createdAt: at('2026-11-10T12:00:00Z') })
+    await sale({ machineId: dry._id, amount: 4, batchId: 'c', createdAt: at('2026-11-11T12:00:00Z') })
+    await sale({ machineId: wash._id, amount: 2, batchId: 'old', createdAt: at('2026-11-08T12:00:00Z') }) // the day before the range
+    const { shopRange } = await import('../src/services/shopRange.js')
+    const r = await computeInsights(tenant._id, { now: NOW, range: shopRange({ from: '2026-11-10', to: '2026-11-11' }) })
+    expect(r.period).to.include({ from: '2026-11-10', to: '2026-11-11', days: 2, cycles: 2 })
+    expect(r.period.revenue).to.include({ current: 10, previous: 7 }) // 6 + 4, against the two days before it (8 and 9 Nov: 2 + 5)
+    expect(r.ticket.cycles).to.equal(2) // the cycle of the 9th and the one of the 8th are outside
+    const today = await computeInsights(tenant._id, { now: NOW, range: shopRange({ from: '2026-11-11', to: '2026-11-11' }) })
+    expect(today.period).to.include({ days: 1, cycles: 1 })
+    const all = await computeInsights(tenant._id, { now: NOW, range: shopRange({ all: '1' }) })
+    expect(all.period.cycles).to.equal(4)
+    expect(all.period.revenue.previous).to.equal(null) // nothing before "everything"
+    // the routes: revenue by day for a range (and without a range it is still the last 30 days), rhythm and machines follow it
+    const get = (path) => request(app).get(path).set('Authorization', `Bearer ${signToken(admin)}`)
+    const rev = (await get('/api/admin/analytics/revenue?from=2026-11-09&to=2026-11-10')).body
+    expect(rev.map((d) => d._id)).to.deep.equal(['2026-11-09', '2026-11-10'])
+    const bad = (await get('/api/admin/analytics/revenue?from=nonsense&to=x&all=1')).body // nonsense days are ignored; all=1 = everything
+    expect(bad.length).to.equal(4)
+    const mach = (await get('/api/admin/analytics/machines?from=2026-11-09&to=2026-11-09')).body
+    expect(mach.find((m) => m.machineInfo.name === 'Lavar 1').usageCount).to.equal(1)
+    const rhythm = (await get('/api/admin/analytics/rhythm?from=2026-11-09&to=2026-11-09')).body
+    expect(rhythm.parts.reduce((t, x) => t + x.cycles, 0)).to.equal(1)
+  })
+
   it('cards money, ticket, machines, wash/dry, customers and hours, from the sales', async () => {
     await Card.create([
       { tenantId: tenant._id, code: 'A', balance: 10, status: 'active', createdAt: at('2026-08-01T10:00:00Z') }, // holds money, idle for months

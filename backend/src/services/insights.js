@@ -53,11 +53,26 @@ export function periodComparison(byDay, today, firstDay = null) {
   }
 }
 
-export async function computeInsights(tenantId, { days = 30, now = new Date() } = {}) {
+/**
+ * `days` = the window is the last N days (the old way). `range` ({ from, to: Dates, fromDay, toDay: 'YYYY-MM-DD', active }, see
+ * services/shopRange.js) = the dashboard filter: the window is exactly that range (an open side = the first sale / now), and everything
+ * that depends on the window (cycles, ticket, occupancy, wash/dry, hours, customers) follows it. `period` then holds the revenue of the
+ * window against the window of the same length before it. What does not depend on a window (the money on cards now) stays as it is.
+ */
+export async function computeInsights(tenantId, { days = 30, now = new Date(), range = null } = {}) {
   const tid = new mongoose.Types.ObjectId(String(tenantId))
   const today = lisbon(now).day
-  const windowStart = new Date(now.getTime() - days * DAY)
-  const histStart = new Date(now.getTime() - 70 * DAY) // covers "this month" and the whole previous month
+  const first = await Sale.findOne({ tenantId: tid, method: { $in: ['cash', 'mbway'] } }).sort({ createdAt: 1 }).select('createdAt').lean()
+  const EPOCH = new Date(0)
+  const windowStart = range ? (range.from || EPOCH) : new Date(now.getTime() - days * DAY)
+  const windowEnd = range && range.to && range.to < now ? range.to : new Date(now.getTime() + 1)
+  // how long the window is, in ms: the days asked for, or (a range) from its start, or the first sale, to its end
+  const spanMs = range
+    ? Math.max(DAY, windowEnd.getTime() - Math.max(windowStart.getTime(), first ? new Date(first.createdAt).getTime() : windowEnd.getTime() - DAY))
+    : days * DAY
+  const spanDays = Math.max(1, Math.round(spanMs / DAY))
+  const hasPrev = !range || Boolean(range.from) // "everything" has nothing before it
+  const histStart = new Date(Math.min(now.getTime() - 70 * DAY, hasPrev ? windowStart.getTime() - spanMs : windowStart.getTime())) // covers "this month" and the whole previous month
 
   const [machines, prices, hoursRow, cards, recent] = await Promise.all([
     Machine.find({ tenantId: tid }).select('name type weight tImp status outOfService').lean(),
@@ -84,14 +99,16 @@ export async function computeInsights(tenantId, { days = 30, now = new Date() } 
     const d = lisbon(s.createdAt).day
     byDay.set(d, (byDay.get(d) || 0) + (Number(s.amount) || 0))
   }
-  const first = await Sale.findOne({ tenantId: tid, method: { $in: ['cash', 'mbway'] } }).sort({ createdAt: 1 }).select('createdAt').lean()
   const revenue = periodComparison(byDay, today, first ? lisbon(first.createdAt).day : null)
 
   // ── what the window holds: machine payments = cycles ──
-  const inWin = recent.filter((s) => s.createdAt >= windowStart)
+  const inWin = recent.filter((s) => s.createdAt >= windowStart && s.createdAt < windowEnd)
   const pays = inWin.filter((s) => s.type === 'payment' && s.machineId && mById.has(String(s.machineId)))
   const firstDay = pays.length ? pays.map((s) => lisbon(s.createdAt).day).sort()[0] : today
-  const windowDays = Math.max(1, Math.round((new Date(today + 'T12:00:00Z') - new Date(firstDay + 'T12:00:00Z')) / DAY) + 1)
+  // a range counts from its own first day (or the first sale) to its last day (or today): the shop is judged over the days it was asked about
+  const winFirstDay = range && range.fromDay ? range.fromDay : firstDay
+  const winLastDay = range && range.toDay && range.toDay < today ? range.toDay : today
+  const windowDays = Math.max(1, Math.round((new Date(winLastDay + 'T12:00:00Z') - new Date(winFirstDay + 'T12:00:00Z')) / DAY) + 1)
 
   // ticket: per cycle and per visit (a visit = one payment batch)
   const visits = new Map()
@@ -105,7 +122,7 @@ export async function computeInsights(tenantId, { days = 30, now = new Date() } 
   const idByName = new Map()
   for (const m of machines) { const k = String(m.name).trim().toLowerCase(); idByName.set(k, idByName.has(k) ? null : String(m._id)) }
   const dryNames = new Set(machines.filter((m) => m.type === 'dry').map((m) => String(m.name).trim().toLowerCase()))
-  const starts = (await staffStarts(tid, { from: windowStart, dryNames }))
+  const starts = (await staffStarts(tid, { from: windowStart, to: range ? windowEnd : null, dryNames }))
     .map((x) => ({ type: 'admin_start', machineId: idByName.get(x.name.trim().toLowerCase()), createdAt: x.at, items: [{ quantity: x.blocks }] }))
     .filter((s) => s.machineId)
   const hourCycles = Array(24).fill(0)
@@ -181,8 +198,8 @@ export async function computeInsights(tenantId, { days = 30, now = new Date() } 
     }
     return m
   }
-  const cur = useByCard(windowStart, new Date(now.getTime() + 1))
-  const prev = useByCard(new Date(windowStart.getTime() - days * DAY), windowStart)
+  const cur = useByCard(windowStart, windowEnd)
+  const prev = hasPrev ? useByCard(new Date(windowStart.getTime() - spanMs), windowStart) : new Map()
   const seg = { regular: { cards: 0, spent: 0 }, occasional: { cards: 0, spent: 0 }, single: { cards: 0, spent: 0 } }
   for (const e of cur.values()) { const k = e.days.size >= 4 ? 'regular' : e.days.size >= 2 ? 'occasional' : 'single'; seg[k].cards++; seg[k].spent += e.spent }
   const spentAll = Object.values(seg).reduce((s, x) => s + x.spent, 0)
@@ -195,7 +212,7 @@ export async function computeInsights(tenantId, { days = 30, now = new Date() } 
   const mixRows = { cash: { cycles: 0, amount: 0 }, card: { cycles: 0, amount: 0 }, mbway: { cycles: 0, amount: 0 } }
   for (const s of pays) { const k = s.method === 'cash' ? 'cash' : s.method === 'mbway' ? 'mbway' : 'card'; mixRows[k].cycles++; mixRows[k].amount += Number(s.amount) || 0 }
   const clients = {
-    days,
+    days: spanDays,
     activeCards: cur.size,
     newCardsByMonth: sixMonths.map((m) => ({ month: m, cards: newByMonth[m] })),
     segments: Object.fromEntries(Object.entries(seg).map(([k, v]) => [k, { cards: v.cards, spent: r2(v.spent), sharePct: pct(v.spent, spentAll) }])),
@@ -213,5 +230,17 @@ export async function computeInsights(tenantId, { days = 30, now = new Date() } 
     lastRejectedCoin: lastRejected ? lastRejected.createdAt : null,
   }
 
-  return { generatedAt: now, days, today, alerts, revenue, ticket, cardsLiability, machines: machineRows, washDry, hours: hoursInfo, clients }
+  // revenue (cash + MB WAY) of the window against the window of the same length before it
+  const sumRev = (from, to) => r2(recent.filter((x) => (x.method === 'cash' || x.method === 'mbway') && x.createdAt >= from && x.createdAt < to).reduce((t, x) => t + (Number(x.amount) || 0), 0))
+  const curRev = sumRev(windowStart, windowEnd)
+  const prevRev = hasPrev ? sumRev(new Date(windowStart.getTime() - spanMs), windowStart) : null
+  const prevStart = new Date(windowStart.getTime() - spanMs)
+  const prevComplete = !first || new Date(first.createdAt) <= prevStart // the shop did not exist yet for part of it: no fair comparison
+  const period = {
+    from: range?.fromDay || (first ? lisbon(windowStart > EPOCH ? windowStart : first.createdAt).day : today), to: winLastDay, days: windowDays,
+    revenue: { current: curRev, previous: prevRev, deltaPct: prevRev > 0 && prevComplete ? Math.round(((curRev - prevRev) / prevRev) * 100) : null, partial: prevRev != null && !prevComplete },
+    cycles: pays.length,
+  }
+
+  return { generatedAt: now, days: range ? spanDays : days, period, today, alerts, revenue, ticket, cardsLiability, machines: machineRows, washDry, hours: hoursInfo, clients }
 }
