@@ -92,7 +92,7 @@ export default function WiFiTab() {
           </button>
         </div>
 
-        <form onSubmit={saveWifiDetails} className="border-t pt-4 space-y-3 max-w-xs">
+        {wifiEnabled && <form onSubmit={saveWifiDetails} className="border-t pt-4 space-y-3 max-w-xs">
           <div className="space-y-2">
             <Label htmlFor="wifiDuration">Duração do acesso (minutos)</Label>
             <Input
@@ -125,7 +125,7 @@ export default function WiFiTab() {
               {savingWifi ? 'A guardar…' : 'Guardar'}
             </Button>
           </div>
-        </form>
+        </form>}
       </CardContent>
     </Card>
   )

@@ -95,7 +95,7 @@ export default function PaymentsTab() {
           </button>
         </div>
 
-        <div className="border-t pt-4 space-y-4 max-w-xl">
+        {mbwayEnabled && <div className="border-t pt-4 space-y-4 max-w-xl">
           <div className="text-sm font-medium">Como o cliente indica o número no quiosque</div>
           {[
             { id: 'typed', on: mbwayTyped, title: 'Caixa para escrever o número', text: 'O cliente escreve o número do MB WAY no ecrã do quiosque e aprova na app. É a forma mais simples e funciona com qualquer telemóvel.' },
@@ -113,9 +113,9 @@ export default function PaymentsTab() {
             </div>
           ))}
           <p className="text-xs text-muted-foreground">Com as duas ligadas, o cliente escolhe. Com uma só, o quiosque abre diretamente essa forma.</p>
-        </div>
+        </div>}
 
-        <form onSubmit={saveMbwayConfig} className="border-t pt-4 space-y-3 max-w-md">
+        {mbwayEnabled && <form onSubmit={saveMbwayConfig} className="border-t pt-4 space-y-3 max-w-md">
           <div className="space-y-2">
             <Label htmlFor="mbwayEnv">Ambiente</Label>
             <select id="mbwayEnv" value={mbwayEnv} onChange={(e) => setMbwayEnv(e.target.value)} className="w-full h-10 px-3 rounded-md border border-input bg-background text-sm">
@@ -135,7 +135,7 @@ export default function PaymentsTab() {
           <div className="flex justify-end">
             <Button type="submit" size="sm" disabled={savingMbway}>{savingMbway ? 'A guardar…' : 'Guardar'}</Button>
           </div>
-        </form>
+        </form>}
       </CardContent>
     </Card>
   )
