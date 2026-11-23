@@ -135,6 +135,16 @@ export function broadcastHardwareEvent(tenantId, type, payload) {
   })
 }
 
+/** Only to the kiosk screens of a shop (not to admin logins that may also be listening): for what must not reach anyone else. */
+export function broadcastToKiosks(tenantId, type, payload) {
+  if (!_wss || !tenantId) return
+  const tenantIdStr = tenantId.toString()
+  const msg = JSON.stringify({ type, payload })
+  _wss.clients.forEach((client) => {
+    if (client.readyState === client.OPEN && client.tenantId === tenantIdStr && client.userModel?.role === 'KIOSK') client.send(msg)
+  })
+}
+
 export function initWebSocket(server) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_PAYLOAD })
   _wss = wss

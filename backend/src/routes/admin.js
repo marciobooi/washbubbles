@@ -939,6 +939,7 @@ router.post('/settings', requireAdmin, async (req, res) => {
   }
   // The staff PIN is stored as a hash (never the digits); an empty value removes it.
   let toStore = value
+  if (key === 'staffCards') toStore = (await import('../services/staffCards.js')).cleanStaffCards(value)
   if (key === 'adminPin') {
     const { PIN_FORMAT, hashPin, verifyPin, PIN_SET_AT } = await import('../services/staffPin.js')
     if (value === null || value === '' || value === undefined) toStore = null
@@ -1781,6 +1782,26 @@ router.post('/cards/blank-reader', requireAdmin, async (req, res) => {
   const cmds = []
   for (const k of kiosks) cmds.push(await SyncCommandT.create({ kioskId: k._id, type: 'blank_card', payload: {} }))
   logAction(req, 'card.blank_requested', 'Card', null, {})
+  res.json({ queued: true, commandIds: cmds.map((c) => c._id) })
+})
+
+// POST /admin/staff-cards/write — write a MASTER card: a blank card in the reader gets a code of its own, returned here so the admin can add it
+// to the list. On the shop PC it runs here (up to 45 s waiting for the card); on the central server it is queued for the shop.
+router.post('/staff-cards/write', requireAdmin, async (req, res) => {
+  const { default: coinMachine } = await import('../services/coinMachine.js')
+  if (coinMachine.running) {
+    try {
+      const r = await coinMachine.writeStaffCard()
+      logAction(req, 'staff.card.written', 'Card', null, { card: `•••${String(r.code).slice(-4)}` })
+      return res.json({ queued: false, ...r })
+    } catch (e) { return res.status(409).json({ error: e.message }) }
+  }
+  const kiosks = await User.find({ tenantId: req.tenantId, role: 'KIOSK' }).select('_id').lean()
+  if (kiosks.length === 0) return res.status(409).json({ error: 'Nenhum quiosque registado para esta loja' })
+  const SyncCommandT = withTenant(SyncCommand, req)
+  const cmds = []
+  for (const k of kiosks) cmds.push(await SyncCommandT.create({ kioskId: k._id, type: 'write_staff_card', payload: {} }))
+  logAction(req, 'staff.card.write_requested', 'Card', null, {})
   res.json({ queued: true, commandIds: cmds.map((c) => c._id) })
 })
 

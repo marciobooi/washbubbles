@@ -194,6 +194,11 @@ function pinMail(tenantId, setAt, subject, text) {
 async function checkAdminPin(req, pin) {
   if (typeof pin !== 'string' || !pin) return { ok: false, status: 400, error: 'Missing pin' }
 
+  // A master card was put in the reader: its token stands in for the PIN (see services/staffCards.js).
+  if (typeof pin === 'string' && pin.startsWith('card:')) {
+    const { checkStaffToken } = await import('../services/staffCards.js')
+    return checkStaffToken(req.tenantId, pin) ? { ok: true } : { ok: false, status: 401, error: 'Cartão de staff expirado. Volte a pôr o cartão no leitor.' }
+  }
   const SettingT = withTenant(Setting, req)
   const row = await SettingT.findOne({ key: 'adminPin' })
   const expected = row ? String(row.value ?? '') : ''
@@ -1098,7 +1103,7 @@ router.get('/settings/:key', async (req, res) => {
   // isn't meaningful information, and the kiosk needs all of this before a
   // customer session even authenticates as anything (the banner carousel is
   // the very first thing rendered on the homepage).
-  if (!key.startsWith('branding.') && !key.startsWith('cardPurchase.') && !key.startsWith('loyaltyCard.') && !key.startsWith('wifi.') && !key.startsWith('legal.') && key !== 'payments.mbway.enabled' && key !== 'kioskLockEnabled' && key !== 'banners' && key !== 'bannersTranslations') {
+  if (!key.startsWith('branding.') && !key.startsWith('cardPurchase.') && !key.startsWith('loyaltyCard.') && !key.startsWith('wifi.') && !key.startsWith('legal.') && key !== 'payments.mbway.enabled' && key !== 'kioskLockEnabled' && key !== 'kioskPinVisible' && key !== 'kioskStaffButton' && key !== 'banners' && key !== 'bannersTranslations') {
     return res.status(404).json({ error: 'Not found' })
   }
   const SettingT = withTenant(Setting, req)

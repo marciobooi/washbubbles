@@ -303,6 +303,68 @@ describe('Audit 2026-11', function () {
     })
   })
 
+  describe('master cards open the staff area with no PIN', () => {
+    const save = (value) => request(app).post('/api/admin/settings').set(adminAuth()).send({ key: 'staffCards', value })
+    const tryPin = (pin) => request(app).post('/api/pos/admin/verify-pin').set(kioskAuth()).send({ pin })
+    beforeEach(async () => { (await import('../src/routes/pos.js'))._resetPinGuards(); (await import('../src/services/staffCards.js'))._resetStaffTokens() })
+
+    it('the list is cleaned on save; a card in the list gets a token that stands in for the PIN; wrong or foreign tokens do not', async () => {
+      const r = await save({ enabled: true, cards: [{ code: ' 1234 ', label: 'Ana' }, { code: '1234' }, { code: '' }, { code: 'x'.repeat(100) }] })
+      expect(r.status).to.equal(200)
+      const Setting = (await import('../src/models/setting.js')).default
+      const stored = (await Setting.findOne({ tenantId: tenant._id, key: 'staffCards' }).lean()).value
+      expect(stored.cards.map((c) => c.code)).to.deep.equal(['1234', 'x'.repeat(64)])
+      const { staffCardFor, issueStaffToken } = await import('../src/services/staffCards.js')
+      expect((await staffCardFor(tenant._id, '1234')).label).to.equal('Ana')
+      expect(await staffCardFor(tenant._id, '9999')).to.equal(null)
+      expect((await tryPin('card:nope')).status).to.equal(401)
+      const token = issueStaffToken(tenant._id)
+      expect((await tryPin(`card:${token}`)).status).to.equal(200)
+      const other = issueStaffToken('64b000000000000000000000') // a token of another shop is no good here
+      expect((await tryPin(`card:${other}`)).status).to.equal(401)
+    })
+
+    it('writing a master card: a blank card gets a new code; a card with data is refused and nothing is written; a master card at the reader never reaches the customer path', async () => {
+      const Peripheral = (await import('../src/models/peripheral.js')).default
+      const reader = await Peripheral.create({ tenantId: tenant._id, name: 'rfid', type: 'rfid_reader', enabled: true, port: 'COM9' })
+      const mw = coinMachine.middleware
+      const keep = { last: mw.lastCard, write: mw.writeCardData, tid: coinMachine.tenantId }
+      const writes = []
+      coinMachine.tenantId = tenant._id
+      mw.writeCardData = async (id, d) => { writes.push(d); return { success: true } }
+      try {
+        mw.lastCard = { cardId: '5550001111', name: 'Joana', nif: '', balance: '500' } // a customer's card
+        let err = null
+        await coinMachine.writeStaffCard().catch((e) => { err = e })
+        expect(err?.message).to.match(/já tem dados/)
+        expect(writes).to.have.length(0)
+        mw.lastCard = { new: 'true', cardId: '', name: '', nif: '', balance: '' }
+        const r = await coinMachine.writeStaffCard()
+        expect(r.code).to.match(/^\d{10}$/)
+        expect(writes).to.have.length(1)
+        expect(writes[0]).to.include({ code: r.code, balance: 0 })
+        // the card was written but is not in the list yet: it is still never registered as a customer card
+        await coinMachine.handleCardRead({ cardNumber: r.code, card: { cardId: r.code, name: 'Cartão-mestre', balance: '0' } })
+        expect(await Card.findOne({ tenantId: tenant._id, code: r.code })).to.equal(null)
+        // in the list, at the reader: it gives out a token and loads nothing
+        await save({ enabled: true, cards: [{ code: r.code, label: 'Ana' }] })
+        let loaded = false
+        const sub = coinMachine.client.setClientInfoByCard
+        coinMachine.client.setClientInfoByCard = async () => { loaded = true; return false }
+        coinMachine.staffCodesIgnored.clear()
+        await coinMachine.handleCardRead({ cardNumber: r.code, card: { cardId: r.code, name: 'Cartão-mestre', balance: '0' } })
+        coinMachine.client.setClientInfoByCard = sub
+        expect(loaded).to.equal(false)
+      } finally { mw.lastCard = keep.last; mw.writeCardData = keep.write; coinMachine.tenantId = keep.tid; await reader.deleteOne() }
+    })
+
+    it('switched off, no card is a master card', async () => {
+      await save({ enabled: false, cards: [{ code: '1234', label: 'Ana' }] })
+      const { staffCardFor } = await import('../src/services/staffCards.js')
+      expect(await staffCardFor(tenant._id, '1234')).to.equal(null)
+    })
+  })
+
   describe('the staff PIN is renewed every Monday', () => {
     let Setting
     const setPin = (value) => request(app).post('/api/admin/settings').set(adminAuth()).send({ key: 'adminPin', value })

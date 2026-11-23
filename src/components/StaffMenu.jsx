@@ -3,6 +3,7 @@ import { Settings, Lock, Wallet, Gift, WashingMachine, KeyRound } from 'lucide-r
 import Modal from '@/components/ui/Modal'
 import api from '@/services/api'
 import { useKioskLock } from '@/context/KioskLockContext'
+import { subscribe } from '@/services/websocket'
 import KioskDayCloseModal from '@/components/KioskDayCloseModal'
 import GiftCardForm from '@/components/GiftCardForm'
 import StaffMachinesModal from '@/components/StaffMachinesModal'
@@ -25,6 +26,12 @@ const STAFF_IDLE_MS = 60_000
 export default function StaffMenu() {
   const { lockFeatureEnabled, lock } = useKioskLock()
   const [showPinPrompt, setShowPinPrompt] = useState(false)
+  const [buttonShown, setButtonShown] = useState(true) // setting kioskStaffButton: the watermark button that asks for the PIN
+  useEffect(() => { api.getPublicSetting('kioskStaffButton').then((r) => setButtonShown(r?.value !== false)).catch(() => {}) }, [])
+  const [pinVisible, setPinVisible] = useState(false) // setting kioskPinVisible: show the digits while they are typed
+  useEffect(() => {
+    api.getPublicSetting('kioskPinVisible').then((r) => setPinVisible(Boolean(r?.value))).catch(() => {})
+  }, [showPinPrompt])
   const [pin, setPin] = useState('')
   const [pinError, setPinError] = useState(null)
   const [checking, setChecking] = useState(false)
@@ -96,6 +103,14 @@ export default function StaffMenu() {
     }
   }
 
+  // A master card in the reader: the shop PC sends this screen a token that stands in for the PIN, and the staff area opens with no PIN.
+  useEffect(() => subscribe((m) => {
+    if (m?.type !== 'staff:card_unlock' || !m.payload?.token) return
+    setVerifiedPin(`card:${m.payload.token}`)
+    setShowPinPrompt(false); setPin(''); setPinError(null)
+    setShowChooser(true)
+  }), [])
+
   // Staff left the kiosk with the staff area open: after a minute with no touch it closes by itself and the PIN is
   // forgotten, so the next person who walks up needs the PIN again.
   const staffOpen = showPinPrompt || showChooser || showGift || showDayClose || showMachines || showKey
@@ -130,7 +145,7 @@ export default function StaffMenu() {
 
   return (
     <>
-      <button
+      {buttonShown && <button
         type="button"
         onClick={() => { setPinError(null); setShowPinPrompt(true) }}
         aria-label="Staff"
@@ -138,14 +153,14 @@ export default function StaffMenu() {
         className="fixed bottom-2 left-2 z-30 w-8 h-8 rounded-full bg-transparent text-neutral-500 opacity-[0.09] hover:opacity-60 active:opacity-70 flex items-center justify-center transition-opacity"
       >
         <Settings className="w-4 h-4" aria-hidden />
-      </button>
+      </button>}
 
       {showPinPrompt && (
         <Modal open={showPinPrompt} onClose={closeAll} title="Área de Staff">
           <div className="space-y-4">
             <p className="text-sm text-neutral-600">Introduza o PIN de staff para continuar.</p>
             <input
-              type="password"
+              type={pinVisible ? 'text' : 'password'}
               inputMode="numeric"
               autoComplete="off"
               value={pin}

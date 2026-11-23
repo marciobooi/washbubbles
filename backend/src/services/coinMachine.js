@@ -173,6 +173,7 @@ class CoinMachine extends EventEmitter {
             return r
           },
           blank_card: async () => this.blankCardAtReader(),
+          write_staff_card: async () => this.writeStaffCard(),
           gift_card: async (p) => { const { issueGiftCard } = await import('./giftCard.js'); return issueGiftCard({ tenantId: this.tenantId }, this, { ...p, by: p?.by || 'admin (central)' }) },
           sync_now: async () => { await this.downlink?.pullAll?.(); return { success: true } },
           reinit_hardware: async () => this.reinitHardware('remote'),
@@ -675,6 +676,23 @@ class CoinMachine extends EventEmitter {
    */
   async handleCardRead(data) {
     const { cardNumber } = data
+
+    // A MASTER card (chosen by the admin): it is not a customer card. The staff area opens on the kiosk with no PIN, by a token only that
+    // shop's kiosk screens receive. Nothing is loaded, charged or shown to the customer.
+    try {
+      const { staffCardFor, issueStaffToken } = await import('./staffCards.js')
+      const master = await staffCardFor(this.tenantId, cardNumber)
+      if (master) {
+        const { broadcastToKiosks } = await import('../wsServer.js')
+        broadcastToKiosks(this.tenantId, 'staff:card_unlock', { token: issueStaffToken(this.tenantId), label: master.label })
+        await this.auditSystem('staff.card.unlock', { label: master.label, card: `•••${String(cardNumber).slice(-4)}` })
+        return
+      }
+    } catch (err) { console.error('[StaffCard] check failed:', err.message) }
+
+    // A card this PC has just written as a master card, not in the admin's list yet (the list is saved a moment later): never a customer card.
+    if (this.staffCodesIgnored?.get(String(cardNumber)) > Date.now()) return
+    if (this.staffWriting) return // a master card is being written: a blank card at the reader is for that, not to be registered as a customer's
 
     // A BLANK card at the reader (just dispensed after a purchase): write the purchase onto it now.
     if (data.card && isBlankCard(data.card)) {
@@ -1567,6 +1585,37 @@ class CoinMachine extends EventEmitter {
   }
 
   /** Wipe the card at the reader and forget it here (its sales stay: that money really came in). */
+  /**
+   * Write a MASTER card: a blank card put in the reader gets a new code of its own (and no balance). The admin then adds the code to the
+   * list (Definições > Quiosque); from then on that card opens the staff area (see services/staffCards.js). Only a BLANK card is written:
+   * a customer's card is never overwritten.
+   */
+  async writeStaffCard() {
+    if (this.staffWriting) throw new Error('Já há um cartão-mestre a ser gravado')
+    const reader = await Peripheral.findOne(this.scoped({ type: 'rfid_reader', enabled: true }))
+    if (!reader) throw new Error('Nenhum leitor de cartões configurado')
+    this.staffWriting = true
+    try {
+      const until = Date.now() + 45_000
+      while (!this.middleware.lastCard && Date.now() < until) await new Promise((r) => setTimeout(r, 500))
+      const present = this.middleware.lastCard
+      if (!present) throw new Error('Não há nenhum cartão no leitor. Ponha um cartão em branco e tente outra vez.')
+      if (!isBlankCard(present)) throw new Error('O cartão no leitor já tem dados (pode ser de um cliente). Use um cartão em branco.')
+      const crypto = (await import('crypto')).default
+      let code = ''
+      for (let i = 0; i < 10 && !code; i++) {
+        const c = String(crypto.randomInt(1000000000, 10000000000))
+        if (!(await Card.findOne(this.scoped({ code: c })).lean())) code = c
+      }
+      if (!code) throw new Error('Não foi possível criar um número de cartão')
+      this.staffCodesIgnored = this.staffCodesIgnored || new Map()
+      this.staffCodesIgnored.set(code, Date.now() + 3 * 60_000)
+      await this.middleware.writeCardData(reader._id, { code, balance: 0, name: 'Cartão-mestre' })
+      await this.auditSystem('staff.card.written', { card: `•••${code.slice(-4)}` })
+      return { code }
+    } finally { this.staffWriting = false }
+  }
+
   async blankCardAtReader() {
     const res = await this.middleware.blankCardViaGateway()
     const code = res.before.cardId
