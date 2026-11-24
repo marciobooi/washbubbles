@@ -113,18 +113,11 @@ function RevenueChart({ rangeDays, rangeAvgDaily, byMonth = false }) {
               />}
             />
             {rangeAvgDaily > 0 && <ReferenceLine y={rangeAvgDaily} stroke="#6366f1" strokeDasharray="5 4" strokeOpacity={0.7} label={{ value: `média ${fmtEuro(rangeAvgDaily)}`, position: 'insideTopRight', fill: '#6366f1', fontSize: 10, fontWeight: 700 }} />}
-            {byMonth ? (
-              // a few months: bars (a line between two points says nothing)
-              <>
-                <Bar isAnimationActive={false} dataKey="cash" stackId="a" fill="var(--color-cash)" maxBarSize={56} />
-                <Bar isAnimationActive={false} dataKey="mbway" stackId="a" fill="var(--color-mbway)" maxBarSize={56} radius={[4, 4, 0, 0]} />
-              </>
-            ) : (
-              <>
-                <Area isAnimationActive={false} dataKey="mbway" type="monotone" stackId="a" stroke="var(--color-mbway)" fill="url(#fill-mbway)" />
-                <Area isAnimationActive={false} dataKey="cash" type="monotone" stackId="a" stroke="var(--color-cash)" fill="url(#fill-cash)" />
-              </>
-            )}
+            {/* no <></> around these: recharts only sees its direct children (a Fragment can hide them, as it did on the server's build) */}
+            {byMonth && <Bar isAnimationActive={false} dataKey="cash" stackId="a" fill="var(--color-cash)" maxBarSize={56} />}
+            {byMonth && <Bar isAnimationActive={false} dataKey="mbway" stackId="a" fill="var(--color-mbway)" maxBarSize={56} radius={[4, 4, 0, 0]} />}
+            {!byMonth && <Area isAnimationActive={false} dataKey="mbway" type="monotone" stackId="a" stroke="var(--color-mbway)" fill="url(#fill-mbway)" />}
+            {!byMonth && <Area isAnimationActive={false} dataKey="cash" type="monotone" stackId="a" stroke="var(--color-cash)" fill="url(#fill-cash)" />}
             {/* card use is not revenue (it was counted when the card was loaded): a line on its own, not part of the stack */}
             <Line isAnimationActive={false} dataKey="card" type="monotone" stroke="var(--color-card)" strokeWidth={2} dot={false} />
           </ComposedChart>
