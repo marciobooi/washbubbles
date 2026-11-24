@@ -34,11 +34,11 @@ services:
       LT_DISABLE_WEB_UI: "true"
       LT_UPDATE_MODELS: "false"
       # Each worker holds every language model in memory (about 900 MB each): with the default threads it was killed 25 times by the
-      # 3 GB limit (to 2026-10-19). Fewer threads and a roomier limit (the server has 7.6 GB and the rest uses under 1 GB).
+      # 3 GB limit (to 2026-10-19). Fewer threads and a roomier limit (the server has 7.6 GB and the rest uses under 1 GB); 4 GB was still hit twice in the first days (2026-11-10), now 5 GB.
       LT_THREADS: "2"
     volumes:
       - washbubbles_lt_models:/home/libretranslate/.local
-    mem_limit: 4g
+    mem_limit: 5g
 
   backend:
     build: ./backend
