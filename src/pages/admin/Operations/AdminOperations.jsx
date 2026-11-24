@@ -90,7 +90,7 @@ function OfflineBanner({ shop }) {
   return (
     <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 text-amber-900 px-4 py-3 text-sm">
       <strong>A loja está sem ligação à internet</strong>
-      {shop.offlineSeconds != null ? ` há ${shop.offlineSeconds >= 120 ? Math.round(shop.offlineSeconds / 60) + ' min' : shop.offlineSeconds + ' s'}` : ''}. Iniciar e Parar não chegam à loja até voltar a ligação. No quiosque, as máquinas continuam a funcionar com dinheiro e as vendas são enviadas quando voltar.
+      {shop.offlineSeconds != null ? ` há ${shop.offlineSeconds >= 120 ? Math.round(shop.offlineSeconds / 60) + ' min' : shop.offlineSeconds + ' s'}` : ''}. Iniciar, Libertar e Enviar impulso não chegam à loja até voltar a ligação. No quiosque, as máquinas continuam a funcionar com dinheiro e as vendas são enviadas quando voltar.
     </div>
   )
 }
@@ -141,7 +141,7 @@ function MachineTile({ m, onStart, onStop, onImpulse, onSetFault, onSetRepaired,
           <ActionButton onClick={onStart} variant="primary" Icon={Play}>Iniciar</ActionButton>
         )}
         {m.status === 'working' && (
-          <ActionButton onClick={onStop} variant="secondary" Icon={Square}>Parar</ActionButton>
+          <ActionButton onClick={onStop} variant="secondary" Icon={Square}>Libertar</ActionButton>
         )}
         {isDry && m.status === 'working' && (
           <ActionButton onClick={onImpulse} variant="primary" Icon={Plus}>Enviar impulso</ActionButton>
@@ -256,13 +256,15 @@ export default function AdminOperations() {
     try {
       const r = action === 'start' ? await api.adminStartMachine(m._id, blocks) : action === 'impulse' ? await api.adminImpulseMachine(m._id, blocks) : await api.adminEndMachine(m._id)
       if (r?.queued) {
-        toast({ title: `Pedido enviado ao posto`, description: `${action === 'start' ? 'Iniciar' : action === 'impulse' ? 'Enviar impulso a' : 'Parar'} ${m.name}. O estado atualiza quando o posto confirmar.`, variant: 'success' })
+        toast({ title: `Pedido enviado ao posto`, description: `${action === 'start' ? 'Iniciar' : action === 'impulse' ? 'Enviar impulso a' : 'Libertar'} ${m.name}. O estado atualiza quando o posto confirmar.`, variant: 'success' })
       } else {
         toast({ title: action === 'impulse' ? `${blocks > 1 ? blocks + ' impulsos enviados' : 'Impulso enviado'} à ${m.name}` : action === 'start' ? `${m.name} iniciada${blocks > 1 ? ` (${blocks} ciclos)` : ''}` : `${m.name} libertada`, variant: 'success' })
         if (action !== 'impulse') setMachines((s) => s.map((x) => x._id === m._id ? { ...x, status: action === 'start' ? 'working' : 'free', statusText: action === 'start' ? 'Ocupado' : 'Livre' } : x))
       }
+      return true
     } catch (e) {
-      toast({ title: action === 'start' ? 'Não foi possível iniciar' : action === 'impulse' ? 'Não foi possível enviar o impulso' : 'Não foi possível parar', description: e?.message || String(e), variant: 'destructive' })
+      toast({ title: action === 'start' ? 'Não foi possível iniciar' : action === 'impulse' ? 'Não foi possível enviar o impulso' : 'Não foi possível libertar', description: e?.message || String(e), variant: 'destructive' })
+      return false
     }
   }
 
@@ -270,9 +272,8 @@ export default function AdminOperations() {
 
   const impulseMachine = (m) => setDryPick({ m, blocks: 1, add: true })
 
-  const stopMachine = (m) => {
-    const ok = window.confirm(`Parar ${m.name}?\n\nIsto liberta a máquina no sistema, mas os ciclos já pagos ficam dentro da própria máquina (continua pronta a trabalhar). Cancele-os também na máquina: botão de parar ou desligar da corrente.`)
-    if (ok) runAdminAction(m, 'end')
+  const stopMachine = async (m) => {
+    if (await runAdminAction(m, 'end')) toast({ title: `${m.name}: só libertada no sistema`, description: 'A máquina não pára: o ciclo em curso continua até ao fim. Para o cortar, usa o botão de parar na própria máquina ou desliga-a da corrente.' })
   }
 
   const setOffline = (m) => setMachineStatus(m, 'offline', 'Offline')
