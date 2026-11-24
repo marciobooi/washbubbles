@@ -116,17 +116,17 @@ function RevenueChart({ rangeDays, rangeAvgDaily, byMonth = false }) {
             {byMonth ? (
               // a few months: bars (a line between two points says nothing)
               <>
-                <Bar dataKey="cash" stackId="a" fill="var(--color-cash)" maxBarSize={56} />
-                <Bar dataKey="mbway" stackId="a" fill="var(--color-mbway)" maxBarSize={56} radius={[4, 4, 0, 0]} />
+                <Bar isAnimationActive={false} dataKey="cash" stackId="a" fill="var(--color-cash)" maxBarSize={56} />
+                <Bar isAnimationActive={false} dataKey="mbway" stackId="a" fill="var(--color-mbway)" maxBarSize={56} radius={[4, 4, 0, 0]} />
               </>
             ) : (
               <>
-                <Area dataKey="mbway" type="monotone" stackId="a" stroke="var(--color-mbway)" fill="url(#fill-mbway)" />
-                <Area dataKey="cash" type="monotone" stackId="a" stroke="var(--color-cash)" fill="url(#fill-cash)" />
+                <Area isAnimationActive={false} dataKey="mbway" type="monotone" stackId="a" stroke="var(--color-mbway)" fill="url(#fill-mbway)" />
+                <Area isAnimationActive={false} dataKey="cash" type="monotone" stackId="a" stroke="var(--color-cash)" fill="url(#fill-cash)" />
               </>
             )}
             {/* card use is not revenue (it was counted when the card was loaded): a line on its own, not part of the stack */}
-            <Line dataKey="card" type="monotone" stroke="var(--color-card)" strokeWidth={2} dot={false} />
+            <Line isAnimationActive={false} dataKey="card" type="monotone" stroke="var(--color-card)" strokeWidth={2} dot={false} />
           </ComposedChart>
         </ChartContainer>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
