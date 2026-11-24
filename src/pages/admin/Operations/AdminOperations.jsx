@@ -143,7 +143,7 @@ function MachineTile({ m, onStart, onStop, onImpulse, onSetFault, onSetRepaired,
         {m.status === 'working' && (
           <ActionButton onClick={onStop} variant="secondary" Icon={Square}>Libertar</ActionButton>
         )}
-        {isDry && m.status === 'working' && (
+        {isDry && m.status !== 'fault' && m.status !== 'offline' && (
           <ActionButton onClick={onImpulse} variant="primary" Icon={Plus}>Enviar impulso</ActionButton>
         )}
         {!isOperator && m.status === 'reserved' && (
