@@ -166,6 +166,7 @@ class CoinMachine extends EventEmitter {
         handlers: {
           start_machine: (p) => this.adminStartMachine(p.machineId, p.blocks),
           end_machine: (p) => this.adminEndMachine(p.machineId),
+          add_impulse: (p) => this.adminAddImpulse(p.machineId, p.blocks),
           set_service: (p) => this.setMachineService(p.machineId, p.outOfService, p.status),
           empty_hopper: async () => {
             const r = await this.emptyHopper()
@@ -1887,6 +1888,38 @@ class CoinMachine extends EventEmitter {
     try { await broadcastMachine(fresh) } catch { /* the websocket server may not be up in tests */ }
     this.emit('machines-activated', { machineId: String(machine._id), admin: true })
     console.log(`Machine ${machine.name} started by admin via Interface ${iface.name} (addr=${iface.address}, port=${machine.port}, blocks=${n})`)
+    return { success: true, blocks: n }
+  }
+
+  /**
+   * Admin: add cycles to a dryer that is already running (the customer's coin after the first): one impulse per block as separate
+   * commands, and the cycle clock is extended by the same time so the machine is not freed while it still turns.
+   */
+  async adminAddImpulse(machineId, blocks = 1) {
+    const machine = await Machine.findOne(this.scoped({ _id: machineId })).populate('interfaceId')
+    if (!machine) throw new Error('Machine not found')
+    if ((machine.type || 'wash') !== 'dry') throw new Error(`${machine.name} is not a dryer`)
+    const iface = machine.interfaceId
+    if (!iface || !machine.port) throw new Error(`${machine.name} has no interface/port configured`)
+    if (iface.status !== 'active') throw new Error(`Interface ${iface.name} is not active (status: ${iface.status})`)
+    if (machine.outOfService || machine.status === 'offline' || machine.status === 'fault') throw new Error(`${machine.name} is out of service`)
+    const n = this.blocksFor(machine, { quantity: blocks })
+    flows.step(this.tenantId, 'admin_impulse', `Impulso manual (staff/admin): ${machine.name}${n > 1 ? ` · ${n} ciclos` : ''}`, { machine: machine.name, blocks: n }, { machine: machine.name })
+    // Throws when the controller is not connected: nothing is changed in that case.
+    await this.middleware.sendMachineActivation(machine, iface, 1)
+    const extra = await this.cycleMinutes(machine, n)
+    const from = machine.busyUntil && machine.busyUntil > new Date() ? new Date(machine.busyUntil).getTime() : Date.now() + 2 * 60_000
+    machine.busyUntil = new Date(from + extra * 60_000)
+    machine.status = 'working'
+    machine.statusText = 'Ocupado'
+    if (!machine.startedAt) machine.startedAt = new Date()
+    await machine.save()
+    if (n > 1) {
+      this.impulseJobs = (this.impulseJobs || 0) + 1
+      this.sendRemainingImpulses(machine._id, n - 1).catch((err) => console.error('[Cycle] remaining impulses:', err.message)).finally(() => { this.impulseJobs -= 1 })
+    }
+    try { await broadcastMachine(machine) } catch { /* the websocket server may not be up in tests */ }
+    console.log(`[Cycle] ${machine.name}: ${n} impulse(s) added by admin`)
     return { success: true, blocks: n }
   }
 

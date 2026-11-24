@@ -58,7 +58,7 @@ router.use(requireDashboardUser)
 // exchange, empty / put back / top up the hopper): every other route answers 403 for them.
 const OPERATOR_ALLOWED = (req) =>
   (req.method === 'GET' && (req.path === '/machines' || req.path === '/shop-status' || req.path === '/day-close' || req.path === '/day-close/summary' || /^\/(day-close|commands)\/[0-9a-f]{24}$/.test(req.path) || /^\/day-close\/[0-9a-f]{24}\/report$/.test(req.path))) ||
-  (req.method === 'POST' && (/^\/machines\/[^/]+\/(start|end)$/.test(req.path) || req.path === '/day-close' || /^\/day-close\/(adjust-float|withdraw|exchange|payout-coins|preview-report)$/.test(req.path) || /^\/day-close\/[0-9a-f]{24}\/email$/.test(req.path) || /^\/hopper\/(refill|restore|empty)$/.test(req.path)))
+  (req.method === 'POST' && (/^\/machines\/[^/]+\/(start|end|impulse)$/.test(req.path) || req.path === '/day-close' || /^\/day-close\/(adjust-float|withdraw|exchange|payout-coins|preview-report)$/.test(req.path) || /^\/day-close\/[0-9a-f]{24}\/email$/.test(req.path) || /^\/hopper\/(refill|restore|empty)$/.test(req.path)))
 router.use((req, res, next) => {
   if (req.userModel?.role === 'OPERATOR' && !OPERATOR_ALLOWED(req)) return res.status(403).json({ error: 'Forbidden' })
   next()
@@ -72,7 +72,7 @@ const SHOP_CONFIG_PATHS = /^\/(machines|prices|settings|interfaces|peripherals)(
 router.use((req, res, next) => {
   if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next()
   res.on('finish', () => {
-    if (res.statusCode >= 300 || !SHOP_CONFIG_PATHS.test(req.path) || /\/(start|end|service)$/.test(req.path)) return
+    if (res.statusCode >= 300 || !SHOP_CONFIG_PATHS.test(req.path) || /\/(start|end|impulse|service)$/.test(req.path)) return
     ;(async () => {
       const { default: coinMachine } = await import('../services/coinMachine.js')
       if (coinMachine.running || !req.tenantId) return
@@ -340,8 +340,8 @@ async function machineAdminAction(req, res, kind) {
 
   if (coinMachine.running) {
     try {
-      const result = kind === 'start' ? await coinMachine.adminStartMachine(machine._id, blocks) : await coinMachine.adminEndMachine(machine._id)
-      logAction(req, `machine.admin_${kind}`, 'Machine', machine._id, { name: machine.name, ...(kind === 'start' ? { blocks } : {}) })
+      const result = kind === 'start' ? await coinMachine.adminStartMachine(machine._id, blocks) : kind === 'impulse' ? await coinMachine.adminAddImpulse(machine._id, blocks) : await coinMachine.adminEndMachine(machine._id)
+      logAction(req, `machine.admin_${kind}`, 'Machine', machine._id, { name: machine.name, ...(kind !== 'end' ? { blocks } : {}) })
       if (kind === 'start') {
         await withTenant(Sale, req).create({ machineId: machine._id, amount: 0, type: 'admin_start', method: 'cash' }).catch(() => {})
       }
@@ -360,18 +360,19 @@ async function machineAdminAction(req, res, kind) {
   }
   const SyncCommandT = withTenant(SyncCommand, req)
   // A double click (seen live: two start orders 60 ms apart) is one order: the one already on its way is answered again.
-  const type = kind === 'start' ? 'start_machine' : 'end_machine'
+  const type = kind === 'start' ? 'start_machine' : kind === 'impulse' ? 'add_impulse' : 'end_machine'
   const twin = await SyncCommandT.find({ type, 'payload.machineId': String(machine._id), createdAt: { $gt: new Date(Date.now() - 15_000) } }).select('_id').lean()
   if (twin.length) return res.json({ success: true, queued: true, commandIds: twin.map((c) => c._id), duplicate: true })
   const cmds = []
   for (const k of kiosks) {
-    cmds.push(await SyncCommandT.create({ kioskId: k._id, type, payload: kind === 'start' ? { machineId: String(machine._id), blocks } : { machineId: String(machine._id) } }))
+    cmds.push(await SyncCommandT.create({ kioskId: k._id, type, payload: kind === 'start' || kind === 'impulse' ? { machineId: String(machine._id), blocks } : { machineId: String(machine._id) } }))
   }
   logAction(req, `machine.admin_${kind}_requested`, 'Machine', machine._id, { name: machine.name })
   res.json({ success: true, queued: true, commandIds: cmds.map((c) => c._id) })
 }
 router.post('/machines/:id/start', requireMachineOperator, (req, res, next) => machineAdminAction(req, res, 'start').catch(next))
 router.post('/machines/:id/end', requireMachineOperator, (req, res, next) => machineAdminAction(req, res, 'end').catch(next))
+router.post('/machines/:id/impulse', requireMachineOperator, (req, res, next) => machineAdminAction(req, res, 'impulse').catch(next))
 
 // POST /admin/machines/:id/service — logs a manual maintenance visit and
 // resolves the machine's open ticket, if any.

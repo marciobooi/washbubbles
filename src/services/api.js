@@ -686,6 +686,10 @@ export function createApi(config) {
   function adminStartMachine(id, blocks) {
     return request(`/admin/machines/${id}/start`, { method: 'POST', json: blocks > 1 ? { blocks } : undefined, expect: 'json' });
   }
+  // Add cycles to a dryer that is already running (sends more impulses and extends its clock).
+  function adminImpulseMachine(id, blocks) {
+    return request(`/admin/machines/${id}/impulse`, { method: 'POST', json: { blocks }, expect: 'json' });
+  }
   function adminShopStatus() {
     return request('/admin/shop-status', { method: 'GET', expect: 'json' });
   }
@@ -813,6 +817,7 @@ export function createApi(config) {
     // Middleware
     activateMachine,
     adminStartMachine,
+    adminImpulseMachine,
     adminEndMachine,
     adminShopStatus,
 
@@ -921,6 +926,7 @@ export const {
   updatePeripheral,
   activateMachine,
   adminStartMachine,
+  adminImpulseMachine,
   adminEndMachine,
   adminShopStatus,
   getDayCloseSummary,

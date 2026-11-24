@@ -882,6 +882,30 @@ describe('Admin start/end without payment', function () {
   })
 })
 
+describe('Admin: send an impulse to a dryer that is already running', function () {
+  let app, adminToken, tenant, kiosk
+  before(async () => {
+    await startTestDb(); await clearTestDb()
+    app = await buildTestApp()
+    ;({ tenant, kiosk } = await seedTenantAndUsers())
+    adminToken = (await request(app).post('/api/auth/login').send({ username: 'admin', password: 'admin1234' })).body.token
+  })
+  after(async () => { await stopTestDb() })
+
+  it('on the central server it travels to the shop as add_impulse with the cycles', async () => {
+    const SyncCommand = (await import('../src/models/syncCommand.js')).default
+    const Machine = (await import('../src/models/machine.js')).default
+    const User = (await import('../src/models/user.js')).default
+    await User.findByIdAndUpdate(kiosk._id, { lastSeen: new Date() })
+    const dry = await Machine.create({ tenantId: tenant._id, name: 'Secar Impulso', type: 'dry', weight: 8, tImp: 15, status: 'working' })
+    const res = await request(app).post(`/api/admin/machines/${dry._id}/impulse`).set('Authorization', `Bearer ${adminToken}`).send({ blocks: 2 })
+    expect(res.status).to.equal(200)
+    expect(res.body.queued).to.equal(true)
+    const cmd = await SyncCommand.findOne({ type: 'add_impulse', 'payload.machineId': String(dry._id) })
+    expect(cmd.payload.blocks).to.equal(2)
+  })
+})
+
 describe('Admin setting: automatic refund time', function () {
   let app, adminToken
   before(async () => {

@@ -1,7 +1,7 @@
 import React from 'react'
 import { toast } from '@/components/ui/Toast'
 import api from '@/services/api'
-import { Play, Square, X, Power, Wrench, CheckCircle2, RefreshCw } from 'lucide-react'
+import { Play, Plus, Square, X, Power, Wrench, CheckCircle2, RefreshCw } from 'lucide-react'
 import { connect, subscribe } from '@/services/websocket'
 import { useAuth } from '@/context/AuthContext'
 import PageHeader from '@/components/PageHeader'
@@ -55,15 +55,15 @@ function ActionButton({ onClick, variant = 'secondary', Icon, children, full = f
   )
 }
 
-function DryerStartModal({ machine, blocks, setBlocks, onClose, onConfirm }) {
+function DryerStartModal({ machine, blocks, setBlocks, onClose, onConfirm, add }) {
   const gap = Number(machine?.tImp) > 0 ? Number(machine.tImp) : 15
   const set = (b) => setBlocks(Math.min(8, Math.max(1, b)))
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" onClick={onClose}>
       <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <h3 className="m-0 mb-1 text-lg font-extrabold">Iniciar {machine?.name}</h3>
-        <p className="m-0 mb-4 text-sm text-[#8a8478]">Quantos ciclos de {gap} min?</p>
+        <h3 className="m-0 mb-1 text-lg font-extrabold">{add ? 'Enviar impulso a' : 'Iniciar'} {machine?.name}</h3>
+        <p className="m-0 mb-4 text-sm text-[#8a8478]">{add ? `A máquina já está a trabalhar: acrescenta ciclos de ${gap} min.` : `Quantos ciclos de ${gap} min?`}</p>
         <div className="flex items-center justify-center gap-4 mb-2">
           <Button variant="outline" size="icon" onClick={() => set(blocks - 1)} disabled={blocks <= 1} aria-label="Menos um ciclo">
             −
@@ -79,7 +79,7 @@ function DryerStartModal({ machine, blocks, setBlocks, onClose, onConfirm }) {
         <div className="text-center text-sm font-semibold mb-5">{blocks * gap} min no total</div>
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button onClick={onConfirm}>Iniciar</Button>
+          <Button onClick={onConfirm}>{add ? 'Enviar' : 'Iniciar'}</Button>
         </div>
       </div>
     </div>
@@ -95,7 +95,7 @@ function OfflineBanner({ shop }) {
   )
 }
 
-function MachineSection({ title, machines, loading }) {
+function MachineSection({ title, machines, loading, tileProps }) {
   return (
     <div>
       <h4 className="m-0 mb-3.5 text-[13px] uppercase tracking-[0.06em] text-[#8a8478] font-bold">{title}</h4>
@@ -107,14 +107,14 @@ function MachineSection({ title, machines, loading }) {
         </div>
       ) : (
         <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
-          {machines.map((m) => <MachineTile key={m._id} m={m} />)}
+          {machines.map((m) => <MachineTile key={m._id} m={m} {...tileProps} onStart={() => tileProps.startMachine(m)} onStop={() => tileProps.stopMachine(m)} onImpulse={() => tileProps.impulseMachine(m)} onSetFault={() => tileProps.setFault(m)} onSetRepaired={() => tileProps.setRepaired(m)} onSetOffline={() => tileProps.setOffline(m)} onSetOnline={() => tileProps.setOnline(m)} />)}
         </div>
       )}
     </div>
   )
 }
 
-function MachineTile({ m, onStart, onStop, onSetFault, onSetRepaired, onSetOffline, onSetOnline, isOperator }) {
+function MachineTile({ m, onStart, onStop, onImpulse, onSetFault, onSetRepaired, onSetOffline, onSetOnline, isOperator }) {
   const isDry = m.type === 'dry'
 
   return (
@@ -142,6 +142,9 @@ function MachineTile({ m, onStart, onStop, onSetFault, onSetRepaired, onSetOffli
         )}
         {m.status === 'working' && (
           <ActionButton onClick={onStop} variant="secondary" Icon={Square}>Parar</ActionButton>
+        )}
+        {isDry && m.status === 'working' && (
+          <ActionButton onClick={onImpulse} variant="primary" Icon={Plus}>Enviar impulso</ActionButton>
         )}
         {!isOperator && m.status === 'reserved' && (
           <ActionButton onClick={() => onSetOnline()} variant="secondary" Icon={X}>Cancelar</ActionButton>
@@ -251,19 +254,21 @@ export default function AdminOperations() {
   // the shop reports back, so it is NOT set optimistically.
   const runAdminAction = async (m, action, blocks = 1) => {
     try {
-      const r = action === 'start' ? await api.adminStartMachine(m._id, blocks) : await api.adminEndMachine(m._id)
+      const r = action === 'start' ? await api.adminStartMachine(m._id, blocks) : action === 'impulse' ? await api.adminImpulseMachine(m._id, blocks) : await api.adminEndMachine(m._id)
       if (r?.queued) {
-        toast({ title: `Pedido enviado ao posto`, description: `${action === 'start' ? 'Iniciar' : 'Parar'} ${m.name}. O estado atualiza quando o posto confirmar.`, variant: 'success' })
+        toast({ title: `Pedido enviado ao posto`, description: `${action === 'start' ? 'Iniciar' : action === 'impulse' ? 'Enviar impulso a' : 'Parar'} ${m.name}. O estado atualiza quando o posto confirmar.`, variant: 'success' })
       } else {
-        toast({ title: action === 'start' ? `${m.name} iniciada${blocks > 1 ? ` (${blocks} ciclos)` : ''}` : `${m.name} libertada`, variant: 'success' })
-        setMachines((s) => s.map((x) => x._id === m._id ? { ...x, status: action === 'start' ? 'working' : 'free', statusText: action === 'start' ? 'Ocupado' : 'Livre' } : x))
+        toast({ title: action === 'impulse' ? `${blocks > 1 ? blocks + ' impulsos enviados' : 'Impulso enviado'} à ${m.name}` : action === 'start' ? `${m.name} iniciada${blocks > 1 ? ` (${blocks} ciclos)` : ''}` : `${m.name} libertada`, variant: 'success' })
+        if (action !== 'impulse') setMachines((s) => s.map((x) => x._id === m._id ? { ...x, status: action === 'start' ? 'working' : 'free', statusText: action === 'start' ? 'Ocupado' : 'Livre' } : x))
       }
     } catch (e) {
-      toast({ title: action === 'start' ? 'Não foi possível iniciar' : 'Não foi possível parar', description: e?.message || String(e), variant: 'destructive' })
+      toast({ title: action === 'start' ? 'Não foi possível iniciar' : action === 'impulse' ? 'Não foi possível enviar o impulso' : 'Não foi possível parar', description: e?.message || String(e), variant: 'destructive' })
     }
   }
 
   const startMachine = (m) => (m.type === 'dry' ? setDryPick({ m, blocks: 1 }) : runAdminAction(m, 'start'))
+
+  const impulseMachine = (m) => setDryPick({ m, blocks: 1, add: true })
 
   const stopMachine = (m) => {
     const ok = window.confirm(`Parar ${m.name}?\n\nIsto liberta a máquina no sistema, mas os ciclos já pagos ficam dentro da própria máquina (continua pronta a trabalhar). Cancele-os também na máquina: botão de parar ou desligar da corrente.`)
@@ -275,6 +280,7 @@ export default function AdminOperations() {
   const setFault = (m) => setMachineStatus(m, 'fault', 'Avariada')
   const setRepaired = (m) => setMachineStatus(m, 'free', 'Livre')
 
+  const tileProps = { isOperator, startMachine, stopMachine, impulseMachine, setFault, setRepaired, setOffline, setOnline }
   const wash = machines.filter(m => (m.type || 'wash') === 'wash')
   const dry = machines.filter(m => m.type === 'dry')
 
@@ -293,9 +299,10 @@ export default function AdminOperations() {
         <DryerStartModal
           machine={dryPick.m}
           blocks={dryPick.blocks}
-          setBlocks={setDryPick}
+          setBlocks={(b) => setDryPick((d) => ({ ...d, blocks: b }))}
           onClose={() => setDryPick(null)}
-          onConfirm={() => { const d = dryPick; setDryPick(null); runAdminAction(d.m, 'start', d.blocks) }}
+          add={dryPick.add}
+          onConfirm={() => { const d = dryPick; setDryPick(null); runAdminAction(d.m, d.add ? 'impulse' : 'start', d.blocks) }}
         />
       )}
 
@@ -305,12 +312,14 @@ export default function AdminOperations() {
         title="Lavagem"
         machines={wash}
         loading={loading}
+        tileProps={tileProps}
       />
 
       <MachineSection
         title="Secagem"
         machines={dry}
         loading={loading}
+        tileProps={tileProps}
       />
     </div>
   )
