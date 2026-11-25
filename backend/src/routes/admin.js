@@ -37,6 +37,7 @@ import { bumpLandingVersion } from '../services/landingCache.js'
 import { loadGlossary, sanitizeGlossary, GLOSSARY_KEY } from '../services/landingGlossary.js'
 import { creditCard, balanceUpdate } from '../services/cardBalance.js'
 import AuditLog from '../models/auditLog.js'
+import { countSeverity, WARNING_STEP_TYPES } from '../utils/flowSeverity.js'
 
 const router = express.Router()
 
@@ -855,7 +856,7 @@ router.get('/flows', requireStaffRead, async (req, res) => {
   if (q.kind) filter.kind = { $in: String(q.kind).split(',').slice(0, 8) }
   if (q.status) filter.status = { $in: String(q.status).split(',').slice(0, 4) }
   if (q.method) filter.method = String(q.method).slice(0, 12)
-  if (q.problems === '1' || q.problems === 'true') filter.problems = { $gt: 0 }
+  if (q.problems === '1' || q.problems === 'true') filter.steps = { $elemMatch: { ok: false, type: { $nin: [...WARNING_STEP_TYPES] } } }
   if (q.machine) filter.machines = String(q.machine).slice(0, 60)
   if (q.q) {
     const rx = new RegExp(String(q.q).trim().slice(0, 60).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
@@ -865,10 +866,15 @@ router.get('/flows', requireStaffRead, async (req, res) => {
   const page = Math.max(parseInt(q.page, 10) || 0, 0)
   const FlowT = withTenant(FlowModel, req)
   const [rows, total] = await Promise.all([
-    FlowT.find(filter).sort({ startedAt: -1 }).skip(page * limit).limit(limit).select('-steps').lean(),
+    FlowT.find(filter).sort({ startedAt: -1 }).skip(page * limit).limit(limit).select('-steps.text -steps.data').lean(),
     FlowT.count(filter),
   ])
-  res.json({ total, page, limit, flows: rows })
+  // problems/warnings are recomputed from the step types so flows saved before the split show correctly too
+  const flows = rows.map(({ steps, ...r }) => {
+    const sev = countSeverity(steps)
+    return { ...r, ...sev, status: r.status === 'problem' && sev.problems === 0 ? 'done' : r.status }
+  })
+  res.json({ total, page, limit, flows })
 })
 
 router.get('/flows/:id', requireStaffRead, async (req, res) => {

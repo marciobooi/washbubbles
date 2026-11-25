@@ -18,6 +18,7 @@ import Peripheral from '../models/peripheral.js'
 import SyncCommand from '../models/syncCommand.js'
 import DayClose from '../models/dayClose.js'
 import { roundMoney } from '../utils/money.js'
+import { countSeverity } from '../utils/flowSeverity.js'
 import { logAction } from '../services/auditLog.js'
 import { receiveShopPart, makeCentralCopy, MAX_PART_BYTES, MAX_PARTS } from '../services/dailyBackup.js'
 
@@ -405,7 +406,7 @@ router.post('/push/flow', async (req, res) => {
       kind: String(b.kind || 'other').slice(0, 30), status: ['open', 'done', 'problem', 'interrupted'].includes(b.status) ? b.status : 'done',
       endedAt: b.endedAt ? new Date(b.endedAt) : null, lastAt: new Date(b.lastAt || Date.now()), title: String(b.title || '').slice(0, 300),
       machines: (Array.isArray(b.machines) ? b.machines : []).map((m) => String(m).slice(0, 60)).slice(0, 12), cardCode: String(b.cardCode || '').slice(-4),
-      method: String(b.method || '').slice(0, 12), amount: num(b.amount), inserted: num(b.inserted), change: num(b.change), problems: Math.max(0, parseInt(b.problems, 10) || 0), steps,
+      method: String(b.method || '').slice(0, 12), amount: num(b.amount), inserted: num(b.inserted), change: num(b.change), ...countSeverity(steps), steps,
     }
     // the shop is req.tenantId (set from the key): it is in the filter, so an upsert can only ever create/replace THIS shop's flow
     await FlowModel.updateOne({ tenantId: req.tenantId, flowId }, { $set: doc, $setOnInsert: { startedAt: new Date(b.startedAt || Date.now()) } }, { upsert: true })

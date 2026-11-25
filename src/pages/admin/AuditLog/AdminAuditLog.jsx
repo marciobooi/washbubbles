@@ -263,7 +263,8 @@ function FlowsPanel() {
     const s = Math.max(0, (new Date(t) - new Date(t0)) / 1000)
     return `+${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
   }
-  const STEP_DOT = (s) => (s.ok === false ? 'bg-rose-500'
+  const WARNING_STEPS = ['mbway_cancelled', 'cash_rejected', 'change_retry'] // same list as backend/src/utils/flowSeverity.js
+  const STEP_DOT = (s) => (s.ok === false ? (WARNING_STEPS.includes(s.type) ? 'bg-amber-500' : 'bg-rose-500')
     : s.type.startsWith('cash') ? 'bg-emerald-500'
     : s.type.startsWith('impulse') || s.type === 'admin_start' ? 'bg-sky-500'
     : s.type.startsWith('change') || s.type.startsWith('credit') ? 'bg-amber-500'
@@ -405,15 +406,17 @@ function FlowsPanel() {
             const o = open[r.flowId]
             const isOpen = Boolean(o)
             const hasError = r.problems > 0 || r.status === 'problem' || r.status === 'interrupted'
+            const hasWarn = !hasError && r.warnings > 0
+            const tone = hasError ? 'error' : hasWarn ? 'warn' : (STATUS_TONE[r.status] || 'ok')
 
             return (
-              <div key={r.flowId} className={`bg-white rounded-2xl border transition duration-150 overflow-hidden ${hasError ? 'border-rose-200/90 hover:border-rose-300' : 'border-slate-200/90 hover:border-slate-300'}`}>
-                <button type="button" onClick={() => toggle(r)} className={`w-full text-left px-5 py-3.5 flex items-center gap-4 transition ${hasError ? 'bg-rose-50/20 hover:bg-rose-50/50' : 'hover:bg-slate-50/50'}`}>
+              <div key={r.flowId} className={`bg-white rounded-2xl border transition duration-150 overflow-hidden ${hasError ? 'border-rose-200/90 hover:border-rose-300' : hasWarn ? 'border-amber-200/90 hover:border-amber-300' : 'border-slate-200/90 hover:border-slate-300'}`}>
+                <button type="button" onClick={() => toggle(r)} className={`w-full text-left px-5 py-3.5 flex items-center gap-4 transition ${hasError ? 'bg-rose-50/20 hover:bg-rose-50/50' : hasWarn ? 'bg-amber-50/20 hover:bg-amber-50/50' : 'hover:bg-slate-50/50'}`}>
                   <span className={`text-slate-400 flex-shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}>
                     <ChevronRight className="w-4 h-4" />
                   </span>
-                  <span className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 shadow-xs border ${STATUS_BOX[STATUS_TONE[r.status] || 'ok']}`}>
-                    {STATUS_DOT[r.status] === 'bg-rose-500' ? <AlertTriangle className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+                  <span className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 shadow-xs border ${STATUS_BOX[tone]}`}>
+                    {tone !== 'ok' ? <AlertTriangle className="w-4 h-4" /> : <Check className="w-4 h-4" />}
                   </span>
                   <div className="w-24 flex-shrink-0 leading-tight">
                     <div className="font-mono text-xs font-semibold text-slate-800">{shopTime(r.startedAt)}</div>
@@ -423,6 +426,7 @@ function FlowsPanel() {
                     <div className="font-semibold text-slate-900 text-sm tracking-tight truncate">{r.title || 'Atividade no quiosque'}</div>
                     <div className="text-xs text-slate-500">{KIND_LABEL[r.kind] || r.kind}{dur(r.startedAt, r.endedAt || r.lastAt) ? ` · ${dur(r.startedAt, r.endedAt || r.lastAt)}` : ''}</div>
                   </div>
+                  {r.warnings > 0 && <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800"><AlertTriangle className="w-3 h-3" />{r.warnings}</span>}
                   {r.problems > 0 && <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-rose-100 text-rose-800"><AlertTriangle className="w-3 w-3" />{r.problems}</span>}
                 </button>
 
@@ -446,7 +450,7 @@ function FlowsPanel() {
                                 <span className={`absolute -left-[19px] sm:-left-[27px] top-4 w-2.5 h-2.5 rounded-full ring-4 ring-white ${STEP_DOT(s)}`} />
                                 <span className="font-mono text-xs text-slate-400 w-11 flex-shrink-0">{offset(o.flow.startedAt, s.at)}</span>
                                 <div>
-                                  <span className={`text-sm ${s.ok === false ? 'text-rose-700 font-medium' : 'text-slate-900'}`}>{s.text}</span>
+                                  <span className={`text-sm ${s.ok === false ? (WARNING_STEPS.includes(s.type) ? 'text-amber-700 font-medium' : 'text-rose-700 font-medium') : 'text-slate-900'}`}>{s.text}</span>
                                   {s.data && Object.values(s.data).some((v) => v != null && v !== '' && !(Array.isArray(v) && !v.length)) && (
                                     <details className="ml-[3.75rem]"><summary className="text-[11px] text-slate-400 cursor-pointer">dados</summary><pre className="text-[11px] bg-white border rounded p-2 mt-1 overflow-x-auto">{JSON.stringify(s.data, null, 2)}</pre></details>
                                   )}

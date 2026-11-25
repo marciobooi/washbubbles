@@ -11,6 +11,7 @@
 import crypto from 'crypto'
 import Flow from '../models/flow.js'
 import modelEvents from './modelEvents.js'
+import { countSeverity, WARNING_STEP_TYPES } from '../utils/flowSeverity.js'
 
 const IDLE_MS = 90_000
 const MAX_STEPS = 300
@@ -37,7 +38,7 @@ function kindOf(type, current, recharge) {
 }
 
 function newFlow(tenantId, at) {
-  return { tenantId, flowId: crypto.randomUUID(), kind: 'other', status: 'open', startedAt: at, lastAt: at, title: '', machines: [], cardCode: '', method: '', amount: 0, inserted: 0, change: 0, problems: 0, steps: [], paid: false, dirty: true }
+  return { tenantId, flowId: crypto.randomUUID(), kind: 'other', status: 'open', startedAt: at, lastAt: at, title: '', machines: [], cardCode: '', method: '', amount: 0, inserted: 0, change: 0, problems: 0, warnings: 0, steps: [], paid: false, dirty: true }
 }
 
 function titleOf(f) {
@@ -67,7 +68,7 @@ function persist(f) {
 function persistNow(f) {
   const doc = {
     kind: f.kind, status: f.status, lastAt: f.lastAt, endedAt: f.endedAt || null, title: f.title, machines: f.machines, cardCode: f.cardCode,
-    method: f.method, amount: f.amount, inserted: f.inserted, change: f.change, problems: f.problems, steps: f.steps.slice(-MAX_STEPS),
+    method: f.method, amount: f.amount, inserted: f.inserted, change: f.change, problems: f.problems, warnings: f.warnings || 0, steps: f.steps.slice(-MAX_STEPS),
   }
   return Flow.updateOne({ tenantId: f.tenantId, flowId: f.flowId }, { $set: doc, $setOnInsert: { startedAt: f.startedAt } }, { upsert: true })
     .catch((e) => console.warn('[Flow] not saved:', e.message))
@@ -75,7 +76,7 @@ function persistNow(f) {
 
 function close(f, status) {
   // a refusal the customer then corrected (paid afterwards) is not a problem
-  if (f.paid) f.problems = f.steps.filter((s) => s.ok === false && s.type !== 'pay_refused').length
+  Object.assign(f, countSeverity(f.steps))
   f.status = status || (f.problems ? 'problem' : 'done')
   f.endedAt = new Date()
   f.title = titleOf(f)
@@ -94,10 +95,12 @@ export function step(tenantId, type, text, data = null, opts = {}) {
     let f = open.get(key)
     // someone new arrives after the last customer was paid: close that flow, open another
     if (f && f.paid && STARTERS.has(type)) { close(f); f = null }
+    // an MB WAY payment is a customer's, never part of a staff action that happened to be open (its cancels showed up as the staff's problems)
+    if (f && f.kind === 'admin' && type.startsWith('mbway')) { close(f); f = null }
     if (!f) { f = newFlow(tenantId, at); open.set(key, f) }
     f.lastAt = at
     const ok = opts.ok !== false
-    if (!ok) f.problems += 1
+    if (!ok) { if (WARNING_STEP_TYPES.has(type)) f.warnings = (f.warnings || 0) + 1; else f.problems += 1 }
     // A staff start (or any impulse) of a machine this customer did not ask for lands in whatever flow is open at that moment (2026-11-12:
     // the second impulse of a dryer the staff had started two minutes before showed up in a customer's payment, and its machine in the title).
     // When the flow knows what the customer asked for, such an impulse is kept as a step but marked foreign, and never joins the header.

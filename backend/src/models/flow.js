@@ -32,7 +32,8 @@ const flowSchema = new Schema({
   amount: { type: Number, default: 0 },             // what was paid for
   inserted: { type: Number, default: 0 },           // cash put in
   change: { type: Number, default: 0 },             // change paid out
-  problems: { type: Number, default: 0 },
+  problems: { type: Number, default: 0 },          // real problems only (see utils/flowSeverity.js)
+  warnings: { type: Number, default: 0 },          // orange: cancelled MB WAY, refused coin, change retry
   steps: { type: [stepSchema], default: [] },
   createdAt: { type: Date, default: Date.now },
 })
