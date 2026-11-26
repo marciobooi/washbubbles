@@ -223,8 +223,8 @@ export default function DayCloseForm({ summary, summaryLoading, onSubmit, onPrev
   })
   async function goNext() {
     if (step === 1 && !(countedCash > 0)) return toast({ title: 'Conte o dinheiro que está na caixa (notas e moedas) antes de seguir', variant: 'destructive' })
-    // the coins for the bank are paid out BY THE HOPPER at the end: if it was emptied to count them, they must be back inside first
-    if (step === 1 && onEmptyHopper && !window.confirm('ATENÇÃO: as moedas já voltaram para dentro do hopper?\n\nSe o esvaziou para contar, ponha as moedas de volta (menu Hopper, «Repor») antes de continuar. No fim, as moedas para o banco saem do hopper: se estiver vazio, não saem.\n\nOK = as moedas estão no hopper\nCancelar = vou pô-las primeiro')) return
+    // the coins for the bank are paid out by the hopper at the end, so they must be back inside
+    if (step === 1 && onEmptyHopper) window.alert('Depois da contagem, volte a meter as moedas dentro do hopper.')
     if (step === 2) {
       const atb = parseFloat(amountToBank), fl = parseFloat(floatLeft)
       if (isNaN(atb) || isNaN(fl) || atb < 0) return toast({ title: 'Indique o valor para o banco', variant: 'destructive' })
