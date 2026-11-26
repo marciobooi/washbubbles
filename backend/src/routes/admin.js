@@ -339,9 +339,11 @@ async function machineAdminAction(req, res, kind) {
   if (!machine) return res.status(404).json({ error: 'Machine not found' })
   const { default: coinMachine } = await import('../services/coinMachine.js')
 
+  const username = req.userModel?.username || ''
   if (coinMachine.running) {
     try {
-      const result = kind === 'start' ? await coinMachine.adminStartMachine(machine._id, blocks) : kind === 'impulse' ? await coinMachine.adminAddImpulse(machine._id, blocks) : await coinMachine.adminEndMachine(machine._id)
+      const who = { by: username ? `${username} (admin)` : undefined }
+      const result = kind === 'start' ? await coinMachine.adminStartMachine(machine._id, blocks, who) : kind === 'impulse' ? await coinMachine.adminAddImpulse(machine._id, blocks, who) : await coinMachine.adminEndMachine(machine._id, who)
       logAction(req, `machine.admin_${kind}`, 'Machine', machine._id, { name: machine.name, ...(kind !== 'end' ? { blocks } : {}) })
       if (kind === 'start') {
         await withTenant(Sale, req).create({ machineId: machine._id, amount: 0, type: 'admin_start', method: 'cash' }).catch(() => {})
@@ -366,7 +368,7 @@ async function machineAdminAction(req, res, kind) {
   if (twin.length) return res.json({ success: true, queued: true, commandIds: twin.map((c) => c._id), duplicate: true })
   const cmds = []
   for (const k of kiosks) {
-    cmds.push(await SyncCommandT.create({ kioskId: k._id, type, payload: kind === 'start' || kind === 'impulse' ? { machineId: String(machine._id), blocks } : { machineId: String(machine._id) } }))
+    cmds.push(await SyncCommandT.create({ kioskId: k._id, type, payload: { machineId: String(machine._id), ...(kind === 'end' ? {} : { blocks }), by: username } }))
   }
   logAction(req, `machine.admin_${kind}_requested`, 'Machine', machine._id, { name: machine.name })
   res.json({ success: true, queued: true, commandIds: cmds.map((c) => c._id) })

@@ -266,7 +266,7 @@ function FlowsPanel() {
   const WARNING_STEPS = ['mbway_cancelled', 'cash_rejected', 'change_retry'] // same list as backend/src/utils/flowSeverity.js
   const STEP_DOT = (s) => (s.ok === false ? (WARNING_STEPS.includes(s.type) ? 'bg-amber-500' : 'bg-rose-500')
     : s.type.startsWith('cash') ? 'bg-emerald-500'
-    : s.type.startsWith('impulse') || s.type === 'admin_start' ? 'bg-sky-500'
+    : s.type.startsWith('impulse') || s.type.startsWith('admin_') ? 'bg-sky-500'
     : s.type.startsWith('change') || s.type.startsWith('credit') ? 'bg-amber-500'
     : s.type.startsWith('sale') || s.type === 'card_sold' || s.type === 'recharge_done' || s.type === 'mbway_paid' ? 'bg-emerald-600'
     : s.type.startsWith('mbway') ? 'bg-red-400'

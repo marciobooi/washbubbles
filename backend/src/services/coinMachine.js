@@ -164,9 +164,9 @@ class CoinMachine extends EventEmitter {
       // is queued on the server and picked up by this poller (no-op unless sync is configured).
       this.remoteCommands = new RemoteCommands({
         handlers: {
-          start_machine: (p) => this.adminStartMachine(p.machineId, p.blocks),
-          end_machine: (p) => this.adminEndMachine(p.machineId),
-          add_impulse: (p) => this.adminAddImpulse(p.machineId, p.blocks),
+          start_machine: (p) => this.adminStartMachine(p.machineId, p.blocks, { by: p.by ? `${p.by} (remoto)` : 'admin (remoto)' }),
+          end_machine: (p) => this.adminEndMachine(p.machineId, { by: p.by ? `${p.by} (remoto)` : 'admin (remoto)' }),
+          add_impulse: (p) => this.adminAddImpulse(p.machineId, p.blocks, { by: p.by ? `${p.by} (remoto)` : 'admin (remoto)' }),
           set_service: (p) => this.setMachineService(p.machineId, p.outOfService, p.status),
           empty_hopper: async () => {
             const r = await this.emptyHopper()
@@ -1859,7 +1859,7 @@ class CoinMachine extends EventEmitter {
    * Still refuses what would only fail at the washer: no interface/port, inactive interface,
    * machine already running, or no controller link.
    */
-  async adminStartMachine(machineId, blocks = 1) {
+  async adminStartMachine(machineId, blocks = 1, { by = 'staff/admin' } = {}) {
     const machine = await Machine.findOne(this.scoped({ _id: machineId })).populate('interfaceId')
     if (!machine) throw new Error('Machine not found')
     const iface = machine.interfaceId
@@ -1870,7 +1870,7 @@ class CoinMachine extends EventEmitter {
 
     // A dryer can be started for several cycles (blocks of `tImp` minutes), exactly as a customer picks them.
     const n = this.blocksFor(machine, { quantity: blocks })
-    flows.step(this.tenantId, 'admin_start', `Início manual (staff/admin): ${machine.name}${n > 1 ? ` · ${n} ciclos` : ''}`, { machine: machine.name, blocks: n }, { machine: machine.name })
+    flows.step(this.tenantId, 'admin_start', `Início manual (${by}): ${machine.name}${n > 1 ? ` · ${n} ciclos` : ''}`, { machine: machine.name, blocks: n, by }, { machine: machine.name, by })
     // Throws if the controller is not connected — nothing is marked running in that case.
     if ((machine.type || 'wash') === 'dry') {
       // startPaidMachine sends the impulses and keeps the cycle clock, so the dryer frees itself at the end.
@@ -1895,7 +1895,7 @@ class CoinMachine extends EventEmitter {
    * Admin: add cycles to a dryer that is already running (the customer's coin after the first): one impulse per block as separate
    * commands, and the cycle clock is extended by the same time so the machine is not freed while it still turns.
    */
-  async adminAddImpulse(machineId, blocks = 1) {
+  async adminAddImpulse(machineId, blocks = 1, { by = 'staff/admin' } = {}) {
     const machine = await Machine.findOne(this.scoped({ _id: machineId })).populate('interfaceId')
     if (!machine) throw new Error('Machine not found')
     if ((machine.type || 'wash') !== 'dry') throw new Error(`${machine.name} is not a dryer`)
@@ -1904,7 +1904,7 @@ class CoinMachine extends EventEmitter {
     if (iface.status !== 'active') throw new Error(`Interface ${iface.name} is not active (status: ${iface.status})`)
     if (machine.outOfService || machine.status === 'offline' || machine.status === 'fault') throw new Error(`${machine.name} is out of service`)
     const n = this.blocksFor(machine, { quantity: blocks })
-    flows.step(this.tenantId, 'admin_impulse', `Impulso manual (staff/admin): ${machine.name}${n > 1 ? ` · ${n} ciclos` : ''}`, { machine: machine.name, blocks: n }, { machine: machine.name })
+    flows.step(this.tenantId, 'admin_impulse', `Impulso manual (${by}): ${machine.name}${n > 1 ? ` · ${n} ciclos` : ''}`, { machine: machine.name, blocks: n, by }, { machine: machine.name, by })
     // Throws when the controller is not connected: nothing is changed in that case.
     await this.middleware.sendMachineActivation(machine, iface, 1)
     const extra = await this.cycleMinutes(machine, n)
@@ -1928,7 +1928,7 @@ class CoinMachine extends EventEmitter {
    * protocol notes in docs §9), so a running cycle finishes by itself; this only releases the
    * machine here so the next customer can pick it.
    */
-  async adminEndMachine(machineId) {
+  async adminEndMachine(machineId, { by = 'staff/admin' } = {}) {
     const machine = await Machine.findOne(this.scoped({ _id: machineId }))
     if (!machine) throw new Error('Machine not found')
     machine.status = 'free'
@@ -1942,6 +1942,7 @@ class CoinMachine extends EventEmitter {
     machine.busyUntil = null
     machine.sawBusy = false
     await machine.save()
+    flows.step(this.tenantId, 'admin_end', `Paragem manual (${by}): ${machine.name}`, { machine: machine.name, by }, { machine: machine.name, by })
     try { await broadcastMachine(machine) } catch { /* see above */ }
     return { success: true }
   }

@@ -638,7 +638,8 @@ for (const kind of ['start', 'end']) {
     if (!coinMachine.running) return res.status(409).json({ error: 'Este posto não tem as máquinas ligadas' })
     try {
       const blocks = Math.min(8, Math.max(1, Math.floor(Number(req.body?.blocks)) || 1))
-      const result = kind === 'start' ? await coinMachine.adminStartMachine(req.params.id, blocks) : await coinMachine.adminEndMachine(req.params.id)
+      const who = { by: String(req.body?.pin || '').startsWith('card:') ? 'cartão-mestre no quiosque' : 'PIN do staff no quiosque' }
+      const result = kind === 'start' ? await coinMachine.adminStartMachine(req.params.id, blocks, who) : await coinMachine.adminEndMachine(req.params.id, who)
       const { logAction } = await import('../services/auditLog.js')
       logAction(req, `machine.admin_${kind}`, 'Machine', req.params.id, { by: 'staff PIN (kiosk)', ...(kind === 'start' ? { blocks } : {}) })
       if (kind === 'start') await withTenant(Sale, req).create({ machineId: req.params.id, amount: 0, type: 'admin_start', method: 'cash', metadata: { by: 'staff PIN (kiosk)', blocks } }).catch(() => {})

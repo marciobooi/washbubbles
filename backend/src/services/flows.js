@@ -25,14 +25,16 @@ const PAID_TYPES = new Set(['sale_recorded', 'recharge_done', 'card_sold', 'mbwa
 /** Steps that start something (a new customer). */
 const STARTERS = new Set(['cash_in', 'card_in', 'cart_selected', 'pay_requested'])
 
-function kindOf(type, current, recharge) {
+function kindOf(type, current, recharge, customer) {
   if (type === 'card_sold' || type === 'card_purchase_requested') return 'card_purchase'
   if (type === 'recharge_done' || type === 'recharge_requested') return 'recharge'
   if (type.startsWith('mbway')) return current === 'other' || current === 'machine_payment' ? 'mbway' : current
   if (type === 'sale_recorded' && recharge && (current === 'other' || current === 'card' || current === 'machine_payment')) return 'recharge'
   if (type === 'impulse_sent' || type === 'sale_recorded') return current === 'other' || current === 'card' ? 'machine_payment' : current
   if (type === 'credit_refunded' || type === 'credit_refund_short') return current === 'other' ? 'refund' : current
-  if (type === 'admin_start' || type === 'admin_release') return 'admin'
+  if (type === 'admin_start') return 'admin'
+  // a stop or an added cycle in the middle of a customer's payment is a step of it; on its own it is a staff action
+  if (type === 'admin_impulse' || type === 'admin_end') return customer ? current : 'admin'
   if (type === 'card_in' && current === 'other') return 'card'
   return current
 }
@@ -50,7 +52,7 @@ function titleOf(f) {
     case 'recharge': return `Carregamento de cartão${f.cardCode ? ` •••${f.cardCode}` : ''}${f.amount ? ` · ${eur(f.amount)}` : ''}${how ? ` · ${how}` : ''}${f.change ? ` · troco ${eur(f.change)}` : ''}`
     case 'mbway': return `MB WAY${names ? ` · ${names}` : ''}${f.amount ? ` · ${eur(f.amount)}` : ''}`
     case 'refund': return `Devolução de crédito${f.change ? ` · ${eur(f.change)}` : ''}`
-    case 'admin': return `Ação do staff${names ? ` · ${names}` : ''}`
+    case 'admin': return `Ação do staff${names ? ` · ${names}` : ''}${f.by ? ` · ${f.by}` : ''}`
     case 'card': return `Cartão${f.cardCode ? ` •••${f.cardCode}` : ''}`
     default: return f.inserted ? `Dinheiro inserido · ${eur(f.inserted)}` : 'Atividade no quiosque'
   }
@@ -85,7 +87,7 @@ function close(f, status) {
 }
 
 /**
- * @param opts { ok=true, machine, cardCode, method, amount, inserted, change }  what to fold into the flow's header
+ * @param opts { ok=true, machine, cardCode, method, amount, inserted, change, by }  what to fold into the flow's header
  */
 export function step(tenantId, type, text, data = null, opts = {}) {
   try {
@@ -94,7 +96,10 @@ export function step(tenantId, type, text, data = null, opts = {}) {
     const at = new Date()
     let f = open.get(key)
     // someone new arrives after the last customer was paid: close that flow, open another
-    if (f && f.paid && STARTERS.has(type)) { close(f); f = null }
+    // (a staff action after the customer paid is its own entry too)
+    if (f && f.paid && (STARTERS.has(type) || type.startsWith('admin_'))) { close(f); f = null }
+    // and a customer who arrives after a staff action does not join it
+    if (f && f.kind === 'admin' && STARTERS.has(type)) { close(f); f = null }
     // an MB WAY payment is a customer's, never part of a staff action that happened to be open (its cancels showed up as the staff's problems)
     if (f && f.kind === 'admin' && type.startsWith('mbway')) { close(f); f = null }
     if (!f) { f = newFlow(tenantId, at); open.set(key, f) }
@@ -104,11 +109,14 @@ export function step(tenantId, type, text, data = null, opts = {}) {
     // A staff start (or any impulse) of a machine this customer did not ask for lands in whatever flow is open at that moment (2026-11-12:
     // the second impulse of a dryer the staff had started two minutes before showed up in a customer's payment, and its machine in the title).
     // When the flow knows what the customer asked for, such an impulse is kept as a step but marked foreign, and never joins the header.
-    const foreign = type === 'impulse_sent' && f.requested?.size > 0 && opts.machine && !f.requested.has(String(opts.machine))
-    if (foreign) { data = { ...(data || {}), foreign: true }; opts = { ...opts, machine: undefined } }
+    const other = f.requested?.size > 0 && opts.machine && !f.requested.has(String(opts.machine))
+    const foreign = type === 'impulse_sent' && other
+    if (foreign) data = { ...(data || {}), foreign: true }
+    if (foreign || (other && type.startsWith('admin_'))) opts = { ...opts, machine: undefined }
     f.steps.push({ at, type, text: foreign ? `${text} (arranque de outra ação, não deste cliente)` : text, ok, data })
     if (Array.isArray(data?.items) && data.items.some((i) => /recarga/i.test(String(i)))) f.recharge = true
-    f.kind = kindOf(type, f.kind, f.recharge)
+    f.kind = kindOf(type, f.kind, f.recharge, f.inserted > 0 || f.amount > 0 || f.requested?.size > 0)
+    if (opts.by) f.by = String(opts.by)
     if (opts.machine && !f.machines.includes(opts.machine)) f.machines.push(opts.machine)
     if (opts.cardCode) f.cardCode = String(opts.cardCode).slice(-4)
     if (opts.method) f.method = opts.method
