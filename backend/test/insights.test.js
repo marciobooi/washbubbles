@@ -118,7 +118,15 @@ describe('Owner insights: hardware warnings', function () {
     const NOW = new Date('2026-11-12T12:00:00Z')
     const log = (action, iso, details = {}) => AuditLog.create({ tenantId: tenant._id, actorUsername: 'system', action, targetType: 'CashSession', targetId: '', details, createdAt: new Date(iso) })
     await log('hardware.coin.silent', '2026-11-12T11:00:00Z', { lastCoinMinutesAgo: 210 })
-    expect((await computeInsights(tenant._id, { now: NOW })).alerts.coinSilent).to.deep.include({ lastCoinMinutesAgo: 210 })
+    // `since` is the last coin (alert time minus 210 min = 07:30), and the age is counted to NOW, not to the alert
+    const shown = (await computeInsights(tenant._id, { now: NOW })).alerts.coinSilent
+    expect(shown.lastCoinMinutesAgo).to.equal(270)
+    expect(shown.since.toISOString()).to.equal('2026-11-12T07:30:00.000Z')
+    // a cash payment after the alert ends it even if the PC never wrote 'resumed' (it restarted in between: 2026-11-25)
+    const Sale = (await import('../src/models/sale.js')).default
+    const sale = await Sale.create({ tenantId: tenant._id, amount: 2, method: 'cash', type: 'payment', createdAt: new Date('2026-11-12T11:20:00Z') })
+    expect((await computeInsights(tenant._id, { now: NOW })).alerts.coinSilent).to.equal(null)
+    await Sale.deleteOne({ _id: sale._id })
     await log('hardware.coin.resumed', '2026-11-12T11:30:00Z')
     expect((await computeInsights(tenant._id, { now: NOW })).alerts.coinSilent).to.equal(null)
   })

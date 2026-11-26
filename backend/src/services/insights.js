@@ -225,8 +225,19 @@ export async function computeInsights(tenantId, { days = 30, now = new Date(), r
   const lastSilent = hw.find((x) => x.action === 'hardware.coin.silent')
   const lastResumed = hw.find((x) => x.action === 'hardware.coin.resumed')
   const lastRejected = hw.find((x) => x.action === 'hardware.coin.rejected')
+  // The silence is over when the PC wrote 'resumed', or (the PC may have restarted in between and never written it) when a cash sale came after it.
+  // `since` is when the LAST COIN arrived (the alert was written lastCoinMinutesAgo later), and the age is counted up to now.
+  let coinSilent = null
+  if (lastSilent && (!lastResumed || lastResumed.createdAt < lastSilent.createdAt)) {
+    const cashAfter = await Sale.exists({ tenantId: tid, method: 'cash', type: { $in: ['payment', 'recharge', 'card_purchase'] }, createdAt: { $gt: lastSilent.createdAt } })
+    const ago = lastSilent.details?.lastCoinMinutesAgo
+    if (!cashAfter) {
+      const since = ago != null ? new Date(lastSilent.createdAt.getTime() - ago * 60000) : lastSilent.createdAt
+      coinSilent = { since, lastCoinMinutesAgo: Math.max(0, Math.round((now.getTime() - since.getTime()) / 60000)) }
+    }
+  }
   const alerts = {
-    coinSilent: lastSilent && (!lastResumed || lastResumed.createdAt < lastSilent.createdAt) ? { since: lastSilent.createdAt, lastCoinMinutesAgo: lastSilent.details?.lastCoinMinutesAgo ?? null } : null,
+    coinSilent: coinSilent,
     lastRejectedCoin: lastRejected ? lastRejected.createdAt : null,
   }
 
