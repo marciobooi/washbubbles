@@ -1174,8 +1174,8 @@ class CoinMachine extends EventEmitter {
   }
 
   /**
-   * One look at the coin acceptor: silent for `silentHours` (3) during the shop's open hours while the shop is working (at least 3 payments
-   * of any kind in that time) = it is probably not reporting. Reported once per silence, and again as resumed when a coin arrives.
+   * One look at the coin acceptor: silent for `silentHours` (3) during the shop's open hours while the shop is working (at least 3 CASH payments
+   * in that time: card and MB WAY customers never touch the coin acceptor, 2026-11-25 false alarm) = it is probably not reporting. Reported once per silence, and again as resumed when a coin arrives.
    */
   async checkCoinAcceptor({ now = Date.now(), silentHours = 3, hours = { open: 7, close: 23 }, countPayments } = {}) {
     if (!this.running || this.coinSilent) return 'already'
@@ -1185,7 +1185,7 @@ class CoinMachine extends EventEmitter {
     const silentMs = silentHours * 3600_000
     if (now - since < silentMs) return 'recent'
     const from = new Date(Math.max(since, now - silentMs))
-    const n = await (countPayments ? countPayments(from) : Sale.countDocuments({ tenantId: this.tenantId, createdAt: { $gte: from }, type: { $in: ['payment', 'recharge', 'card_purchase'] } }))
+    const n = await (countPayments ? countPayments(from) : Sale.countDocuments({ tenantId: this.tenantId, createdAt: { $gte: from }, method: 'cash', type: { $in: ['payment', 'recharge', 'card_purchase'] } }))
     if (n < 3) return 'quiet-shop'
     this.coinSilent = true
     this.coinSilent0 = now
